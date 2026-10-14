@@ -24,6 +24,40 @@ async function readNode(g: GraphHandle, id: string): Promise<{ labels: string[];
 
 const MAX_ATTEMPTS = 5;
 
+const dateMs = (v: unknown): number | undefined => {
+  const t = typeof v === "string" ? Date.parse(v) : NaN;
+  return Number.isFinite(t) ? t : undefined;
+};
+
+// The input describes the node as of an earlier date than its current state. Keep the current props; if the older
+// source's tracked values differ, record its view as a Version bracketed by the two dates (since = its asOf,
+// until = the current asOf), marked backdated. Idempotent: the Version id hashes the older source's tracked values.
+async function writeBackdated(
+  g: GraphHandle, n: NodeInput, old: Record<string, unknown>, content: Record<string, Prim>, prov: Record<string, Prim>,
+  since: number, until: number, now: number,
+): Promise<NodeResult> {
+  const differing = (TRACKED_PROPS[n.type] ?? []).filter((k) => k in content && !sameValue(old[k], content[k]));
+  if (!differing.length) return { created: false, versioned: false, updated: false };
+  const { rev: _rev, ...current } = old;
+  const view = JSON.stringify({ ...current, ...content, ...prov });
+  const key = sha256(JSON.stringify([differing.map((k) => [k, content[k]]), n.src ?? null])).slice(0, 8);
+  const rows = await g.query<{ created: boolean }>(
+    `MATCH (n:Entity {id:$id})
+     MERGE (v:Entity:Version {id:$vid}) ON CREATE SET v += $version, v._mergeToken = $token
+     WITH n, v, coalesce(v._mergeToken = $token, false) AS created SET v._mergeToken = null
+     MERGE (n)-[h:HAD_VERSION]->(v) ON CREATE SET h += $hv
+     RETURN created`,
+    {
+      id: n.id, vid: `version:${n.id}@${n.asOf}-${key}`, token: randomBytes(8).toString("hex"),
+      version: defined({ name: "", of: n.id, props: view, changed: differing, since, until, src: n.src, asOf: n.asOf, backdated: true, createdAt: now, updatedAt: now }),
+      hv: defined({ since: now, recordedAt: now, src: n.src, asOf: n.asOf }),
+    });
+  const created = rows[0]?.created === true;
+  if (created) noteGraphWrite(g.name);
+  return { created: false, versioned: created, updated: false };
+}
+
+// Time: an input whose asOf is older than the node's asOf never overwrites the current state (writeBackdated).
 // Concurrency: the create path is one MERGE that reports `created` only to the caller whose ON CREATE ran (a per-call
 // token), and every update is a compare-and-set on `rev`, with the Version written in the same statement. A caller
 // that loses a race re-reads and re-diffs, so two concurrent upserts never both report created and never version the
@@ -54,6 +88,12 @@ export async function upsertNode(g: GraphHandle, n: NodeInput, now: number = Dat
     const have = typeOfLabels(existing.labels);
     if (have !== n.type) throw new InvalidWrite(`${n.id} already exists as ${have ?? existing.labels.join(":")}, not ${n.type}`);
     const old = existing.props;
+    // An older source than the one behind the current state never overwrites it: it becomes a backdated Version.
+    const inAsOf = dateMs(n.asOf);
+    const curAsOf = dateMs(old.asOf);
+    if (inAsOf !== undefined && curAsOf !== undefined && inAsOf < curAsOf) {
+      return writeBackdated(g, n, old, content, prov, inAsOf, curAsOf, now);
+    }
     const changed = Object.keys(content).filter((k) => !sameValue(old[k], content[k]));
     const provChanged = Object.keys(prov).some((k) => !sameValue(old[k], prov[k]));
     // A tracked value appearing for the first time is new information, not a change of state.

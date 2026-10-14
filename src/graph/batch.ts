@@ -12,6 +12,7 @@ export interface WriteStats {
   edgesCreated: number;
   edgesClosed: number;
   observations: number;
+  skippedWeaker: number;  // observations ignored because a stronger (higher conf) one with the same id is stored
   errors: Array<{ kind: "node" | "edge" | "observation"; item: NodeInput | EdgeInput | ObservationInput; error: string }>;
 }
 
@@ -23,7 +24,7 @@ export async function writeBatch(
   w: { nodes?: NodeInput[]; edges?: EdgeInput[]; observations?: ObservationInput[] },
   now: number = Date.now(),
 ): Promise<WriteStats> {
-  const s: WriteStats = { nodesCreated: 0, nodesUpdated: 0, versions: 0, edgesCreated: 0, edgesClosed: 0, observations: 0, errors: [] };
+  const s: WriteStats = { nodesCreated: 0, nodesUpdated: 0, versions: 0, edgesCreated: 0, edgesClosed: 0, observations: 0, skippedWeaker: 0, errors: [] };
   const msg = (e: unknown) => (e instanceof Error ? `${e.name}: ${e.message}` : String(e));
   for (const n of w.nodes ?? []) {
     try {
@@ -38,6 +39,10 @@ export async function writeBatch(
   for (const o of w.observations ?? []) {
     try {
       const r = await writeObservation(g, o, now);
+      if (r.skippedWeaker) {
+        s.skippedWeaker++;
+        continue;
+      }
       s.observations++;
       if (r.versioned) s.versions++;
     } catch (e) {

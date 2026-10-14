@@ -134,6 +134,91 @@ describe("temporal upsert (integration)", () => {
     await expect(upsertEdge(g, { from: "person:founder", type: "NOT_A_REL" as never, to: "task:sitemap" })).rejects.toBeInstanceOf(InvalidWrite);
   });
 
+  it("an older source never overwrites newer state: it lands as a backdated Version", async () => {
+    const id = "task:late-source";
+    await upsertNode(g, { type: "Task", id, name: "Late", props: { status: "done" }, src: "document:pending", asOf: "2026-10-14" }, T0);
+    const old = { type: "Task" as const, id, name: "Late", props: { status: "open" }, src: "document:old", asOf: "2026-09-01" };
+    expect(await upsertNode(g, old, T0 + 10)).toEqual({ created: false, versioned: true, updated: false });
+    const [cur] = await g.roQuery<Record<string, unknown>>("MATCH (n:Entity {id:$id}) RETURN n.status AS status, n.asOf AS asOf, n.src AS src", { id });
+    expect(cur).toEqual({ status: "done", asOf: "2026-10-14", src: "document:pending" });
+    const versions = async () => g.roQuery<{ props: string; since: number; until: number; backdated: boolean }>(
+      "MATCH (:Entity {id:$id})-[:HAD_VERSION]->(v) RETURN v.props AS props, v.since AS since, v.until AS until, v.backdated AS backdated", { id });
+    const [v] = await versions();
+    expect(JSON.parse(v!.props)).toMatchObject({ status: "open", asOf: "2026-09-01", src: "document:old" });
+    expect(v).toMatchObject({ since: Date.parse("2026-09-01"), until: Date.parse("2026-10-14"), backdated: true });
+    // replaying the same old source is a no-op; an old source that agrees with the current state adds nothing
+    expect(await upsertNode(g, old, T0 + 20)).toEqual({ created: false, versioned: false, updated: false });
+    expect(await upsertNode(g, { ...old, props: { status: "done" } }, T0 + 30)).toEqual({ created: false, versioned: false, updated: false });
+    expect(await versions()).toHaveLength(1);
+    // a newer source still moves the state on
+    expect(await upsertNode(g, { ...old, props: { status: "archived" }, asOf: "2026-10-20" }, T0 + 40)).toEqual({ created: false, versioned: true, updated: true });
+    expect(await versions()).toHaveLength(2);
+  });
+
+  it("a functional close sets until to the new edge's since and retiredAt to now", async () => {
+    await upsertNode(g, { type: "Task", id: "task:handover", name: "Handover" }, T0);
+    await upsertEdge(g, { from: "person:founder", type: "OWNS", to: "task:handover", since: T0 + 10 }, T0 + 10);
+    expect(await upsertEdge(g, { from: "agent:jarvis", type: "OWNS", to: "task:handover", since: T0 + 20 }, T0 + 30)).toEqual({ created: true, closed: 1 });
+    const rows = await g.roQuery<Record<string, unknown>>(
+      "MATCH (o)-[r:OWNS]->(:Entity {id:'task:handover'}) RETURN o.id AS o, r.since AS since, r.until AS until, r.retiredAt AS ret ORDER BY r.since");
+    expect(rows).toEqual([
+      { o: "person:founder", since: T0 + 10, until: T0 + 20, ret: T0 + 30 },
+      { o: "agent:jarvis", since: T0 + 20, until: null, ret: null },
+    ]);
+  });
+
+  it("a late-arriving older owner does not displace the current one", async () => {
+    await upsertNode(g, { type: "Task", id: "task:late-owner", name: "Late owner" }, T0);
+    await upsertEdge(g, { from: "agent:jarvis", type: "OWNS", to: "task:late-owner", since: T0 + 100 }, T0 + 100);
+    expect(await upsertEdge(g, { from: "person:founder", type: "OWNS", to: "task:late-owner", since: T0 + 50 }, T0 + 200))
+      .toEqual({ created: true, closed: 0 });
+    const rows = await g.roQuery<Record<string, unknown>>(
+      "MATCH (o)-[r:OWNS]->(:Entity {id:'task:late-owner'}) RETURN o.id AS o, r.since AS since, r.until AS until, r.retiredAt AS ret ORDER BY r.since");
+    expect(rows).toEqual([
+      { o: "person:founder", since: T0 + 50, until: T0 + 100, ret: T0 + 200 }, // created already closed
+      { o: "agent:jarvis", since: T0 + 100, until: null, ret: null },
+    ]);
+  });
+
+  it("re-asserting an edge keeps the stronger fact (missing conf = 1, deterministic)", async () => {
+    await upsertNode(g, { type: "System", id: "system:conf-a", name: "A" }, T0);
+    await upsertNode(g, { type: "System", id: "system:conf-b", name: "B" }, T0);
+    await upsertNode(g, { type: "System", id: "system:conf-c", name: "C" }, T0);
+    const edge = async (to: string) => (await g.roQuery<Record<string, unknown>>(
+      "MATCH (:Entity {id:'system:conf-a'})-[r:DEPENDS_ON]->(:Entity {id:$to}) WHERE r.until IS NULL RETURN r.conf AS conf, r.src AS src, r.asOf AS asOf, r.note AS note", { to }))[0];
+    // deterministic edge, then a weaker LLM re-assert: nothing changes
+    await upsertEdge(g, { from: "system:conf-a", type: "DEPENDS_ON", to: "system:conf-b", src: "document:pending", asOf: "2026-10-14", props: { note: "registry" } }, T0);
+    await upsertEdge(g, { from: "system:conf-a", type: "DEPENDS_ON", to: "system:conf-b", src: "document:llm", asOf: "2026-10-15", conf: 0.6, props: { note: "guess" } }, T0 + 1);
+    expect(await edge("system:conf-b")).toEqual({ conf: null, src: "document:pending", asOf: "2026-10-14", note: "registry" });
+    // LLM edge at 0.7: a weaker re-assert keeps it, an equal or stronger one takes over, a deterministic one wins outright
+    await upsertEdge(g, { from: "system:conf-a", type: "DEPENDS_ON", to: "system:conf-c", src: "document:x", asOf: "2026-10-10", conf: 0.7 }, T0);
+    await upsertEdge(g, { from: "system:conf-a", type: "DEPENDS_ON", to: "system:conf-c", src: "document:y", asOf: "2026-10-11", conf: 0.5 }, T0 + 1);
+    expect(await edge("system:conf-c")).toMatchObject({ conf: 0.7, src: "document:x", asOf: "2026-10-10" });
+    await upsertEdge(g, { from: "system:conf-a", type: "DEPENDS_ON", to: "system:conf-c", src: "document:z", asOf: "2026-10-12", conf: 0.7 }, T0 + 2);
+    expect(await edge("system:conf-c")).toMatchObject({ conf: 0.7, src: "document:z", asOf: "2026-10-12" });
+    await upsertEdge(g, { from: "system:conf-a", type: "DEPENDS_ON", to: "system:conf-c", src: "document:pending", asOf: "2026-10-13" }, T0 + 3);
+    expect(await edge("system:conf-c")).toMatchObject({ conf: null, src: "document:pending", asOf: "2026-10-13" });
+  });
+
+  it("a weaker observation never overwrites a stronger one with the same id", async () => {
+    await upsertNode(g, { type: "Channel", id: "channel:conf-ig", name: "IG" }, T0);
+    const measured = { subject: "channel:conf-ig", metric: "followers", value: 1200, asOf: "2026-10-14", src: "document:pending" };
+    const id = await addObservation(g, measured, T0);
+    const value = async () => (await g.roQuery<{ v: number; conf: number | null }>("MATCH (o:Entity {id:$id}) RETURN o.value AS v, o.conf AS conf", { id }))[0];
+    const stats = await writeBatch(g, { observations: [{ ...measured, value: 1500, conf: 0.6, evidence: "about 1.5k followers" }] }, T0 + 1);
+    expect(stats).toMatchObject({ observations: 0, skippedWeaker: 1, versions: 0 });
+    expect(await value()).toEqual({ v: 1200, conf: null });
+    // reported first, then measured: the measurement wins and the report stays as a Version
+    const rid = await addObservation(g, { ...measured, metric: "reach", value: 90, conf: 0.6 }, T0);
+    expect((await g.roQuery("MATCH (o:Entity {id:$rid}) RETURN o.conf AS conf", { rid }))[0]).toEqual({ conf: 0.6 });
+    const s2 = await writeBatch(g, { observations: [{ ...measured, metric: "reach", value: 95 }] }, T0 + 2);
+    expect(s2).toMatchObject({ observations: 1, skippedWeaker: 0, versions: 1 });
+    expect((await g.roQuery("MATCH (o:Entity {id:$rid}) RETURN o.value AS v, o.conf AS conf", { rid }))[0]).toEqual({ v: 95, conf: null });
+    // equal conf behaves as before: update and version
+    await addObservation(g, { ...measured, metric: "reach", value: 96 }, T0 + 3);
+    expect((await g.roQuery("MATCH (:Entity {id:$rid})-[:HAD_VERSION]->(v) RETURN count(v) AS c", { rid }))[0]).toEqual({ c: 2 });
+  });
+
   it("concurrent creates of one node report created exactly once", async () => {
     const rs = await Promise.all(Array.from({ length: 5 }, () => upsertNode(g, { type: "Task", id: "task:race", name: "Race" }, T0)));
     expect(rs.filter((r) => r.created)).toHaveLength(1);

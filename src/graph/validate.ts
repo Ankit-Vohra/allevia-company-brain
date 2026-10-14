@@ -45,6 +45,7 @@ export interface ObservationInput {
   src: string;
   simulated?: boolean;
   evidence?: string;      // the source's own words for the number (LLM extraction keeps its quote here)
+  conf?: number;          // 1 (default) = measured by a connector; < 1 = reported in a document (LLM extraction)
 }
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;

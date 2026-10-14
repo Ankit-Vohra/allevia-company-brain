@@ -12,9 +12,14 @@ const CLOSE_SET = (v: string, reason: string) =>
   `SET ${v}.until = CASE WHEN ${v}.since > $end THEN ${v}.since ELSE $end END, ${v}.retiredAt = $now, ${v}.closedCost = $cost, ${v}.closeReason = ${reason}`;
 
 // One statement per edge, so a functional hand-over is all-or-nothing: the slot's previous edge is closed only when
-// (and in the same statement as) the new edge is created. Re-asserting a current fact refreshes its provenance,
-// closes duplicate current copies of it, and leaves the slot alone. The endpoint/type check is a separate read
-// before it; nodes are never deleted, so that read cannot go stale in a way that matters.
+// (and in the same statement as) the new edge is created. The endpoint/type check is a separate read before it;
+// nodes are never deleted, so that read cannot go stale in a way that matters.
+// - Late arrivals: only slot edges with since <= the new since are closed (until = the new since). If the slot holds
+//   a NEWER edge, the new one is created already closed (until = that holder's since): an older source arriving
+//   late never displaces the current holder.
+// - Re-asserting a current fact keeps the stronger one (missing conf = 1, deterministic): its src/asOf/props/conf
+//   are replaced only when the incoming conf >= the stored conf. Duplicate current copies get closed. The slot is
+//   left alone.
 export async function upsertEdge(g: GraphHandle, e: EdgeInput, now: number = Date.now()): Promise<{ created: boolean; closed: number }> {
   validateEdge(e);
   const ends = await g.query<{ id: string; labels: string[] | null }>(
@@ -32,27 +37,36 @@ export async function upsertEdge(g: GraphHandle, e: EdgeInput, now: number = Dat
     : e.functional === true ? { rel: e.type, toType, key: "from", why: "caller marked functional" }
     : functionalRule(e.type, fromType, toType);
   const T = e.type;
-  let cypher = `MATCH (a:Entity {id:$from}), (b:Entity {id:$to})
+  const slot = !rule ? "WITH a, b, cur, [] AS others"
+    : rule.key === "to"
+      ? `OPTIONAL MATCH (x:Entity)-[o:${T}]->(b) WHERE o.until IS NULL AND x <> a${rule.fromType ? ` AND x:${rule.fromType}` : ""}
+         WITH a, b, cur, collect(o) AS others`
+      : `OPTIONAL MATCH (a)-[o:${T}]->(y:Entity) WHERE o.until IS NULL AND y <> b${rule.toType ? ` AND y:${rule.toType}` : ""}
+         WITH a, b, cur, collect(o) AS others`;
+  const cypher = `MATCH (a:Entity {id:$from}), (b:Entity {id:$to})
     OPTIONAL MATCH (a)-[c:${T}]->(b) WHERE c.until IS NULL
     WITH a, b, c ORDER BY c.recordedAt
     WITH a, b, collect(c) AS cur
-    FOREACH (x IN cur[0..1] | SET x += $props)
+    ${slot}
+    WITH a, b, cur, size(cur) = 0 AS created,
+         [o IN others WHERE coalesce(o.since, 0) <= $since] AS older,
+         [o IN others WHERE coalesce(o.since, 0) > $since] AS newer
+    WITH a, b, cur, created, older,
+         reduce(m = null, o IN newer | CASE WHEN m IS NULL OR o.since < m THEN o.since ELSE m END) AS cap
+    FOREACH (x IN [y IN cur[0..1] WHERE $c >= coalesce(y.conf, 1)] | SET x += $props, x.conf = $conf)
     FOREACH (x IN cur[1..] | ${CLOSE_SET("x", "'duplicate current edge'")})
-    FOREACH (_ IN CASE WHEN size(cur) = 0 THEN [1] ELSE [] END |
-      CREATE (a)-[r:${T}]->(b) SET r += $props, r.since = $since, r.recordedAt = $now)
-    WITH a, b, size(cur) = 0 AS created, CASE WHEN size(cur) > 1 THEN size(cur) - 1 ELSE 0 END AS dupes`;
-  if (rule) {
-    cypher += rule.key === "to"
-      ? ` OPTIONAL MATCH (x:Entity)-[o:${T}]->(b) WHERE created AND o.until IS NULL AND x <> a${rule.fromType ? ` AND x:${rule.fromType}` : ""}`
-      : ` OPTIONAL MATCH (a)-[o:${T}]->(y:Entity) WHERE created AND o.until IS NULL AND y <> b${rule.toType ? ` AND y:${rule.toType}` : ""}`;
-    cypher += ` WITH created, dupes, collect(o) AS olds FOREACH (o IN olds | ${CLOSE_SET("o", "$reason")}) RETURN created, dupes, size(olds) AS closed`;
-  } else {
-    cypher += " RETURN created, dupes, 0 AS closed";
-  }
+    FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END |
+      CREATE (a)-[r:${T}]->(b) SET r += $props, r.conf = $conf, r.since = $since, r.recordedAt = $now, r.until = cap,
+        r.retiredAt = CASE WHEN cap IS NULL THEN null ELSE $now END,
+        r.closedCost = CASE WHEN cap IS NULL THEN null ELSE $cost END,
+        r.closeReason = CASE WHEN cap IS NULL THEN null ELSE 'arrived after a newer holder' END)
+    FOREACH (o IN CASE WHEN created THEN older ELSE [] END | ${CLOSE_SET("o", "$reason")})
+    RETURN created, CASE WHEN size(cur) > 1 THEN size(cur) - 1 ELSE 0 END AS dupes,
+           CASE WHEN created THEN size(older) ELSE 0 END AS closed`;
   const since = e.since ?? now;
   const rows = await g.query<{ created: boolean; dupes: number; closed: number }>(cypher, {
     from: e.from, to: e.to, now, since, end: since, cost: CLOSED_EDGE_COST,
-    props: defined({ ...e.props, src: e.src, asOf: e.asOf, conf: e.conf }),
+    props: defined({ ...e.props, src: e.src, asOf: e.asOf }), conf: e.conf ?? null, c: e.conf ?? 1,
     reason: `replaced by ${e.from} -[:${e.type}]-> ${e.to}`,
   });
   const r = rows[0];
