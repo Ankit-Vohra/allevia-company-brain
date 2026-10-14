@@ -8,7 +8,7 @@ import { agentById } from "../../../shared/roster.js";
 import { upsertEdge, upsertNode } from "../../graph/upsert.js";
 import { entityId } from "../../util/ids.js";
 import { isoDate } from "../../util/time.js";
-import { Collector, InputError, clip, defineTool, getNode, getNodes, nextId, refuseIfReadOnly, serial } from "./common.js";
+import { Collector, InputError, clip, defineTool, getNode, getNodes, nextId, refuseIfReadOnly, ro, serial } from "./common.js";
 
 const ACTION_KINDS = ["github_issue", "content_draft", "pause_ad", "discord_post"] as const satisfies readonly ActionKind[];
 const PAYLOAD_CAP = 20_000;
@@ -36,13 +36,20 @@ async function runPropose(args: Args, ctx: ToolContext) {
   const recId = entityId("Recommendation", title);
   const agentId = staffAgentId(ctx.agentId);
 
-  const approvalId = await serial(ctx.graph.name, async () => {
+  const { approvalId, reused } = await serial(ctx.graph.name, async () => {
     if (!(await getNode(ctx, agentId))) {
       const def = agentById(ctx.agentId);
       await upsertNode(ctx.graph, {
         type: "Agent", id: agentId, name: def?.name ?? ctx.agentId,
         props: { kind: "allevia", rosterId: ctx.agentId, ...(def ? { title: def.title, department: def.department } : {}) },
       }, ctx.now);
+    }
+    // The same recommendation already waiting on the owner: add the new evidence, never a second card.
+    const [waiting] = await ro<{ id: string }>(ctx,
+      "MATCH (:Entity {id:$rid})-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL AND a.status = 'pending' RETURN a.id AS id ORDER BY id LIMIT 1", { rid: recId });
+    if (waiting) {
+      for (const to of evidence) await upsertEdge(ctx.graph, { from: recId, type: "EVIDENCED_BY", to, src, asOf }, ctx.now);
+      return { approvalId: waiting.id, reused: true };
     }
     const approvalId = await nextId(ctx, `approval:${ctx.turnId}-`);
     await upsertNode(ctx.graph, {
@@ -60,7 +67,7 @@ async function runPropose(args: Args, ctx: ToolContext) {
     await upsertEdge(ctx.graph, { from: recId, type: "PROPOSES", to: approvalId, src, asOf }, ctx.now);
     for (const to of evidence) await upsertEdge(ctx.graph, { from: recId, type: "EVIDENCED_BY", to, src, asOf }, ctx.now);
     await upsertEdge(ctx.graph, { from: agentId, type: "PRODUCED", to: recId, src, asOf }, ctx.now);
-    return approvalId;
+    return { approvalId, reused: false };
   });
 
   const nodes = await getNodes(ctx, [recId, approvalId, agentId, ...evidence]);
@@ -70,9 +77,11 @@ async function runPropose(args: Args, ctx: ToolContext) {
   edge(recId, "PROPOSES", approvalId);
   for (const to of evidence) edge(recId, "EVIDENCED_BY", to);
   edge(agentId, "PRODUCED", recId);
+  const said = reused ? `Already proposed and waiting for the owner (${approvalId}); added the evidence.` : `Proposed for the owner's approval (${approvalId}); nothing has been executed.`;
   return col.result(ctx, {
-    recommendationId: recId, approvalId, kind: args.kind, status: "pending", title, evidence, ...(skipped.length ? { skipped } : {}),
-  }, `Proposed for the owner's approval (${approvalId}); nothing has been executed.${skipped.length ? ` Unknown evidence skipped: ${skipped.join(", ")}.` : ""}`);
+    recommendationId: recId, approvalId, kind: args.kind, status: "pending", title, evidence, ...(reused ? { alreadyPending: true } : {}),
+    ...(skipped.length ? { skipped } : {}),
+  }, `${said}${skipped.length ? ` Unknown evidence skipped: ${skipped.join(", ")}.` : ""}`);
 }
 
 export const proposeAction = defineTool({

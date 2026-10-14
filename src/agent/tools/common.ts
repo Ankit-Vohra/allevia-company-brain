@@ -83,13 +83,15 @@ export function ro<T = Record<string, unknown>>(ctx: ToolContext, cypher: string
   return ctx.graph.roQuery<T>(cypher, params, { timeoutMs: Math.min(timeoutMs, READ_TIMEOUT_MS) });
 }
 
-// The graph core's algorithms call roQuery without a timeout; this view caps every read they make.
+// The graph core's algorithms call roQuery without a timeout; this view caps every read they make, including reads
+// on the throwaway projection they copy to.
 export function bounded(g: GraphHandle, ms = READ_TIMEOUT_MS): GraphHandle {
   return new Proxy(g, {
     get(target, key) {
       if (key === "roQuery") {
         return (c: string, p?: Record<string, unknown>, o?: QueryOpts) => target.roQuery(c, p, { ...o, timeoutMs: Math.min(o?.timeoutMs ?? ms, ms) });
       }
+      if (key === "copyTo") return async (dest: string) => bounded(await target.copyTo(dest), ms);
       const v = Reflect.get(target, key, target) as unknown;
       return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(target) : v;
     },

@@ -18,8 +18,8 @@ async function runContent(args: { channel?: string; days?: number; limit?: numbe
   const days = args.days === undefined ? null : clamp(args.days, 30, 1, 3650);
   const cutoff = days === null ? null : isoDate(ctx.now - days * 86_400_000);
   const items = await ro<ContentRow>(ctx,
-    `MATCH (c:Content) ${channel ? "MATCH (c)-[pr:PUBLISHED_ON]->(:Entity {id:$ch}) WHERE pr.until IS NULL WITH c" : ""}
-     WITH c WHERE $cutoff IS NULL OR c.publishedAt >= $cutoff
+    `MATCH (c:Content) ${channel ? "MATCH (c)-[pr:PUBLISHED_ON]->(:Entity {id:$ch}) WHERE pr.until IS NULL" : ""}
+     WITH DISTINCT c WHERE $cutoff IS NULL OR c.publishedAt >= $cutoff
      RETURN ${NODE("c")} AS c, c.format AS format, c.publishedAt AS publishedAt, coalesce(c.hook, c.caption) AS hook
      ORDER BY c.publishedAt DESC LIMIT 500`, { ch: channel?.id ?? null, cutoff });
   const col = new Collector();

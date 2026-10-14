@@ -34,6 +34,8 @@ describe("metric_trend (integration)", () => {
   it("from/to bound the range; groupBy week sums daily flows", async () => {
     const r = await call(metricTrend, { metric: "followers", subject: "channel:instagram", from: "2026-09-14", to: "2026-09-28" }, makeCtx(g));
     expect(r.data.stats).toMatchObject({ points: 3, first: 1080, last: 1260, delta: 180, pctChange: 16.7 });
+    const dt = await call(metricTrend, { metric: "followers", subject: "channel:instagram", from: "2026-09-14T08:00:00Z", to: "2026-09-28T01:00:00Z" }, makeCtx(g));
+    expect(dt.data.stats.points).toBe(3);
     const w = await call(metricTrend, { metric: "signups", subject: "business:aamdani", groupBy: "week" }, makeCtx(g));
     expect(w.data.series).toEqual([{ date: "2026-09-28", value: 26 }, { date: "2026-10-05", value: 69 }]);
     expect(w.data).toMatchObject({ groupBy: "week", aggregate: "sum" });

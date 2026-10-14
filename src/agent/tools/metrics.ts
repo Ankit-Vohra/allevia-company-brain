@@ -45,7 +45,7 @@ async function runTrend(args: { metric: string; subject?: string; from?: string;
   for (const d of [args.from, args.to]) if (d && !ISO_DATE.test(d)) throw new InputError(`Dates must be ISO like 2026-10-01, got ${JSON.stringify(d)}.`);
   const subject = args.subject ? await requireNode(ctx, args.subject) : null;
   // `to` is inclusive of the whole day: "2026-10-10T08:00Z" <= "2026-10-10~" because "~" sorts after "T".
-  const p = { m: args.metric.trim().toLowerCase(), sid: subject?.id ?? null, from: args.from ?? null, to: args.to ? `${args.to.slice(0, 10)}~` : null };
+  const p = { m: args.metric.trim().toLowerCase(), sid: subject?.id ?? null, from: args.from?.slice(0, 10) ?? null, to: args.to ? `${args.to.slice(0, 10)}~` : null };
   const rows = await ro<Row>(ctx,
     `MATCH (o:Observation)-[r:MEASURES]->(s:Entity) WHERE toLower(o.metric) = $m AND ($sid IS NULL OR s.id = $sid)
      WITH s, o, r, coalesce(o.windowEnd, o.asOf) AS at WHERE ($from IS NULL OR at >= $from) AND ($to IS NULL OR at <= $to)

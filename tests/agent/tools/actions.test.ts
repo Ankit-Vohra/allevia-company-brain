@@ -46,6 +46,15 @@ describe("propose_action (integration)", () => {
     expect(later.data.pendingApprovals.map((a: { id: string }) => a.id)).toContain("approval:t-100-1");
   });
 
+  it("re-proposing while the card is still pending adds evidence instead of a second card", async () => {
+    const r = await call(proposeAction, { ...args, evidence: ["query:jobs-in-raipur"] }, makeCtx(g, { agentId: "tech-lead", turnId: "t-200" }));
+    expect(r.data).toMatchObject({ approvalId: "approval:t-100-1", alreadyPending: true });
+    expect(r.note).toMatch(/Already proposed/);
+    expect((await g.roQuery<{ c: number }>("MATCH (:Entity {id:'recommendation:add-meta-description-to-jobs'})-[:PROPOSES]->(a) RETURN count(a) AS c"))[0]!.c).toBe(1);
+    const ev = await g.roQuery<{ id: string }>("MATCH (:Entity {id:'recommendation:add-meta-description-to-jobs'})-[:EVIDENCED_BY]->(x) RETURN x.id AS id ORDER BY id");
+    expect(ev.map((e) => e.id)).toContain("query:jobs-in-raipur");
+  });
+
   it("parallel proposals get distinct approval ids; no valid evidence is refused", async () => {
     const ctx = () => makeCtx(g, { agentId: "growth-marketer" });
     const [a, b] = await Promise.all([

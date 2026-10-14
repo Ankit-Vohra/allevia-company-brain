@@ -53,4 +53,11 @@ describe("search (integration)", () => {
     expect(none.data.hits).toEqual([]);
     expect(none.note).toMatch(/no match/i);
   });
+
+  it("falls back to text when the embedder fails", async () => {
+    const r = await call(search, { query: "token refresh" }, makeCtx(g, { embedQuery: async () => { throw new Error("model not loaded"); } }));
+    expect(r.data.hits.map((h: { id: string }) => h.id)).toContain("document:pending");
+    expect(r.note).toMatch(/vector search skipped \(model not loaded\)/);
+    expect((await call(search, { query: "the of" }, makeCtx(g, { embedQuery: undefined }))).data.error).toMatch(/no searchable words/);
+  });
 });

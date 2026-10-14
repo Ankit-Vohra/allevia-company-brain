@@ -36,7 +36,6 @@ async function safe<T>(p: Promise<T[]>, errors: string[], what: string): Promise
 async function run(args: { query: string; types?: string[]; limit?: number }, ctx: ToolContext) {
   const limit = clamp(args.limit, 10, 1, 25);
   const terms = ftTerms(args.query);
-  if (!terms.length && !ctx.embedQuery) throw new InputError("The query has no searchable words. Use nouns, e.g. 'instagram reels signups'.");
   const types = args.types?.length ? args.types : SEARCH_TYPES;
   const entityTypes = types.filter((t) => t !== "Chunk");
   const wantChunks = !args.types?.length || types.includes("Document") || types.includes("Chunk");
@@ -47,7 +46,15 @@ async function run(args: { query: string; types?: string[]; limit?: number }, ct
   const chunkCols = `${NODE("node")} AS c, node.text AS text, ${NODE("d")} AS doc, score`;
   const typeFilter = "WITH node, score WHERE any(l IN labels(node) WHERE l IN $types) AND NOT node:Chunk";
   const q = terms.length ? ftQuery(terms) : null;
-  const vec = ctx.embedQuery ? await ctx.embedQuery(args.query) : null;
+  let vec: number[] | null = null;
+  if (ctx.embedQuery) {
+    try {
+      vec = await ctx.embedQuery(args.query);
+    } catch (e) {
+      errors.push(`vector search skipped (${(e as Error).message.slice(0, 80)})`);
+    }
+  }
+  if (!terms.length && !vec) throw new InputError("The query has no searchable words. Use nouns, e.g. 'instagram reels signups'.");
 
   const [ftE, ftC, vE, vC] = await Promise.all([
     q && entityTypes.length ? safe(ro<EntRow>(ctx, `CALL db.idx.fulltext.queryNodes('Entity', $q) YIELD node, score ${typeFilter}
