@@ -119,7 +119,15 @@ export class Collector {
 
   edge(row: EdgeRow | null | undefined): void {
     if (!row || typeof row.from !== "string" || typeof row.to !== "string") return;
-    const e = toEdge(row);
+    this.edgeRef(toEdge(row));
+  }
+
+  // Refs that are already shaped (e.g. from algorithms.shortestPaths).
+  ref(ref: NodeRef): void {
+    if (!this.nodes.has(ref.id)) this.nodes.set(ref.id, ref);
+  }
+
+  edgeRef(e: EdgeRef): void {
     this.edges.set(`${e.from}|${e.type}|${e.to}|${e.since ?? ""}`, e);
   }
 
@@ -136,11 +144,14 @@ export class Collector {
 
 // Documents behind the given ids, in the ids' order: the id itself when it is a Document, its SOURCED_FROM targets,
 // and the Document named by its `src` prop.
-export async function sourcesFor(ctx: ToolContext, ids: string[], cap = SOURCE_CAP): Promise<SourceRef[]> {
+export interface SourceRow { of: string; id: string; title: string | null; asOf: string | null }
+
+// One row per (id, Document behind it), in the ids' order.
+export async function sourceRows(ctx: ToolContext, ids: string[]): Promise<SourceRow[]> {
   const list = [...new Set(ids)].slice(0, 300);
   if (!list.length) return [];
   const cols = "oid AS of, d.id AS id, coalesce(d.title, d.name) AS title, d.asOf AS asOf";
-  const rows = await ro<{ of: string; id: string; title: string | null; asOf: string | null }>(ctx,
+  const rows = await ro<SourceRow>(ctx,
     `UNWIND $ids AS oid MATCH (d:Entity {id:oid}) WHERE d:Document RETURN ${cols}
      UNION ALL
      UNWIND $ids AS oid MATCH (:Entity {id:oid})-[:SOURCED_FROM]->(d:Document) RETURN ${cols}
@@ -148,7 +159,11 @@ export async function sourcesFor(ctx: ToolContext, ids: string[], cap = SOURCE_C
      UNWIND $ids AS oid MATCH (n:Entity {id:oid}) WHERE n.src IS NOT NULL WITH oid, n.src AS src MATCH (d:Entity {id:src}) WHERE d:Document RETURN ${cols}`,
     { ids: list });
   const order = new Map(list.map((id, i) => [id, i]));
-  rows.sort((a, b) => (order.get(a.of) ?? 0) - (order.get(b.of) ?? 0));
+  return rows.sort((a, b) => (order.get(a.of) ?? 0) - (order.get(b.of) ?? 0));
+}
+
+export async function sourcesFor(ctx: ToolContext, ids: string[], cap = SOURCE_CAP): Promise<SourceRef[]> {
+  const rows = await sourceRows(ctx, ids);
   const out = new Map<string, SourceRef>();
   for (const r of rows) {
     if (out.size >= cap) break;
