@@ -173,3 +173,11 @@ export const isRelType = (s: string): s is RelType => REL_SET.has(s);
 export function typeOfLabels(labels: readonly string[]): EntityType | undefined {
   return labels.find((l): l is EntityType => l !== "Entity" && isEntityType(l));
 }
+
+// Bookkeeping props upsert owns; callers cannot set them through `props`.
+export const NODE_META_PROPS = ["id", "name", "summary", "src", "asOf", "simulated", "createdAt", "updatedAt", "stateSince", "embedding", "textEmbedding"] as const;
+export const EDGE_META_PROPS = ["since", "until", "recordedAt", "retiredAt", "src", "asOf", "conf", "closedCost", "closeReason"] as const;
+
+// Closed edges also get `closedCost = CLOSED_EDGE_COST`. FalkorDB's algo.SPpaths cannot filter on edge properties,
+// but it can cap a summed cost (costProp/maxCost, missing cost = 0), which makes it skip closed edges during the search.
+export const CLOSED_EDGE_COST = 1_000_000;
