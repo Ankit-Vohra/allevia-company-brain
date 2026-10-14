@@ -5,10 +5,12 @@ import { entityId } from "../../src/util/ids.js";
 import { closeAll } from "../../src/graph/client.js";
 import { ensureIndexes } from "../../src/graph/indexes.js";
 import { writeBatch, type ObservationInput } from "../../src/graph/upsert.js";
+import type { SourceResult } from "../../src/ingest/types.js";
 import { testGraph } from "../helpers/graph.js";
 
 const base = { tenantSlug: "aamdani", seed: 20261015, days: 28, endDate: "2026-10-14" };
 const PROFILES: AdsProfile[] = ["jobs-platform", "architecture-studio"];
+const SEEDS = [20261015, 1, 7, 42, 12345];
 
 const NAMES: Record<AdsProfile, string[]> = {
   "jobs-platform": ["Seekers — Raipur reels boost", "Employers — lead form", "Google Search — jobs near me", "YouTube Shorts — brand"],
@@ -25,6 +27,17 @@ const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length
 // observations of one metric for one campaign, in date order
 function series(obs: ObservationInput[], campaignId: string, metric: string): Array<{ date: string; value: number }> {
   return obs.filter((o) => o.subject === campaignId && o.metric === metric).map((o) => ({ date: o.windowEnd!, value: o.value })).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// The two planted stories of a run: each campaign's overall CPA (spend / conversions) and its CTR in the last 7 days
+// relative to the days before.
+function stories(r: SourceResult): Array<{ name: string; cpa: number; ctrRatio: number }> {
+  const obs = r.write.observations;
+  const sum = (id: string, m: string) => series(obs, id, m).reduce((a, x) => a + x.value, 0);
+  return r.write.nodes.filter((n) => n.type === "Campaign").map((c) => {
+    const ctr = series(obs, c.id, "ctr").map((x) => x.value);
+    return { name: c.name, cpa: sum(c.id, "spend") / sum(c.id, "conversions"), ctrRatio: mean(ctr.slice(-7)) / mean(ctr.slice(0, -7)) };
+  });
 }
 
 describe("mulberry32", () => {
@@ -45,8 +58,6 @@ describe.each(PROFILES)("simulateAds(%s)", (profile) => {
   const campaigns = nodes.filter((n) => n.type === "Campaign");
   const cid = (name: string) => entityId("Campaign", name);
   const convOf = (c: (typeof campaigns)[number]) => String(c.props?.conversionMetric);
-  const cpaOf = (id: string, conv: string) =>
-    series(observations, id, "spend").reduce((a, s) => a + s.value, 0) / series(observations, id, conv).reduce((a, s) => a + s.value, 0);
 
   it("is a simads SourceResult with the campaigns of the profile", () => {
     expect(res.source).toBe("simads");
@@ -55,12 +66,21 @@ describe.each(PROFILES)("simulateAds(%s)", (profile) => {
     expect(res.redactions).toEqual({});
     expect(campaigns.map((c) => c.name).sort()).toEqual([...NAMES[profile]].sort());
     expect(nodes.filter((n) => n.type === "Channel").map((n) => n.id).sort()).toEqual(["channel:google-ads", "channel:meta-ads"]);
-    for (const ch of nodes.filter((n) => n.type === "Channel")) expect(ch.props?.status).toBe("simulated");
   });
 
-  it("is deterministic: the same seed gives identical output, another seed does not", () => {
-    expect(simulateAds(opts)).toEqual(res);
-    expect(JSON.stringify(simulateAds({ ...opts, seed: opts.seed + 1 }).write.observations)).not.toBe(JSON.stringify(observations));
+  it("marks the ad channels as not connected with simulated data, without flagging the real platforms or taking their src", () => {
+    for (const ch of nodes.filter((n) => n.type === "Channel")) {
+      expect(ch.props, ch.id).toMatchObject({ status: "not_connected", dataSimulated: true });
+      expect(ch.simulated, ch.id).toBeUndefined();
+      expect(ch.src, ch.id).toBeUndefined();
+      expect(ch.asOf, ch.id).toBeUndefined();
+    }
+  });
+
+  it.each(SEEDS)("is deterministic for seed %i: the same seed gives identical output, another seed does not", (seed) => {
+    const a = simulateAds({ ...opts, seed });
+    expect(simulateAds({ ...opts, seed })).toEqual(a);
+    expect(JSON.stringify(simulateAds({ ...opts, seed: seed + 1 }).write.observations)).not.toBe(JSON.stringify(a.write.observations));
   });
 
   it("has one snapshot Document, flagged simulated", () => {
@@ -70,9 +90,9 @@ describe.each(PROFILES)("simulateAds(%s)", (profile) => {
     expect(docs[0]!.props?.hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("flags every node and every observation as simulated (audiences are real concepts and stay unflagged)", () => {
+  it("flags the Document, every Campaign and every observation as simulated (audiences and channels are real and stay unflagged)", () => {
     for (const n of nodes) {
-      if (n.type === "Audience") expect(n.simulated, n.id).toBeUndefined();
+      if (n.type === "Audience" || n.type === "Channel") expect(n.simulated, n.id).toBeUndefined();
       else expect(n.simulated, n.id).toBe(true);
     }
     expect(observations.length).toBeGreaterThan(0);
@@ -88,7 +108,7 @@ describe.each(PROFILES)("simulateAds(%s)", (profile) => {
     for (const n of nodes) {
       if (n.id === doc) continue;
       expect(edges.some((e) => e.type === "SOURCED_FROM" && e.from === n.id && e.to === doc), n.id).toBe(true);
-      expect(n.src).toBe(doc);
+      if (n.type !== "Channel") expect(n.src).toBe(doc); // a real platform's `src` is not ours to set
     }
     for (const e of edges) {
       expect(type.has(e.from) && type.has(e.to), `${e.from} -> ${e.to}`).toBe(true);
@@ -110,8 +130,8 @@ describe.each(PROFILES)("simulateAds(%s)", (profile) => {
 
   it("emits a daily series per campaign over the window, ending on endDate", () => {
     const metrics = new Set(observations.map((o) => o.metric));
-    expect(metrics).toEqual(new Set(["spend", "impressions", "clicks", "ctr", "cpa", ...campaigns.map(convOf)]));
-    for (const c of campaigns) for (const m of ["spend", "impressions", "clicks", "ctr", "cpa", convOf(c)]) {
+    expect(metrics).toEqual(new Set(["spend", "impressions", "clicks", "ctr", "cpa", "conversions", ...campaigns.map(convOf)]));
+    for (const c of campaigns) for (const m of ["spend", "impressions", "clicks", "ctr", "cpa", "conversions", convOf(c)]) {
       const s = series(observations, c.id, m);
       expect(s, `${c.id} ${m}`).toHaveLength(28);
       expect(s[0]!.date).toBe("2026-09-17");
@@ -127,7 +147,9 @@ describe.each(PROFILES)("simulateAds(%s)", (profile) => {
   it("has realistic magnitudes and internally consistent derived metrics", () => {
     for (const c of campaigns) {
       const spend = series(observations, c.id, "spend"), imp = series(observations, c.id, "impressions"), clk = series(observations, c.id, "clicks");
-      const cv = series(observations, c.id, convOf(c)), ctr = series(observations, c.id, "ctr"), cpa = series(observations, c.id, "cpa");
+      const cv = series(observations, c.id, "conversions"), ctr = series(observations, c.id, "ctr"), cpa = series(observations, c.id, "cpa");
+      // every campaign reports the unified `conversions`, equal to its natural signups/leads count
+      expect(cv.map((x) => x.value), c.id).toEqual(series(observations, c.id, convOf(c)).map((x) => x.value));
       spend.forEach((s, i) => {
         expect(s.value, `${c.id} spend`).toBeGreaterThanOrEqual(300);
         expect(s.value).toBeLessThanOrEqual(2500);
@@ -144,31 +166,26 @@ describe.each(PROFILES)("simulateAds(%s)", (profile) => {
     expect(unit("ctr")).toEqual(new Set(["%"]));
   });
 
-  it("has exactly one underperformer, whose CPA is at least 1.8x the median", () => {
-    const cpa = campaigns.map((c) => ({ name: c.name, cpa: cpaOf(c.id, convOf(c)) }));
+  it.each(SEEDS)("seed %i: exactly one underperformer, whose CPA is 1.8x to 2.6x the median", (seed) => {
+    const cpa = stories(simulateAds({ ...opts, seed }));
     const med = median(cpa.map((x) => x.cpa));
     const bad = cpa.filter((x) => x.cpa >= 1.5 * med);
-    expect(bad).toHaveLength(1);
+    expect(bad, JSON.stringify(cpa)).toHaveLength(1);
     expect(bad[0]!.cpa).toBeGreaterThanOrEqual(1.8 * med);
     expect(bad[0]!.cpa).toBeLessThanOrEqual(2.6 * med);
   });
 
-  it("has exactly one campaign whose CTR dropped in the last 7 days, the others steady", () => {
-    const ratio = campaigns.map((c) => {
-      const s = series(observations, c.id, "ctr").map((x) => x.value);
-      return { name: c.name, r: mean(s.slice(-7)) / mean(s.slice(0, -7)) };
-    });
-    const dropped = ratio.filter((x) => x.r <= 0.8);
-    expect(dropped, JSON.stringify(ratio)).toHaveLength(1);
-    expect(dropped[0]!.r).toBeGreaterThanOrEqual(0.5);
-    for (const x of ratio.filter((y) => y.r > 0.8)) expect(x.r, x.name).toBeGreaterThan(0.88);
-    for (const x of ratio.filter((y) => y.r > 0.8)) expect(x.r, x.name).toBeLessThan(1.12);
-  });
-
-  it("the underperformer and the CTR-drop campaign are different campaigns", () => {
-    const worst = campaigns.map((c) => ({ id: c.id, cpa: cpaOf(c.id, convOf(c)) })).sort((a, b) => b.cpa - a.cpa)[0]!;
-    const drop = campaigns.map((c) => { const s = series(observations, c.id, "ctr").map((x) => x.value); return { id: c.id, r: mean(s.slice(-7)) / mean(s.slice(0, -7)) }; }).sort((a, b) => a.r - b.r)[0]!;
-    expect(worst.id).not.toBe(drop.id);
+  it.each(SEEDS)("seed %i: exactly one campaign has a CTR drop in the last 7 days, the others steady, and it is not the underperformer", (seed) => {
+    const st = stories(simulateAds({ ...opts, seed }));
+    const dropped = st.filter((x) => x.ctrRatio <= 0.8);
+    expect(dropped, JSON.stringify(st)).toHaveLength(1);
+    expect(dropped[0]!.ctrRatio).toBeGreaterThanOrEqual(0.5);
+    for (const x of st.filter((y) => y.ctrRatio > 0.8)) {
+      expect(x.ctrRatio, x.name).toBeGreaterThan(0.88);
+      expect(x.ctrRatio, x.name).toBeLessThan(1.12);
+    }
+    const worst = [...st].sort((a, b) => b.cpa - a.cpa)[0]!;
+    expect(worst.name).not.toBe(dropped[0]!.name);
   });
 
   it("does not give the answer away in node props", () => {
@@ -188,7 +205,7 @@ describe("simulateAds: details", () => {
 
   it("works for other window sizes and rejects invalid options", () => {
     const week = simulateAds({ ...base, days: 7, profile: "architecture-studio" }).write.observations;
-    expect(week).toHaveLength(3 * 7 * 6);
+    expect(week).toHaveLength(3 * 7 * 7);
     expect(() => simulateAds({ ...base, days: 0, profile: "jobs-platform" })).toThrow(/days/);
     expect(() => simulateAds({ ...base, endDate: "14/10/2026", profile: "jobs-platform" })).toThrow(/endDate/);
     expect(() => simulateAds({ ...base, profile: "bakery" as AdsProfile })).toThrow(/profile/);

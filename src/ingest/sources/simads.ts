@@ -1,8 +1,11 @@
 // Simulated ads (spec §6.2): a business with no connected ad accounts still needs ad data to reason about, so this
-// generates a deterministic, seeded stand-in. EVERYTHING it writes is flagged simulated:true (nodes and observations;
-// audiences are real concepts of the business and stay unflagged), so answers can say "simulated".
+// generates a deterministic, seeded stand-in. The simulated things are flagged simulated:true so answers can say
+// "simulated": the snapshot Document, every Campaign and every Observation. Audiences and the ad Channels are real
+// (a segment of the business, a real platform), so they stay unflagged and carry no src from here; the Channels only
+// get status "not_connected" and dataSimulated true.
 // Each profile has campaigns with realistic daily spend (INR), impressions, clicks, conversions, CTR and CPA, weekly
-// seasonality and noise. Two stories are planted for the detectors to find: exactly one campaign has a CPA about twice
+// seasonality and noise. Each campaign reports its natural conversion metric (signups or leads) and, for every
+// campaign alike, a unified `conversions` (the same number); cpa = spend / conversions. Two stories are planted for the detectors to find: exactly one campaign has a CPA about twice
 // the median, and a different one has a CTR drop in the last 7 days. Nothing in the graph says which.
 import type { EdgeInput, NodeInput, ObservationInput } from "../../graph/upsert.js";
 import type { SourceResult } from "../types.js";
@@ -146,7 +149,7 @@ export function simulateAds(opts: SimAdsOptions): SourceResult {
 
   const channels = [...new Set(specs.map((s) => s.channel))];
   for (const key of channels) {
-    nodes.push(channelNode(key, { props: { status: "simulated" }, summary: "Ad account not connected; ad data on this channel is simulated.", simulated: true, ...prov }));
+    nodes.push(channelNode(key, { props: { status: "not_connected", dataSimulated: true } }));
     sourced(channelId(key));
   }
   for (const name of [...new Set(specs.map((s) => s.audience))]) {
@@ -191,6 +194,7 @@ export function simulateAds(opts: SimAdsOptions): SourceResult {
       day("impressions", impressions, "count");
       day("clicks", clicks, "count");
       day(s.conv, conversions, "count");
+      day("conversions", conversions, "count");
       day("ctr", round((clicks / impressions) * 100, 3), "%");
       day("cpa", round(spend / conversions, 2), "INR");
     });
