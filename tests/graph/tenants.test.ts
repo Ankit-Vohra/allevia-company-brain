@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { closeAll, openGraph, openGraphByName } from "../../src/graph/client.js";
 import { listIndexes } from "../../src/graph/indexes.js";
 import { ensureTenant, getTenant, listTenants, businessId } from "../../src/graph/tenants.js";
+import { entityId } from "../../src/util/ids.js";
 import { testGraphName } from "../helpers/graph.js";
 
 // Never touches the real allevia_meta: the registry goes into a throwaway allevia_test_* graph, and the tenant slug
@@ -18,6 +19,12 @@ describe("tenants (integration)", () => {
     await closeAll();
   });
 
+  it("derives the Business id with the same rule as entityId", () => {
+    expect(businessId("avs_atelier")).toBe("business:avs-atelier");
+    expect(businessId("avs_atelier")).toBe(entityId("Business", "avs_atelier"));
+    expect(businessId(slug)).toBe(entityId("Business", slug)); // the test slug has an underscore too
+  });
+
   it("lists nothing before the registry exists", async () => {
     expect(await listTenants(opts)).toEqual([]);
     expect(await getTenant(slug, opts)).toBeNull();
@@ -26,7 +33,7 @@ describe("tenants (integration)", () => {
   it("creates the tenant, its Business node and its indexes", async () => {
     const t = await ensureTenant({ slug, name: "Aamdani Test", domain: "aamdani.ai", industry: "jobs", city: "Raipur" }, opts);
     expect(t).toMatchObject({ slug, name: "Aamdani Test", domain: "aamdani.ai", industry: "jobs", city: "Raipur",
-      graph: `allevia_${slug}`, businessId: `business:${slug}`, ontologyVersion: 1 });
+      graph: `allevia_${slug}`, businessId: entityId("Business", slug), ontologyVersion: 1 });
     expect(typeof t.createdAt).toBe("number");
     const g = await openGraph(slug);
     const [b] = await g.roQuery<Record<string, unknown>>("MATCH (b:Entity:Business {id:$id}) RETURN b.name AS name, b.domain AS domain, b.city AS city", { id: businessId(slug) });

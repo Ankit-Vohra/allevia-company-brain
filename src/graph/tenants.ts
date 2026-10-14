@@ -1,10 +1,11 @@
 // Tenant registry. `allevia_meta` holds one (:Tenant) node per business; each business gets its own graph
-// `allevia_<slug>` with the standard indexes and a Business node `business:<slug>` as the root of its world.
+// `allevia_<slug>` with the standard indexes and a Business node (businessId(slug)) as the root of its world.
 // ALLEVIA_META_GRAPH (or opts.metaGraph) points the registry elsewhere, which is how tests stay off the real one.
 import { graphName, openGraph, openGraphByName } from "./client.js";
 import { ensureIndexes } from "./indexes.js";
 import { ONTOLOGY_VERSION } from "./schema.js";
 import { upsertNode, type Prim } from "./upsert.js";
+import { entityId } from "../util/ids.js";
 
 export const META_GRAPH = "allevia_meta";
 
@@ -18,8 +19,9 @@ export interface Tenant extends TenantInput {
 }
 export interface TenantOpts { metaGraph?: string }
 
-// The slug is already [a-z0-9_], so it is used verbatim (entityId would turn "_" into "-").
-export const businessId = (slug: string): string => `business:${slug}`;
+// Same rule as every other id, so callers that compute entityId("Business", slug) agree ("avs_atelier" ->
+// "business:avs-atelier"). The graph name keeps the underscore: allevia_avs_atelier.
+export const businessId = (slug: string): string => entityId("Business", slug);
 
 const metaName = (opts?: TenantOpts) => opts?.metaGraph ?? process.env.ALLEVIA_META_GRAPH ?? META_GRAPH;
 
