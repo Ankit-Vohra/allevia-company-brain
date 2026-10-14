@@ -60,6 +60,7 @@ export interface ObservationInput {
   asOf: string;
   src: string;
   simulated?: boolean;
+  evidence?: string;      // the source's own words for the number (LLM extraction keeps its quote here)
 }
 
 export interface NodeResult { created: boolean; versioned: boolean; updated: boolean }
@@ -293,7 +294,10 @@ async function writeObservation(g: GraphHandle, o: ObservationInput, now: number
   const res = await upsertNode(g, {
     type: "Observation", id,
     name: `${o.metric} of ${subj[0]!.name ?? o.subject} (${o.windowEnd ?? o.asOf})`,
-    props: defined({ metric: o.metric, value: o.value, unit: o.unit, windowStart: o.windowStart, windowEnd: o.windowEnd, subject: o.subject }),
+    props: defined({
+      metric: o.metric, value: o.value, unit: o.unit, windowStart: o.windowStart, windowEnd: o.windowEnd, subject: o.subject,
+      evidence: o.evidence,
+    }),
     src: o.src, asOf: o.asOf, simulated: o.simulated,
   }, now);
   await upsertEdge(g, { from: id, type: "MEASURES", to: o.subject, src: o.src, asOf: o.asOf }, now);
@@ -311,8 +315,9 @@ export async function addObservation(g: GraphHandle, o: ObservationInput, now: n
 
 // ---------- batches ----------
 
-// Nodes first, then edges, then observations. A bad item is recorded in `errors` and the batch carries on.
-// Observation MEASURES/SOURCED_FROM edges are not counted in edgesCreated.
+// Nodes first, then observations (they only need their subject node), then edges, so an edge can point at an
+// observation from the same batch (an extracted Decision BASED_ON a number). A bad item is recorded in `errors` and the
+// batch carries on. Observation MEASURES/SOURCED_FROM edges are not counted in edgesCreated.
 export async function writeBatch(
   g: GraphHandle,
   w: { nodes?: NodeInput[]; edges?: EdgeInput[]; observations?: ObservationInput[] },
@@ -330,15 +335,6 @@ export async function writeBatch(
       s.errors.push({ kind: "node", item: n, error: msg(e) });
     }
   }
-  for (const e of w.edges ?? []) {
-    try {
-      const r = await upsertEdge(g, e, now);
-      if (r.created) s.edgesCreated++;
-      s.edgesClosed += r.closed;
-    } catch (err) {
-      s.errors.push({ kind: "edge", item: e, error: msg(err) });
-    }
-  }
   for (const o of w.observations ?? []) {
     try {
       const r = await writeObservation(g, o, now);
@@ -346,6 +342,15 @@ export async function writeBatch(
       if (r.versioned) s.versions++;
     } catch (e) {
       s.errors.push({ kind: "observation", item: o, error: msg(e) });
+    }
+  }
+  for (const e of w.edges ?? []) {
+    try {
+      const r = await upsertEdge(g, e, now);
+      if (r.created) s.edgesCreated++;
+      s.edgesClosed += r.closed;
+    } catch (err) {
+      s.errors.push({ kind: "edge", item: e, error: msg(err) });
     }
   }
   return s;
