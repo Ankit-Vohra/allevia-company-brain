@@ -1,5 +1,5 @@
 # dependencies and builds
-node_modules/
+node_modules
 dist/
 web/dist/
 *.tsbuildinfo
