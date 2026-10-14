@@ -1,0 +1,1562 @@
+{
+  "source_file": "detector/patterns.js",
+  "note": "Data tables from the avoid-ai-writing detection engine, converted from JS literals. Regexes are stored as {source, flags}. The detection logic itself is not vendored.",
+  "contextExempt": [
+    "robust",
+    "comprehensive",
+    "seamless",
+    "seamlessly",
+    "ecosystem",
+    "leverage",
+    "leverages",
+    "leveraging",
+    "leveraged",
+    "facilitate",
+    "facilitates",
+    "underpin",
+    "underpinning",
+    "underpinnings",
+    "streamline"
+  ],
+  "tiers": {
+    "tier1": {
+      "severity": "high",
+      "weight": 5,
+      "mode": "always flag",
+      "words": {
+        "delve": "explore, dig into, look at",
+        "tapestry": "complex structure, rich history",
+        "paradigm": "model, approach, framework",
+        "beacon": "rewrite entirely",
+        "robust": "strong, reliable, solid",
+        "comprehensive": "thorough, complete, full",
+        "cutting-edge": "latest, newest, advanced",
+        "pivotal": "important, key, critical",
+        "meticulous": "careful, detailed, precise",
+        "meticulously": "carefully, precisely",
+        "seamless": "smooth, easy, without friction",
+        "seamlessly": "smoothly, easily",
+        "game-changer": "changes how [X] works",
+        "game-changing": "changes how [X] works",
+        "nestled": "is located, sits",
+        "vibrant": "lively, active",
+        "thriving": "growing, active",
+        "bustling": "busy, active",
+        "intricate": "complex, detailed",
+        "intricacies": "complexities, details",
+        "ever-evolving": "changing, growing",
+        "enduring": "lasting, long-running",
+        "daunting": "hard, difficult",
+        "holistic": "complete, full, whole",
+        "holistically": "completely, fully",
+        "actionable": "practical, useful, concrete",
+        "impactful": "effective, significant",
+        "learnings": "lessons, findings, takeaways",
+        "synergy": "combined effect, benefit of working together",
+        "synergies": "combined effect, benefit of working together",
+        "interplay": "relationship, connection",
+        "symphony": "coordination, balance",
+        "embrace": "adopt, accept, use"
+      },
+      "phrases": [
+        {
+          "pattern": {
+            "source": "\\bdelve\\s+into\\b",
+            "flags": "gi"
+          },
+          "replace": "explore, dig into"
+        },
+        {
+          "pattern": {
+            "source": "\\blandscape\\b",
+            "flags": "gi"
+          },
+          "replace": "field, space, industry",
+          "filter": true
+        },
+        {
+          "pattern": {
+            "source": "\\brealm\\b",
+            "flags": "gi"
+          },
+          "replace": "area, field, domain"
+        },
+        {
+          "pattern": {
+            "source": "\\btestament\\s+to\\b",
+            "flags": "gi"
+          },
+          "replace": "shows, proves"
+        },
+        {
+          "pattern": {
+            "source": "\\bleverag(?:e|es|ing|ed)\\b",
+            "flags": "gi"
+          },
+          "replace": "use"
+        },
+        {
+          "pattern": {
+            "source": "\\bwatershed\\s+moment\\b",
+            "flags": "gi"
+          },
+          "replace": "turning point, shift"
+        },
+        {
+          "pattern": {
+            "source": "\\bmarking\\s+a\\s+pivotal\\s+moment\\b",
+            "flags": "gi"
+          },
+          "replace": "changing [X], leading to [Y]"
+        },
+        {
+          "pattern": {
+            "source": "\\bthe\\s+future\\s+looks\\s+bright\\b",
+            "flags": "gi"
+          },
+          "replace": "cut or say something specific"
+        },
+        {
+          "pattern": {
+            "source": "\\bonly\\s+time\\s+will\\s+tell\\b",
+            "flags": "gi"
+          },
+          "replace": "cut or say something specific"
+        },
+        {
+          "pattern": {
+            "source": "\\bdespite\\s+challenges[^.]*continues?\\s+to\\s+thrive\\b",
+            "flags": "gi"
+          },
+          "replace": "keeps growing despite [named difficulty], continues to succeed despite [named difficulty]"
+        },
+        {
+          "pattern": {
+            "source": "\\bdeep\\s+dive\\b",
+            "flags": "gi"
+          },
+          "replace": "look at, examine"
+        },
+        {
+          "pattern": {
+            "source": "\\bdive\\s+into\\b",
+            "flags": "gi"
+          },
+          "replace": "look at, examine"
+        },
+        {
+          "pattern": {
+            "source": "\\bunpack(?:ing)?\\b",
+            "flags": "gi"
+          },
+          "replace": "explain, break down"
+        },
+        {
+          "pattern": {
+            "source": "\\bcomplexities\\b",
+            "flags": "gi"
+          },
+          "replace": "problems, details"
+        },
+        {
+          "pattern": {
+            "source": "\\bthought\\s+leader(?:ship)?\\b",
+            "flags": "gi"
+          },
+          "replace": "expert, authority"
+        },
+        {
+          "pattern": {
+            "source": "\\bbest\\s+practices\\b",
+            "flags": "gi"
+          },
+          "replace": "what works, proven methods"
+        },
+        {
+          "pattern": {
+            "source": "\\bat\\s+its\\s+core\\b",
+            "flags": "gi"
+          },
+          "replace": "cut, just state it"
+        },
+        {
+          "pattern": {
+            "source": "\\bin\\s+order\\s+to\\b",
+            "flags": "gi"
+          },
+          "replace": "to",
+          "clarity": true
+        },
+        {
+          "pattern": {
+            "source": "\\bdue\\s+to\\s+the\\s+fact\\s+that\\b",
+            "flags": "gi"
+          },
+          "replace": "because",
+          "clarity": true
+        },
+        {
+          "pattern": {
+            "source": "\\bserves\\s+as\\b",
+            "flags": "gi"
+          },
+          "replace": "is",
+          "clarity": true
+        },
+        {
+          "pattern": {
+            "source": "\\bfeatures\\b",
+            "flags": "gi"
+          },
+          "replace": "has, includes",
+          "filter": true,
+          "clarity": true,
+          "guard": "featuresIsNoun"
+        },
+        {
+          "pattern": {
+            "source": "\\bboasts\\b",
+            "flags": "gi"
+          },
+          "replace": "has",
+          "clarity": true
+        },
+        {
+          "pattern": {
+            "source": "\\butiliz(?:e|es|ing|ed)\\b",
+            "flags": "gi"
+          },
+          "replace": "use",
+          "clarity": true
+        },
+        {
+          "pattern": {
+            "source": "\\bshowcas(?:e|es|ing|ed)\\b",
+            "flags": "gi"
+          },
+          "replace": "show, demonstrate"
+        },
+        {
+          "pattern": {
+            "source": "\\bembark(?:s|ing|ed)?\\b",
+            "flags": "gi"
+          },
+          "replace": "start, begin"
+        },
+        {
+          "pattern": {
+            "source": "\\bcommenc(?:e|es|ing|ed)\\b",
+            "flags": "gi"
+          },
+          "replace": "start, begin",
+          "clarity": true
+        },
+        {
+          "pattern": {
+            "source": "\\bascertain(?:s|ing|ed)?\\b",
+            "flags": "gi"
+          },
+          "replace": "find out, determine",
+          "clarity": true
+        },
+        {
+          "pattern": {
+            "source": "\\bendeavou?r(?:s|ing|ed)?\\b",
+            "flags": "gi"
+          },
+          "replace": "effort, attempt, try",
+          "clarity": true
+        },
+        {
+          "pattern": {
+            "source": "\\bunderscor(?:es|ing|ed)\\b",
+            "flags": "gi"
+          },
+          "replace": "highlights, shows"
+        },
+        {
+          "pattern": {
+            "source": "\\bload-bearing\\b(?=[ \\t]+(?:assumptions?|claims?|invariants?|premises?|constraints?|dependenc(?:y|ies)|arguments?|abstractions?)\\b)",
+            "flags": "gi"
+          },
+          "replace": "essential, critical, or say what breaks if you remove it"
+        }
+      ]
+    },
+    "tier2": {
+      "severity": "medium",
+      "weight": 3,
+      "mode": "flag in clusters (2+ per paragraph)",
+      "words": {
+        "harness": "use, take advantage of",
+        "navigate": "work through, handle",
+        "navigating": "working through, handling",
+        "foster": "encourage, support, build",
+        "elevate": "improve, raise, strengthen",
+        "unleash": "release, enable, unlock",
+        "streamline": "simplify, speed up",
+        "empower": "enable, let, allow",
+        "bolster": "support, strengthen",
+        "spearhead": "lead, drive, run",
+        "resonate": "connect with, appeal to",
+        "resonates": "connects with, appeals to",
+        "revolutionize": "change, transform",
+        "facilitate": "enable, help, allow",
+        "facilitates": "enables, helps, allows",
+        "underpin": "support, form the basis of",
+        "nuanced": "specific, subtle, detailed",
+        "crucial": "important, key, necessary",
+        "multifaceted": "having several parts, with several aspects",
+        "ecosystem": "system, community, network",
+        "myriad": "many, numerous",
+        "plethora": "many, a lot of",
+        "encompass": "include, cover, span",
+        "catalyze": "start, trigger, accelerate",
+        "reimagine": "rethink, redesign, rebuild",
+        "galvanize": "motivate, rally, push",
+        "augment": "add to, expand, supplement",
+        "cultivate": "build, develop, grow",
+        "illuminate": "clarify, explain, show",
+        "elucidate": "explain, clarify",
+        "juxtapose": "compare, contrast",
+        "transformative": "changes how [X] works",
+        "transformation": "major change, overhaul",
+        "cornerstone": "foundation, basis, key part",
+        "paramount": "most important, top priority",
+        "poised": "ready, set, about to",
+        "burgeoning": "growing, emerging",
+        "nascent": "new, early-stage",
+        "quintessential": "typical, classic, defining",
+        "overarching": "main, central, broad",
+        "quietly": "cut, or name the concrete contrast",
+        "underpinning": "basis, foundation",
+        "underpinnings": "basis, foundations",
+        "paradigm-shifting": "changes the basic model, changes how [X] is understood"
+      },
+      "conditional": [
+        {
+          "word": "deeply",
+          "pattern": {
+            "source": "\\bdeeply\\s+(?:integrated|committed|rooted|personal|human|flawed|resonant|transformative|interconnected|ingrained|embedded|meaningful)\\b",
+            "flags": "i"
+          },
+          "suggestion": "cut, or name what specifically runs deep"
+        }
+      ]
+    },
+    "tier3": {
+      "severity": "low",
+      "weight": 2,
+      "mode": "flag by density",
+      "words": [
+        "significant",
+        "significantly",
+        "innovative",
+        "innovation",
+        "effective",
+        "effectively",
+        "dynamic",
+        "dynamics",
+        "scalable",
+        "scalability",
+        "compelling",
+        "unprecedented",
+        "exceptional",
+        "exceptionally",
+        "remarkable",
+        "remarkably",
+        "sophisticated",
+        "instrumental",
+        "world-class",
+        "state-of-the-art",
+        "best-in-class",
+        "verbatim"
+      ],
+      "phrases": [
+        {
+          "source": "\\bemerging\\s+(?:sector|space|category|industry)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bthe\\s+integration\\s+of\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bthe\\s+intersection\\s+of\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bcommunity-?driven\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\blong-?term\\s+sustainability\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\buser\\s+engagement\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bdecentralized\\s+compute\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\b(?:sustainable\\s+)?reward\\s+emissions?\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\btokenized\\s+incentive\\s+structures?\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bdesigned\\s+for\\s+long-?term\\b",
+          "flags": "gi"
+        }
+      ],
+      "phraseWeight": 3
+    }
+  },
+  "categories": {
+    "ai-citation-markup": {
+      "severity": "critical",
+      "weight": 15,
+      "label": "Chatbot citation markup leak",
+      "groups": [
+        "AI_CITATION_MARKUP"
+      ],
+      "patterns": [
+        {
+          "source": "\\bcite(?:turn|news|search|navigation)\\d+(?:search|turn|news|navigation)\\d+",
+          "flags": "gi"
+        },
+        {
+          "source": "contentReference\\s*\\[oaicite:[^\\]]+\\]\\s*\\{[^}]*\\}",
+          "flags": "gi"
+        },
+        {
+          "source": "\\boai_citation\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\[attached_file:\\d+\\]",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bgrok_card\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "ai-placeholder": {
+      "severity": "critical",
+      "weight": 10,
+      "label": "Unfilled placeholder",
+      "groups": [
+        "AI_PLACEHOLDERS"
+      ],
+      "patterns": [
+        {
+          "source": "\\[(?:Your|Insert|Add|Enter|Describe|Specify|Choose|Pick)[^\\]\\n]{1,80}\\]",
+          "flags": "gi"
+        },
+        {
+          "source": "\\[(?:Recipient|Sender|Topic|Subject|Salutation|Closing|Position|Department|Project Name|Company Name|Date)(?:\\s+[^\\]\\n]{0,60})?\\]",
+          "flags": "gi"
+        },
+        {
+          "source": "\\[(?:INSERT|FILL\\s+IN|ADD|TODO|TBD|PLACEHOLDER)[^\\]\\n]{0,80}\\]",
+          "flags": "g"
+        },
+        {
+          "source": "\\b(?:19|20)\\d{2}-XX-XX\\b",
+          "flags": "g"
+        },
+        {
+          "source": "\\bXX\\/XX\\/(?:19|20)\\d{2}\\b",
+          "flags": "g"
+        },
+        {
+          "source": "<!--\\s*(?:add|fill\\s+in|insert|todo|placeholder)[^>]{0,120}-->",
+          "flags": "gi"
+        }
+      ]
+    },
+    "ai-utm-source": {
+      "severity": "critical",
+      "weight": 12,
+      "label": "AI-tool URL parameter",
+      "groups": [
+        "AI_UTM_SOURCE"
+      ],
+      "patterns": [
+        {
+          "source": "[?&]utm_source=(?:chatgpt|openai|copilot|claude|grok|gemini|perplexity)(?:\\.com|\\.ai)?\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "[?&]referrer=(?:chatgpt|copilot|grok|claude|gemini|perplexity)\\.(?:com|ai)\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "chatbot": {
+      "severity": "critical",
+      "weight": 8,
+      "label": "Chatbot artifact",
+      "groups": [
+        "CHATBOT_ARTIFACTS"
+      ],
+      "patterns": [
+        {
+          "source": "\\bi\\s+hope\\s+this\\s+helps\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bcertainly!\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\babsolutely!\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bgreat\\s+question!\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bexcellent\\s+point!\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bfeel\\s+free\\s+to\\s+reach\\s+out\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\blet\\s+me\\s+know\\s+if\\s+you\\s+need\\s+anything\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bin\\s+this\\s+article,?\\s+we\\s+will\\s+explore\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\blet'?s\\s+dive\\s+in!?\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "confidence-calibration": {
+      "severity": "low",
+      "weight": 2,
+      "label": "Confidence stacking",
+      "groups": [
+        "CONFIDENCE_CALIBRATION"
+      ],
+      "patterns": [
+        {
+          "source": "\\binterestingly\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bsurprisingly\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bimportantly\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bsignificantly\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bcertainly\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bundoubtedly\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bwithout\\s+a\\s+doubt\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "crowd-contrast": {
+      "severity": "medium",
+      "weight": 6,
+      "label": "Dramatized crowd contrast",
+      "groups": [
+        "CROWD_CONTRAST"
+      ],
+      "patterns": [
+        {
+          "source": "\\bwhile\\s+(?:everyone\\s+else|the\\s+(?:industry|market|competition)|others)\\s+(?:was|were|is|are)\\s+still\\s+(?:busy\\s+)?(?:(?:debat|deliberat|hesitat|theoriz|philosophiz|pontificat|speculat|argu)ing|(?:dither|bicker)ing)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bwhile\\s+(?:everyone\\s+else|the\\s+(?:industry|market|competition)|others)\\s+(?:was\\s+|were\\s+)?(?:busy\\s+)?(?:writing|wrote)\\s+think-?\\s?pieces\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bwhile\\s+(?:everyone\\s+else|the\\s+(?:industry|market|competition)|others)\\s+(?:was\\s+|were\\s+|is\\s+|are\\s+)?(?:still\\s+)?play(?:ed|ing|s)?\\s+catch[-\\s]?up\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "cutoff-disclaimer": {
+      "severity": "critical",
+      "weight": 10,
+      "label": "Cutoff disclaimer",
+      "groups": [
+        "CUTOFF_DISCLAIMERS"
+      ],
+      "patterns": [
+        {
+          "source": "\\bas\\s+of\\s+my\\s+last\\s+update\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bas\\s+of\\s+my\\s+(?:knowledge\\s+)?(?:cut-?off|last\\s+training)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bi\\s+don'?t\\s+have\\s+access\\s+to\\s+real-?time\\s+(?:data|information)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bbased\\s+on\\s+available\\s+information\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bas\\s+an?\\s+(?:ai|artificial\\s+intelligence|large\\s+language|ai\\s+language)\\s+(?:language\\s+)?model\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bi\\s+(?:am|'m)\\s+an?\\s+(?:ai|artificial\\s+intelligence|large\\s+language)\\s+(?:assistant|model)?\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bi\\s+cannot\\s+(?:provide|give|offer)\\s+(?:legal|medical|financial|professional)\\s+advice\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bmy\\s+training\\s+data\\s+(?:only\\s+)?(?:goes\\s+up\\s+to|extends\\s+to|ends\\s+(?:in|at))\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "dev-blog-boilerplate": {
+      "severity": "medium",
+      "weight": 3,
+      "label": "Dev-blog boilerplate",
+      "groups": [
+        "DEV_BLOG_BOILERPLATE"
+      ],
+      "patterns": [
+        {
+          "source": "\\bit\\s+just\\s+works\\b(?!\\s+out\\b(?![-\\s]+of[-\\s]+the[-\\s]+box\\b))",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bzero[-\\s]config(?:uration)?\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bsane\\s+defaults\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\b(?:hold|fit|fits|holds)\\s+in\\s+your\\s+head\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "emotional-flatline": {
+      "severity": "low",
+      "weight": 0,
+      "label": "Stock reaction framing",
+      "groups": [
+        "EMOTIONAL_FLATLINE"
+      ],
+      "patterns": [
+        {
+          "source": "\\bwhat\\s+surprised\\s+me\\s+most\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bi\\s+was\\s+fascinated\\s+to\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bwhat\\s+struck\\s+me\\s+was\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bi\\s+was\\s+excited\\s+to\\s+learn\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bthe\\s+most\\s+interesting\\s+(?:part|thing|aspect|piece)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "^[ \\t]*interesting\\s+(?:part|thing|aspect|piece)(?:\\s+of\\s+(?:the\\s+)?\\w+)?\\s*:",
+          "flags": "gim"
+        }
+      ]
+    },
+    "fake-casual-prop": {
+      "severity": "high",
+      "weight": 8,
+      "label": "Fake-casual prop",
+      "groups": [
+        "FAKE_CASUAL_PROPS"
+      ],
+      "patterns": [
+        {
+          "source": "\\*\\s?(?:checks\\s+notes|chef['\\u2019]s\\s+kiss|mic\\s+drop|takes\\s+a\\s+deep\\s+breath|sips\\s+(?:coffee|tea)|nervous\\s+laughter)\\s?\\*",
+          "flags": "gi"
+        },
+        {
+          "source": "\\(\\s?(?:yes|no)\\s?,\\s?(?:really|seriously)\\s?\\)",
+          "flags": "gi"
+        }
+      ]
+    },
+    "false-concession": {
+      "severity": "medium",
+      "weight": 2,
+      "label": "False concession",
+      "groups": [
+        "FALSE_CONCESSION"
+      ],
+      "patterns": [
+        {
+          "source": "\\bwhile\\s+[^,;:.!?\\n]{1,60}?\\s+is\\s+impressive\\b[^,;:.!?\\n]{0,80}?[,;:]\\s*[^,;:.!?\\n]{0,80}?(?:remains?\\s+a\\s+challenge|(?:is|are)\\s+still\\s+an?\\s+open\\s+questions?|there\\s+(?:is|are)\\s+still\\s+work\\s+to\\s+do|remains?\\s+unanswered)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\balthough\\s+[^,;:.!?\\n]{1,60}?\\s+has\\s+made\\s+strides\\b[^,;:.!?\\n]{0,80}?[,;:]\\s*[^,;:.!?\\n]{0,80}?(?:remains?\\s+a\\s+challenge|(?:is|are)\\s+still\\s+an?\\s+open\\s+questions?|there\\s+(?:is|are)\\s+still\\s+work\\s+to\\s+do|remains?\\s+unanswered)\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "filler": {
+      "severity": "medium",
+      "weight": 2,
+      "label": "Filler phrase",
+      "groups": [
+        "FILLERS"
+      ],
+      "patterns": [
+        {
+          "source": "\\bit\\s+is\\s+important\\s+to\\s+note\\s+that\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bin\\s+terms\\s+of\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bthe\\s+reality\\s+is\\s+that\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bit'?s\\s+important\\s+to\\s+note\\s+that\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "formulaic-opener": {
+      "severity": "high",
+      "weight": 8,
+      "label": "Formulaic opener",
+      "groups": [
+        "FORMULAIC_OPENERS"
+      ],
+      "patterns": [
+        {
+          "source": "\\bin\\s+the\\s+(?:rapidly\\s+|ever-?\\s*)?(?:evolving|changing|expanding|growing|shifting)\\s+(?:world|landscape|realm|space|field|domain|era)\\s+of\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bin\\s+(?:an?|the)\\s+(?:digital\\s+)?age\\s+(?:where|of)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bas\\s+(?:we|the\\s+world|society|industries?)\\s+(?:continue|move|navigate|enter)\\s+(?:to\\s+)?(?:evolve|forward|into|through)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bhas\\s+emerged\\s+as\\s+(?:a|the|one\\s+of)\\s+(?:leading|key|major|critical|essential|fundamental|pivotal|prominent|dominant|important)\\s+\\w+",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bhas\\s+become\\s+increasingly\\s+(?:important|critical|popular|relevant|prominent|essential)\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "future-narrative": {
+      "severity": "high",
+      "weight": 12,
+      "label": "Generic future narrative",
+      "groups": [
+        "FUTURE_NARRATIVE"
+      ],
+      "patterns": [
+        {
+          "source": "\\b(?:may|could|will|is\\s+(?:poised|set)\\s+to)\\s+become\\s+(?:one\\s+of\\s+)?(?:the\\s+)?(?:most\\s+)?\\w+\\s+(?:narratives?|stories|developments?|trends?|movements?|chapters?|themes?|forces?)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bone\\s+of\\s+the\\s+most\\s+important\\s+(?:narratives?|stories|trends?|themes?)\\s+of\\s+the\\s+(?:next|coming)\\s+\\w+\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "generic-conclusion": {
+      "severity": "medium",
+      "weight": 3,
+      "label": "Generic conclusion",
+      "groups": [
+        "GENERIC_CONCLUSIONS"
+      ],
+      "patterns": [
+        {
+          "source": "\\bthe\\s+future\\s+looks\\s+bright\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bonly\\s+time\\s+will\\s+tell\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bone\\s+thing\\s+is\\s+certain\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bas\\s+we\\s+move\\s+forward\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "hedge-stack": {
+      "severity": "high",
+      "weight": 6,
+      "label": "Hedge-stacked prediction",
+      "groups": [
+        "HEDGE_STACK"
+      ],
+      "patterns": [
+        {
+          "source": "\\b(?:could|may|might)\\s+(?:(?!not\\b|never\\b|hardly\\b|scarcely\\b|barely\\b)\\w+\\s+)?(?:potentially|eventually|ultimately|possibly|conceivably)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\b(?:potentially|eventually|ultimately)\\s+(?:could|may|might)\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "hollow-intensifier": {
+      "severity": "medium",
+      "weight": 2,
+      "label": "Hollow intensifier",
+      "groups": [
+        "HOLLOW_INTENSIFIERS"
+      ],
+      "patterns": [
+        {
+          "source": "\\bgenuine(?:ly)?\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\btruly\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bquite\\s+frankly\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bto\\s+be\\s+honest\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\blet'?s\\s+be\\s+clear\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "launch-intro": {
+      "severity": "high",
+      "weight": 8,
+      "label": "Launch-copy introduction",
+      "groups": [
+        "LAUNCH_INTROS"
+      ],
+      "patterns": [
+        {
+          "source": "(?<=^|[.!?]\\s|\\n)Meet\\s+[A-Z][\\w'-]{1,29}\\s*,\\s*(?:your\\s+new\\s+(?:favorite|go-to)\\b|the\\s+new\\s+(?:home\\s+of\\b|way\\s+to\\b|standard\\s+(?:in|for)\\b|(?:standard|way|home)(?=\\s*(?:[.!?,;:\\u2013\\u2014]|$))))",
+          "flags": "g"
+        },
+        {
+          "source": "(?<=^|[.!?]\\s|\\n)[Tt]hink\\s+[A-Z][\\w'-]{1,29}\\s+meets\\s+[A-Z][\\w'-]{1,29}\\b",
+          "flags": "g"
+        }
+      ]
+    },
+    "lets-construction": {
+      "severity": "medium",
+      "weight": 2,
+      "label": "\"Let's\" opener",
+      "groups": [
+        "LETS_PATTERNS"
+      ],
+      "patterns": [
+        {
+          "source": "\\blet'?s\\s+explore\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\blet'?s\\s+take\\s+a\\s+look\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\blet'?s\\s+break\\s+this\\s+down\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\blet'?s\\s+examine\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\blet'?s\\s+(?:consider|discuss|delve|unpack|walk\\s+through)\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "lingering-attention": {
+      "severity": "medium",
+      "weight": 3,
+      "label": "Lingering-attention claim",
+      "groups": [
+        "LINGERING_ATTENTION"
+      ],
+      "patterns": [
+        {
+          "source": "\\b(?:the|that|this)\\s+(?:one\\s+)?(?:line|quote|bit|part|idea|point|framing|comment|thing)\\s+(?:that\\s+)?i\\s+keep\\s+(?:coming\\s+back\\s+to|thinking\\s+about)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bi\\s+can'?t\\s+stop\\s+thinking\\s+about\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bstill\\s+thinking\\s+about\\s+(?:this|that)\\s+one\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\b(?:been|be)\\s+rattling\\s+around\\s+(?:in\\s+)?my\\s+(?:head|brain)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bi'?ve\\s+been\\s+chewing\\s+on\\s+(?:this|that)\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "negation-chain": {
+      "severity": "high",
+      "weight": 5,
+      "label": "Negation chain",
+      "groups": [
+        "NEGATION_CHAIN"
+      ],
+      "patterns": [
+        {
+          "source": "(?<=^|[.!?]\\s|\\n|[:\\u2013\\u2014]\\s)No\\s+(?!matter\\b|one\\b|doubt\\b|longer\\b|way\\b|less\\b|more\\b|such\\b|other\\b|means\\b)[a-z'’-]+(?:\\s+(?!(?:in|on|at|of|to|for|with|from|by|is|are|was|were|be|been|being|will|would|can|could|should|shall|may|might|must|have|has|had|do|does|did)\\b)[a-z'’-]+)?(?:\\s*,\\s*(?:and\\s+|or\\s+|just\\s+)?no\\s+(?!matter\\b|one\\b|doubt\\b|longer\\b|way\\b|less\\b|more\\b|such\\b|other\\b|means\\b)[a-z'’-]+(?:\\s+(?!(?:in|on|at|of|to|for|with|from|by|is|are|was|were|be|been|being|will|would|can|could|should|shall|may|might|must|have|has|had|do|does|did)\\b)[a-z'’-]+)?){2,}",
+          "flags": "gm"
+        },
+        {
+          "source": "\\b(?:did\\s+not|didn['\\u2019]t)\\s+[a-z]+[^,.;!?\\n]{0,20},\\s*(?:did\\s+not|didn['\\u2019]t)\\s+[a-z]+",
+          "flags": "gi"
+        },
+        {
+          "source": "\\b(?:do\\s+not|don['\\u2019]t)\\s+(?:just\\s+)?(\\w+)\\s+it\\b[^.!?\\n]{0,60}[.!?;:,][\\s'\"\\u201d\\u2019]*(?:just\\s+)?\\1\\s+it\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "negative-parallelism": {
+      "severity": "high",
+      "weight": 4,
+      "label": "Negative parallelism",
+      "groups": [
+        "NEGATIVE_PARALLELISM_REVEAL",
+        "NEGATIVE_PARALLELISM_CONTRAST"
+      ],
+      "patterns": [
+        {
+          "source": "(?:\\b(?:is|are|was|were)(?:n['\\u2019]t|\\s+not)|\\b(?:it|this|that|they|he|she|we|you)['\\u2019](?:s|re)\\s+not)\\s+(?:just|merely|simply)\\s+[^,;:.!?\\n\\u2014\\u2013]{1,80}?(?:\\s*[,;:]|\\s*[\\u2014\\u2013]|\\s+--)\\s*(?:it|this|that|they)(?:['\\u2019](?:s|re)|\\s+(?:is|are|was|were))\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "(?:\\b(?:is|are|was|were)(?:n['\\u2019]t|\\s+not)|\\b(?:it|this|that|they|he|she|we|you)['\\u2019](?:s|re)\\s+not)\\s+(?!(?:just|merely|simply)\\b)[^,;:.!?\\n\\u2014\\u2013]{1,80}?(?:\\s*[,;:]|\\s*[\\u2014\\u2013]|\\s+--)\\s*(?:it|this|that|they)(?:['\\u2019](?:s|re)|\\s+(?:is|are|was|were))\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "(?:\\b(?:is|are|was|were)(?:n['\\u2019]t|\\s+not)|\\b(?:it|this|that|they|he|she|we|you)['\\u2019](?:s|re)\\s+not)\\s+(?:just|merely|simply)\\s+[^,;:.!?\\n\\u2014\\u2013]{1,80}?[.!]\\s+(?:it|this|that|they)(?:['\\u2019](?:s|re)|\\s+(?:is|are|was|were))\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "novelty-inflation": {
+      "severity": "medium",
+      "weight": 3,
+      "label": "Novelty inflation",
+      "groups": [
+        "NOVELTY_INFLATION"
+      ],
+      "patterns": [
+        {
+          "source": "\\bthe\\s+failure\\s+mode\\s+nobody'?s?\\s+naming\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\ba\\s+problem\\s+nobody\\s+talks\\s+about\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bthe\\s+insight\\s+everyone'?s?\\s+missing\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bwhat\\s+nobody\\s+tells\\s+you\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "parenthetical-hedge": {
+      "severity": "medium",
+      "weight": 3,
+      "label": "Parenthetical hedge",
+      "groups": [
+        "PARENTHETICAL_HEDGE"
+      ],
+      "patterns": [
+        {
+          "source": "\\(\\s*(?:and\\s+)?(?:increasingly|notably|importantly|crucially|interestingly|perhaps)[,]?\\s+[^)]{3,60}\\)",
+          "flags": "gi"
+        },
+        {
+          "source": "\\(\\s*or\\s+more\\s+(?:precisely|accurately|specifically)[,]?\\s+[^)]{3,60}\\)",
+          "flags": "gi"
+        },
+        {
+          "source": "\\(\\s*though\\s+to\\s+be\\s+fair[,]?\\s+[^)]{3,60}\\)",
+          "flags": "gi"
+        },
+        {
+          "source": "\\(\\s*at\\s+least\\s+(?:in\\s+)?(?:theory|principle|part)[,]?\\s+[^)]{0,60}\\)",
+          "flags": "gi"
+        }
+      ]
+    },
+    "performed-insight": {
+      "severity": "medium",
+      "weight": 3,
+      "label": "Performed-insight phrase",
+      "groups": [
+        "PERFORMED_INSIGHT",
+        "STAGED_DISCOVERY"
+      ],
+      "patterns": [
+        {
+          "source": "\\bsit(?:s|ting)?\\s+with\\s+(?:that|this)(?=\\s*(?:[.!?,;:)\\u2013\\u2014\\u2019\"']|for\\s+a\\s+(?:moment|minute|second|beat)\\b|$))(?:\\s+for\\s+a\\s+(?:moment|minute|second|beat))?",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bsit(?:s|ting)?\\s+with\\s+(?:the|your)\\s+(?:discomfort|tension|uncertainty|ambiguity|grief|unease)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\b(?:that|this|it|which)(?:['\\u2019]s|\\s+(?:is|was))\\s+not\\s+nothing\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\byou\\s+already\\s+know\\s+the\\s+answer\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\b(?:do\\s+not|don['\\u2019]t)\\s+(?:have\\s+to\\s+)?take\\s+my\\s+word\\s+for\\s+it\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "(?<=^|[.!?]\\s|\\n)Turns\\s+out\\b",
+          "flags": "g"
+        },
+        {
+          "source": "(?:['\\u2019]s|\\b(?:is|was|are|were))\\s+the\\s+(?:whole|entire)\\s+(?:point|game|ballgame|trick|pitch|idea|play|business\\s+model|value\\s+proposition)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\b(?:that|this)(?:['\\u2019]s|\\s+(?:is|was))\\s+the\\s+part\\s+(?:that|I|you|we|nobody|no\\s+one|most\\s+people)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bthe\\s+only\\s+[\\w'\\u2019-]+\\s+that\\s+(?:matters|counts)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bis\\s+dead\\s*[.;,:\\u2013\\u2014]\\s*long\\s+live\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\b(?:that|this)(?:['\\u2019]s|\\s+(?:is|was))\\s+why\\s+[^.!?\\n]{0,60}\\s+mattered\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\b(?:turned|turns|turning)\\s+out\\s+to\\s+be\\s+the\\s+(?:least|most)\\s+(?:interesting|important|surprising|revealing|valuable|useful)\\s+(?:part|thing|piece|bit)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bthe\\s+real\\s+story\\s+(?:here\\s+)?(?:is|was)\\b(?=\\s+(?:the|that|how|why|what)\\b)",
+          "flags": "gi"
+        }
+      ]
+    },
+    "real-actual-inflation": {
+      "severity": "medium",
+      "weight": 5,
+      "label": "\"Real/actual\" inflation",
+      "groups": [
+        "REAL_ACTUAL_INFLATION"
+      ],
+      "patterns": [
+        {
+          "source": "\\b(?:real|actual|genuine|true)\\s+(?:on-?chain\\s+)?(?:tokenomics|economics|utility|adoption|sustainability|impact|revenue|fundamentals|demand|value|innovation|traction)\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "reasoning-artifact": {
+      "severity": "critical",
+      "weight": 6,
+      "label": "Reasoning artifact",
+      "groups": [
+        "REASONING_ARTIFACTS"
+      ],
+      "patterns": [
+        {
+          "source": "\\blet\\s+me\\s+think\\s+step\\s+by\\s+step\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bbreaking\\s+this\\s+down\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bto\\s+approach\\s+this\\s+systematically\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bhere'?s\\s+my\\s+thought\\s+process\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bfirst,?\\s+let'?s\\s+consider\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bworking\\s+through\\s+this\\s+logically\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "rhetorical-question": {
+      "severity": "medium",
+      "weight": 2,
+      "label": "Rhetorical question",
+      "groups": [
+        "RHETORICAL_QUESTIONS"
+      ],
+      "patterns": [
+        {
+          "source": "\\bbut\\s+what\\s+does\\s+this\\s+mean\\s+for\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bso\\s+why\\s+should\\s+you\\s+care\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bwhat'?s\\s+next\\?\\s*",
+          "flags": "gi"
+        }
+      ]
+    },
+    "significance-inflation": {
+      "severity": "high",
+      "weight": 4,
+      "label": "Significance inflation",
+      "groups": [
+        "SIGNIFICANCE_INFLATION"
+      ],
+      "patterns": [
+        {
+          "source": "\\bmarking\\s+a\\s+(?:pivotal|significant|important)\\s+moment\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\ba\\s+watershed\\s+moment\\s+for\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\b(?:moment|milestone|chapter|era|turning\\s+point|watershed|inflection\\s+point|leap|role|new\\s+phase)\\s+in\\s+the\\s+evolution\\s+of\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\ba\\s+(?:pivotal|defining)\\s+moment\\s+in\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "social-cta-closer": {
+      "severity": "high",
+      "weight": 8,
+      "label": "Engagement-bait closer",
+      "groups": [
+        "SOCIAL_CTA_CLOSER"
+      ],
+      "patterns": [
+        {
+          "source": "\\bthis\\s+one['’]?s?\\s+(?:is\\s+)?(?:well\\s+|totally\\s+|absolutely\\s+|definitely\\s+|really\\s+|truly\\s+|easily\\s+|more\\s+than\\s+)?worth\\s+(?:your\\s+time|the\\s+read|a\\s+read|every\\s+(?:minute|second)|reading|watching|a\\s+listen|a\\s+watch|a\\s+look|it)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bthis\\s+one['’]?s?\\s+(?:is\\s+)?a\\s+must[-\\s]?(?:read|watch|listen|see)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\b(?:highly|strongly|can['’]?t|cannot)\\s+recommend\\w*\\s+(?:giving\\s+)?(?:this|it)\\s+(?:one\\s+)?a\\s+(?:read|listen|watch|look|go)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bdo\\s+yourself\\s+a\\s+favou?r\\s+and\\s+(?:read|watch|check\\s+out)\\s+(?:this|it)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\byou\\s+(?:really\\s+)?(?:won['’]?t|do\\s*n['’]?t|will\\s+not|do\\s+not)\\s+want\\s+to\\s+miss\\s+this(?:\\s+one)?(?=\\s*(?:[:.!\\n]|$))",
+          "flags": "gi"
+        },
+        {
+          "source": "(?<=^|[,.!?:\\n]\\s{0,4})(?:you\\s+can\\s+)?thank\\s+me\\s+later\\b",
+          "flags": "gim"
+        },
+        {
+          "source": "(?<=^|[.!?:\\n]\\s{0,4})save\\s+this\\s+(?:one\\s+)?for\\s+later\\b",
+          "flags": "gim"
+        },
+        {
+          "source": "\\bbookmark\\s+this(?:\\s+(?:one|post|thread))?(?=\\s*(?:[:.!\\n]|$))",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bdo\\s*n['’]?t\\s+sleep\\s+on\\s+this\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\btrust\\s+me,?\\s+(?:on\\s+this|you['’]?ll)\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "speculative-opener": {
+      "severity": "high",
+      "weight": 8,
+      "label": "Speculative scenario opener",
+      "groups": [
+        "SPECULATIVE_OPENERS"
+      ],
+      "patterns": [
+        {
+          "source": "\\b(?:imagine|picture|envision)(?:\\s*,[^,\\n]{1,30},)?\\s+a\\s+(?:world|future|reality)\\s+(?:where|in\\s+which)\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "sycophantic": {
+      "severity": "critical",
+      "weight": 8,
+      "label": "Sycophantic tone",
+      "groups": [
+        "SYCOPHANTIC"
+      ],
+      "patterns": [
+        {
+          "source": "\\byou'?re\\s+absolutely\\s+right\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bthat'?s\\s+a\\s+really\\s+insightful\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bthat'?s\\s+a\\s+great\\s+question\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bexcellent\\s+question\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "template-phrase": {
+      "severity": "high",
+      "weight": 3,
+      "label": "Template phrase",
+      "groups": [
+        "TEMPLATE_PHRASES"
+      ],
+      "patterns": [
+        {
+          "source": "\\ban?\\s+(?:meaningful|significant|major|crucial|important|big|huge|bold|giant|monumental|pivotal|critical|key|vital|massive|tremendous|substantial|decisive|landmark|historic|exciting|transformative)\\s+step\\s+(?:towards?|forward)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bwhether\\s+you'?re\\s+\\w+\\s+or\\s+\\w+",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bi\\s+recently\\s+had\\s+the\\s+pleasure\\s+of\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "title-case-header": {
+      "severity": "medium",
+      "weight": 4,
+      "label": "Title Case header",
+      "groups": [
+        "TITLE_CASE_HEADER"
+      ],
+      "patterns": [
+        {
+          "source": "^(?:#{1,6}[ \\t]+)?([A-Z][a-z]+(?:[ \\t]+(?:[A-Z][a-z]+|A|I|[A-Z]{2,}|and|or|of|the|in|for|to|a|an))+[ \\t]+[A-Z][a-z]+)[ \\t]*$",
+          "flags": "gm"
+        }
+      ]
+    },
+    "transition": {
+      "severity": "medium",
+      "weight": 2,
+      "label": "AI transition",
+      "groups": [
+        "TRANSITIONS"
+      ],
+      "patterns": [
+        {
+          "source": "\\bmoreover\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bfurthermore\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\badditionally\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bin\\s+today'?s\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bin\\s+an\\s+era\\s+where\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bit'?s\\s+worth\\s+noting\\s+that\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bnotably\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bin\\s+conclusion\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bin\\s+summary\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bto\\s+summarize\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bwhen\\s+it\\s+comes\\s+to\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bat\\s+the\\s+end\\s+of\\s+the\\s+day\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bthat\\s+(?:being\\s+)?said\\b",
+          "flags": "gi"
+        }
+      ]
+    },
+    "vague-attribution": {
+      "severity": "critical",
+      "weight": 5,
+      "label": "Vague attribution",
+      "groups": [
+        "VAGUE_ATTRIBUTIONS"
+      ],
+      "patterns": [
+        {
+          "source": "\\bexperts\\s+(?:believe|say|suggest|agree)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bstudies\\s+(?:show|suggest|indicate)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bresearch\\s+(?:shows|suggests|indicates)\\b",
+          "flags": "gi"
+        },
+        {
+          "source": "\\bindustry\\s+leaders\\s+(?:agree|believe|say)\\b",
+          "flags": "gi"
+        }
+      ]
+    }
+  },
+  "weights": {
+    "tier1": 5,
+    "tier1-clarity": 3,
+    "tier2": 3,
+    "tier3": 2,
+    "transition": 2,
+    "chatbot": 8,
+    "sycophantic": 8,
+    "filler": 2,
+    "generic-conclusion": 3,
+    "lets-construction": 2,
+    "reasoning-artifact": 6,
+    "significance-inflation": 4,
+    "vague-attribution": 5,
+    "hollow-intensifier": 2,
+    "emotional-flatline": 0,
+    "lingering-attention": 3,
+    "novelty-inflation": 3,
+    "cutoff-disclaimer": 10,
+    "template-phrase": 3,
+    "false-concession": 2,
+    "rhetorical-question": 2,
+    "confidence-calibration": 2,
+    "em-dash": 0,
+    "uniformity": 5,
+    "formatting": 3,
+    "tier3-phrase": 3,
+    "tier3-phrase-cluster": 12,
+    "hashtag-stuff": 12,
+    "bullet-np-list": 10,
+    "hedge-stack": 6,
+    "future-narrative": 12,
+    "real-actual-inflation": 5,
+    "social-cta-closer": 8,
+    "performed-insight": 3,
+    "negation-chain": 5,
+    "negative-parallelism": 4,
+    "dev-blog-boilerplate": 3,
+    "formulaic-opener": 8,
+    "speculative-opener": 8,
+    "launch-intro": 8,
+    "crowd-contrast": 6,
+    "fake-casual-prop": 8,
+    "title-case-header": 4,
+    "parenthetical-hedge": 3,
+    "smart-punct-signature": 6,
+    "punct-distribution": 6,
+    "fnword-trigram-entropy": 5,
+    "cross-para-burstiness": 5,
+    "normalization-flag": 9,
+    "low-ttr": 3,
+    "ai-placeholder": 10,
+    "ai-citation-markup": 15,
+    "ai-utm-source": 12,
+    "unnecessary-hyphenation": 0
+  },
+  "typeLabels": {
+    "tier1": "AI vocabulary",
+    "tier1-clarity": "Wordiness",
+    "tier2": "Word cluster",
+    "tier3": "Overused word",
+    "transition": "AI transition",
+    "chatbot": "Chatbot artifact",
+    "sycophantic": "Sycophantic tone",
+    "filler": "Filler phrase",
+    "generic-conclusion": "Generic conclusion",
+    "lets-construction": "\"Let's\" opener",
+    "reasoning-artifact": "Reasoning artifact",
+    "significance-inflation": "Significance inflation",
+    "vague-attribution": "Vague attribution",
+    "hollow-intensifier": "Hollow intensifier",
+    "emotional-flatline": "Stock reaction framing",
+    "lingering-attention": "Lingering-attention claim",
+    "novelty-inflation": "Novelty inflation",
+    "cutoff-disclaimer": "Cutoff disclaimer",
+    "template-phrase": "Template phrase",
+    "false-concession": "False concession",
+    "rhetorical-question": "Rhetorical question",
+    "confidence-calibration": "Confidence stacking",
+    "em-dash": "Em dash overuse",
+    "uniformity": "Rhythm uniformity",
+    "formatting": "Formatting",
+    "tier3-phrase": "Boilerplate phrase",
+    "tier3-phrase-cluster": "Boilerplate cluster",
+    "hashtag-stuff": "Hashtag stuffing",
+    "bullet-np-list": "Bullet-NP list",
+    "hedge-stack": "Hedge-stacked prediction",
+    "future-narrative": "Generic future narrative",
+    "real-actual-inflation": "\"Real/actual\" inflation",
+    "social-cta-closer": "Engagement-bait closer",
+    "formulaic-opener": "Formulaic opener",
+    "speculative-opener": "Speculative scenario opener",
+    "launch-intro": "Launch-copy introduction",
+    "crowd-contrast": "Dramatized crowd contrast",
+    "fake-casual-prop": "Fake-casual prop",
+    "title-case-header": "Title Case header",
+    "parenthetical-hedge": "Parenthetical hedge",
+    "smart-punct-signature": "Smart-punct signature",
+    "punct-distribution": "Punctuation distribution",
+    "fnword-trigram-entropy": "Grammar repetition",
+    "cross-para-burstiness": "Cross-paragraph rhythm",
+    "normalization-flag": "Bypass-trick chars",
+    "low-ttr": "Low vocabulary diversity",
+    "ai-placeholder": "Unfilled placeholder",
+    "ai-citation-markup": "Chatbot citation markup leak",
+    "ai-utm-source": "AI-tool URL parameter",
+    "unnecessary-hyphenation": "Unnecessary hyphenation",
+    "performed-insight": "Performed-insight phrase",
+    "negation-chain": "Negation chain",
+    "negative-parallelism": "Negative parallelism",
+    "dev-blog-boilerplate": "Dev-blog boilerplate"
+  },
+  "severityLabels": {
+    "critical": "P0",
+    "high": "P1",
+    "medium": "P2",
+    "low": "P3"
+  }
+}
