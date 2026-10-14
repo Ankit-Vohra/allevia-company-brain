@@ -212,7 +212,7 @@ describe("temporal upsert (integration)", () => {
     await expect(addObservation(g, { subject: "channel:none", metric: "x", value: 1, asOf: "2026-10-13", src: "document:later" })).rejects.toBeInstanceOf(MissingEndpoint);
   });
 
-  it("writeBatch writes nodes, then edges, then observations and collects per-item errors", async () => {
+  it("writeBatch writes nodes, then observations, then edges and collects per-item errors", async () => {
     const stats = await writeBatch(g, {
       nodes: [
         { type: "Product", id: "product:app", name: "Aamdani app" },
@@ -230,5 +230,20 @@ describe("temporal upsert (integration)", () => {
     expect(stats).toMatchObject({ nodesCreated: 2, nodesUpdated: 1, versions: 1, edgesCreated: 2, edgesClosed: 1, observations: 1 });
     expect(stats.errors.map((e) => e.kind)).toEqual(["node", "edge"]);
     expect(stats.errors[1]!.error).toMatch(/product:missing/);
+  });
+
+  it("writeBatch lets an edge point at an observation from the same batch, and keeps its evidence quote", async () => {
+    const o = { subject: "channel:instagram", metric: "share_of_reach", value: 90, unit: "%", asOf: "2026-09-28", src: "document:pending", evidence: "Reels drove 90% of reach" };
+    const obsId = "obs:share_of_reach:channel:instagram:2026-09-28";
+    const stats = await writeBatch(g, {
+      nodes: [{ type: "Decision", id: "decision:pause-facebook", name: "Pause Facebook posts" }],
+      edges: [{ from: "decision:pause-facebook", type: "BASED_ON", to: obsId }],
+      observations: [o],
+    }, T0 + 2000);
+    expect(stats.errors).toEqual([]);
+    expect(stats).toMatchObject({ edgesCreated: 1, observations: 1 });
+    const [r] = await g.roQuery<Record<string, unknown>>(
+      "MATCH (:Entity {id:'decision:pause-facebook'})-[:BASED_ON]->(o:Observation) RETURN o.id AS id, o.evidence AS ev");
+    expect(r).toEqual({ id: obsId, ev: "Reels drove 90% of reach" });
   });
 });
