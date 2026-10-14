@@ -6,7 +6,11 @@
 //   Re-asserting a current fact refreshes its provenance in place; re-asserting a closed fact opens a new edge.
 //   Functional relationships (schema FUNCTIONAL_RELS) close the slot's previous edge when a new one arrives.
 // - Numbers are Observation nodes with a deterministic id, linked MEASURES -> subject and SOURCED_FROM -> document.
-// One query (or two) per item: plenty for hackathon-sized ingests; UNWIND batching can come later behind writeBatch.
+// Concurrency: each node create, node update (+ its Version) and edge write (+ its functional hand-over) is one
+// atomic statement; see upsertNode/upsertEdge. addObservation is three idempotent statements (node, MEASURES,
+// SOURCED_FROM), not one, and writeBatch is item by item.
+// A read plus one write per item: plenty for hackathon-sized ingests; UNWIND batching can come later behind writeBatch.
+import { randomBytes } from "node:crypto";
 import type { GraphHandle } from "./client.js";
 import {
   CLOSED_EDGE_COST, EDGE_META_PROPS, NODE_META_PROPS, TRACKED_PROPS, functionalRule, isAllowed, isEntityType, isRelType,
@@ -142,70 +146,81 @@ async function readNode(g: GraphHandle, id: string): Promise<{ labels: string[];
   return r ? { labels: r.labels, props: Object.fromEntries(r.kv) } : null;
 }
 
+const MAX_ATTEMPTS = 5;
+
+// Concurrency: the create path is one MERGE that reports `created` only to the caller whose ON CREATE ran (a per-call
+// token), and every update is a compare-and-set on `rev`, with the Version written in the same statement. A caller
+// that loses a race re-reads and re-diffs, so two concurrent upserts never both report created and never version the
+// same state twice. What remains: nodes are matched by id with the type checked on read, so a concurrent create of
+// the same id under a different type could still make two nodes (the id-prefix check makes that a caller bug).
 export async function upsertNode(g: GraphHandle, n: NodeInput, now: number = Date.now()): Promise<NodeResult> {
   validateNode(n);
   const content = defined({ ...n.props, name: n.name, summary: n.summary });
   const prov = defined({ src: n.src, asOf: n.asOf, simulated: n.simulated });
-  const setVec = n.embedding ? ` SET n.${vectorPropFor(n.type)} = vecf32($vec)` : "";
-  const params: Record<string, unknown> = { id: n.id, now, props: { ...content, ...prov }, vec: n.embedding };
+  const vecProp = vectorPropFor(n.type);
+  const base: Record<string, unknown> = { id: n.id, now, props: { ...content, ...prov }, vec: n.embedding };
 
-  const existing = await readNode(g, n.id);
-  if (!existing) {
-    await g.query(
-      `MERGE (n:Entity:${n.type} {id:$id}) ON CREATE SET n.createdAt = $now, n.updatedAt = $now, n.stateSince = $now SET n += $props${setVec}`,
-      params);
-    return { created: true, versioned: false, updated: false };
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const existing = await readNode(g, n.id);
+    if (!existing) {
+      const rows = await g.query<{ created: boolean }>(
+        `MERGE (n:Entity:${n.type} {id:$id})
+         ON CREATE SET n += $props, n.createdAt = $now, n.updatedAt = $now, n.stateSince = $now, n.rev = 1, n._mergeToken = $token${n.embedding ? `, n.${vecProp} = vecf32($vec)` : ""}
+         WITH n, coalesce(n._mergeToken = $token, false) AS created SET n._mergeToken = null RETURN created`,
+        { ...base, token: randomBytes(8).toString("hex") });
+      if (rows[0]?.created) return { created: true, versioned: false, updated: false };
+      continue; // another writer created it between our read and MERGE: go round as an update
+    }
+
+    const have = typeOfLabels(existing.labels);
+    if (have !== n.type) throw new InvalidWrite(`${n.id} already exists as ${have ?? existing.labels.join(":")}, not ${n.type}`);
+    const old = existing.props;
+    const changed = Object.keys(content).filter((k) => !sameValue(old[k], content[k]));
+    const provChanged = Object.keys(prov).some((k) => !sameValue(old[k], prov[k]));
+    // A tracked value appearing for the first time is new information, not a change of state.
+    const tracked = (TRACKED_PROPS[n.type] ?? []).filter((k) => changed.includes(k) && old[k] !== null && old[k] !== undefined);
+    if (!changed.length && !provChanged && !n.embedding) return { created: false, versioned: false, updated: false };
+
+    const params: Record<string, unknown> = { ...base, rev: num(old.rev) ?? 0 };
+    let cypher = "MATCH (n:Entity {id:$id}) WHERE coalesce(n.rev, 0) = $rev";
+    if (tracked.length) {
+      const snapshot = JSON.stringify(old);
+      params.version = defined({
+        id: `version:${n.id}@${now}-${sha256(snapshot).slice(0, 8)}`,
+        name: "", // no display name: a Version must not surface as an entity-search hit (the old name is in `props`)
+        of: n.id,
+        props: snapshot,
+        changed: tracked,
+        since: num(old.stateSince) ?? num(old.updatedAt) ?? num(old.createdAt) ?? now,
+        until: now,
+        src: old.src as Prim | undefined,
+        asOf: old.asOf as Prim | undefined,
+        createdAt: now,
+        updatedAt: now,
+      });
+      params.hv = defined({ since: now, recordedAt: now, src: n.src, asOf: n.asOf });
+      cypher += " CREATE (n)-[h:HAD_VERSION]->(v:Entity:Version) SET v += $version, h += $hv";
+    }
+    cypher += " SET n += $props, n.rev = $rev + 1";
+    if (changed.length) cypher += ", n.updatedAt = $now";
+    if (tracked.length) cypher += ", n.stateSince = $now";
+    if (n.embedding) cypher += `, n.${vecProp} = vecf32($vec)`;
+    const rows = await g.query<{ c: number }>(`${cypher} RETURN count(n) AS c`, params);
+    if (rows[0]?.c) return { created: false, versioned: tracked.length > 0, updated: changed.length > 0 };
+    // `rev` moved under us: someone else updated the node; re-read and re-diff against their state.
   }
-
-  const have = typeOfLabels(existing.labels);
-  if (have !== n.type) throw new InvalidWrite(`${n.id} already exists as ${have ?? existing.labels.join(":")}, not ${n.type}`);
-  const old = existing.props;
-  const changed = Object.keys(content).filter((k) => !sameValue(old[k], content[k]));
-  const provChanged = Object.keys(prov).some((k) => !sameValue(old[k], prov[k]));
-  // A tracked value appearing for the first time is new information, not a change of state.
-  const tracked = (TRACKED_PROPS[n.type] ?? []).filter((k) => changed.includes(k) && old[k] !== null && old[k] !== undefined);
-  if (!changed.length && !provChanged && !n.embedding) return { created: false, versioned: false, updated: false };
-
-  let cypher = "MATCH (n:Entity {id:$id})";
-  if (tracked.length) {
-    const snapshot = JSON.stringify(old);
-    params.version = defined({
-      id: `version:${n.id}@${now}-${sha256(snapshot).slice(0, 8)}`,
-      name: "", // no display name: a Version must not surface as an entity-search hit (the old name is in `props`)
-      of: n.id,
-      props: snapshot,
-      changed: tracked,
-      since: num(old.stateSince) ?? num(old.updatedAt) ?? num(old.createdAt) ?? now,
-      until: now,
-      src: old.src as Prim | undefined,
-      asOf: old.asOf as Prim | undefined,
-      createdAt: now,
-      updatedAt: now,
-    });
-    params.hv = defined({ since: now, recordedAt: now, src: n.src, asOf: n.asOf });
-    cypher += " CREATE (n)-[h:HAD_VERSION]->(v:Entity:Version) SET v += $version, h += $hv";
-  }
-  cypher += " SET n += $props";
-  if (changed.length) cypher += ", n.updatedAt = $now";
-  if (tracked.length) cypher += ", n.stateSince = $now";
-  await g.query(cypher + setVec, params);
-  return { created: false, versioned: tracked.length > 0, updated: changed.length > 0 };
+  throw new Error(`upsertNode ${n.id}: still contended after ${MAX_ATTEMPTS} attempts`);
 }
 
 // ---------- edges ----------
 
-const CLOSE_SET =
-  " SET r.until = CASE WHEN r.since > $end THEN r.since ELSE $end END, r.retiredAt = $now, r.closedCost = $cost, r.closeReason = $reason";
+const CLOSE_SET = (v: string, reason: string) =>
+  `SET ${v}.until = CASE WHEN ${v}.since > $end THEN ${v}.since ELSE $end END, ${v}.retiredAt = $now, ${v}.closedCost = $cost, ${v}.closeReason = ${reason}`;
 
-async function closeSlot(g: GraphHandle, e: EdgeInput, rule: FunctionalRule, end: number, now: number): Promise<number> {
-  const match = rule.key === "to"
-    ? `MATCH (x:Entity)-[r:${e.type}]->(:Entity {id:$to}) WHERE r.until IS NULL AND x.id <> $from${rule.fromType ? ` AND x:${rule.fromType}` : ""}`
-    : `MATCH (:Entity {id:$from})-[r:${e.type}]->(y:Entity) WHERE r.until IS NULL AND y.id <> $to${rule.toType ? ` AND y:${rule.toType}` : ""}`;
-  const rows = await g.query<{ c: number }>(`${match}${CLOSE_SET} RETURN count(r) AS c`,
-    { from: e.from, to: e.to, end, now, cost: CLOSED_EDGE_COST, reason: `replaced by ${e.from} -[:${e.type}]-> ${e.to}` });
-  return rows[0]?.c ?? 0;
-}
-
+// One statement per edge, so a functional hand-over is all-or-nothing: the slot's previous edge is closed only when
+// (and in the same statement as) the new edge is created. Re-asserting a current fact refreshes its provenance,
+// closes duplicate current copies of it, and leaves the slot alone. The endpoint/type check is a separate read
+// before it; nodes are never deleted, so that read cannot go stale in a way that matters.
 export async function upsertEdge(g: GraphHandle, e: EdgeInput, now: number = Date.now()): Promise<{ created: boolean; closed: number }> {
   validateEdge(e);
   const ends = await g.query<{ id: string; labels: string[] | null }>(
@@ -222,25 +237,33 @@ export async function upsertEdge(g: GraphHandle, e: EdgeInput, now: number = Dat
   const rule: FunctionalRule | undefined = e.functional === false ? undefined
     : e.functional === true ? { rel: e.type, toType, key: "from", why: "caller marked functional" }
     : functionalRule(e.type, fromType, toType);
+  const T = e.type;
+  let cypher = `MATCH (a:Entity {id:$from}), (b:Entity {id:$to})
+    OPTIONAL MATCH (a)-[c:${T}]->(b) WHERE c.until IS NULL
+    WITH a, b, c ORDER BY c.recordedAt
+    WITH a, b, collect(c) AS cur
+    FOREACH (x IN cur[0..1] | SET x += $props)
+    FOREACH (x IN cur[1..] | ${CLOSE_SET("x", "'duplicate current edge'")})
+    FOREACH (_ IN CASE WHEN size(cur) = 0 THEN [1] ELSE [] END |
+      CREATE (a)-[r:${T}]->(b) SET r += $props, r.since = $since, r.recordedAt = $now)
+    WITH a, b, size(cur) = 0 AS created, CASE WHEN size(cur) > 1 THEN size(cur) - 1 ELSE 0 END AS dupes`;
+  if (rule) {
+    cypher += rule.key === "to"
+      ? ` OPTIONAL MATCH (x:Entity)-[o:${T}]->(b) WHERE created AND o.until IS NULL AND x <> a${rule.fromType ? ` AND x:${rule.fromType}` : ""}`
+      : ` OPTIONAL MATCH (a)-[o:${T}]->(y:Entity) WHERE created AND o.until IS NULL AND y <> b${rule.toType ? ` AND y:${rule.toType}` : ""}`;
+    cypher += ` WITH created, dupes, collect(o) AS olds FOREACH (o IN olds | ${CLOSE_SET("o", "$reason")}) RETURN created, dupes, size(olds) AS closed`;
+  } else {
+    cypher += " RETURN created, dupes, 0 AS closed";
+  }
   const since = e.since ?? now;
-  const closed = rule ? await closeSlot(g, e, rule, since, now) : 0;
-
-  const p = { from: e.from, to: e.to, now, since, props: defined({ ...e.props, src: e.src, asOf: e.asOf, conf: e.conf }) };
-  const pair = `MATCH (a:Entity {id:$from})-[r:${e.type}]->(b:Entity {id:$to})`;
-  const current = await g.query<{ rid: number }>(`${pair} WHERE r.until IS NULL RETURN id(r) AS rid ORDER BY r.recordedAt, rid`, p);
-  if (!current.length) {
-    await g.query(`MATCH (a:Entity {id:$from}), (b:Entity {id:$to}) CREATE (a)-[r:${e.type}]->(b) SET r += $props, r.since = $since, r.recordedAt = $now`, p);
-    return { created: true, closed };
-  }
-  // Re-assertion: refresh provenance and props on the current edge; any duplicate current edges get closed.
-  await g.query(`${pair} WHERE id(r) = $rid SET r += $props`, { ...p, rid: current[0]!.rid });
-  let dupes = 0;
-  if (current.length > 1) {
-    const rows = await g.query<{ c: number }>(`${pair} WHERE id(r) IN $rids${CLOSE_SET} RETURN count(r) AS c`,
-      { ...p, rids: current.slice(1).map((c) => c.rid), end: now, cost: CLOSED_EDGE_COST, reason: "duplicate current edge" });
-    dupes = rows[0]?.c ?? 0;
-  }
-  return { created: false, closed: closed + dupes };
+  const rows = await g.query<{ created: boolean; dupes: number; closed: number }>(cypher, {
+    from: e.from, to: e.to, now, since, end: since, cost: CLOSED_EDGE_COST,
+    props: defined({ ...e.props, src: e.src, asOf: e.asOf, conf: e.conf }),
+    reason: `replaced by ${e.from} -[:${e.type}]-> ${e.to}`,
+  });
+  const r = rows[0];
+  if (!r) throw new MissingEndpoint([e.from, e.to], "endpoint vanished during upsertEdge");
+  return { created: r.created, closed: r.closed + r.dupes };
 }
 
 // Ends the current (from)-[type]->(to) fact: sets until + retiredAt (and the SPpaths cost). Returns how many edges it
@@ -248,7 +271,7 @@ export async function upsertEdge(g: GraphHandle, e: EdgeInput, now: number = Dat
 export async function closeEdge(g: GraphHandle, from: string, type: RelType, to: string, now: number = Date.now(), reason?: string): Promise<number> {
   if (!isRelType(type)) throw new InvalidWrite(`unknown relationship type ${JSON.stringify(type)}`);
   const rows = await g.query<{ c: number }>(
-    `MATCH (:Entity {id:$from})-[r:${type}]->(:Entity {id:$to}) WHERE r.until IS NULL${CLOSE_SET} RETURN count(r) AS c`,
+    `MATCH (:Entity {id:$from})-[r:${type}]->(:Entity {id:$to}) WHERE r.until IS NULL ${CLOSE_SET("r", "$reason")} RETURN count(r) AS c`,
     { from, to, end: now, now, cost: CLOSED_EDGE_COST, reason: reason ?? null });
   return rows[0]?.c ?? 0;
 }

@@ -134,6 +134,46 @@ describe("temporal upsert (integration)", () => {
     await expect(upsertEdge(g, { from: "person:founder", type: "NOT_A_REL" as never, to: "task:sitemap" })).rejects.toBeInstanceOf(InvalidWrite);
   });
 
+  it("concurrent creates of one node report created exactly once", async () => {
+    const rs = await Promise.all(Array.from({ length: 5 }, () => upsertNode(g, { type: "Task", id: "task:race", name: "Race" }, T0)));
+    expect(rs.filter((r) => r.created)).toHaveLength(1);
+    expect(await count("MATCH (n:Entity {id:'task:race'}) RETURN count(n) AS c")).toBe(1);
+  });
+
+  it("concurrent tracked updates never version the same state twice", async () => {
+    await upsertNode(g, { type: "Task", id: "task:race2", name: "R", props: { status: "open" } }, T0);
+    const rs = await Promise.all([
+      upsertNode(g, { type: "Task", id: "task:race2", name: "R", props: { status: "done" } }, T0 + 1),
+      upsertNode(g, { type: "Task", id: "task:race2", name: "R", props: { status: "blocked" } }, T0 + 2),
+    ]);
+    expect(rs.map((r) => r.versioned)).toEqual([true, true]);
+    const vs = await g.roQuery<{ props: string }>("MATCH (:Entity {id:'task:race2'})-[:HAD_VERSION]->(v) RETURN v.props AS props");
+    expect(vs.map((v) => JSON.parse(v.props).status).sort()).toEqual(["done", "open"]);
+  });
+
+  it("concurrent functional edges leave exactly one current owner", async () => {
+    await upsertNode(g, { type: "Task", id: "task:race3", name: "R3" }, T0);
+    const rs = await Promise.all([
+      upsertEdge(g, { from: "person:founder", type: "OWNS", to: "task:race3" }, T0 + 1),
+      upsertEdge(g, { from: "agent:jarvis", type: "OWNS", to: "task:race3" }, T0 + 2),
+      upsertEdge(g, { from: "agent:jarvis", type: "OWNS", to: "task:race3" }, T0 + 3),
+    ]);
+    expect(rs.filter((r) => r.created)).toHaveLength(2);
+    expect(await count("MATCH ()-[r:OWNS]->(:Entity {id:'task:race3'}) WHERE r.until IS NULL RETURN count(r) AS c")).toBe(1);
+    expect(await count("MATCH ()-[r:OWNS]->(:Entity {id:'task:race3'}) RETURN count(r) AS c")).toBe(2);
+  });
+
+  it("closes a functional slot only when the new edge is created; duplicate current edges get closed", async () => {
+    await upsertNode(g, { type: "Task", id: "task:slot", name: "Slot" }, T0);
+    await upsertEdge(g, { from: "agent:jarvis", type: "OWNS", to: "task:slot" }, T0);
+    // simulate legacy inconsistency: a second current owner and a duplicate current jarvis edge written behind our back
+    await g.query("MATCH (a:Entity {id:'person:founder'}), (t:Entity {id:'task:slot'}) CREATE (a)-[:OWNS {since:1, recordedAt:1}]->(t)");
+    await g.query("MATCH (a:Entity {id:'agent:jarvis'}), (t:Entity {id:'task:slot'}) CREATE (a)-[:OWNS {since:2, recordedAt:$rec}]->(t)", { rec: T0 + 1 });
+    expect(await upsertEdge(g, { from: "agent:jarvis", type: "OWNS", to: "task:slot" }, T0 + 5)).toEqual({ created: false, closed: 1 });
+    const cur = await g.roQuery<{ o: string }>("MATCH (o)-[r:OWNS]->(:Entity {id:'task:slot'}) WHERE r.until IS NULL RETURN o.id AS o ORDER BY o");
+    expect(cur.map((r) => r.o)).toEqual(["agent:jarvis", "person:founder"]); // re-assert leaves the slot alone
+  });
+
   it("validates node input", async () => {
     await expect(upsertNode(g, { type: "Decision", id: "task:sitemap", name: "wrong type" })).rejects.toThrow(/Task/);
     await expect(upsertNode(g, { type: "Task", id: "decision:x", name: "x" })).rejects.toBeInstanceOf(InvalidWrite);
@@ -142,6 +182,7 @@ describe("temporal upsert (integration)", () => {
     expect((await upsertNode(g, { type: "BrandRule", id: "brand-rule:no-jargon", name: "No jargon" })).created).toBe(true);
     await expect(upsertNode(g, { type: "Task", id: "task:bad", name: "x", props: { "bad-key": 1 } })).rejects.toBeInstanceOf(InvalidWrite);
     await expect(upsertNode(g, { type: "Task", id: "task:bad", name: "x", props: { createdAt: 1 } })).rejects.toThrow(/reserved/);
+    await expect(upsertNode(g, { type: "Task", id: "task:bad", name: "x", props: { rev: 9 } })).rejects.toThrow(/reserved/);
     await expect(upsertNode(g, { type: "Task", id: "task:bad", name: "x", embedding: [1, 2, 3] })).rejects.toThrow(/384/);
     await expect(upsertNode(g, { type: "Nope" as never, id: "x:y", name: "x" })).rejects.toBeInstanceOf(InvalidWrite);
     await expect(upsertEdge(g, { from: "task:sitemap", type: "BLOCKS", to: "task:sitemap" })).rejects.toThrow(/itself/);

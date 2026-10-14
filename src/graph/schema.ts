@@ -189,7 +189,11 @@ export function typeOfLabels(labels: readonly string[]): EntityType | undefined 
 }
 
 // Bookkeeping props upsert owns; callers cannot set them through `props`.
-export const NODE_META_PROPS = ["id", "name", "summary", "src", "asOf", "simulated", "createdAt", "updatedAt", "stateSince", "embedding", "textEmbedding"] as const;
+// `rev` counts writes (compare-and-set for concurrent upserts); `_mergeToken` exists only inside one MERGE statement.
+export const NODE_META_PROPS = [
+  "id", "name", "summary", "src", "asOf", "simulated", "createdAt", "updatedAt", "stateSince", "embedding", "textEmbedding",
+  "rev", "_mergeToken",
+] as const;
 export const EDGE_META_PROPS = ["since", "until", "recordedAt", "retiredAt", "src", "asOf", "conf", "closedCost", "closeReason"] as const;
 
 // Closed edges also get `closedCost = CLOSED_EDGE_COST`. FalkorDB's algo.SPpaths cannot filter on edge properties,
