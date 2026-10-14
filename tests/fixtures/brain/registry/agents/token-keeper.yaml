@@ -1,0 +1,7 @@
+# registry/agents/token-keeper.yaml — SYNTHETIC fixture. Its file name matches the sensitive-name policy, so it is never read.
+id: token-keeper
+name: Token keeper
+department: platform
+kind: headless-cron
+status: active
+does: Renews the weekly access token.

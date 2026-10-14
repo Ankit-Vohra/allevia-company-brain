@@ -1,0 +1,7 @@
+# registry/tools/dup-keys.yaml — SYNTHETIC fixture: a duplicate key must not make the file unreadable (last one wins).
+id: dup-keys
+name: Duplicate keys
+type: script
+status: planned
+status: active
+purpose: A script whose file lists status twice.

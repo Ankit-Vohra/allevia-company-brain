@@ -1,0 +1,17 @@
+# registry/departments/research.yaml — SYNTHETIC fixture. Synthetic: names, never values.
+id: research
+name: Research
+purpose: "Works out what sells: products, numbers, tests and the weekly plan."
+lead_agent: scout
+acting_lead: founder (Planner is planned)
+source:
+  - widget-brain/agents/README.md
+agents:
+  active:
+    - scout
+  paused: []
+  retired:
+    - old-writer
+  planned:
+    - planner
+    - ghost-agent

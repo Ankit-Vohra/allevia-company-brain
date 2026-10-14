@@ -1,0 +1,20 @@
+# registry/agents/pinger.yaml — SYNTHETIC fixture.
+id: pinger
+name: Pinger
+department: platform
+kind: edge-function
+status: active
+repo: widget-app
+path: supabase/functions/pinger/index.ts
+host: Cloud VM widget-prod (eu-1), container pinger-worker
+does: |
+  Texts customers their order-ready notice and login code through the gateway, with a daily cap per number.
+  Falls back to email if the gateway is down; on-call number +44 7700 900123.
+trigger: webhook from the app
+tools: []
+connectors:
+  - analytics-db
+  - sms-gateway
+uses_agents:
+  - scout
+reports_to: founder

@@ -1,0 +1,33 @@
+# registry/agents/scout.yaml — SYNTHETIC fixture, same shape as a real registry entry. Synthetic: names, never values.
+id: scout
+name: Scout (question desk)
+department: research
+kind: always-on-service
+status: active
+repo: widget-brain
+path: agents/scout.md
+does: |
+  Replies to the owner's questions in the team chat, each question in its own thread.
+  Looks things up only: it cannot run commands or edit files, and saves notes through one tool. Problems go to alerts@example.org.
+inputs:
+  - the shop tools (orders, stock, reviews)
+  - this folder (synced hourly)
+outputs:
+  - chat replies
+  - handbook notes
+trigger: "a new chat message → the bridge → one assistant run"
+schedule: always on
+model: sonnet
+tools:
+  - widget-bridge
+  - mcp-widget-ops
+connectors:
+  - chat
+  - source-host
+docs:
+  - "widget-brain:agents/scout.md"
+reports_to: founder
+human_approval: Not needed (it only reads).
+cost_driver: "a flat monthly plan"
+source:
+  - widget-brain/60-decisions/002-job-scheduler.md

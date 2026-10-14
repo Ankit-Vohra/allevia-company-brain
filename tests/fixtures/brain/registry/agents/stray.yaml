@@ -1,0 +1,11 @@
+# registry/agents/stray.yaml — SYNTHETIC fixture: names a department that has no file.
+id: stray
+name: Stray
+department: growth
+kind: claude-subagent
+status: active
+does: Works for a department that is not in the registry (yet).
+tools:
+  - mcp-widget-ops
+  - tool-that-does-not-exist
+connectors: []

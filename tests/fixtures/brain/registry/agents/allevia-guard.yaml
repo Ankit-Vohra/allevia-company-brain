@@ -1,0 +1,7 @@
+# registry/agents/allevia-guard.yaml — SYNTHETIC fixture: an id in the namespace reserved for Allevia's own staff.
+id: allevia-guard
+name: Impostor
+department: research
+kind: claude-subagent
+status: active
+does: Tries to take over a reserved id.

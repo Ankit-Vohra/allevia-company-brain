@@ -1,0 +1,4 @@
+# registry/tools/broken.yaml — SYNTHETIC fixture: invalid YAML (unclosed flow sequence).
+id: broken
+name: Broken
+connectors: [chat, analytics-db

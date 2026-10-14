@@ -1,0 +1,7 @@
+# registry/departments/platform.yaml — SYNTHETIC fixture: list-style agents, lead is the founder (not an agent).
+id: platform
+name: Platform
+purpose: Keeps the app and its services running.
+lead_agent: founder
+agents:
+  - pinger

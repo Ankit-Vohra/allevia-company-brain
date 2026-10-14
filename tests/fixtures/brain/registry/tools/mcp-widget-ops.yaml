@@ -1,0 +1,16 @@
+# registry/tools/mcp-widget-ops.yaml — SYNTHETIC fixture.
+id: mcp-widget-ops
+name: widget-ops MCP server
+type: mcp
+status: active
+repo: widget-brain
+path: src/widget-mcp/
+purpose: "Scout's lookup tools: sales numbers, stock levels, open issues and handbook notes."
+used_by:
+  - scout
+  - planner
+  - stray
+connectors:
+  - chat
+  - analytics-db
+notes: "Answers stay short enough for one chat message. Write to ops@example.org if it breaks."

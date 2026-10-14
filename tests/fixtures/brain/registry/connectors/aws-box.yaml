@@ -1,0 +1,7 @@
+# registry/connectors/aws-box.yaml — SYNTHETIC fixture. Its file name matches the sensitive-name policy, so it is never read.
+id: aws-box
+name: Cloud box
+purpose: Hosts the bot. Elastic IP 203.0.113.45.
+status: connected
+used_by:
+  - scout

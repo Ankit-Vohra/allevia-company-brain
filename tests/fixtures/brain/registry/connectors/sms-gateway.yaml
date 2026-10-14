@@ -1,0 +1,7 @@
+# registry/connectors/sms-gateway.yaml — SYNTHETIC fixture.
+id: sms-gateway
+name: SMS gateway
+purpose: Sends login codes.
+status: not_configured
+used_by:
+  - pinger

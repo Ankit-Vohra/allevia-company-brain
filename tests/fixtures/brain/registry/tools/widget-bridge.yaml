@@ -1,0 +1,14 @@
+# registry/tools/widget-bridge.yaml — SYNTHETIC fixture.
+id: widget-bridge
+name: Widget bridge (chat to assistant run)
+type: internal-service
+status: active
+repo: widget-brain
+path: src/bridge/
+purpose: "Turns each chat message into a thread and runs one assistant session per thread; picks up where it left off after a restart."
+used_by:
+  - scout
+runs_on: "Cloud VM, launched from ~/.config/widget/bridge.env (DB_URL, BRIDGE_TOKEN=abc123def456)"
+connectors:
+  - chat
+source: widget-brain/docs/bridge.md

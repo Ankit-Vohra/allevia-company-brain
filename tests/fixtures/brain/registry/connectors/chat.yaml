@@ -1,0 +1,24 @@
+# registry/connectors/chat.yaml — SYNTHETIC fixture. Synthetic: names, never values.
+id: chat
+name: Chat service
+purpose: "Where the owner approves posts, sees alerts and talks to the assistant."
+status: connected
+status_how: "Assumed: messages went out this week; nobody checked by hand."
+last_verified: first week of October 2026 (from the notes)
+used_by:
+  - scout
+  - planner
+  - widget-bridge
+  - mcp-widget-ops
+  - founder
+  - "the storefront (not a helper)"
+credential_env_names:
+  - CHAT_BOT_TOKEN
+  - CHAT_APP_ID
+credential_location:
+  - "~/.config/widget/chat.env on the laptop"
+  - "/home/demo/secrets/chat.txt"
+expiry_rotation: Never expires; rotate by hand if exposed.
+notes: "The bot's credentials sit in the host environment only. Unclear whether it is up: messages went out this week."
+source:
+  - widget-brain/docs/chat.md

@@ -1,0 +1,19 @@
+# registry/agents/planner.yaml — SYNTHETIC fixture.
+id: planner
+name: Planner
+department: research
+kind: planned
+status: planned
+repo: widget-brain
+path: agents/planner.md
+does: |
+  Plans the weekly work: picks the products to push, drafts the briefs, asks Scout for numbers.
+trigger: timetable (planned)
+schedule: "08:15 daily (planned)"
+tools: []
+connectors:
+  - analytics-db
+reports_to: scout
+delegates_to:
+  - pinger
+unverified: true

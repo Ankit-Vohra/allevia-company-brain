@@ -1,0 +1,13 @@
+# registry/connectors/analytics-db.yaml — SYNTHETIC fixture.
+id: analytics-db
+name: Supabase analytics (xkqzbtwhrnvdmfgjpsly, London)
+purpose: "The analytics database and edge functions; contact ops@example.org for access."
+status: connected
+used_by:
+  - pinger
+  - mcp-widget-ops
+  - nightly-report
+  - planner
+credential_env_names:
+  - ANALYTICS_URL
+  - ANALYTICS_SERVICE_ROLE_KEY
