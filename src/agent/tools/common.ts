@@ -55,6 +55,28 @@ export function defineTool<S extends z.ZodRawShape>(t: AlleviaTool<S>): AlleviaT
   return tool as unknown as AlleviaTool;
 }
 
+// ---------- writes ----------
+
+// Agents of one turn run in parallel; write tools allocate ids like `memory:<turn>-<n>` by reading the highest n. One
+// chain per graph makes read-then-write atomic within this process.
+const chains = new Map<string, Promise<unknown>>();
+export function serial<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const next = (chains.get(key) ?? Promise.resolve()).then(fn, fn);
+  chains.set(key, next.catch(() => undefined));
+  return next;
+}
+
+// The next free `<prefix><n>` (n from 1).
+export async function nextId(ctx: ToolContext, prefix: string): Promise<string> {
+  const rows = await ro<{ id: string }>(ctx, "MATCH (n:Entity) WHERE n.id STARTS WITH $p RETURN n.id AS id", { p: prefix });
+  const max = rows.reduce((m, r) => Math.max(m, Number(r.id.slice(prefix.length)) || 0), 0);
+  return `${prefix}${max + 1}`;
+}
+
+export function refuseIfReadOnly(ctx: ToolContext, tool: string): void {
+  if (ctx.readOnly) throw new InputError(`${tool} is disabled in read-only mode; nothing was saved.`, { refused: true });
+}
+
 // ---------- reads ----------
 
 export function ro<T = Record<string, unknown>>(ctx: ToolContext, cypher: string, params?: Record<string, unknown>, timeoutMs = READ_TIMEOUT_MS): Promise<T[]> {
