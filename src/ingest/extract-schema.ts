@@ -11,7 +11,7 @@ import type { RawDoc } from "./types.js";
 
 export const PROMPT_VERSION = 2;
 
-export const LIMITS = { entities: 40, relations: 60, observations: 40, aliases: 6, evidenceChars: 200, docChars: 30_000 } as const;
+export const LIMITS = { entities: 40, relations: 60, observations: 40, aliases: 6, evidenceChars: 200, docChars: 30_000, lineChars: 500 } as const;
 
 // Content formats (spec §5.2 Content.format); "project" is a portfolio project on a firm's website.
 export const CONTENT_FORMATS = ["reel", "post", "story", "short", "video", "article", "ad", "project"] as const;
@@ -212,23 +212,43 @@ Web pages
 Mixed Hindi and English (Hinglish, Devanagari or Latin script) is normal: read it as written, quote evidence in the original words, and write summaries in English.`;
 }
 
-function truncate(text: string): string {
-  if (text.length <= LIMITS.docChars) return text;
-  return `${text.slice(0, LIMITS.docChars)}\n[… truncated: the document continues for ${text.length - LIMITS.docChars} more characters]`;
+// The document text as the prompt carries it: NFKC-normalised, cut to LIMITS.docChars, tags stripped. Cutting before
+// stripping bounds the strip loop's work (each pass undoes one level of nesting) on a hostile page.
+function documentBody(text: string): string {
+  const norm = text.normalize("NFKC");
+  const body = stripDocTags(norm.slice(0, LIMITS.docChars));
+  if (norm.length <= LIMITS.docChars) return body;
+  return `${body}\n[… truncated: the document continues for ${norm.length - LIMITS.docChars} more characters]`;
 }
 
-// Any <document…> or </document…> tag inside untrusted text is removed, so the text cannot close the block early.
-const stripDocTags = (s: string) => s.replace(/<\s*\/?\s*document[^<>]*>/gi, "");
+// Any <document…> or </document…> tag inside untrusted text is removed, so the text cannot close the block early (the
+// random suffix already makes the real tag unguessable; this is the second lock). The text is NFKC-normalised first, so
+// full-width and compatibility forms ("＜/ｄｏｃｕｍｅｎｔ＞", "﹤document﹥") become plain ones, and removal repeats until
+// nothing changes, so the pieces around a removed tag cannot form a new one ("</docu<document>ment-x>"). A tag is at most
+// 80 characters on one line: a stray "<document" never swallows the text up to some later ">". Evidence checks
+// normalise quotes and document with NFKC as well, so quotes of the normalised text still match the stored text.
+const DOC_TAG = /<[^\S\n]*\/?[^\S\n]*document[^<>\n]{0,80}>/gi;
+export function stripDocTags(s: string): string {
+  let out = s.normalize("NFKC");
+  for (let prev = ""; prev !== out;) {
+    prev = out;
+    out = out.replace(DOC_TAG, "");
+  }
+  return out;
+}
 
-// `nonce` is only for tests; every real call gets a fresh random tag suffix. The system prompt does not depend on it,
-// so it stays cacheable.
+// Title and path: one line, at most LIMITS.lineChars characters, tags stripped.
+const headerLine = (s: string) => stripDocTags(s.normalize("NFKC").replace(/\s+/g, " ").slice(0, LIMITS.lineChars));
+
+// `nonce` is only for tests; every real call gets a fresh random tag suffix (8 bytes). The system prompt does not
+// depend on it, so it stays cacheable.
 export function extractionPrompt(doc: RawDoc, business: BusinessContext, opts: { nonce?: string } = {}): { system: string; prompt: string } {
-  const tag = `document-${opts.nonce ?? randomBytes(3).toString("hex")}`;
+  const tag = `document-${opts.nonce ?? randomBytes(8).toString("hex")}`;
   const inside = [
-    `title: ${stripDocTags(doc.title)}`,
-    ...(doc.path ? [`path: ${stripDocTags(doc.path)}`] : []),
+    `title: ${headerLine(doc.title)}`,
+    ...(doc.path ? [`path: ${headerLine(doc.path)}`] : []),
     "",
-    truncate(stripDocTags(doc.text)),
+    documentBody(doc.text),
   ].join("\n");
   const prompt = [
     `Document kind: ${doc.kind}`,
