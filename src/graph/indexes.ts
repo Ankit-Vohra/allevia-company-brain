@@ -42,7 +42,14 @@ export async function listIndexes(g: GraphHandle): Promise<IndexSpec[]> {
 
 const already = (e: unknown) => /already indexed|already exists/i.test(String((e as Error).message));
 
+const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 export async function ensureIndexes(g: GraphHandle, specs: IndexSpec[] = INDEXES): Promise<void> {
+  // label and prop are interpolated into DDL, so they must be plain identifiers
+  for (const s of specs) {
+    if (!IDENT.test(s.label) || !IDENT.test(s.prop)) throw new Error(`index label/prop must be plain identifiers, got ${s.label}.${s.prop}`);
+    if (!["RANGE", "FULLTEXT", "VECTOR"].includes(s.type)) throw new Error(`unknown index type ${s.type}`);
+  }
   const have = new Set((await listIndexes(g)).map((i) => `${i.label}|${i.prop}|${i.type}`));
   const missing = specs.filter((s) => !have.has(`${s.label}|${s.prop}|${s.type}`));
   // One full-text statement per label covers all its missing props.

@@ -298,28 +298,32 @@ describe("temporal upsert (integration)", () => {
   });
 
   it("writeBatch writes nodes, then observations, then edges and collects per-item errors", async () => {
+    // own fixtures (beyond the beforeAll people and document): a task with a status and a current owner
+    await upsertNode(g, { type: "Task", id: "task:batch", name: "Batch task", props: { status: "open" } }, T0);
+    await upsertEdge(g, { from: "agent:jarvis", type: "OWNS", to: "task:batch" }, T0);
     const stats = await writeBatch(g, {
       nodes: [
-        { type: "Product", id: "product:app", name: "Aamdani app" },
-        { type: "Feature", id: "feature:jobs", name: "Jobs" },
-        { type: "Task", id: "task:sitemap", name: "Fix sitemap", props: { status: "blocked" } },
-        { type: "Task", id: "task:bad", name: "bad", props: { "x-y": 1 } },
+        { type: "Product", id: "product:batch-app", name: "Aamdani app" },
+        { type: "Feature", id: "feature:batch-jobs", name: "Jobs" },
+        { type: "Task", id: "task:batch", name: "Batch task", props: { status: "blocked" } },
+        { type: "Task", id: "task:batch-bad", name: "bad", props: { "x-y": 1 } },
       ],
       edges: [
-        { from: "feature:jobs", type: "PART_OF", to: "product:app" },
-        { from: "feature:jobs", type: "PART_OF", to: "product:missing" },
-        { from: "person:founder", type: "OWNS", to: "task:sitemap" },
+        { from: "feature:batch-jobs", type: "PART_OF", to: "product:batch-app" },
+        { from: "feature:batch-jobs", type: "PART_OF", to: "product:missing" },
+        { from: "person:founder", type: "OWNS", to: "task:batch" },
       ],
-      observations: [{ subject: "feature:jobs", metric: "signups", value: 42, asOf: "2026-10-14", src: "document:pending" }],
+      observations: [{ subject: "feature:batch-jobs", metric: "signups", value: 42, asOf: "2026-10-14", src: "document:pending" }],
     }, T0 + 1000);
-    expect(stats).toMatchObject({ nodesCreated: 2, nodesUpdated: 1, versions: 1, edgesCreated: 2, edgesClosed: 1, observations: 1 });
+    expect(stats).toMatchObject({ nodesCreated: 2, nodesUpdated: 1, versions: 1, edgesCreated: 2, edgesClosed: 1, observations: 1, skippedWeaker: 0 });
     expect(stats.errors.map((e) => e.kind)).toEqual(["node", "edge"]);
     expect(stats.errors[1]!.error).toMatch(/product:missing/);
   });
 
   it("writeBatch lets an edge point at an observation from the same batch, and keeps its evidence quote", async () => {
-    const o = { subject: "channel:instagram", metric: "share_of_reach", value: 90, unit: "%", asOf: "2026-09-28", src: "document:pending", evidence: "Reels drove 90% of reach" };
-    const obsId = "obs:share_of_reach:channel:instagram:2026-09-28";
+    await upsertNode(g, { type: "Channel", id: "channel:batch-ig", name: "Instagram" }, T0);
+    const o = { subject: "channel:batch-ig", metric: "share_of_reach", value: 90, unit: "%", asOf: "2026-09-28", src: "document:pending", evidence: "Reels drove 90% of reach" };
+    const obsId = "obs:share_of_reach:channel:batch-ig:2026-09-28";
     const stats = await writeBatch(g, {
       nodes: [{ type: "Decision", id: "decision:pause-facebook", name: "Pause Facebook posts" }],
       edges: [{ from: "decision:pause-facebook", type: "BASED_ON", to: obsId }],

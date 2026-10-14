@@ -30,6 +30,11 @@ describe("ensureIndexes (integration)", () => {
     ]));
   });
 
+  it("refuses labels and props that are not plain identifiers", async () => {
+    await expect(ensureIndexes(g, [{ label: "Entity) DETACH DELETE (n", prop: "id", type: "RANGE" }])).rejects.toThrow(/identifier/);
+    await expect(ensureIndexes(g, [{ label: "Entity", prop: "id x", type: "RANGE" }])).rejects.toThrow(/identifier/);
+  });
+
   it("serves full-text and vector queries; chunk vectors stay out of the entity index", async () => {
     expect(vectorPropFor("Chunk")).toBe("textEmbedding");
     expect(vectorPropFor("Decision")).toBe("embedding");

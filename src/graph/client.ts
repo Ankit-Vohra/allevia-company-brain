@@ -98,9 +98,10 @@ export class GraphHandle {
 }
 
 const pool = new Map<string, Promise<FalkorDB>>();
+let defaultUrl: string | undefined; // read the config (and its env file) once per process
 
 export async function connect(url?: string): Promise<FalkorDB> {
-  const u = url ?? loadConfig().falkordbUrl;
+  const u = url ?? (defaultUrl ??= loadConfig().falkordbUrl);
   let p = pool.get(u);
   if (!p) {
     p = FalkorDB.connect({ url: u }).then((db) => {

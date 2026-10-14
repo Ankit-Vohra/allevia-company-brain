@@ -34,7 +34,7 @@ describe("loadConfig", () => {
     expect(c.dataDir.endsWith("/data")).toBe(true);
     expect(c.brainPath).toBe(join(homedir(), "aamdani-brain"));
     expect(c.opsSsh).toEqual({ host: "203.0.113.10", user: "ankit", keyPath: join(homedir(), ".ssh/example-key.pem"),
-      remoteDir: "/home/ankit/aamdani-social-automation" });
+      remoteDir: "/home/ankit/aamdani-social-automation", via: "aamdani-box" });
     expect(c.githubActionRepo).toBe("Ankit-Vohra/allevia");
     expect(c.publicMode).toBe(false);
     expect(c.port).toBe(8787);
@@ -60,6 +60,7 @@ describe("loadConfig", () => {
     expect(c.port).toBe(1234);
     expect(c.publicMode).toBe(false);
     expect(c.falkordbUrl).toBe("redis://example:1");
+    expect(loadConfig({ ALLEVIA_ENV_FILE: envFile, ALLEVIA_OPS_SSH_VIA: "other-box" }).opsSsh.via).toBe("other-box");
   });
 
   it("rejects a bad port", () => {

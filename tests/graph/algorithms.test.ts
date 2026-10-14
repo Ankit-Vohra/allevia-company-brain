@@ -138,9 +138,13 @@ describe("time-travel paths are exact (integration)", () => {
       ...[["task:a", "task:b"], ["task:b", "task:c"], ["task:c", "task:d"]].map(([from, to]) => ({ from: from!, type: "BLOCKS" as const, to: to!, since: T0 })),
       ...xs.flatMap((x) => [{ from: "task:a", type: "BLOCKS" as const, to: x, since: T0 + 1000 }, { from: x, type: "BLOCKS" as const, to: "task:d", since: T0 + 1000 }]),
     ];
+    // plus a 7-hop chain p0 -> … -> p7, longer than any path the tools may ask for
+    const chain = Array.from({ length: 8 }, (_, i) => `task:p${i}`);
+    nodes.push(...chain.map((id): NodeInput => ({ type: "Task", id, name: id })));
+    edges.push(...chain.slice(1).map((to, i): EdgeInput => ({ from: chain[i]!, type: "BLOCKS", to, since: T0 })));
     const stats = await writeBatch(g, { nodes, edges }, T0 + 2000);
     expect(stats.errors).toEqual([]);
-    expect(stats.edgesCreated).toBe(65);
+    expect(stats.edgesCreated).toBe(72);
   });
   afterAll(async () => {
     await cleanup();
@@ -154,6 +158,13 @@ describe("time-travel paths are exact (integration)", () => {
     const now = await shortestPaths(g, "task:a", "task:d");
     expect(now.map((p) => p.length)).toEqual([2, 2, 2]);
     expect(await shortestPaths(g, "task:a", "task:d", { asOf: T0 - 1 })).toEqual([]);
+  });
+
+  it("clamps maxLen to 1..6", async () => {
+    expect(await shortestPaths(g, "task:p0", "task:p6", { maxLen: 50 })).toHaveLength(1); // 6 hops: allowed
+    expect(await shortestPaths(g, "task:p0", "task:p7", { maxLen: 50 })).toEqual([]); // 7 hops: beyond the clamp
+    expect(await shortestPaths(g, "task:a", "task:d", { maxLen: 0 })).toEqual([]); // clamped to 1, and a-d needs 2
+    expect((await shortestPaths(g, "task:a", "task:b", { maxLen: 0 }))[0]!.length).toBe(1);
   });
 
   it("drops its asOf projection", async () => {

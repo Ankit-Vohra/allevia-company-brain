@@ -40,13 +40,15 @@ export async function shortestPaths(
   const rels = opts.relTypes ?? [];
   checkRels(rels);
   const maxPaths = Math.max(1, Math.min(opts.maxPaths ?? 3, 50));
+  // Paths longer than 6 hops explain nothing, and SPpaths' cost grows with maxLen.
+  const maxLen = Math.max(1, Math.min(Math.floor(opts.maxLen ?? 6), 6));
   const timeTravel = opts.asOf !== undefined;
   const cfg = ["sourceNode: a", "targetNode: b", "relDirection: 'both'", "maxLen: $maxLen", "pathCount: $pathCount"];
   if (rels.length) cfg.push("relTypes: $rels");
   if (!timeTravel) cfg.push("costProp: 'closedCost'", "maxCost: $maxCost");
   const run = (h: GraphHandle) => h.roQuery<{ path: RawPath }>(
     `MATCH (a:Entity {id:$from}), (b:Entity {id:$to}) CALL algo.SPpaths({${cfg.join(", ")}}) YIELD path RETURN path`,
-    { from: fromId, to: toId, rels, maxLen: opts.maxLen ?? 6, pathCount: maxPaths, maxCost: CLOSED_EDGE_COST - 1 });
+    { from: fromId, to: toId, rels, maxLen, pathCount: maxPaths, maxCost: CLOSED_EDGE_COST - 1 });
   const rows = timeTravel ? await onEdgesValidAt(g, opts.asOf, rels, run) : await run(g);
   const paths = rows.map((r) => r.path).filter((p) => p.edges.every((e) => edgeValidAt(e.properties, opts.asOf)));
   if (!paths.length) {

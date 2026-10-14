@@ -13,7 +13,8 @@ export interface AlleviaConfig {
   brainPath: string;
   discord: { token?: string; appId?: string; guildId?: string; channelId?: string };
   avsIg: { token?: string; userId?: string };
-  opsSsh: { host: string; user: string; keyPath: string; remoteDir: string };
+  // `via` is the ssh alias the box is actually reached through (EC2 Instance Connect); host/user/keyPath describe it.
+  opsSsh: { host: string; user: string; keyPath: string; remoteDir: string; via: string };
   githubActionRepo: string;
   publicMode: boolean;
   port: number;
@@ -70,6 +71,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
       user: get("ALLEVIA_OPS_SSH_USER") ?? "ankit",
       keyPath: expandHome(get("ALLEVIA_OPS_SSH_KEY") ?? "~/.ssh/example-key.pem"),
       remoteDir: get("ALLEVIA_OPS_REMOTE_DIR") ?? "/home/ankit/aamdani-social-automation",
+      via: get("ALLEVIA_OPS_SSH_VIA") ?? "aamdani-box",
     },
     githubActionRepo: get("ALLEVIA_ACTION_REPO") ?? "Ankit-Vohra/allevia",
     publicMode: /^(1|true|yes|on)$/i.test(get("ALLEVIA_PUBLIC_MODE") ?? ""),
