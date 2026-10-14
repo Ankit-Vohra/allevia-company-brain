@@ -173,6 +173,7 @@ export const sdkToolName = (name: string): string => `mcp__${MCP_SERVER}__${name
 // Folds SDK stream messages into text/structured output and streamed `text` events. Pure, so it is unit-tested.
 export class SdkMessageFolder {
   private texts: string[] = [];
+  private streamed = false;
   result?: { ok: boolean; text?: string; structured?: unknown; error?: string };
 
   constructor(private agentId: string, private streamText: boolean, private emit: Emit) {}
@@ -181,8 +182,13 @@ export class SdkMessageFolder {
     const msg = m as { type?: string; subtype?: string; parent_tool_use_id?: string | null; [k: string]: unknown };
     if (msg.parent_tool_use_id) return; // nested agents' chatter is not this agent's answer
     if (msg.type === "stream_event" && this.streamText) {
-      const ev = msg.event as { type?: string; delta?: { type?: string; text?: string } } | undefined;
+      const ev = msg.event as { type?: string; delta?: { type?: string; text?: string }; content_block?: { type?: string } } | undefined;
+      // A new text block after earlier streamed text (e.g. after a tool call) starts a new paragraph.
+      if (ev?.type === "content_block_start" && ev.content_block?.type === "text" && this.streamed) {
+        this.emit({ type: "text", agent: this.agentId, delta: "\n\n" });
+      }
       if (ev?.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) {
+        this.streamed = true;
         this.emit({ type: "text", agent: this.agentId, delta: ev.delta.text });
       }
     } else if (msg.type === "assistant") {
@@ -261,6 +267,7 @@ export class ClaudeAgentSdkRuntime implements AgentRuntime {
 // ---------- FakeRuntime (tests) ----------
 
 export interface FakeStep {
+  preText?: string;                                // text written before the tool calls (streamed when streamText)
   calls?: Array<{ name: string; args?: unknown }>; // tool calls to make, in order, through invokeTool
   text?: string;                                   // final text (streamed as `text` deltas when streamText)
   structured?: unknown;
@@ -300,6 +307,10 @@ export class FakeRuntime implements AgentRuntime {
     const st = this.step(input);
     if (st.delayMs) await sleep(st.delayMs, input.signal);
     if (input.signal?.aborted) throw new Error(`${input.agentId} was stopped (timeout)`);
+    const stream = (text: string) => {
+      if (input.streamText && text) for (const piece of text.match(/[\s\S]{1,40}/g) ?? []) emit({ type: "text", agent: input.agentId, delta: piece });
+    };
+    stream(st.preText ?? "");
     for (const c of st.calls ?? []) {
       const tool = input.tools.find((t) => t.name === c.name);
       if (!tool) {
@@ -309,10 +320,9 @@ export class FakeRuntime implements AgentRuntime {
       await invokeTool(tool, c.args ?? {}, input, emit, nextCallId(input.agentId));
     }
     if (st.fail) throw new Error(st.fail);
-    const text = st.text ?? "";
-    if (input.streamText && text) {
-      for (const piece of text.match(/[\s\S]{1,40}/g) ?? []) emit({ type: "text", agent: input.agentId, delta: piece });
-    }
+    if (st.preText && st.text) stream("\n\n");
+    stream(st.text ?? "");
+    const text = [st.preText, st.text].filter(Boolean).join("\n\n"); // like the SDK: every text block, in order
     return st.structured === undefined ? { text } : { text, structured: st.structured };
   }
 }

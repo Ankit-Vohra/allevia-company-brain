@@ -10,10 +10,10 @@ import { AGENTS, agentById, type AgentDef } from "../../shared/roster.js";
 import type { ActionKind, AgentEvent, EdgeRef, NodeRef, PlanStep, ToolResult } from "../../shared/contracts.js";
 import type { GraphHandle } from "../graph/client.js";
 import { typeFromId } from "../util/ids.js";
-import { extractCitations, hasNumbers } from "./checks.js";
+import { checkTurn, extractCitations, hasNumbers } from "./checks.js";
 import {
   CHIEF, FINDING_MAX_CHARS, FINDING_SCHEMA, MAX_PLAN_STEPS, PLAN_SCHEMA, REVIEW_SCHEMA, agentSystemPrompt, directPrompt,
-  planPrompt, planSystemPrompt, reviewPrompt, revisePrompt, synthesisPrompt, workPrompt, type FindingView,
+  planPrompt, planSystemPrompt, reviewPrompt, revisePrompt, synthesisPrompt, workPrompt, type FindingView, type ReviewEvidence,
 } from "./prompts.js";
 import { invokeTool, nextCallId, type AgentRuntime, type Emit, type RunInput, type RunOutput, type RunPhase } from "./runtime.js";
 import { TouchedSet, type AlleviaTool, type ToolContext } from "./tool.js";
@@ -168,6 +168,37 @@ export function arrayArgKey(shape: Record<string, unknown>): string | undefined 
   return keys.find((k) => k === "ids") ?? keys[0];
 }
 
+// The Chief's streamed answer. What the owner saw stream IS the answer: text deltas are forwarded and kept. Once an
+// answer has been written and show_path is called, anything more (a model re-writing its answer after the tool call)
+// is dropped from both the stream and the answer. If nothing streamed, the run's final text is sent once.
+const MIN_ANSWER_CHARS = 80;
+
+export class AnswerStream {
+  private parts: string[] = [];
+  private sealed = false;
+
+  constructor(private out: Emit) {}
+
+  readonly emit: Emit = (e) => {
+    if (e.type === "tool_call" && e.agent === CHIEF && e.name === "show_path" && this.parts.join("").trim().length >= MIN_ANSWER_CHARS) {
+      this.sealed = true;
+    }
+    if (e.type === "text" && e.agent === CHIEF) {
+      if (this.sealed) return;
+      this.parts.push(e.delta);
+    }
+    this.out(e);
+  };
+
+  finish(finalText: string): string {
+    const streamed = this.parts.join("").trim();
+    if (streamed) return streamed;
+    const text = finalText.trim();
+    if (text) this.out({ type: "text", agent: CHIEF, delta: text });
+    return text;
+  }
+}
+
 // ---------- the turn ----------
 
 interface RunOpts {
@@ -233,7 +264,7 @@ class Turn {
   }
 
   // One agent run with a timeout that also aborts the runtime.
-  private async runAgent(agent: AgentDef, o: RunOpts): Promise<RunOutput> {
+  private async runAgent(agent: AgentDef, o: RunOpts, emit: Emit = this.emit): Promise<RunOutput> {
     this.involve(agent.id);
     const ms = this.deps.agentTimeoutMs ?? AGENT_TIMEOUT_MS;
     const ac = new AbortController();
@@ -241,7 +272,7 @@ class Turn {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => { ac.abort(); reject(new Error(`timed out after ${Math.round(ms / 1000)}s`)); }, ms);
     });
-    const run = this.deps.runtime.run(this.runInput(agent, o, ac.signal), this.emit);
+    const run = this.deps.runtime.run(this.runInput(agent, o, ac.signal), emit);
     run.catch(() => {}); // a run that loses the race may reject later
     try {
       return await Promise.race([run, timeout]);
@@ -331,14 +362,33 @@ class Turn {
 
   // ----- review (+ one revision) -----
 
+  // Rejected only when every reviewer that answered rejects; any other non-ok verdict (a fix, or a reject the others
+  // disagree with) earns exactly one revision that addresses all the notes.
   private async review(f: FindingRecord, producer: AgentDef): Promise<void> {
     const reviewers = reviewersFor(producer.id, f.text);
     if (!reviewers.length) return;
     const got = (await Promise.all(reviewers.map((r) => this.runReview(r, f, producer)))).filter((v): v is ReviewRecord => !!v);
     this.reviews.push(...got);
-    if (got.some((v) => v.verdict === "reject")) { f.rejected = true; return; }
-    const fixes = got.filter((v) => v.verdict === "fix");
-    if (fixes.length) await this.revise(f, producer, fixes);
+    if (got.length && got.every((v) => v.verdict === "reject")) { f.rejected = true; return; }
+    const notes = got.filter((v) => v.verdict !== "ok");
+    if (notes.length) await this.revise(f, producer, notes);
+  }
+
+  // The deterministic check of a finding against this turn's tool results, as one line for reviewers and the Chief.
+  private autoCheck(text: string): string {
+    const c = checkTurn(text, this.touched, { now: this.deps.now, question: this.input.question });
+    return [
+      c.citationsValid ? "every cited id was returned by a tool this turn" : `cited but returned by no tool: ${c.invalidCitations.join(", ")}`,
+      c.numbersGrounded ? "every number appears in this turn's tool data" : `numbers not found in any tool data: ${c.ungroundedNumbers.join(", ")}`,
+    ].join("; ");
+  }
+
+  private evidence(f: FindingRecord): ReviewEvidence {
+    const byId = new Map(this.touched.nodes().map((n) => [n.id, n] as const));
+    for (const s of this.touched.sources()) if (!byId.has(s.id)) byId.set(s.id, { id: s.id, label: "Source", name: s.title, ...(s.asOf ? { asOf: s.asOf } : {}) });
+    const citedNodes = f.citations.map((id) => byId.get(id)).filter((n): n is NodeRef => !!n).slice(0, 20)
+      .map((n) => ({ id: n.id, label: n.label, name: n.name, ...(n.asOf ? { asOf: n.asOf } : {}) }));
+    return { citedNodes, autoCheck: this.autoCheck(f.text) };
   }
 
   private async runReview(reviewer: AgentDef, f: FindingRecord, producer: AgentDef): Promise<ReviewRecord | undefined> {
@@ -346,7 +396,7 @@ class Turn {
       const tools = this.tools(reviewer);
       const out = await this.runAgent(reviewer, {
         phase: "review", system: this.system(reviewer, tools), tools, outputSchema: REVIEW_SCHEMA, maxTurns: 6,
-        prompt: reviewPrompt({ question: this.input.question, reviewer, finding: this.view(f) }),
+        prompt: reviewPrompt({ question: this.input.question, reviewer, finding: this.view(f), evidence: this.evidence(f) }),
       });
       const s = (out.structured ?? tryParseJson(out.text)) as Record<string, unknown> | undefined;
       const verdict = s?.verdict === "fix" || s?.verdict === "reject" ? s.verdict : "ok";
@@ -373,6 +423,7 @@ class Turn {
   private readonly view = (f: FindingRecord): FindingView => ({
     id: f.id, agent: f.agent, text: f.text, citations: f.citations, proposals: f.proposals, rejected: f.rejected,
     reviews: this.reviews.filter((r) => r.findingId === f.id).map((r) => ({ reviewer: r.reviewer, verdict: r.verdict, note: r.note })),
+    autoCheck: this.autoCheck(f.text),
   });
 
   // ----- answer -----
@@ -384,14 +435,16 @@ class Turn {
     const text = await this.step(chief, fast ? plan.steps[0]!.task : "Writing the answer", async () => {
       try {
         const tools = this.tools(chief);
+        const stream = new AnswerStream(this.emit);
         const out = await this.runAgent(chief, {
           phase: fast ? "direct" : "synthesis", system: this.system(chief, tools), tools, streamText: true, maxTurns: fast ? 12 : 8,
           prompt: fast
             ? directPrompt({ question: this.input.question, recall: this.input.recall.text, task: plan.steps[0]!.task })
             : synthesisPrompt({ question: this.input.question, recall: this.input.recall.text, findings: findings.map(this.view), failed: this.failed, ...(plan.chiefTask ? { chiefTask: plan.chiefTask } : {}) }),
-        });
-        if (!out.text.trim()) throw new Error("wrote no answer");
-        return out.text.trim();
+        }, stream.emit);
+        const answer = stream.finish(out.text);
+        if (!answer) throw new Error("wrote no answer");
+        return answer;
       } catch (e) {
         failure = e instanceof Error ? e.message : String(e);
         throw e;

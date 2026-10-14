@@ -242,18 +242,47 @@ describe("runTurn: reviews", () => {
     expect(out.agents).toEqual(["chief-of-staff", "content-strategist", "copy-editor", "fact-checker"]);
   });
 
-  it("a 'reject' marks the finding rejected, skips revision and warns the Chief", async () => {
+  it("a unanimous 'reject' marks the finding rejected, skips revision and warns the Chief", async () => {
     const { run, runtime } = setup({
       "chief-of-staff:plan": plan([{ agent: "data-analyst", task: "Signups" }]),
       "data-analyst": finding("Signups were 99 [[metric:signups]]."),
       "coe-lead": { structured: { verdict: "reject", note: "99 is not in the data." } },
-      "fact-checker": { structured: { verdict: "fix", note: "Check the number." } },
+      "fact-checker": { structured: { verdict: "reject", note: "Unsupported." } },
       "chief-of-staff:synthesis": { text: "Not recorded." },
     });
     const out = await run();
     expect(runtime.runs.filter((r) => r.agentId === "data-analyst")).toHaveLength(1);
     expect(out.findings[0]!.rejected).toBe(true);
     expect(runtime.runs.find((r) => r.phase === "synthesis")!.prompt).toContain("REJECTED: do not rely on it");
+  });
+
+  it("reviewers who disagree (reject + ok) earn one revision with every non-ok note, not a rejection", async () => {
+    const { run, runtime } = setup({
+      "chief-of-staff:plan": plan([{ agent: "data-analyst", task: "Signups" }]),
+      "data-analyst:work": { calls: [{ name: "metric_trend", args: { metric: "signups" } }], ...finding("Signups fell from 55 to 41 [[metric:signups]].") },
+      "data-analyst:revise": finding("Signups fell from 55 to 41 in the week to 2026-10-05 [[metric:signups]] [[obs:signups:2026-10-05]]."),
+      "coe-lead": { structured: { verdict: "ok", note: "Figures match." } },
+      "fact-checker": { structured: { verdict: "reject", note: "Could not find the source." } },
+      "chief-of-staff:synthesis": { text: "Signups fell from 55 to 41 [[metric:signups]]." },
+    });
+    const out = await run();
+    expect(runtime.runs.filter((r) => r.agentId === "data-analyst").map((r) => r.phase)).toEqual(["work", "revise"]);
+    expect(runtime.runs.find((r) => r.phase === "revise")!.prompt).toContain("Nisha (Fact Checker): reject, Could not find the source.");
+    expect(runtime.runs.find((r) => r.phase === "revise")!.prompt).not.toContain("Figures match.");
+    expect(out.findings[0]).toMatchObject({ rejected: false, revised: true });
+  });
+
+  it("reviewers see which cited ids the tools returned and the automatic number check", async () => {
+    const { runtime, run } = setup({
+      "chief-of-staff:plan": plan([{ agent: "data-analyst", task: "Signups" }]),
+      "data-analyst": { calls: [{ name: "metric_trend", args: { metric: "signups" } }], ...finding("Signups fell from 55 to 41 [[obs:signups:2026-10-05]] and 77 [[made:up]].") },
+      "chief-of-staff:synthesis": { text: "ok" },
+    });
+    await run();
+    const p = runtime.runs.find((r) => r.agentId === "coe-lead")!.prompt;
+    expect(p).toContain('- obs:signups:2026-10-05: Observation "signups (2026-10-05)", as of 2026-10-06');
+    expect(p).toContain("Automatic check: cited but returned by no tool: made:up; numbers not found in any tool data: 77");
+    expect(runtime.runs.find((r) => r.phase === "synthesis")!.prompt).toContain("Automatic check: cited but returned by no tool: made:up");
   });
 });
 
@@ -277,6 +306,21 @@ describe("runTurn: fast path", () => {
     expect(events.find(is("path"))).toMatchObject({ nodes: [{ id: "decision:pause-stories" }] });
     expect(out.agents).toEqual(["chief-of-staff"]);
     expect(out.findings).toEqual([]);
+  });
+
+  it("an answer re-written after show_path is dropped from the stream and the answer", async () => {
+    const answer = "We paused daily stories on 2026-10-10 to put the time into reels [[decision:pause-stories]]. Next: review reel reach.";
+    const { events, run } = setup({
+      "chief-of-staff:plan": plan([{ agent: "chief-of-staff", task: "Look it up" }]),
+      "chief-of-staff:direct": {
+        preText: answer,
+        calls: [{ name: "search", args: { query: "stories" } }, { name: "show_path", args: { ids: ["decision:pause-stories"] } }],
+        text: "To recap: we paused daily stories [[decision:pause-stories]].",
+      },
+    });
+    const out = await run();
+    expect(out.answer).toBe(answer);
+    expect(events.filter(is("text")).map((e) => (e as { delta: string }).delta).join("")).toBe(answer);
   });
 
   it("a failed plan falls back to the fast path", async () => {

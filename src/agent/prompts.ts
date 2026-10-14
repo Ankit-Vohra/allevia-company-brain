@@ -101,6 +101,13 @@ export interface FindingView {
   proposals?: string[];
   reviews?: Array<{ reviewer: string; verdict: string; note: string }>;
   rejected?: boolean;
+  autoCheck?: string;   // the deterministic check of its citations and numbers against this turn's tool results
+}
+
+// What the reviewers get besides the text: the cited nodes the team's tools returned and the automatic check.
+export interface ReviewEvidence {
+  citedNodes: Array<{ id: string; label: string; name: string; asOf?: string }>;
+  autoCheck: string;
 }
 
 const who = (id: string): string => {
@@ -115,6 +122,7 @@ function findingBlock(f: FindingView, withReviews: boolean): string {
   const lines = [`### ${who(f.agent)} [${f.id}]${f.rejected ? " REJECTED: do not rely on it" : ""}`, f.text.trim()];
   if (f.citations.length) lines.push(`Cites: ${f.citations.join(", ")}`);
   if (f.proposals?.length) lines.push(`Proposes:\n${f.proposals.map((p) => `- ${p}`).join("\n")}`);
+  if (withReviews && f.autoCheck) lines.push(`Automatic check: ${f.autoCheck}`);
   if (withReviews && f.reviews?.length) lines.push(`Reviews: ${f.reviews.map((r) => `${who(r.reviewer)}: ${r.verdict}, ${r.note}`).join(" | ")}`);
   return lines.join("\n");
 }
@@ -162,16 +170,21 @@ export function workPrompt(o: { question: string; task: string; recall: string; 
 
 // ---------- REVIEW (a reviewer, structured verdict) ----------
 
-export function reviewPrompt(o: { question: string; reviewer: AgentDef; finding: FindingView }): string {
+export function reviewPrompt(o: { question: string; reviewer: AgentDef; finding: FindingView; evidence?: ReviewEvidence }): string {
   const focus = REVIEW_FOCUS[o.reviewer.id] ?? o.reviewer.persona;
-  return [
+  const parts = [
     quoteQ(o.question),
     `${who(o.finding.agent)} wrote this finding [${o.finding.id}]:\n"""\n${o.finding.text.trim()}\n"""\nIt cites: ${o.finding.citations.join(", ") || "nothing"}`,
-    `Review it as ${o.reviewer.title}. ${focus}
-- Check it with your tools where you can.
+  ];
+  if (o.evidence) {
+    const nodes = o.evidence.citedNodes.map((n) => `- ${n.id}: ${n.label} "${n.name}"${n.asOf ? `, as of ${n.asOf}` : ""}`);
+    parts.push(`What the team's tools returned this turn (the system checked this, so you don't need to re-find these ids):\n${nodes.join("\n") || "- none of the cited ids"}\nAutomatic check: ${o.evidence.autoCheck}`);
+  }
+  parts.push(`Review it as ${o.reviewer.title}. ${focus}
+- Check it with your tools where you can. Not finding something with your own tools is not proof it is wrong: reject only what the evidence contradicts or what no tool returned.
 - verdict "ok": accurate and usable as is. "fix": usable after a specific change; say exactly what in the note. "reject": wrong or unsupported at its core.
-- note: one or two sentences.`,
-  ].join("\n\n");
+- note: one or two sentences.`);
+  return parts.join("\n\n");
 }
 
 // ---------- REVISE (the producer, once, after a "fix") ----------
@@ -192,7 +205,7 @@ const ANSWER_RULES = `Write the answer to the owner now:
 - Lead with the answer in one or two sentences, then bullets (at most 5 per group), then one next action.
 - Cite [[id]] for every claim, using the entity ids the findings cite (never the finding ids). Numbers with their dates. The "simulated" and "as of <date>" rules apply.
 - Don't narrate the team's process unless it helps the owner trust the answer (for example "Isha double-checked the figures").
-- When the answer is written, call show_path once with the ordered ids that explain it (cause to effect), then stop: write nothing after it.
+- Write the answer exactly once. Then call show_path once with the ordered ids that explain it (cause to effect). After show_path returns, write nothing more: no recap, no second version.
 - If an action is clearly warranted, you may call propose_action. It only creates an approval card; nothing is executed.`;
 
 export function synthesisPrompt(o: { question: string; recall: string; findings: FindingView[]; failed: string[]; chiefTask?: string }): string {

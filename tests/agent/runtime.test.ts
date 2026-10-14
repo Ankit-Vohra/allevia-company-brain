@@ -128,6 +128,14 @@ describe("SdkMessageFolder (SDK messages -> events and output)", () => {
     expect(f.output()).toEqual({ text: "Signups rose.\n\nPath shown." });
   });
 
+  it("separates text blocks that follow earlier streamed text with a paragraph break", () => {
+    const { events, emit } = recorder();
+    const f = new SdkMessageFolder("chief-of-staff", true, emit);
+    const start = { type: "stream_event", parent_tool_use_id: null, event: { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } } };
+    for (const m of [start, delta("Looking."), start, delta("Answer.")]) f.push(m);
+    expect(events.map((e) => (e as { delta: string }).delta).join("")).toBe("Looking.\n\nAnswer.");
+  });
+
   it("returns structured output and does not stream when streamText is off", () => {
     const { events, emit } = recorder();
     const f = new SdkMessageFolder("chief-of-staff", false, emit);
