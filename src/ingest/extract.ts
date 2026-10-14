@@ -11,6 +11,8 @@ import type { RawDoc } from "./types.js";
 
 export * from "./extract-schema.js";
 export * from "./resolve.js";
+export * from "./resolve-names.js";
+export * from "./resolve-evidence.js";
 export type { LlmRunner, StructuredInput } from "./llm.js";
 export { AgentSdkRunner } from "./llm.js";
 
