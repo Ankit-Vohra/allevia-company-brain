@@ -1,7 +1,175 @@
-// Ontology: the node labels Allevia writes (spec §5.2). Every node also carries the base label `Entity`.
+// Ontology (spec §5): node labels, relationship types, which (from, rel, to) triples are legal, which relationships
+// are functional, and which properties keep a version history. Writes are validated against this; the extraction
+// JSON schema is built from it. Bump ONTOLOGY_VERSION when a change needs re-ingestion.
+
+export const ONTOLOGY_VERSION = 1;
+
+// Every node also carries the base label `Entity` (so `MATCH (n:Entity {id})` finds anything, Chunks and Versions
+// included). The type label is the one that is not `Entity`.
 export const ENTITY_TYPES = [
   "Business", "Person", "Agent", "Team", "Product", "Feature", "Audience", "Need", "BrandRule", "BrandAsset",
   "Channel", "Content", "Campaign", "Page", "Query", "Metric", "Observation", "Document", "Chunk", "Decision", "Task",
   "System", "Event", "Playbook", "Rule", "Recommendation", "Approval", "Action", "Session", "Turn", "Memory", "Version",
 ] as const;
 export type EntityType = (typeof ENTITY_TYPES)[number];
+
+export const REL_TYPES = [
+  // company
+  "MEMBER_OF", "OWNS", "KNOWS_ABOUT", "AUTHORED", "DECIDED", "BASED_ON", "SUPERSEDES", "AFFECTS", "DEPENDS_ON", "BLOCKS",
+  "PART_OF",
+  // knowledge
+  "MENTIONS", "LINKS_TO", "SOURCED_FROM", "HAS_CHUNK",
+  // market
+  "TARGETS", "HAS_NEED", "SOLVES", "PUBLISHED_ON", "PROMOTES", "LINKS_TO_PAGE", "RANKS_FOR", "USES_RULE", "MEASURES",
+  // procedural
+  "INCLUDES", "APPLIES_TO", "FAILS", "PASSES", "LEARNED_FROM",
+  // action layer
+  "PROPOSES", "EVIDENCED_BY", "APPROVED_BY", "REJECTED_BY", "RESULTED_IN",
+  // memory
+  "ASKED", "IN_SESSION", "TOUCHED", "CITED", "ABOUT", "STATED", "HAD_VERSION", "CONTRADICTS",
+] as const;
+export type RelType = (typeof REL_TYPES)[number];
+
+type End = EntityType | "*";
+export type Pattern = [End, RelType, End];
+
+// Expand "any of these sources, any of these targets" into flat triples.
+function pat(from: End | End[], rel: RelType, to: End | End[]): Pattern[] {
+  const fs = Array.isArray(from) ? from : [from];
+  const ts = Array.isArray(to) ? to : [to];
+  return fs.flatMap((f) => ts.map((t): Pattern => [f, rel, t]));
+}
+
+const ACTORS: EntityType[] = ["Person", "Agent"];
+const OWNERS: EntityType[] = ["Person", "Agent", "Team", "Business"];
+const OWNABLE: EntityType[] = [
+  "Task", "System", "Channel", "Product", "Feature", "Decision", "Campaign", "Page", "Document", "Playbook", "Metric",
+  "BrandAsset", "Content",
+];
+const EVIDENCE: EntityType[] = ["Observation", "Document", "Chunk", "Memory", "Event", "Decision"];
+
+export const ALLOWED_PATTERNS: Pattern[] = [
+  // company
+  ...pat(["Person", "Agent", "Team"], "MEMBER_OF", ["Team", "Business"]),
+  ...pat(OWNERS, "OWNS", OWNABLE),
+  ...pat([...ACTORS, "Team"], "KNOWS_ABOUT", "*"),
+  ...pat(ACTORS, "AUTHORED", ["Document", "Content", "Decision", "Playbook", "Rule"]),
+  ...pat([...ACTORS, "Team"], "DECIDED", "Decision"),
+  ...pat("Decision", "BASED_ON", [...EVIDENCE, "Recommendation"]),
+  ...pat("Recommendation", "BASED_ON", [...EVIDENCE, "Rule", "Metric", "Content", "Page", "Campaign"]),
+  ...pat(["Decision", "Rule", "BrandRule", "Recommendation", "Document", "Memory", "Playbook"], "SUPERSEDES",
+    ["Decision", "Rule", "BrandRule", "Recommendation", "Document", "Memory", "Playbook"]).filter((p) => p[0] === p[2]),
+  ...pat(["Decision", "Event", "Action", "Task", "Recommendation"], "AFFECTS", "*"),
+  ...pat("System", "DEPENDS_ON", "System"),
+  ...pat("Channel", "DEPENDS_ON", ["System", "Channel"]),
+  ...pat("Task", "DEPENDS_ON", ["Task", "System", "Decision"]),
+  ...pat(["Product", "Feature"], "DEPENDS_ON", ["System", "Feature"]),
+  ...pat("Campaign", "DEPENDS_ON", ["Channel", "Page", "Content"]),
+  ...pat(["Task", "System", "Event", "Decision"], "BLOCKS", "Task"),
+  ...pat("Task", "BLOCKS", "Decision"),
+  ...pat("Feature", "PART_OF", "Product"),
+  ...pat("Page", "PART_OF", ["Channel", "Page"]),
+  ...pat("Content", "PART_OF", "Campaign"),
+  ...pat("Task", "PART_OF", ["Task", "Campaign"]),
+  ...pat("Team", "PART_OF", ["Team", "Business"]),
+  ...pat(["Product", "Channel"], "PART_OF", "Business"),
+  ...pat("System", "PART_OF", "System"),
+  // knowledge
+  ...pat(["Document", "Chunk", "Content", "Task"], "MENTIONS", "*"),
+  ...pat(["Document", "Chunk"], "LINKS_TO", ["Document", "Page"]),
+  ...pat("*", "SOURCED_FROM", "Document"),
+  ...pat("Document", "HAS_CHUNK", "Chunk"),
+  // market
+  ...pat(["Business", "Product", "Feature", "Content", "Campaign", "Page", "Channel"], "TARGETS", "Audience"),
+  ...pat(["Page", "Content", "Campaign"], "TARGETS", "Query"),
+  ...pat("Audience", "HAS_NEED", "Need"),
+  ...pat(["Product", "Feature", "Page", "Content"], "SOLVES", "Need"),
+  ...pat(["Content", "Page", "Campaign"], "PUBLISHED_ON", "Channel"),
+  ...pat(["Content", "Campaign", "Page"], "PROMOTES", ["Product", "Feature", "Page", "Business", "Content"]),
+  ...pat(["Content", "Page", "Campaign", "Channel", "Document"], "LINKS_TO_PAGE", "Page"),
+  ...pat(["Page", "Content"], "RANKS_FOR", "Query"),
+  ...pat(["Content", "Page", "Campaign"], "USES_RULE", ["Rule", "BrandRule"]),
+  ...pat("Observation", "MEASURES", "*"),
+  // procedural
+  ...pat("Playbook", "INCLUDES", ["Rule", "Playbook"]),
+  ...pat(["Rule", "Playbook", "BrandRule"], "APPLIES_TO", "*"),
+  ...pat(["Page", "Content", "Campaign", "Channel"], "FAILS", ["Rule", "BrandRule"]),
+  ...pat(["Page", "Content", "Campaign", "Channel"], "PASSES", ["Rule", "BrandRule"]),
+  ...pat(["Rule", "BrandRule", "Memory"], "LEARNED_FROM", "Approval"),
+  // action layer
+  ...pat("Recommendation", "PROPOSES", "Approval"),
+  ...pat("Recommendation", "EVIDENCED_BY", "*"),
+  ...pat("Approval", "APPROVED_BY", ACTORS),
+  ...pat("Approval", "REJECTED_BY", ACTORS),
+  ...pat("Approval", "RESULTED_IN", "Action"),
+  ...pat("Action", "RESULTED_IN", ["Task", "Content", "Document", "Campaign", "Observation", "Event", "Page"]),
+  // memory
+  ...pat(ACTORS, "ASKED", "Turn"),
+  ...pat("Turn", "IN_SESSION", "Session"),
+  ...pat("Turn", "TOUCHED", "*"),
+  ...pat("Turn", "CITED", "*"),
+  ...pat("Memory", "ABOUT", "*"),
+  ...pat(ACTORS, "STATED", "Memory"),
+  ...pat("*", "HAD_VERSION", "Version"),
+  ...pat("*", "CONTRADICTS", "*"),
+];
+
+const ALLOWED = new Set(ALLOWED_PATTERNS.map(([f, r, t]) => `${f}|${r}|${t}`));
+
+export function isAllowed(from: EntityType, rel: RelType, to: EntityType): boolean {
+  return [from, "*"].some((f) => [to, "*"].some((t) => ALLOWED.has(`${f}|${rel}|${t}`)));
+}
+
+// Functional relationships: at most one CURRENT edge per slot. When a new edge arrives for an occupied slot, upsertEdge
+// closes the old one (until + retiredAt) instead of deleting it.
+//   key 'to'   - the target is the slot: "a Task has one current owner" (any OWNS edge into the same Task).
+//   key 'from' - the source is the slot: "X has one current <rel> target" (any <rel> edge out of the same X).
+// fromType/toType restrict when the rule applies (OWNS is functional only when the target is a Task).
+export interface FunctionalRule {
+  rel: RelType;
+  fromType?: EntityType;
+  toType?: EntityType;
+  key: "to" | "from";
+  why: string;
+}
+
+export const FUNCTIONAL_RELS: FunctionalRule[] = [
+  { rel: "OWNS", toType: "Task", key: "to", why: "a task has one current owner" },
+  { rel: "SUPERSEDES", key: "to", why: "a decision (or rule, doc…) is superseded by at most one successor" },
+  { rel: "IN_SESSION", fromType: "Turn", key: "from", why: "a turn belongs to one session" },
+];
+
+export function functionalRule(rel: RelType, fromType: EntityType, toType: EntityType): FunctionalRule | undefined {
+  return FUNCTIONAL_RELS.find((f) => f.rel === rel && (!f.fromType || f.fromType === fromType) && (!f.toType || f.toType === toType));
+}
+
+// Properties whose change writes a Version node (old values kept one hop away via HAD_VERSION). Observation values
+// are tracked so a number corrected by a later source keeps its earlier reading.
+export const TRACKED_PROPS: Partial<Record<EntityType, string[]>> = {
+  Task: ["status", "title"],
+  Decision: ["status", "title"],
+  Channel: ["status", "handle"],
+  Page: ["title", "statusCode", "metaDescription"],
+  Campaign: ["status"],
+  Recommendation: ["status"],
+  Approval: ["status"],
+  Observation: ["value", "unit"],
+};
+
+// Types the entity search (full-text on name/summary, vector on embedding) should return. Chunks have their own
+// text and vector indexes; Observations, Versions and the episodic/action plumbing are reached by traversal instead.
+export const SEARCHABLE: EntityType[] = [
+  "Business", "Person", "Agent", "Team", "Product", "Feature", "Audience", "Need", "BrandRule", "BrandAsset", "Channel",
+  "Content", "Campaign", "Page", "Query", "Metric", "Document", "Decision", "Task", "System", "Event", "Playbook", "Rule",
+  "Recommendation", "Memory",
+];
+
+const TYPE_SET = new Set<string>(ENTITY_TYPES);
+const REL_SET = new Set<string>(REL_TYPES);
+export const isEntityType = (s: string): s is EntityType => TYPE_SET.has(s);
+export const isRelType = (s: string): s is RelType => REL_SET.has(s);
+
+// The type label of a node given all its labels (the one that is not `Entity`).
+export function typeOfLabels(labels: readonly string[]): EntityType | undefined {
+  return labels.find((l): l is EntityType => l !== "Entity" && isEntityType(l));
+}
