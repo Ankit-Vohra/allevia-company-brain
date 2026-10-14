@@ -314,8 +314,8 @@ class Turn {
     const inputs = (s.after ?? []).map((a) => this.findings.get(a)).filter((f): f is FindingRecord => !!f);
     const failedDeps = (s.after ?? []).filter((a) => !this.findings.has(a));
     for (const f of inputs) this.emit({ type: "handoff", from: f.agent, to: agent.id, note: clip(`${nameOf(f.agent)}'s finding: ${f.text.replace(/\s+/g, " ")}`, 120) });
-    const tools = this.tools(agent);
     const finding = await this.step(agent, s.task, async () => {
+      const tools = this.tools(agent);
       const out = await this.runAgent(agent, {
         phase: "work", system: this.system(agent, tools), tools, outputSchema: FINDING_SCHEMA, maxTurns: 12,
         prompt: workPrompt({ question: this.input.question, task: s.task, recall: this.input.recall.text, inputs: inputs.map(this.view), failedDeps }),
@@ -342,8 +342,8 @@ class Turn {
   }
 
   private async runReview(reviewer: AgentDef, f: FindingRecord, producer: AgentDef): Promise<ReviewRecord | undefined> {
-    const tools = this.tools(reviewer);
     return this.step(reviewer, `Reviewing ${producer.name}'s finding`, async () => {
+      const tools = this.tools(reviewer);
       const out = await this.runAgent(reviewer, {
         phase: "review", system: this.system(reviewer, tools), tools, outputSchema: REVIEW_SCHEMA, maxTurns: 6,
         prompt: reviewPrompt({ question: this.input.question, reviewer, finding: this.view(f) }),
@@ -358,8 +358,8 @@ class Turn {
   }
 
   private async revise(f: FindingRecord, producer: AgentDef, notes: ReviewRecord[]): Promise<void> {
-    const tools = this.tools(producer);
     await this.step(producer, "Revising after review", async () => {
+      const tools = this.tools(producer);
       const out = await this.runAgent(producer, {
         phase: "revise", system: this.system(producer, tools), tools, outputSchema: FINDING_SCHEMA, maxTurns: 8,
         prompt: revisePrompt({ question: this.input.question, task: f.task, finding: this.view(f), notes: notes.map((n) => ({ reviewer: n.reviewer, verdict: n.verdict, note: n.note })) }),
@@ -379,11 +379,11 @@ class Turn {
 
   async answer(plan: Plan, fast: boolean): Promise<{ text: string; ok: boolean }> {
     const chief = agentById(CHIEF)!;
-    const tools = this.tools(chief);
     const findings = plan.steps.map((s) => this.findings.get(s.agent)).filter((f): f is FindingRecord => !!f);
     let failure = "";
     const text = await this.step(chief, fast ? plan.steps[0]!.task : "Writing the answer", async () => {
       try {
+        const tools = this.tools(chief);
         const out = await this.runAgent(chief, {
           phase: fast ? "direct" : "synthesis", system: this.system(chief, tools), tools, streamText: true, maxTurns: fast ? 12 : 8,
           prompt: fast
@@ -412,7 +412,8 @@ class Turn {
 
   // The Chief didn't call show_path: call it with the answer's cited ids, in order of appearance.
   private async fallbackPath(chief: AgentDef, answer: string): Promise<void> {
-    const showPath = this.deps.getTools(["show_path"]).find((t) => t.name === "show_path");
+    let showPath: AlleviaTool | undefined;
+    try { showPath = this.deps.getTools(["show_path"]).find((t) => t.name === "show_path"); } catch { return; }
     const ids = extractCitations(answer).filter((id) => this.touched.has(id)).slice(0, MAX_PATH_IDS);
     if (!showPath || !ids.length) return;
     const key = arrayArgKey(showPath.input) ?? "ids";

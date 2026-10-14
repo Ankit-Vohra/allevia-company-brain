@@ -312,6 +312,19 @@ describe("runTurn: failures and proposals", () => {
     expect(out.touched.has("metric:signups")).toBe(true); // what it saw before failing still counts
   });
 
+  it("a tool registry that throws for one desk fails only that desk", async () => {
+    const { getTools } = registry();
+    const { events, run } = setup({
+      "chief-of-staff:plan": plan([{ agent: "librarian", task: "History" }, { agent: "tech-lead", task: "Site" }]),
+      "tech-lead": finding("The sitemap is broken [[system:sitemap]]."),
+      "chief-of-staff:synthesis": { text: "The sitemap is broken [[system:sitemap]]." },
+    }, { getTools: (names) => { if (names.includes("trace_decision")) throw new Error("registry broken"); return getTools(names); } });
+    const out = await run();
+    expect(events.find(is("agent_done", "librarian"))).toMatchObject({ ok: false });
+    expect(out.failed).toEqual(["librarian"]);
+    expect(out.ok).toBe(true);
+  });
+
   it("a desk that runs past the timeout is stopped and reported as failed", async () => {
     const { events, run } = setup({
       "chief-of-staff:plan": plan([{ agent: "librarian", task: "History" }]),
