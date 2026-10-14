@@ -465,3 +465,61 @@ used for ideas only, and nothing is copied from them.
 | Live box disturbed | Read-only MCP over SSH, allow-listed tools, no writes, no restarts, Clarity skipped |
 | Judges see "existing project" | New repo, new code, connectors called over MCP, vendored data credited |
 | FalkorDB 6.0 gaps (A*, Louvain not yet ported) | Use SPpaths, BFS, PageRank, betweenness, WCC and labelPropagation, all verified |
+
+## 16. Addendum, 2026-10-15 01:40 IST: the agent company (founder's direction before sleeping)
+
+Founder: "ensure the ui is very interesting, every agent is visible, its knowledge and understanding is visible … if a
+request is given then it should be visible on steps followed what each agent did … like we also have for reel and
+content generation … make different departments: analytics, tech, center of excellence (numbers and overall), ops,
+marketing, content and so on". He pointed to pixel-agents-hq/pixel-agents and harishkotra/agent-office (both MIT) as
+the visual reference.
+
+### 16.1 Departments and agents (`shared/roster.ts`)
+There are 8 departments and 10 agents. Each agent has a name, a title, tools, a model tier and a pixel sprite palette.
+
+| Department | Agents |
+|---|---|
+| Leadership | Meera, Chief of Staff (orchestrator) |
+| Center of Excellence | Isha, CoE Lead (numbers and overall health; reviews analysts' figures) |
+| Analytics | Kabir, Data Analyst |
+| Marketing | Rohan, Growth Marketer |
+| Content Studio | Tara, Content Strategist → Dev, Brand & Copy Editor → Nisha, Fact Checker (Aamdani's reel-expert pattern) |
+| Tech | Arjun, Tech Lead |
+| Operations | Vikram, Ops Manager |
+| Library | Sara, Librarian |
+
+Each agent is an `Agent` node `MEMBER_OF` its department's `Team` in every tenant graph.
+
+### 16.2 How a request runs
+This replaces the SDK-subagent idea in §7.1. We orchestrate ourselves, so every step is attributable and visible.
+1. **Recall**: the graph brief of what we already know (§7.3).
+2. **Plan**: the Chief of Staff returns structured output `{steps:[{agent, task, after?}], rationale}`. A single-desk
+   question gets a 1-step plan, so no work is wasted.
+3. **Work**: each planned agent runs as its own Agent SDK `query()` with only its tools and its persona. Agents with no
+   pending `after` run in parallel. Each ends by writing a **Finding**: text plus citations, and `basedOn` earlier
+   Findings, which is the handoff.
+4. **Review**: reviewers named in the roster check the Findings of the agents they cover. Copy Editor and Fact Checker
+   review content; CoE reviews numbers. The verdicts are ok, fix (one revision round) or reject.
+5. **Answer**: the Chief of Staff synthesises from the Findings, streams the answer, calls `show_path`, and may
+   `propose_action`.
+6. **Persist**: the Turn (`HANDLED_BY` each agent), Findings (`PRODUCED`, `PART_OF`, `CITED`, `BASED_ON`), reviews
+   (`REVIEWED`), and the full event log for replay.
+   - Each agent's `KNOWS_ABOUT` weights grow from the entities its Findings cited, so its knowledge visibly builds up
+     over time.
+
+Every step streams as `AgentEvent`s (`shared/contracts.ts`): plan, agent_start/status, tool_call/result (attributed),
+handoff, finding, review, proposal, text, path, final.
+
+### 16.3 UI additions
+- **Office** (the home of the app): a pixel-art floor plan drawn in the Allevia palette ("ledger paper, indigo ink, one
+  gold mark") with one room per department and each agent at a desk. The sprites are drawn by us, because the reference
+  repos' character art comes from a third-party pack, so it is not covered by their MIT licence.
+  - Idle agents breathe. Active agents type, with a speech bubble showing their current step.
+  - A handoff animates as a gold "file" flying from desk to desk.
+  - Findings pin to the agent's desk.
+  - Clicking an agent opens its **profile**: role, tools, playbooks it uses, a **knowledge map** (its `KNOWS_ABOUT`
+    subgraph), recent Findings, stats (requests handled, proposals made, checks passed).
+- **Ask** shows a **work log**: a per-agent timeline of each step with the nodes it touched. The graph path lights up as
+  the answer streams. The same view replays stored threads.
+- **Content Studio** flow: requests like "3 reel ideas for employers" visibly pass Tara → Dev → Nisha before Meera
+  answers.

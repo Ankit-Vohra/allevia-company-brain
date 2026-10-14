@@ -10,6 +10,8 @@ export const ENTITY_TYPES = [
   "Business", "Person", "Agent", "Team", "Product", "Feature", "Audience", "Need", "BrandRule", "BrandAsset",
   "Channel", "Content", "Campaign", "Page", "Query", "Metric", "Observation", "Document", "Chunk", "Decision", "Task",
   "System", "Event", "Playbook", "Rule", "Recommendation", "Approval", "Action", "Session", "Turn", "Memory", "Version",
+  // the agent company: one Finding per agent step-result inside a Turn (founder 2026-10-15: "every agent is visible")
+  "Finding",
 ] as const;
 export type EntityType = (typeof ENTITY_TYPES)[number];
 
@@ -27,6 +29,8 @@ export const REL_TYPES = [
   "PROPOSES", "EVIDENCED_BY", "APPROVED_BY", "REJECTED_BY", "RESULTED_IN",
   // memory
   "ASKED", "IN_SESSION", "TOUCHED", "CITED", "ABOUT", "STATED", "HAD_VERSION", "CONTRADICTS",
+  // agent company (multi-agent shared state)
+  "HANDLED_BY", "PRODUCED", "REVIEWED",
 ] as const;
 export type RelType = (typeof REL_TYPES)[number];
 
@@ -112,6 +116,15 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   ...pat(ACTORS, "STATED", "Memory"),
   ...pat("*", "HAD_VERSION", "Version"),
   ...pat("*", "CONTRADICTS", "*"),
+  // agent company: a Turn is handled by agents; each agent PRODUCES Findings (its share of the work, with citations);
+  // reviewers REVIEW them; a Finding can build on another agent's Finding (the handoff, visible as BASED_ON).
+  ...pat("Turn", "HANDLED_BY", "Agent"),
+  ...pat("Agent", "PRODUCED", ["Finding", "Recommendation", "Content", "Document"]),
+  ...pat("Agent", "REVIEWED", ["Finding", "Content", "Recommendation"]),
+  ...pat("Finding", "PART_OF", "Turn"),
+  ...pat("Finding", "CITED", "*"),
+  ...pat("Finding", "BASED_ON", ["Finding", ...EVIDENCE]),
+  ...pat("Recommendation", "BASED_ON", "Finding"),
 ];
 
 const ALLOWED = new Set(ALLOWED_PATTERNS.map(([f, r, t]) => `${f}|${r}|${t}`));
@@ -161,7 +174,7 @@ export const TRACKED_PROPS: Partial<Record<EntityType, string[]>> = {
 export const SEARCHABLE: EntityType[] = [
   "Business", "Person", "Agent", "Team", "Product", "Feature", "Audience", "Need", "BrandRule", "BrandAsset", "Channel",
   "Content", "Campaign", "Page", "Query", "Metric", "Document", "Decision", "Task", "System", "Event", "Playbook", "Rule",
-  "Recommendation", "Memory",
+  "Recommendation", "Memory", "Finding",
 ];
 
 const TYPE_SET = new Set<string>(ENTITY_TYPES);
