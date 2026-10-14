@@ -7,6 +7,7 @@ import { TRACKED_PROPS, typeOfLabels } from "./schema.js";
 import { CHUNK_VECTOR_PROP, ENTITY_VECTOR_PROP, vectorPropFor } from "./indexes.js";
 import { InvalidWrite } from "./errors.js";
 import { defined, num, sameValue, validateNode, type NodeInput, type Prim } from "./validate.js";
+import { noteGraphWrite } from "./projection.js";
 import { sha256 } from "../util/ids.js";
 
 export interface NodeResult { created: boolean; versioned: boolean; updated: boolean }
@@ -43,7 +44,10 @@ export async function upsertNode(g: GraphHandle, n: NodeInput, now: number = Dat
          ON CREATE SET n += $props, n.createdAt = $now, n.updatedAt = $now, n.stateSince = $now, n.rev = 1, n._mergeToken = $token${n.embedding ? `, n.${vecProp} = vecf32($vec)` : ""}
          WITH n, coalesce(n._mergeToken = $token, false) AS created SET n._mergeToken = null RETURN created`,
         { ...base, token: randomBytes(8).toString("hex") });
-      if (rows[0]?.created) return { created: true, versioned: false, updated: false };
+      if (rows[0]?.created) {
+        noteGraphWrite(g.name); // a new node changes what the algorithms see
+        return { created: true, versioned: false, updated: false };
+      }
       continue; // another writer created it between our read and MERGE: go round as an update
     }
 
@@ -81,7 +85,10 @@ export async function upsertNode(g: GraphHandle, n: NodeInput, now: number = Dat
     if (tracked.length) cypher += ", n.stateSince = $now";
     if (n.embedding) cypher += `, n.${vecProp} = vecf32($vec)`;
     const rows = await g.query<{ c: number }>(`${cypher} RETURN count(n) AS c`, params);
-    if (rows[0]?.c) return { created: false, versioned: tracked.length > 0, updated: changed.length > 0 };
+    if (rows[0]?.c) {
+      if (tracked.length) noteGraphWrite(g.name); // a Version node and a HAD_VERSION edge appeared
+      return { created: false, versioned: tracked.length > 0, updated: changed.length > 0 };
+    }
     // `rev` moved under us: someone else updated the node; re-read and re-diff against their state.
   }
   throw new Error(`upsertNode ${n.id}: still contended after ${MAX_ATTEMPTS} attempts`);

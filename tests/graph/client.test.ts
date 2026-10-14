@@ -1,8 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
-import {
-  graphName, connect, listGraphs, closeAll, openGraph, openGraphByName, projectionName, isProjectionName, sweepProjections,
-  type GraphHandle,
-} from "../../src/graph/client.js";
+import { graphName, connect, listGraphs, closeAll, openGraph, type GraphHandle } from "../../src/graph/client.js";
 import { testGraph } from "../helpers/graph.js";
 
 describe("graphName", () => {
@@ -68,27 +65,6 @@ describe("client (integration)", () => {
     await g.drop();
     expect(await listGraphs()).not.toContain(g.name);
     await g.drop();
-  });
-
-  it("names projections, hides them from listGraphs and sweeps only stale ones", async () => {
-    const base = g.name;
-    const fresh = projectionName(base, "cur");
-    expect(fresh.startsWith(`${base}__cur_`) && isProjectionName(fresh)).toBe(true);
-    expect(isProjectionName(projectionName(base, "asof"))).toBe(true);
-    expect(isProjectionName(base)).toBe(false);
-    const stale = projectionName(base, "asof", Date.now() - 60 * 60_000);
-    for (const name of [fresh, stale]) await (await openGraphByName(name)).query("CREATE (:X)");
-    const raw = await (await connect()).list();
-    expect(raw).toEqual(expect.arrayContaining([fresh, stale]));
-    const listed = await listGraphs();
-    expect(listed).not.toContain(fresh);
-    expect(listed).not.toContain(stale);
-    const dropped = await sweepProjections();
-    expect(dropped).toContain(stale);
-    expect(dropped).not.toContain(fresh); // could belong to a live algorithm call in another process
-    const after = await (await connect()).list();
-    expect(after).not.toContain(stale);
-    await (await openGraphByName(fresh)).drop();
   });
 
   it("opens tenant graphs by slug", async () => {

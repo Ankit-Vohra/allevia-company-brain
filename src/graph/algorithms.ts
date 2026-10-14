@@ -3,18 +3,20 @@
 // - shortestPaths, now: algo.SPpaths with costProp 'closedCost' / maxCost on the live graph. Closed edges carry
 //   closedCost = 1e6 (set by upsert), missing cost counts as 0, so SPpaths prunes closed edges during the search and
 //   still finds the shortest current path. Results are post-checked too.
-// - shortestPaths with asOf, and pageRank / betweenness / components / communities: onEdgesValidAt(). If any edge
-//   of the requested types is invalid at that time, the graph is GRAPH.COPY'd to a throwaway projection, the invalid
-//   edges are removed from the COPY only, the algorithm runs there, and the copy is dropped. Exact, unlike asking
+// - pageRank / betweenness / components / communities run on the cached slim projection of current edges, and
+//   shortestPaths with asOf on a per-call projection of the edges valid then (projection.ts). Exact, unlike asking
 //   SPpaths for N candidates and filtering (31 short paths that start later can crowd out the one valid long path).
+// The label "Entity" means every SEARCHABLE type (projected nodes carry a `Searchable` label): Chunks, Versions,
+// Observations, Turns… would otherwise dominate rankings and components.
 // Paths ignore edge direction (relDirection 'both'): "how is X connected to Y" does not care which way an arrow
 // points. EdgeRefs keep the stored direction.
 // Note: FalkorDB's labelPropagation is synchronous; on near-bipartite shapes (two triangles sharing an edge) labels
 // oscillate and one tight-looking cluster can come back as two communities. Cliques and dense clusters settle.
-import { projectionName, sweepProjections, type GraphHandle } from "./client.js";
+import type { GraphHandle } from "./client.js";
 import { CLOSED_EDGE_COST, isEntityType, isRelType, type EntityType, type RelType } from "./schema.js";
 import { MissingEndpoint } from "./errors.js";
-import { currentEdge, edgeValidAt, toPathResult, type PathResult, type RawPath } from "./read.js";
+import { edgeValidAt, toPathResult, type PathResult, type RawPath } from "./read.js";
+import { onEdgesValidAt, SEARCHABLE_LABEL } from "./projection.js";
 
 export type { NodeRef, EdgeRef, PathResult } from "./read.js";
 export { currentEdge } from "./read.js";
@@ -25,6 +27,9 @@ function checkLabels(labels: readonly string[]): void {
 function checkRels(rels: readonly string[]): void {
   for (const r of rels) if (!isRelType(r)) throw new Error(`unknown relationship type ${JSON.stringify(r)}`);
 }
+
+// Projection label for an algorithm's node filter: "Entity" -> the SEARCHABLE types.
+const projLabel = (l: EntityType | "Entity"): string => (l === "Entity" ? SEARCHABLE_LABEL : l);
 
 export async function shortestPaths(
   g: GraphHandle,
@@ -49,30 +54,25 @@ export async function shortestPaths(
     const missing = [fromId, toId].filter((id) => !found.some((f) => f.id === id));
     if (missing.length) throw new MissingEndpoint(missing, "shortestPaths");
   }
-  return paths.slice(0, maxPaths).map(toPathResult);
+  const out = paths.slice(0, maxPaths).map(toPathResult);
+  return timeTravel ? hydrate(g, out) : out;
 }
 
-let swept: Promise<unknown> | undefined;
-
-// Runs `fn` on a graph in which every edge of `rels` (all types when empty) is valid: current when asOf is undefined,
-// valid at asOf otherwise. Perf trade-off: once any edge is closed, every algorithm call copies the whole graph
-// (milliseconds at hackathon size, not at 1M edges). Later: cache the projection per graph version, or keep it
-// incrementally (closing an edge also deletes it from a standing `<graph>__current` copy).
-async function onEdgesValidAt<T>(g: GraphHandle, asOf: number | undefined, rels: readonly RelType[], fn: (h: GraphHandle) => Promise<T>): Promise<T> {
-  const invalid = asOf === undefined ? "r.until IS NOT NULL" : `NOT (${currentEdge("r", "asOf")})`;
-  const [row] = await g.roQuery<{ c: number }>(
-    `MATCH ()-[r]->() WHERE ${invalid}${rels.length ? " AND type(r) IN $rels" : ""} RETURN count(r) AS c`, { rels, asOf });
-  if (!row?.c) return fn(g);
-  // Once per process, before the first projection: drop orphans left by processes that died mid-call.
-  await (swept ??= sweepProjections().catch((e) => console.error(`[graph] projection sweep failed: ${(e as Error).message}`)));
-  const proj = await g.copyTo(projectionName(g.name, asOf === undefined ? "cur" : "asof"));
-  try {
-    await proj.query(`MATCH ()-[r]->() WHERE ${invalid} DELETE r`, { asOf });
-    return await fn(proj);
-  } finally {
-    // Never let a failed drop hide the algorithm's own error; a later sweep collects the orphan.
-    await proj.drop().catch((e) => console.error(`[graph] could not drop projection ${proj.name}: ${(e as Error).message}`));
+// Paths from a projection know only ids and type labels; fill names, asOf and simulated from the source graph.
+async function hydrate(g: GraphHandle, paths: PathResult[]): Promise<PathResult[]> {
+  const ids = [...new Set(paths.flatMap((p) => p.nodes.map((n) => n.id)))];
+  if (!ids.length) return paths;
+  const rows = await g.roQuery<{ id: string; name: string | null; asOf: string | null; simulated: boolean | null }>(
+    "MATCH (n:Entity) WHERE n.id IN $ids RETURN n.id AS id, n.name AS name, n.asOf AS asOf, n.simulated AS simulated", { ids });
+  const by = new Map(rows.map((r) => [r.id, r]));
+  for (const n of paths.flatMap((p) => p.nodes)) {
+    const r = by.get(n.id);
+    if (!r) continue;
+    if (r.name) n.name = r.name;
+    if (typeof r.asOf === "string") n.asOf = r.asOf;
+    if (typeof r.simulated === "boolean") n.simulated = r.simulated;
   }
+  return paths;
 }
 
 function algoConfig(labels: readonly string[], rels: readonly string[]): string {
@@ -86,7 +86,7 @@ export async function pageRank(g: GraphHandle, label: EntityType | "Entity", rel
   checkLabels([label]);
   if (rel) checkRels([rel]);
   return onEdgesValidAt(g, undefined, rel ? [rel] : [], (h) => h.roQuery<{ id: string; score: number }>(
-    `CALL algo.pageRank('${label}', ${rel ? `'${rel}'` : "null"}) YIELD node, score WITH node, score WHERE node.id IS NOT NULL
+    `CALL algo.pageRank('${projLabel(label)}', ${rel ? `'${rel}'` : "null"}) YIELD node, score WITH node, score WHERE node.id IS NOT NULL
      RETURN node.id AS id, score ORDER BY score DESC, id`));
 }
 
@@ -95,7 +95,7 @@ export async function betweenness(g: GraphHandle, labels: Array<EntityType | "En
   checkRels(rels);
   return onEdgesValidAt(g, undefined, rels, (h) => h.roQuery<{ id: string; score: number }>(
     `CALL algo.betweenness(${algoConfig(labels, rels)}) YIELD node, score WITH node, score WHERE node.id IS NOT NULL
-     RETURN node.id AS id, score ORDER BY score DESC, id`, { labels, rels }));
+     RETURN node.id AS id, score ORDER BY score DESC, id`, { labels: labels.map(projLabel), rels }));
 }
 
 export async function components(g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[]): Promise<Array<{ id: string; componentId: number }>> {
@@ -103,7 +103,7 @@ export async function components(g: GraphHandle, labels: Array<EntityType | "Ent
   checkRels(rels);
   return onEdgesValidAt(g, undefined, rels, (h) => h.roQuery<{ id: string; componentId: number }>(
     `CALL algo.WCC(${algoConfig(labels, rels)}) YIELD node, componentId WITH node, componentId WHERE node.id IS NOT NULL
-     RETURN node.id AS id, componentId ORDER BY componentId, id`, { labels, rels }));
+     RETURN node.id AS id, componentId ORDER BY componentId, id`, { labels: labels.map(projLabel), rels }));
 }
 
 export async function communities(g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[]): Promise<Array<{ id: string; communityId: number }>> {
@@ -111,5 +111,5 @@ export async function communities(g: GraphHandle, labels: Array<EntityType | "En
   checkRels(rels);
   return onEdgesValidAt(g, undefined, rels, (h) => h.roQuery<{ id: string; communityId: number }>(
     `CALL algo.labelPropagation(${algoConfig(labels, rels)}) YIELD node, communityId WITH node, communityId WHERE node.id IS NOT NULL
-     RETURN node.id AS id, communityId ORDER BY communityId, id`, { labels, rels }));
+     RETURN node.id AS id, communityId ORDER BY communityId, id`, { labels: labels.map(projLabel), rels }));
 }

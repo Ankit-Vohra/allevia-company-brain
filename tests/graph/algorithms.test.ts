@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { closeAll, connect, type GraphHandle } from "../../src/graph/client.js";
 import { ensureIndexes } from "../../src/graph/indexes.js";
-import { upsertNode, upsertEdge, closeEdge, writeBatch, MissingEndpoint, type EdgeInput, type NodeInput } from "../../src/graph/upsert.js";
+import { upsertNode, upsertEdge, closeEdge, writeBatch, addObservation, MissingEndpoint, type EdgeInput, type NodeInput } from "../../src/graph/upsert.js";
 import { shortestPaths, pageRank, betweenness, components, communities } from "../../src/graph/algorithms.js";
 import { testGraph } from "../helpers/graph.js";
 
@@ -30,9 +30,12 @@ describe("algorithms (integration, 6-node fixture)", () => {
     ] as const;
     for (const [from, type, to] of edges) await upsertEdge(g, { from, type, to }, T0);
     expect(await closeEdge(g, "task:t2", "DEPENDS_ON", "system:s1", T0 + 100)).toBe(1);
+    // a non-searchable node pointing at t1: "Entity" rankings must leave it out
+    await addObservation(g, { subject: "task:t1", metric: "age_days", value: 3, asOf: "2026-10-14", src: "document:none" }, T0);
   });
   afterAll(async () => {
     await cleanup();
+    expect((await (await connect()).list()).filter((n) => n.startsWith(`${g.name}__`))).toEqual([]);
     await closeAll();
   });
 
@@ -69,6 +72,8 @@ describe("algorithms (integration, 6-node fixture)", () => {
     expect(then.length).toBeGreaterThan(0);
     expect(then[0]!.edges.map((e) => e.type)).toContain("DEPENDS_ON");
     expect(then[0]!.edges.find((e) => e.from === "task:t2")).toMatchObject({ to: "system:s1", until: T0 + 100 });
+    // asOf paths come from a projection (ids + type labels only); names are filled back in from the tenant graph
+    expect(then[0]!.nodes.find((n) => n.id === "system:s1")).toEqual({ id: "system:s1", label: "System", name: "S1" });
     expect(await shortestPaths(g, "person:founder", "system:s2", { asOf: T0 + 150 })).toEqual([]);
     expect(await shortestPaths(g, "person:founder", "system:s2", { asOf: T0 - 1 })).toEqual([]);
   });
@@ -112,8 +117,10 @@ describe("algorithms (integration, 6-node fixture)", () => {
     expect(s("system:s1")).toBe(0);
   });
 
-  it("leaves no projection graphs behind", async () => {
-    expect((await (await connect()).list()).filter((n) => n.startsWith(`${g.name}__`))).toEqual([]);
+  it("keeps at most the one cached projection; dropping the graph takes it along", async () => {
+    const kids = (await (await connect()).list()).filter((n) => n.startsWith(`${g.name}__`));
+    expect(kids.filter((n) => !n.includes("__cur_"))).toEqual([]);
+    expect(kids.length).toBeLessThanOrEqual(1);
   });
 });
 

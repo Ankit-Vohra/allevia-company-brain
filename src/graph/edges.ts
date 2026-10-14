@@ -6,6 +6,7 @@ import type { GraphHandle } from "./client.js";
 import { CLOSED_EDGE_COST, functionalRule, isAllowed, isRelType, typeOfLabels, type FunctionalRule, type RelType } from "./schema.js";
 import { DisallowedRelationship, InvalidWrite, MissingEndpoint } from "./errors.js";
 import { defined, validateEdge, type EdgeInput } from "./validate.js";
+import { noteGraphWrite } from "./projection.js";
 
 const CLOSE_SET = (v: string, reason: string) =>
   `SET ${v}.until = CASE WHEN ${v}.since > $end THEN ${v}.since ELSE $end END, ${v}.retiredAt = $now, ${v}.closedCost = $cost, ${v}.closeReason = ${reason}`;
@@ -56,6 +57,7 @@ export async function upsertEdge(g: GraphHandle, e: EdgeInput, now: number = Dat
   });
   const r = rows[0];
   if (!r) throw new MissingEndpoint([e.from, e.to], "endpoint vanished during upsertEdge");
+  if (r.created || r.closed + r.dupes > 0) noteGraphWrite(g.name);
   return { created: r.created, closed: r.closed + r.dupes };
 }
 
@@ -66,5 +68,7 @@ export async function closeEdge(g: GraphHandle, from: string, type: RelType, to:
   const rows = await g.query<{ c: number }>(
     `MATCH (:Entity {id:$from})-[r:${type}]->(:Entity {id:$to}) WHERE r.until IS NULL ${CLOSE_SET("r", "$reason")} RETURN count(r) AS c`,
     { from, to, end: now, now, cost: CLOSED_EDGE_COST, reason: reason ?? null });
-  return rows[0]?.c ?? 0;
+  const closed = rows[0]?.c ?? 0;
+  if (closed) noteGraphWrite(g.name);
+  return closed;
 }
