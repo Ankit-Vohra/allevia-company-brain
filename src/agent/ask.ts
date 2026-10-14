@@ -33,6 +33,12 @@ export interface AskDeps {
   readOnly?: boolean;
 }
 
+// What src/agent/wiring.ts (written once the graph tools land) must export, so every surface (CLI, server, Discord,
+// MCP) builds the same deps: the SDK runtime, the real tools, the tenant graph and search-backed seeds.
+export interface AgentWiring {
+  createAskDeps(opts: { tenant: string; model?: string }): Promise<AskDeps>;
+}
+
 export interface AskResult {
   ok: boolean;
   turnId: string;
