@@ -8,6 +8,7 @@
 //
 // Params: the client inlines params as a `CYPHER k=v …` prefix. Lists and maps work (so `SET n += $props` works);
 // map keys must be plain identifiers, numbers must be finite, and undefined values are dropped.
+import { randomBytes } from "node:crypto";
 import { FalkorDB, type Graph } from "falkordb";
 import { loadConfig } from "../config.js";
 
@@ -123,8 +124,43 @@ export async function openGraph(tenant: string): Promise<GraphHandle> {
   return openGraphByName(graphName(tenant));
 }
 
+// Throwaway projections (see algorithms.ts) are named `<graph>__<kind>_<created, base36 ms>_<rand>` so a sweep can
+// tell an orphan (its process died mid-call) from one a live call in another process is still using.
+export type ProjectionKind = "cur" | "asof";
+const PROJECTION = /^allevia_\w+?__(?:cur|asof)_([0-9a-z]+)_[0-9a-f]{8}$/;
+export const STALE_PROJECTION_MS = 10 * 60_000;
+
+export function projectionName(base: string, kind: ProjectionKind, at: number = Date.now()): string {
+  return `${base}__${kind}_${at.toString(36)}_${randomBytes(4).toString("hex")}`;
+}
+
+export function isProjectionName(name: string): boolean {
+  return PROJECTION.test(name);
+}
+
+// Drops projections older than maxAgeMs; returns their names. Young ones are left alone.
+export async function sweepProjections(maxAgeMs: number = STALE_PROJECTION_MS): Promise<string[]> {
+  const db = await connect();
+  const cutoff = Date.now() - maxAgeMs;
+  const stale = (await db.list()).filter((n) => {
+    const m = PROJECTION.exec(n);
+    return m !== null && parseInt(m[1]!, 36) < cutoff;
+  });
+  const dropped: string[] = [];
+  for (const name of stale) {
+    try {
+      await new GraphHandle(name, db.selectGraph(name), db).drop();
+      dropped.push(name);
+    } catch (e) {
+      console.error(`[graph] could not sweep projection ${name}: ${(e as Error).message}`);
+    }
+  }
+  return dropped;
+}
+
+// Real graphs only: projections are an implementation detail of the algorithms.
 export async function listGraphs(): Promise<string[]> {
-  return (await connect()).list();
+  return (await (await connect()).list()).filter((n) => !isProjectionName(n));
 }
 
 export async function closeAll(): Promise<void> {

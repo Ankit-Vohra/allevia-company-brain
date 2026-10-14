@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { closeAll, listGraphs, type GraphHandle } from "../../src/graph/client.js";
+import { closeAll, connect, type GraphHandle } from "../../src/graph/client.js";
 import { ensureIndexes } from "../../src/graph/indexes.js";
-import { upsertNode, upsertEdge, closeEdge, MissingEndpoint } from "../../src/graph/upsert.js";
+import { upsertNode, upsertEdge, closeEdge, writeBatch, MissingEndpoint, type EdgeInput, type NodeInput } from "../../src/graph/upsert.js";
 import { shortestPaths, pageRank, betweenness, components, communities } from "../../src/graph/algorithms.js";
 import { testGraph } from "../helpers/graph.js";
 
@@ -113,6 +113,43 @@ describe("algorithms (integration, 6-node fixture)", () => {
   });
 
   it("leaves no projection graphs behind", async () => {
-    expect((await listGraphs()).filter((n) => n.startsWith(`${g.name}__`))).toEqual([]);
+    expect((await (await connect()).list()).filter((n) => n.startsWith(`${g.name}__`))).toEqual([]);
+  });
+});
+
+// Reviewer's case: the only path valid at asOf is a-b-c-d, while 31 shorter a-x-d paths only start later. A candidate
+// budget (ask SPpaths for N paths, filter afterwards) fills up with the short paths and returns nothing.
+describe("time-travel paths are exact (integration)", () => {
+  let g: GraphHandle;
+  let cleanup: () => Promise<void>;
+  beforeAll(async () => {
+    ({ g, cleanup } = await testGraph());
+    await ensureIndexes(g);
+    const xs = Array.from({ length: 31 }, (_, i) => `task:x${i}`);
+    const nodes: NodeInput[] = ["task:a", "task:b", "task:c", "task:d", ...xs].map((id) => ({ type: "Task", id, name: id }));
+    const edges: EdgeInput[] = [
+      ...[["task:a", "task:b"], ["task:b", "task:c"], ["task:c", "task:d"]].map(([from, to]) => ({ from: from!, type: "BLOCKS" as const, to: to!, since: T0 })),
+      ...xs.flatMap((x) => [{ from: "task:a", type: "BLOCKS" as const, to: x, since: T0 + 1000 }, { from: x, type: "BLOCKS" as const, to: "task:d", since: T0 + 1000 }]),
+    ];
+    const stats = await writeBatch(g, { nodes, edges }, T0 + 2000);
+    expect(stats.errors).toEqual([]);
+    expect(stats.edgesCreated).toBe(65);
+  });
+  afterAll(async () => {
+    await cleanup();
+    await closeAll();
+  });
+
+  it("finds the only path valid at asOf", async () => {
+    const then = await shortestPaths(g, "task:a", "task:d", { asOf: T0 + 500 });
+    expect(then).toHaveLength(1);
+    expect(then[0]!.nodes.map((n) => n.id)).toEqual(["task:a", "task:b", "task:c", "task:d"]);
+    const now = await shortestPaths(g, "task:a", "task:d");
+    expect(now.map((p) => p.length)).toEqual([2, 2, 2]);
+    expect(await shortestPaths(g, "task:a", "task:d", { asOf: T0 - 1 })).toEqual([]);
+  });
+
+  it("drops its asOf projection", async () => {
+    expect((await (await connect()).list()).filter((n) => n.startsWith(`${g.name}__`))).toEqual([]);
   });
 });
