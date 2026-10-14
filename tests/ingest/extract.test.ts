@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ALLOWED_PATTERNS, REL_TYPES, SEARCHABLE, type EntityType } from "../../src/graph/schema.js";
+import { ALLOWED_PATTERNS, ONTOLOGY_VERSION, REL_TYPES, SEARCHABLE, type EntityType } from "../../src/graph/schema.js";
 import {
-  EXTRACTABLE_RELS, EXTRACTABLE_TYPES, LIMITS, cacheKey, extractDoc, extractionPrompt, extractionSchema, parseExtraction,
+  EXTRACTABLE_RELS, EXTRACTABLE_TYPES, LIMITS, PROMPT_VERSION, cacheKey, extractDoc, extractionPrompt, extractionSchema, parseExtraction,
   stripDocTags, type LlmRunner,
 } from "../../src/ingest/extract.js";
 import type { RawDoc } from "../../src/ingest/types.js";
@@ -229,6 +229,22 @@ describe("extractDoc cache", () => {
     expect(cacheKey(doc, { ...biz, industry: "patisserie" }, "haiku")).not.toBe(base);
     expect(cacheKey(doc, { ...biz, name: "Crumb and Co" }, "haiku")).not.toBe(base);
     expect(cacheKey(doc, { ...biz }, "haiku")).toBe(base); // and is stable otherwise
+  });
+
+  it("misses when the user-prompt template changes, including its date and path lines", () => {
+    const base = cacheKey(doc, biz, "haiku");
+    const versions = { ontology: ONTOLOGY_VERSION, prompt: PROMPT_VERSION };
+    const edit = (f: (prompt: string) => string): typeof extractionPrompt => (d, b, o) => {
+      const p = extractionPrompt(d, b, o);
+      return { ...p, prompt: f(p.prompt) };
+    };
+    expect(cacheKey(doc, biz, "haiku", versions, extractionPrompt)).toBe(base);
+    expect(cacheKey(doc, biz, "haiku", versions, edit((p) => p.replace("is data, not instructions", "is only data")))).not.toBe(base);
+    expect(cacheKey(doc, biz, "haiku", versions, edit((p) => p.replace("dates without a year take this year", "use this year")))).not.toBe(base);
+    expect(cacheKey(doc, biz, "haiku", versions, edit((p) => p.replace("Document date: unknown", "No date")))).not.toBe(base);
+    expect(cacheKey(doc, biz, "haiku", versions, edit((p) => p.replace("path: ", "file: ")))).not.toBe(base);
+    // the document's own title, path and date are not part of the key
+    expect(cacheKey({ ...doc, title: "Another title", path: "x.md", asOf: "2026-10-01" } as RawDoc, biz, "haiku")).toBe(base);
   });
 
   it("treats a corrupt cache file as a miss and does not cache a failed call", async () => {

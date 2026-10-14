@@ -3,8 +3,8 @@
 // prompt asks for fewer, quoted, typed facts, and resolve.ts drops anything the ontology does not allow.
 // The document is untrusted data (notes, web pages): it goes inside a tag with a random per-call suffix, title and path
 // included, and the system prompt says never to follow instructions found in it.
-// The extraction cache key hashes the system prompt and schema text, so wording changes re-extract on their own;
-// PROMPT_VERSION is still bumped for changes worth naming.
+// The extraction cache key hashes the system prompt, the user-prompt template and the schema text, so wording changes
+// re-extract on their own; PROMPT_VERSION is still bumped for changes worth naming.
 import { randomBytes } from "node:crypto";
 import { ALLOWED_PATTERNS, REL_TYPES, SEARCHABLE, type EntityType, type RelType } from "../graph/schema.js";
 import type { RawDoc } from "./types.js";

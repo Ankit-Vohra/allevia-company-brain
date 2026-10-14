@@ -17,18 +17,23 @@ export type { LlmRunner, StructuredInput } from "./llm.js";
 export { AgentSdkRunner } from "./llm.js";
 
 // Cache key: the redacted text's hash, the ontology and prompt versions, the text of the system prompt (which carries
-// the business context) and of the JSON schema, so any wording change re-extracts, and the model alias. The resolved
-// model id is only known after a call, so it is not part of the key. Title and date are left out on purpose (a
-// re-fetched web page with a new date but the same text is not re-extracted); observation dates that fall back to the
-// document date are filled in at resolution time, not cached.
+// the business context), of the user-prompt template and of the JSON schema, so any wording change re-extracts, and the
+// model alias. The template is the user prompt around placeholder documents, with and without the optional path and
+// date lines. The resolved model id is only known after a call, so it is not part of the key. Title and date are left
+// out on purpose (a re-fetched web page with a new date but the same text is not re-extracted); observation dates that
+// fall back to the document date are filled in at resolution time, not cached. `build` is only for tests.
 export function cacheKey(
   doc: Pick<RawDoc, "hash">, business: BusinessContext, model: string,
   versions = { ontology: ONTOLOGY_VERSION, prompt: PROMPT_VERSION },
+  build: typeof extractionPrompt = extractionPrompt,
 ): string {
-  const { system } = extractionPrompt({ id: "document:key", kind: "note", title: "", text: "", hash: "" }, business, { nonce: "0" });
+  const placeholder: RawDoc = { id: "document:key", kind: "note", title: "{title}", text: "{text}", hash: "" };
+  const bare = build(placeholder, business, { nonce: "{nonce}" });
+  const full = build({ ...placeholder, path: "{path}", asOf: "{asOf}" }, business, { nonce: "{nonce}" });
   return sha256([
-    doc.hash, `ontology:${versions.ontology}`, `prompt:${versions.prompt}`, `system:${sha256(system)}`,
-    `schema:${sha256(JSON.stringify(extractionSchema()))}`, `model:${model}`,
+    doc.hash, `ontology:${versions.ontology}`, `prompt:${versions.prompt}`, `system:${sha256(bare.system)}`,
+    `user:${sha256(JSON.stringify([bare.prompt, full.prompt]))}`, `schema:${sha256(JSON.stringify(extractionSchema()))}`,
+    `model:${model}`,
   ].join("|"));
 }
 
