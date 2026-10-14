@@ -21,8 +21,12 @@ export interface QueryOpts { timeoutMs?: number }
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const GRAPH_NAME = /^[A-Za-z0-9_]+$/;
 
+// Tenant slugs are lowercase words joined by single underscores. "__" is reserved: projection graphs are named
+// `<graph>__<kind>_…`, and listGraphs/sweeps rely on no real graph containing it.
+const TENANT_SLUG = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
+
 export function graphName(tenant: string): string {
-  if (!/^[a-z0-9_]+$/.test(tenant)) throw new Error(`tenant slug must match [a-z0-9_]+, got ${JSON.stringify(tenant)}`);
+  if (!TENANT_SLUG.test(tenant)) throw new Error(`tenant slug must be lowercase words joined by single "_", got ${JSON.stringify(tenant)}`);
   return `allevia_${tenant}`;
 }
 

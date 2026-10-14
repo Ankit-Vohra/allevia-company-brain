@@ -12,6 +12,11 @@ describe("graphName", () => {
     expect(() => graphName("Bad-Name")).toThrow(/tenant/);
     expect(() => graphName("")).toThrow(/tenant/);
     expect(() => graphName("a b")).toThrow(/tenant/);
+    // "__" is reserved for projections (<graph>__cur_…), so no tenant graph can look like one
+    expect(() => graphName("shop__cur_1_deadbeef")).toThrow(/tenant/);
+    expect(() => graphName("shop__x")).toThrow(/tenant/);
+    expect(() => graphName("_shop")).toThrow(/tenant/);
+    expect(() => graphName("shop_")).toThrow(/tenant/);
   });
 });
 
