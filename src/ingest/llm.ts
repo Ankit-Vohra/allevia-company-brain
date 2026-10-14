@@ -1,11 +1,13 @@
 // Structured LLM calls for ingestion. AgentSdkRunner runs Claude through the Agent SDK on the founder's subscription:
-// no API key (ANTHROPIC_API_KEY is removed from the child's env), no tools, no user/project settings, an empty cwd so no
-// CLAUDE.md is read, no session transcripts on disk, and a JSON-schema output format. At most `concurrency` calls run
-// at once; a failed or timed-out call is retried `retries` times.
-import { mkdtempSync } from "node:fs";
+// an allow-listed env (subscriptionEnv: no API key, token or base URL), no tools, no user/project settings, a fresh
+// empty cwd per call (removed afterwards) so no CLAUDE.md is read, no session transcripts on disk, and a JSON-schema
+// output format. At most `concurrency` calls run at once. A failed or timed-out call is retried `retries` times after
+// a 1-2 s jittered pause; auth/billing failures and aborts are not retried.
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { subscriptionEnv } from "../agent/sdk-env.js";
 
 export interface StructuredInput { system: string; prompt: string; schema: object; model: string }
 
@@ -39,37 +41,44 @@ export class LlmError extends Error {
   override name = "LlmError";
 }
 
+// Retrying cannot fix these: the login, the account or the request itself is wrong, or someone aborted the call.
+export class FatalLlmError extends LlmError {
+  override name = "FatalLlmError";
+}
+const FATAL_SDK_ERRORS = new Set([
+  "authentication_failed", "oauth_org_not_allowed", "account_on_hold", "verification_required", "billing_error",
+  "invalid_request", "model_not_found", "cloud_credential_error",
+]);
+const isFatal = (e: unknown) =>
+  e instanceof FatalLlmError || (e instanceof Error && (e.name === "AbortError" || /\babort(ed)?\b/i.test(e.message)));
+
 export interface AgentSdkRunnerOpts {
-  concurrency?: number;   // default 3
-  retries?: number;       // default 1
-  timeoutMs?: number;     // default 120 s per attempt
-  maxTurns?: number;      // default 4 (room for the SDK's own structured-output retries)
-  cwd?: string;           // default: a fresh empty temp dir
+  concurrency?: number;                        // default 3
+  retries?: number;                            // default 1
+  timeoutMs?: number;                          // default 120 s per attempt
+  maxTurns?: number;                           // default 4 (room for the SDK's own structured-output retries)
+  retryDelayMs?: { min: number; max: number }; // default 1-2 s
+  cwd?: string;                                // default: a fresh empty temp dir per call, removed afterwards
   queryFn?: QueryFn;
 }
 
-// Child env: everything except the API key (calls must run on the subscription) and the marker that would make the
-// CLI think it is nested inside another Claude Code session.
-export function childEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string | undefined> {
-  const out = { ...env };
-  delete out.ANTHROPIC_API_KEY;
-  delete out.CLAUDECODE;
-  return out;
-}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class AgentSdkRunner implements LlmRunner {
   private readonly sem: Semaphore;
   private readonly retries: number;
   private readonly timeoutMs: number;
   private readonly maxTurns: number;
+  private readonly retryDelay: { min: number; max: number };
   private readonly queryFn: QueryFn;
-  private cwd: string | undefined;
+  private readonly cwd: string | undefined;
 
   constructor(opts: AgentSdkRunnerOpts = {}) {
     this.sem = new Semaphore(opts.concurrency ?? 3);
     this.retries = opts.retries ?? 1;
     this.timeoutMs = opts.timeoutMs ?? 120_000;
     this.maxTurns = opts.maxTurns ?? 4;
+    this.retryDelay = opts.retryDelayMs ?? { min: 1_000, max: 2_000 };
     this.queryFn = opts.queryFn ?? query;
     this.cwd = opts.cwd;
   }
@@ -78,10 +87,12 @@ export class AgentSdkRunner implements LlmRunner {
     return this.sem.run(async () => {
       const errors: string[] = [];
       for (let attempt = 0; attempt <= this.retries; attempt++) {
+        if (attempt > 0) await sleep(this.retryDelay.min + Math.random() * (this.retryDelay.max - this.retryDelay.min));
         try {
           return await this.once(input);
         } catch (e) {
           errors.push(e instanceof Error ? e.message : String(e));
+          if (isFatal(e)) throw new FatalLlmError(`structured call failed (not retried): ${errors.join(" | ")}`);
         }
       }
       throw new LlmError(`structured call failed after ${errors.length} attempt(s): ${errors.join(" | ")}`);
@@ -89,7 +100,7 @@ export class AgentSdkRunner implements LlmRunner {
   }
 
   private async once(input: StructuredInput): Promise<unknown> {
-    this.cwd ??= mkdtempSync(join(tmpdir(), "allevia-llm-"));
+    const cwd = this.cwd ?? mkdtempSync(join(tmpdir(), "allevia-llm-"));
     const ac = new AbortController();
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<never>((_, reject) => {
@@ -102,7 +113,7 @@ export class AgentSdkRunner implements LlmRunner {
       const messages = this.queryFn({
         prompt: input.prompt,
         options: {
-          cwd: this.cwd,
+          cwd,
           model: input.model,
           systemPrompt: input.system,
           settingSources: [],
@@ -112,21 +123,28 @@ export class AgentSdkRunner implements LlmRunner {
           maxTurns: this.maxTurns,
           persistSession: false,
           abortController: ac,
-          env: childEnv(),
+          env: subscriptionEnv(),
           outputFormat: { type: "json_schema", schema: input.schema as Record<string, unknown> },
         },
       });
+      let sdkError: string | undefined;
       for await (const m of messages) {
+        if (m.type === "assistant" && m.error) {
+          if (FATAL_SDK_ERRORS.has(m.error)) throw new FatalLlmError(`SDK error ${m.error}`);
+          sdkError = m.error;
+          continue;
+        }
         if (m.type !== "result") continue;
         if (m.subtype === "success" && m.structured_output !== undefined) return m.structured_output;
-        throw new Error(`result ${m.subtype}${m.subtype === "success" ? " without structured output" : ""}`);
+        throw new Error(`result ${m.subtype}${m.subtype === "success" ? " without structured output" : ""}${sdkError ? ` (${sdkError})` : ""}`);
       }
-      throw new Error("the SDK stream ended without a result");
+      throw new Error(`the SDK stream ended without a result${sdkError ? ` (${sdkError})` : ""}`);
     };
     try {
       return await Promise.race([run(), timeout]);
     } finally {
       clearTimeout(timer);
+      if (!this.cwd) rmSync(cwd, { recursive: true, force: true });
     }
   }
 }
