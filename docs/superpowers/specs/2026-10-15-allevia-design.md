@@ -233,7 +233,10 @@ where it applies, `conf` (0–1).
 
 The ops snapshot uses `users_summary`, `new_users`, `acquisition_sources`, `signup_funnel`, `search_console`,
 `analytics_ga4`, `reels_performance`, `account_reach`, `published_content`, `facebook_reels`, `youtube_stats`,
-`marketplace`, `connectors_status` (names and status only), `brain_pending` and `review_cards`. It skips
+`marketplace`, `connectors_status` (names and status only), `brain_pending` (only aggregate counts; the
+vault source owns Tasks) and `review_cards`. Added 2026-10-15 for the Tech and Analytics desks: `ai_features`,
+`posthog_funnels`, `sentry_issues`, `play_health`, `app_store_status`, and `admin_metrics` with its money sections
+dropped. `money` is excluded, per the founder's rule that finance stays out of the demo. It skips
 `clarity_insights` (10 reads a day), `server_health` and `cron_status` (infrastructure). It runs only tools whose names
 pass a read-only allow-list.
 
