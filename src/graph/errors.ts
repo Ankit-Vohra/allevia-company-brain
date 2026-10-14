@@ -12,6 +12,12 @@ export class MissingEndpoint extends Error {
   }
 }
 
+// A projection did not hold exactly what its source holds (a truncated read, or a source that kept changing while it
+// was read). Algorithms never run on a partial projection.
+export class ProjectionMismatch extends Error {
+  override name = "ProjectionMismatch";
+}
+
 export class DisallowedRelationship extends Error {
   override name = "DisallowedRelationship";
   constructor(readonly from: EntityType, readonly rel: RelType, readonly to: EntityType) {

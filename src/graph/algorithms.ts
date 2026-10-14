@@ -10,9 +10,13 @@
 // Observations, Turns… would otherwise dominate rankings and components.
 // Paths ignore edge direction (relDirection 'both'): "how is X connected to Y" does not care which way an arrow
 // points. EdgeRefs keep the stored direction.
+// Result size: the per-node algorithms return a row per node, more than FalkorDB's RESULTSET_SIZE (10,000 rows, the
+// rest dropped silently) on a big tenant. They run once and pack their rows into lists of MAX_PAGE per result row.
+// Time: every function takes `timeoutMs` (default DEFAULT_READ_TIMEOUT_MS, 15 s): one budget for the whole call,
+// projection reads included. Running out throws a "timed out" error.
 // Note: FalkorDB's labelPropagation is synchronous; on near-bipartite shapes (two triangles sharing an edge) labels
 // oscillate and one tight-looking cluster can come back as two communities. Cliques and dense clusters settle.
-import type { GraphHandle } from "./client.js";
+import { MAX_PAGE, readBudget, type GraphHandle } from "./client.js";
 import { CLOSED_EDGE_COST, isEntityType, isRelType, type EntityType, type RelType } from "./schema.js";
 import { MissingEndpoint } from "./errors.js";
 import { edgeValidAt, toPathResult, type PathResult, type RawPath } from "./read.js";
@@ -20,6 +24,8 @@ import { onEdgesValidAt, SEARCHABLE_LABEL } from "./projection.js";
 
 export type { NodeRef, EdgeRef, PathResult } from "./read.js";
 export { currentEdge } from "./read.js";
+
+export interface AlgoOpts { timeoutMs?: number }
 
 function checkLabels(labels: readonly string[]): void {
   for (const l of labels) if (l !== "Entity" && !isEntityType(l)) throw new Error(`unknown label ${JSON.stringify(l)}`);
@@ -35,10 +41,11 @@ export async function shortestPaths(
   g: GraphHandle,
   fromId: string,
   toId: string,
-  opts: { relTypes?: RelType[]; maxPaths?: number; asOf?: number; maxLen?: number } = {},
+  opts: { relTypes?: RelType[]; maxPaths?: number; asOf?: number; maxLen?: number; timeoutMs?: number } = {},
 ): Promise<PathResult[]> {
   const rels = opts.relTypes ?? [];
   checkRels(rels);
+  const left = readBudget(opts.timeoutMs);
   const maxPaths = Math.max(1, Math.min(opts.maxPaths ?? 3, 50));
   // Paths longer than 6 hops explain nothing, and SPpaths' cost grows with maxLen.
   const maxLen = Math.max(1, Math.min(Math.floor(opts.maxLen ?? 6), 6));
@@ -48,24 +55,25 @@ export async function shortestPaths(
   if (!timeTravel) cfg.push("costProp: 'closedCost'", "maxCost: $maxCost");
   const run = (h: GraphHandle) => h.roQuery<{ path: RawPath }>(
     `MATCH (a:Entity {id:$from}), (b:Entity {id:$to}) CALL algo.SPpaths({${cfg.join(", ")}}) YIELD path RETURN path`,
-    { from: fromId, to: toId, rels, maxLen, pathCount: maxPaths, maxCost: CLOSED_EDGE_COST - 1 });
-  const rows = timeTravel ? await onEdgesValidAt(g, opts.asOf, rels, run) : await run(g);
+    { from: fromId, to: toId, rels, maxLen, pathCount: maxPaths, maxCost: CLOSED_EDGE_COST - 1 }, { timeoutMs: left() });
+  const rows = timeTravel ? await onEdgesValidAt(g, opts.asOf, rels, run, { timeoutMs: left() }) : await run(g);
   const paths = rows.map((r) => r.path).filter((p) => p.edges.every((e) => edgeValidAt(e.properties, opts.asOf)));
   if (!paths.length) {
-    const found = await g.roQuery<{ id: string }>("MATCH (n:Entity) WHERE n.id IN $ids RETURN DISTINCT n.id AS id", { ids: [fromId, toId] });
+    const found = await g.roQuery<{ id: string }>("MATCH (n:Entity) WHERE n.id IN $ids RETURN DISTINCT n.id AS id",
+      { ids: [fromId, toId] }, { timeoutMs: left() });
     const missing = [fromId, toId].filter((id) => !found.some((f) => f.id === id));
     if (missing.length) throw new MissingEndpoint(missing, "shortestPaths");
   }
   const out = paths.slice(0, maxPaths).map(toPathResult);
-  return timeTravel ? hydrate(g, out) : out;
+  return timeTravel ? hydrate(g, out, left) : out;
 }
 
 // Paths from a projection know only ids and type labels; fill names, asOf and simulated from the source graph.
-async function hydrate(g: GraphHandle, paths: PathResult[]): Promise<PathResult[]> {
+async function hydrate(g: GraphHandle, paths: PathResult[], left: () => number): Promise<PathResult[]> {
   const ids = [...new Set(paths.flatMap((p) => p.nodes.map((n) => n.id)))];
   if (!ids.length) return paths;
   const rows = await g.roQuery<{ id: string; name: string | null; asOf: string | null; simulated: boolean | null }>(
-    "MATCH (n:Entity) WHERE n.id IN $ids RETURN n.id AS id, n.name AS name, n.asOf AS asOf, n.simulated AS simulated", { ids });
+    "MATCH (n:Entity) WHERE n.id IN $ids RETURN n.id AS id, n.name AS name, n.asOf AS asOf, n.simulated AS simulated", { ids }, { timeoutMs: left() });
   const by = new Map(rows.map((r) => [r.id, r]));
   for (const n of paths.flatMap((p) => p.nodes)) {
     const r = by.get(n.id);
@@ -84,34 +92,51 @@ function algoConfig(labels: readonly string[], rels: readonly string[]): string 
   return `{${parts.join(", ")}}`;
 }
 
-export async function pageRank(g: GraphHandle, label: EntityType | "Entity", rel?: RelType): Promise<Array<{ id: string; score: number }>> {
+// Runs a per-node algorithm once and returns every [id, value] row it yields (projected nodes without an id are
+// skipped), packed MAX_PAGE to a result row so no row is lost to RESULTSET_SIZE. Sorted by `order`.
+async function perNode(
+  h: GraphHandle, call: string, col: string, params: Record<string, unknown>, timeoutMs: number,
+  order: (a: [string, number], b: [string, number]) => number,
+): Promise<Array<[string, number]>> {
+  const rows = await h.roQuery<{ part: Array<[string, number]> }>(
+    `${call} YIELD node, ${col} WITH node.id AS id, ${col} AS v WHERE id IS NOT NULL
+     WITH collect([id, v]) AS xs UNWIND range(0, size(xs) - 1, $page) AS i RETURN xs[i..i + $page] AS part`,
+    { ...params, page: MAX_PAGE }, { timeoutMs });
+  return rows.flatMap((r) => r.part).sort(order);
+}
+
+const byId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+const scoreDesc = (a: [string, number], b: [string, number]): number => b[1] - a[1] || byId(a[0], b[0]);
+const groupAsc = (a: [string, number], b: [string, number]): number => a[1] - b[1] || byId(a[0], b[0]);
+
+export async function pageRank(g: GraphHandle, label: EntityType | "Entity", rel?: RelType, opts: AlgoOpts = {}): Promise<Array<{ id: string; score: number }>> {
   checkLabels([label]);
   if (rel) checkRels([rel]);
-  return onEdgesValidAt(g, undefined, rel ? [rel] : [], (h) => h.roQuery<{ id: string; score: number }>(
-    `CALL algo.pageRank('${projLabel(label)}', ${rel ? `'${rel}'` : "null"}) YIELD node, score WITH node, score WHERE node.id IS NOT NULL
-     RETURN node.id AS id, score ORDER BY score DESC, id`));
+  const rows = await onEdgesValidAt(g, undefined, rel ? [rel] : [], (h, left) =>
+    perNode(h, `CALL algo.pageRank('${projLabel(label)}', ${rel ? `'${rel}'` : "null"})`, "score", {}, left(), scoreDesc), opts);
+  return rows.map(([id, score]) => ({ id, score }));
 }
 
-export async function betweenness(g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[]): Promise<Array<{ id: string; score: number }>> {
+export async function betweenness(g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[], opts: AlgoOpts = {}): Promise<Array<{ id: string; score: number }>> {
   checkLabels(labels);
   checkRels(rels);
-  return onEdgesValidAt(g, undefined, rels, (h) => h.roQuery<{ id: string; score: number }>(
-    `CALL algo.betweenness(${algoConfig(labels, rels)}) YIELD node, score WITH node, score WHERE node.id IS NOT NULL
-     RETURN node.id AS id, score ORDER BY score DESC, id`, { labels: labels.map(projLabel), rels }));
+  const rows = await onEdgesValidAt(g, undefined, rels, (h, left) =>
+    perNode(h, `CALL algo.betweenness(${algoConfig(labels, rels)})`, "score", { labels: labels.map(projLabel), rels }, left(), scoreDesc), opts);
+  return rows.map(([id, score]) => ({ id, score }));
 }
 
-export async function components(g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[]): Promise<Array<{ id: string; componentId: number }>> {
+export async function components(g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[], opts: AlgoOpts = {}): Promise<Array<{ id: string; componentId: number }>> {
   checkLabels(labels);
   checkRels(rels);
-  return onEdgesValidAt(g, undefined, rels, (h) => h.roQuery<{ id: string; componentId: number }>(
-    `CALL algo.WCC(${algoConfig(labels, rels)}) YIELD node, componentId WITH node, componentId WHERE node.id IS NOT NULL
-     RETURN node.id AS id, componentId ORDER BY componentId, id`, { labels: labels.map(projLabel), rels }));
+  const rows = await onEdgesValidAt(g, undefined, rels, (h, left) =>
+    perNode(h, `CALL algo.WCC(${algoConfig(labels, rels)})`, "componentId", { labels: labels.map(projLabel), rels }, left(), groupAsc), opts);
+  return rows.map(([id, componentId]) => ({ id, componentId }));
 }
 
-export async function communities(g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[]): Promise<Array<{ id: string; communityId: number }>> {
+export async function communities(g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[], opts: AlgoOpts = {}): Promise<Array<{ id: string; communityId: number }>> {
   checkLabels(labels);
   checkRels(rels);
-  return onEdgesValidAt(g, undefined, rels, (h) => h.roQuery<{ id: string; communityId: number }>(
-    `CALL algo.labelPropagation(${algoConfig(labels, rels)}) YIELD node, communityId WITH node, communityId WHERE node.id IS NOT NULL
-     RETURN node.id AS id, communityId ORDER BY communityId, id`, { labels: labels.map(projLabel), rels }));
+  const rows = await onEdgesValidAt(g, undefined, rels, (h, left) =>
+    perNode(h, `CALL algo.labelPropagation(${algoConfig(labels, rels)})`, "communityId", { labels: labels.map(projLabel), rels }, left(), groupAsc), opts);
+  return rows.map(([id, communityId]) => ({ id, communityId }));
 }

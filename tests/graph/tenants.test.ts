@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { randomBytes } from "node:crypto";
-import { closeAll, openGraph, openGraphByName } from "../../src/graph/client.js";
+import { closeAll, openGraph, openGraphByName, MAX_PAGE } from "../../src/graph/client.js";
 import { listIndexes } from "../../src/graph/indexes.js";
 import { ensureTenant, getTenant, listTenants, businessId } from "../../src/graph/tenants.js";
 import { entityId } from "../../src/util/ids.js";
@@ -59,5 +59,21 @@ describe("tenants (integration)", () => {
   it("rejects bad slugs and empty names", async () => {
     await expect(ensureTenant({ slug: "Bad-Slug", name: "x" }, opts)).rejects.toThrow(/tenant slug/);
     await expect(ensureTenant({ slug, name: " " }, opts)).rejects.toThrow(/name/);
+  });
+
+  it("lists every tenant, past the 10,000 rows one result can hold", async () => {
+    const big = testGraphName();
+    const meta = await openGraphByName(big);
+    try {
+      const n = MAX_PAGE * 2 + 3;
+      await meta.query("UNWIND range(1, $n) AS i CREATE (:Tenant {slug: 'test_t' + toString(100000 + i), name: 'T', graph: 'x', businessId: 'b', ontologyVersion: 1, createdAt: 1, updatedAt: 1})", { n });
+      const all = await listTenants({ metaGraph: big });
+      expect(all).toHaveLength(n);
+      expect(all[0]!.slug).toBe("test_t100001");
+      expect(all.at(-1)!.slug).toBe(`test_t${100000 + n}`);
+      expect(new Set(all.map((t) => t.slug)).size).toBe(n);
+    } finally {
+      await meta.drop();
+    }
   });
 });

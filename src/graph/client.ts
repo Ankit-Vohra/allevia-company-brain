@@ -4,7 +4,12 @@
 //
 // Timeouts: `timeoutMs` becomes FalkorDB's per-query TIMEOUT, enforced server-side. FalkorDB 6.0 applies it to
 // read-only queries only; write queries ignore it (verified in scripts/spikes/falkordb-graph-core.ts), so writes are
-// never cut off half-way. roQuery defaults to DEFAULT_READ_TIMEOUT_MS.
+// never cut off half-way. roQuery defaults to DEFAULT_READ_TIMEOUT_MS. A call made of several reads (a projection
+// build, an algorithm) spends one budget across all of them: see `readBudget`.
+//
+// Result size: FalkorDB caps every result at RESULTSET_SIZE rows (10,000 on our servers) and drops the rest
+// SILENTLY. A read whose row count grows with the graph must page (MAX_PAGE rows at a time, keyed on an ordered
+// column) or pack its rows into lists; projection.ts, algorithms.ts and tenants.ts do.
 //
 // Params: the client inlines params as a `CYPHER k=v …` prefix. Lists and maps work (so `SET n += $props` works);
 // map keys must be plain identifiers, numbers must be finite, and undefined values are dropped.
@@ -12,6 +17,8 @@ import { FalkorDB, type Graph } from "falkordb";
 import { loadConfig } from "../config.js";
 
 export const DEFAULT_READ_TIMEOUT_MS = 15_000;
+// Rows per page for reads that page: well under RESULTSET_SIZE (10,000), so a page is never truncated.
+export const MAX_PAGE = 5000;
 
 type Param = null | string | number | boolean | Param[] | { [k: string]: Param };
 type Params = Record<string, Param>;
@@ -93,8 +100,20 @@ export class GraphHandle {
     for (const child of (await db.list()).filter((n) => n.startsWith(`${this.name}__`))) {
       await new GraphHandle(child, db.selectGraph(child), db).drop();
     }
-    for (const fn of dropListeners) fn(this.name);
+    for (const fn of dropListeners) await fn(this.name);
   }
+}
+
+// One time budget spent across several reads: each call returns the milliseconds left (pass it as timeoutMs), and
+// throws once the budget is gone. Writes are not cut off (FalkorDB ignores TIMEOUT on writes).
+export function readBudget(timeoutMs: number = DEFAULT_READ_TIMEOUT_MS): () => number {
+  if (!(Number.isFinite(timeoutMs) && timeoutMs > 0)) throw new Error(`timeoutMs must be a positive number, got ${timeoutMs}`);
+  const end = Date.now() + timeoutMs;
+  return () => {
+    const left = end - Date.now();
+    if (left <= 0) throw new Error(`Query timed out: the ${timeoutMs} ms budget is spent`);
+    return left;
+  };
 }
 
 const pool = new Map<string, Promise<FalkorDB>>();
@@ -130,13 +149,27 @@ export async function listGraphs(): Promise<string[]> {
   return (await (await connect()).list()).filter((n) => !n.includes("__"));
 }
 
-// Called with a graph's name after GraphHandle.drop(); projection.ts uses it to forget its cache.
-const dropListeners: Array<(name: string) => void> = [];
-export function onGraphDropped(fn: (name: string) => void): void {
+// Called (and awaited) with a graph's name after GraphHandle.drop(); projection.ts uses it to forget its cache and
+// the graph's write stamp.
+const dropListeners: Array<(name: string) => void | Promise<void>> = [];
+export function onGraphDropped(fn: (name: string) => void | Promise<void>): void {
   dropListeners.push(fn);
 }
 
+// Run (and awaited) by closeAll before the connections close: projection.ts drops the projections it cached.
+const closeHooks: Array<() => Promise<void>> = [];
+export function onClose(fn: () => Promise<void>): void {
+  closeHooks.push(fn);
+}
+
 export async function closeAll(): Promise<void> {
+  for (const fn of closeHooks) {
+    try {
+      await fn();
+    } catch (e) {
+      console.error(`[graph] close hook failed: ${(e as Error).message}`);
+    }
+  }
   const all = [...pool.values()];
   pool.clear();
   await Promise.allSettled(all.map(async (p) => (await p).close()));

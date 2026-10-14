@@ -117,6 +117,20 @@ describe("algorithms (integration, 6-node fixture)", () => {
     expect(s("system:s1")).toBe(0);
   });
 
+  it("takes a timeoutMs on every algorithm", async () => {
+    const t = { timeoutMs: 10_000 };
+    expect((await shortestPaths(g, "person:founder", "task:t2", t))[0]!.length).toBe(1);
+    expect(await shortestPaths(g, "person:founder", "system:s2", { ...t, asOf: T0 + 50 })).not.toEqual([]);
+    expect(await pageRank(g, "Entity", undefined, t)).toHaveLength(6);
+    expect(await betweenness(g, ["Task"], ["BLOCKS"], t)).toHaveLength(2);
+    expect(await components(g, ["Task"], ["BLOCKS"], t)).toHaveLength(2);
+    expect(await communities(g, ["Task"], ["BLOCKS"], t)).toHaveLength(2);
+    for (const bad of [0, -5, Number.NaN]) {
+      await expect(pageRank(g, "Entity", undefined, { timeoutMs: bad })).rejects.toThrow(/positive/);
+      await expect(shortestPaths(g, "person:founder", "task:t2", { timeoutMs: bad })).rejects.toThrow(/positive/);
+    }
+  });
+
   it("keeps at most the one cached projection; dropping the graph takes it along", async () => {
     const kids = (await (await connect()).list()).filter((n) => n.startsWith(`${g.name}__`));
     expect(kids.filter((n) => !n.includes("__cur_"))).toEqual([]);
