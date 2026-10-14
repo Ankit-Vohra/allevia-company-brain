@@ -67,9 +67,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
     },
     avsIg: { token: get("AVS_IG_LOGIN_ACCESS_TOKEN"), userId: get("AVS_IG_USER_ID") },
     opsSsh: {
-      host: get("ALLEVIA_OPS_SSH_HOST") ?? "203.0.113.10",
+      // Host and key are only needed when ALLEVIA_OPS_SSH_VIA=none; real values live in the env file, not in code.
+      host: get("ALLEVIA_OPS_SSH_HOST") ?? "",
       user: get("ALLEVIA_OPS_SSH_USER") ?? "ankit",
-      keyPath: expandHome(get("ALLEVIA_OPS_SSH_KEY") ?? "~/.ssh/example-key.pem"),
+      keyPath: expandHome(get("ALLEVIA_OPS_SSH_KEY") ?? ""),
       remoteDir: get("ALLEVIA_OPS_REMOTE_DIR") ?? "/home/ankit/aamdani-social-automation",
       via: get("ALLEVIA_OPS_SSH_VIA") ?? "aamdani-box",
     },

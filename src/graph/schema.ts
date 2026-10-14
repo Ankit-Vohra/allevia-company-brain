@@ -31,6 +31,8 @@ export const REL_TYPES = [
   "ASKED", "IN_SESSION", "TOUCHED", "CITED", "ABOUT", "STATED", "HAD_VERSION", "CONTRADICTS",
   // agent company (multi-agent shared state)
   "HANDLED_BY", "PRODUCED", "REVIEWED",
+  // who uses which tool/system (registry: agents using connectors and skills)
+  "USES",
 ] as const;
 export type RelType = (typeof REL_TYPES)[number];
 
@@ -125,6 +127,7 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   ...pat("Finding", "CITED", "*"),
   ...pat("Finding", "BASED_ON", ["Finding", ...EVIDENCE]),
   ...pat("Recommendation", "BASED_ON", "Finding"),
+  ...pat(["Person", "Agent", "Team", "Business", "System"], "USES", ["System", "Channel", "Playbook", "Rule"]),
 ];
 
 const ALLOWED = new Set(ALLOWED_PATTERNS.map(([f, r, t]) => `${f}|${r}|${t}`));

@@ -33,7 +33,7 @@ describe("loadConfig", () => {
     expect(c.extractModel).toBe("haiku");
     expect(c.dataDir.endsWith("/data")).toBe(true);
     expect(c.brainPath).toBe(join(homedir(), "aamdani-brain"));
-    expect(c.opsSsh).toEqual({ host: "203.0.113.10", user: "ankit", keyPath: join(homedir(), ".ssh/example-key.pem"),
+    expect(c.opsSsh).toEqual({ host: "", user: "ankit", keyPath: "",
       remoteDir: "/home/ankit/aamdani-social-automation", via: "aamdani-box" });
     expect(c.githubActionRepo).toBe("Ankit-Vohra/allevia");
     expect(c.publicMode).toBe(false);
