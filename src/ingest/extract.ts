@@ -11,20 +11,31 @@ import type { RawDoc } from "./types.js";
 
 export * from "./extract-schema.js";
 export * from "./resolve.js";
+export * from "./resolve-names.js";
+export * from "./resolve-evidence.js";
 export type { LlmRunner, StructuredInput } from "./llm.js";
 export { AgentSdkRunner } from "./llm.js";
 
-// Cache key: the redacted text's hash, the ontology and prompt versions, and the model. Title and date are left out
-// on purpose (a re-fetched web page with a new date but the same text is not re-extracted); observation dates that
-// fall back to the document date are filled in at resolution time, not cached.
-export function cacheKey(doc: Pick<RawDoc, "hash">, model: string, versions = { ontology: ONTOLOGY_VERSION, prompt: PROMPT_VERSION }): string {
-  return sha256([doc.hash, `ontology:${versions.ontology}`, `prompt:${versions.prompt}`, `model:${model}`].join("|"));
+// Cache key: the redacted text's hash, the ontology and prompt versions, the text of the system prompt (which carries
+// the business context) and of the JSON schema, so any wording change re-extracts, and the model alias. The resolved
+// model id is only known after a call, so it is not part of the key. Title and date are left out on purpose (a
+// re-fetched web page with a new date but the same text is not re-extracted); observation dates that fall back to the
+// document date are filled in at resolution time, not cached.
+export function cacheKey(
+  doc: Pick<RawDoc, "hash">, business: BusinessContext, model: string,
+  versions = { ontology: ONTOLOGY_VERSION, prompt: PROMPT_VERSION },
+): string {
+  const { system } = extractionPrompt({ id: "document:key", kind: "note", title: "", text: "", hash: "" }, business, { nonce: "0" });
+  return sha256([
+    doc.hash, `ontology:${versions.ontology}`, `prompt:${versions.prompt}`, `system:${sha256(system)}`,
+    `schema:${sha256(JSON.stringify(extractionSchema()))}`, `model:${model}`,
+  ].join("|"));
 }
 
 export interface ExtractOpts { runner: LlmRunner; model: string; cacheDir: string }
 
 export async function extractDoc(doc: RawDoc, business: BusinessContext, opts: ExtractOpts): Promise<{ extraction: Extraction; cached: boolean }> {
-  const key = cacheKey(doc, opts.model);
+  const key = cacheKey(doc, business, opts.model);
   const file = join(opts.cacheDir, `${key}.json`);
   const hit = readCache(file);
   if (hit) return { extraction: hit, cached: true };
@@ -72,7 +83,10 @@ export function parseExtraction(raw: unknown): Extraction {
   for (const e of list(raw.entities)) {
     if (!isObj(e) || !text(e.type) || !text(e.name)) continue;
     const aliases = list(e.aliases).map(text).filter((a): a is string => !!a);
-    out.entities.push({ type: text(e.type) as EntityType, name: text(e.name)!, summary: text(e.summary) ?? "", ...(aliases.length ? { aliases } : {}) });
+    out.entities.push({
+      type: text(e.type) as EntityType, name: text(e.name)!, summary: text(e.summary) ?? "",
+      ...(aliases.length ? { aliases } : {}), ...(text(e.format) ? { format: text(e.format) } : {}),
+    });
   }
   for (const r of list(raw.relations)) {
     if (!isObj(r)) continue;
