@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { subscriptionEnv } from "../../src/agent/sdk-env.js";
+import { NotOnSubscriptionError, assertSubscription, subscriptionEnv } from "../../src/agent/sdk-env.js";
 
 describe("subscriptionEnv", () => {
   const parent = {
@@ -28,5 +28,23 @@ describe("subscriptionEnv", () => {
       "DISCORD_BOT_TOKEN", "AVS_IG_LOGIN_ACCESS_TOKEN", "CLAUDECODE", "NODE_OPTIONS"]) {
       expect(k in env).toBe(false);
     }
+  });
+});
+
+describe("assertSubscription", () => {
+  const init = (apiKeySource?: unknown) => ({ type: "system", subtype: "init", ...(apiKeySource === undefined ? {} : { apiKeySource }) });
+
+  it("accepts an init message that uses no API key (claude.ai login), and the legacy oauth value", () => {
+    expect(assertSubscription(init("none"))).toBe("none");
+    expect(assertSubscription(init("oauth"))).toBe("oauth");
+  });
+
+  it("throws when the call would be billed to an API key, and fails closed on anything it does not know", () => {
+    for (const src of ["ANTHROPIC_API_KEY", "apiKeyHelper", "/login managed key", "user", "project", "org", "temporary", "something-new", "", 0, null]) {
+      expect(() => assertSubscription(init(src))).toThrow(NotOnSubscriptionError);
+    }
+    expect(() => assertSubscription(init())).toThrow(/apiKeySource missing/);
+    expect(() => assertSubscription(init("ANTHROPIC_API_KEY"))).toThrow(/apiKeySource "ANTHROPIC_API_KEY".*subscription/s);
+    expect(() => assertSubscription(init("/login managed key"))).toThrow(/claude\.ai account/);
   });
 });
