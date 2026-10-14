@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { EntityType } from "../../src/graph/schema.js";
 import {
-  FOUNDER_ID, MERGE_SIMILARITY, normName, rememberWrite, resolveExtraction, type Extraction, type KnownEntity, type ResolveContext,
+  FOUNDER_ID, MERGE_SIMILARITY, namesAgree, normName, rememberWrite, resolveExtraction, type Extraction, type KnownEntity, type ResolveContext,
 } from "../../src/ingest/extract.js";
 import type { GraphWrite } from "../../src/ingest/types.js";
 
@@ -46,7 +46,7 @@ describe("resolveExtraction: entities", () => {
     expect(edges(write)).toEqual([`${DOC} -MENTIONS-> ${GSC.id}`, `${GSC.id} -SOURCED_FROM-> ${DOC}`]);
   });
 
-  it("merges through similar() only at or above the threshold, and records a near miss on the MENTIONS edge", async () => {
+  it("merges through similar() only at or above the threshold", async () => {
     const existing = known(GSC);
     const at = (score: number) => ctx({ existing, similar: async (type, name) => (type === "System" && name === "Search Console" ? { id: GSC.id, score } : null) });
 
@@ -55,15 +55,32 @@ describe("resolveExtraction: entities", () => {
     // the merge teaches the existing node the new name, without renaming it
     expect(merged.write.nodes).toEqual([{ type: "System", id: GSC.id, name: "Google Search Console", props: { aliases: ["Search Console"] } }]);
 
-    const near = await resolveExtraction(ex({ entities: [ent("System", "Search Console")] }), at(0.85));
-    expect(ids(near.write)).toEqual(["system:search-console"]);
-    const m = near.write.edges.find((e) => e.type === "MENTIONS")!;
-    expect(m).toMatchObject({ to: "system:search-console", props: { maybeSameAs: GSC.id } });
-    expect(m.conf).toBeLessThan(0.6);
+    const below = await resolveExtraction(ex({ entities: [ent("System", "Search Console")] }), at(0.91));
+    expect(ids(below.write)).toEqual(["system:search-console"]);
+    expect(below.write.edges.find((e) => e.type === "MENTIONS")!.props).toBeUndefined();
+  });
 
-    const far = await resolveExtraction(ex({ entities: [ent("System", "Search Console")] }), at(0.5));
-    expect(ids(far.write)).toEqual(["system:search-console"]);
-    expect(far.write.edges.find((e) => e.type === "MENTIONS")!.props).toBeUndefined();
+  it("merges an acronym, but not a high-scoring name that disagrees (e5 puts Instagram and Facebook at 0.96)", async () => {
+    const existing = known(GSC, { id: "channel:facebook", type: "Channel", name: "Facebook" });
+    const similar = async (type: EntityType) => (type === "System" ? { id: GSC.id, score: 0.93 } : { id: "channel:facebook", score: 0.96 });
+    const { write } = await resolveExtraction(ex({ entities: [ent("System", "GSC"), ent("Channel", "Instagram")] }), ctx({ existing, similar }));
+    expect(edges(write, "MENTIONS")).toEqual([`${DOC} -MENTIONS-> channel:instagram`, `${DOC} -MENTIONS-> ${GSC.id}`]);
+    expect(ids(write)).toEqual(["channel:instagram", GSC.id]); // the new channel, and GSC learning its acronym
+    // the disagreement is kept for the librarian: a low-confidence MENTIONS with maybeSameAs
+    const m = write.edges.find((e) => e.type === "MENTIONS" && e.to === "channel:instagram")!;
+    expect(m.props).toEqual({ maybeSameAs: "channel:facebook" });
+    expect(m.conf).toBeLessThan(0.6);
+  });
+
+  it("names agree on token containment or initials, not on shared words", () => {
+    expect(namesAgree(["Search Console"], ["Google Search Console"])).toBe(true);
+    expect(namesAgree(["GSC"], ["Google Search Console"])).toBe(true);
+    expect(namesAgree(["GA4"], ["Google Analytics 4"])).toBe(true);
+    expect(namesAgree(["Insta"], ["Instagram"])).toBe(true);
+    expect(namesAgree(["Instagram"], ["Facebook"])).toBe(false);
+    expect(namesAgree(["Pause Facebook posts"], ["Pause Instagram posts"])).toBe(false);
+    expect(namesAgree(["Job seekers in Raipur"], ["Job seekers in Bilaspur"])).toBe(false);
+    expect(namesAgree(["IG"], ["Instagram"])).toBe(false);
   });
 
   it("does not merge 'Search Console' with 'Google Search Console' on its own", async () => {

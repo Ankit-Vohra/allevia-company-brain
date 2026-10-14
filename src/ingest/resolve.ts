@@ -3,11 +3,18 @@
 // dropped with a reason, never guessed.
 //
 // Name → id, within one type: the founder's references → person:founder; a name already used in this document; the
-// exact id; a known name or alias; similar() ≥ MERGE_SIMILARITY; else a new entityId(type, name). A near miss
-// (AMBIGUOUS_SIMILARITY ≤ score < MERGE_SIMILARITY) becomes a new node whose MENTIONS edge carries conf < 0.6 and
-// `maybeSameAs`, for the librarian to look at. Existing nodes are never renamed or re-summarised by extraction; they
-// only learn new aliases. Extracted edges are never functional: a document read by an LLM does not close facts that
-// came from deterministic sources (the librarian handles contradictions).
+// exact id; a known name or alias; similar() ≥ MERGE_SIMILARITY *and* names that agree (namesAgree); else a new
+// entityId(type, name).
+//
+// Why the name check: e5-small scores distinct same-type entities above 0.92 (measured 2026-10-15 on entityText:
+// Instagram~Facebook 0.959, "Pause Facebook posts"~"Pause Instagram posts" 0.964, "Job seekers in Raipur"~"…Bilaspur"
+// 0.947), so a vector score alone would merge different things. A high score with disagreeing names becomes a new
+// node whose MENTIONS edge carries conf < 0.6 and `maybeSameAs`, for the librarian to look at (spec §6.4: ambiguous
+// → created with conf < 0.6, not merged).
+//
+// Existing nodes are never renamed or re-summarised by extraction; they only learn new aliases. Extracted edges are
+// never functional: a document read by an LLM does not close facts that came from deterministic sources (the
+// librarian handles contradictions).
 import { isAllowed, type EntityType } from "../graph/schema.js";
 import { observationId, type EdgeInput, type NodeInput, type ObservationInput } from "../graph/upsert.js";
 import { entityId, typeFromId } from "../util/ids.js";
@@ -15,7 +22,6 @@ import { LIMITS, isExtractableRel, isExtractableType, type Extraction } from "./
 import type { GraphWrite } from "./types.js";
 
 export const MERGE_SIMILARITY = 0.92;
-export const AMBIGUOUS_SIMILARITY = 0.8;
 export const MIN_RELATION_CONF = 0.5;
 export const AMBIGUOUS_MENTION_CONF = 0.55;
 export const FOUNDER_ID = "person:founder";
@@ -40,6 +46,24 @@ export interface Dropped { item: unknown; reason: string }
 // Case, punctuation and a leading "the" do not distinguish names.
 export function normName(s: string): string {
   return s.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}\p{M}]+/gu, " ").trim().replace(/^the /, "");
+}
+
+const tokens = (s: string) => normName(s).split(" ").filter(Boolean);
+// a token matches another equal one, or one it is a prefix of (4+ characters: "insta" → "instagram", "post" → "posts")
+const tokenIn = (t: string, pool: string[]) =>
+  pool.some((p) => p === t || (t.length >= 4 && p.startsWith(t)) || (p.length >= 4 && t.startsWith(p)));
+const contained = (small: string[], big: string[]) => small.length > 0 && small.every((t) => tokenIn(t, big));
+// "google analytics 4" → "ga4"
+const initials = (ts: string[]) => ts.map((t) => (/^\p{N}+$/u.test(t) ? t : [...t][0])).join("");
+const acronymOf = (short: string[], full: string[]) => short.length === 1 && full.length >= 2 && short[0] === initials(full);
+
+// Do two sets of names plausibly name the same thing? One name's words all appear in the other's ("Search Console" /
+// "Google Search Console"), or one is the other's initials ("GSC"). Sharing some words is not enough.
+export function namesAgree(a: string[], b: string[]): boolean {
+  return a.some((x) => b.some((y) => {
+    const [tx, ty] = [tokens(x), tokens(y)];
+    return contained(tx, ty) || contained(ty, tx) || acronymOf(tx, ty) || acronymOf(ty, tx);
+  }));
 }
 
 export function metricSlug(s: string): string {
@@ -138,9 +162,11 @@ export async function resolveExtraction(ex: Extraction, ctx: ResolveContext): Pr
     }
     if (!useSimilar) return undefined;
     const hit = ctx.similar ? await ctx.similar(type, names[0]!) : null;
-    if (hit && hit.id !== fresh && typeFromId(hit.id) === type && Number.isFinite(hit.score)) {
-      if (hit.score >= MERGE_SIMILARITY) return { id: hit.id, known: knownById.get(hit.id), existing: true };
-      if (hit.score >= AMBIGUOUS_SIMILARITY) return { id: fresh, existing: false, maybeSameAs: hit.id };
+    if (hit && typeFromId(hit.id) === type && Number.isFinite(hit.score) && hit.score >= MERGE_SIMILARITY) {
+      if (hit.id === fresh) return { id: fresh, existing: true }; // in the graph, just not in the known map
+      const cand = knownById.get(hit.id);
+      if (cand && namesAgree(names, [cand.name, ...(cand.aliases ?? [])])) return { id: hit.id, known: cand, existing: true };
+      return { id: fresh, existing: false, maybeSameAs: hit.id };
     }
     return { id: fresh, existing: false };
   }
