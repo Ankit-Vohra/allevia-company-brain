@@ -1,0 +1,23 @@
+# dependencies and builds
+node_modules/
+dist/
+web/dist/
+*.tsbuildinfo
+
+# secrets: real values live in ~/.config/allevia/allevia.env, never here
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# company data pulled at runtime (snapshots, extraction cache, crawls); never committed
+data/
+!data/.gitkeep
+models/
+.cache/
+
+# local tooling
+.DS_Store
+coverage/
+*.log
