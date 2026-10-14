@@ -29,6 +29,9 @@ export interface RunInput {
   maxTurns?: number;
   phase?: RunPhase;      // which job this is (FakeRuntime scripts key on it; the SDK ignores it)
   signal?: AbortSignal;  // aborts the run (the orchestrator's per-agent timeout)
+  // Called after each successful tool call, right after its tool_result event (the orchestrator turns show_path and
+  // propose_action results into path/proposal events here).
+  onToolResult?: (call: { agent: string; id: string; name: string; args: unknown; result: ToolResult }) => void;
 }
 
 export interface RunOutput { text: string; structured?: unknown }
@@ -139,6 +142,7 @@ export async function invokeTool(tool: AlleviaTool, rawArgs: unknown, input: Run
     const result = await tool.run(parsed.data, ctx);
     input.ctx.touched.add(result);
     emit({ type: "tool_result", agent, id: callId, name: tool.name, summary: summarise(result), nodes: result.nodes, edges: result.edges, sources: result.sources });
+    input.onToolResult?.({ agent, id: callId, name: tool.name, args: parsed.data, result });
     return { text: forModel(result), isError: false, result };
   } catch (e) {
     const msg = clip(e instanceof Error ? e.message : String(e), 300);

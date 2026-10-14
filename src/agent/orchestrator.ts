@@ -1,0 +1,444 @@
+// The agent company's turn (spec §16.2): recall -> the Chief of Staff plans -> department agents work as a DAG
+// (independent steps in parallel, `after` steps once their inputs are done, each handed its inputs' Findings) -> each
+// Finding is reviewed by the relevant reviewers in parallel (a "fix" earns exactly one revision) -> the Chief writes
+// the streamed answer from the Findings and calls show_path. Every step is an attributed AgentEvent.
+//
+// Fast path: a plan that is a single chief-of-staff step skips Findings and reviews; the Chief answers with its tools.
+// Failure: each agent run has a timeout (120 s); a failed agent emits agent_done {ok:false} and the Chief is told.
+// This file does not touch the graph itself: tools do (through the injected getTools), memory.ts persists the turn.
+import { AGENTS, agentById, type AgentDef } from "../../shared/roster.js";
+import type { ActionKind, AgentEvent, EdgeRef, NodeRef, PlanStep, ToolResult } from "../../shared/contracts.js";
+import type { GraphHandle } from "../graph/client.js";
+import { typeFromId } from "../util/ids.js";
+import { extractCitations, hasNumbers } from "./checks.js";
+import {
+  CHIEF, FINDING_MAX_CHARS, FINDING_SCHEMA, MAX_PLAN_STEPS, PLAN_SCHEMA, REVIEW_SCHEMA, agentSystemPrompt, directPrompt,
+  planPrompt, planSystemPrompt, reviewPrompt, revisePrompt, synthesisPrompt, workPrompt, type FindingView,
+} from "./prompts.js";
+import { invokeTool, nextCallId, type AgentRuntime, type Emit, type RunInput, type RunOutput, type RunPhase } from "./runtime.js";
+import { TouchedSet, type AlleviaTool, type ToolContext } from "./tool.js";
+import { findingId, type FindingRecord, type ProposalRecord, type RecallBrief, type ReviewRecord } from "./types.js";
+
+export const AGENT_TIMEOUT_MS = 120_000;
+const MAX_PATH_IDS = 12;
+
+export interface TurnInput {
+  tenant: string;
+  question: string;
+  sessionId: string;
+  turnId: string;
+  asker: string;
+  recall: RecallBrief;
+}
+
+export interface TurnDeps {
+  runtime: AgentRuntime;
+  getTools: (names: string[]) => AlleviaTool[];
+  graph: GraphHandle;
+  now: number;                              // epoch ms, fixed for the turn
+  model?: string;                           // overrides every agent's roster tier (e.g. "haiku")
+  agentTimeoutMs?: number;
+  embedQuery?: ToolContext["embedQuery"];
+  readOnly?: boolean;
+}
+
+export interface Plan { steps: PlanStep[]; rationale: string; chiefTask?: string }
+
+export interface TurnOutcome {
+  ok: boolean;                              // false when the Chief could not write the answer (a fallback was used)
+  answer: string;
+  plan: Plan;
+  fastPath: boolean;
+  findings: FindingRecord[];
+  reviews: ReviewRecord[];
+  proposals: ProposalRecord[];
+  path?: { nodes: NodeRef[]; edges: EdgeRef[] };
+  agents: string[];                         // every agent that ran, in order of first involvement
+  failed: string[];                         // agents whose work failed
+  touched: TouchedSet;
+}
+
+// ---------- pure helpers (exported for tests) ----------
+
+const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
+const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()).map((x) => x.trim()) : []);
+const unique = <T>(xs: T[]): T[] => [...new Set(xs)];
+const nameOf = (id: string): string => agentById(id)?.name ?? id;
+
+export function tryParseJson(text: string): unknown {
+  const a = text.indexOf("{");
+  const b = text.lastIndexOf("}");
+  if (a < 0 || b <= a) return undefined;
+  try { return JSON.parse(text.slice(a, b + 1)); } catch { return undefined; }
+}
+
+// Validates the Chief's plan: unknown agents dropped, one step per agent (tasks merged), at most 5 steps, `after`
+// limited to planned agents, topologically ordered (a cycle is broken by dropping the stuck step's unmet deps). The
+// Chief alongside other desks becomes a note for synthesis. Nothing usable -> a single chief-of-staff step.
+export function normalisePlan(raw: unknown, question: string): Plan {
+  const r = (raw && typeof raw === "object" ? raw : {}) as { steps?: unknown; rationale?: unknown };
+  const merged = new Map<string, { agent: string; task: string; after: string[] }>();
+  for (const s of Array.isArray(r.steps) ? r.steps : []) {
+    if (!s || typeof s !== "object") continue;
+    const o = s as Record<string, unknown>;
+    const agent = typeof o.agent === "string" ? o.agent.trim() : "";
+    if (!agentById(agent)) continue;
+    const task = typeof o.task === "string" ? o.task.trim() : "";
+    const prev = merged.get(agent);
+    if (prev) {
+      if (task && !prev.task.includes(task)) prev.task = prev.task ? `${prev.task}; ${task}` : task;
+      prev.after = unique([...prev.after, ...strings(o.after)]);
+    } else merged.set(agent, { agent, task, after: strings(o.after) });
+  }
+  let steps = [...merged.values()];
+  let chiefTask: string | undefined;
+  if (steps.length > 1 && merged.has(CHIEF)) {
+    chiefTask = merged.get(CHIEF)!.task || undefined;
+    steps = steps.filter((s) => s.agent !== CHIEF);
+  }
+  steps = steps.slice(0, MAX_PLAN_STEPS);
+  const planned = new Set(steps.map((s) => s.agent));
+  for (const s of steps) {
+    s.after = s.after.filter((a) => a !== s.agent && planned.has(a));
+    if (!s.task) s.task = question.trim();
+  }
+  const ordered: typeof steps = [];
+  const done = new Set<string>();
+  let pending = steps;
+  while (pending.length) {
+    const ready = pending.filter((s) => s.after.every((a) => done.has(a)));
+    if (!ready.length) { pending[0]!.after = pending[0]!.after.filter((a) => done.has(a)); continue; }
+    for (const s of ready) { ordered.push(s); done.add(s.agent); }
+    pending = pending.filter((s) => !done.has(s.agent));
+  }
+  const rationale = typeof r.rationale === "string" ? r.rationale.trim() : "";
+  if (!ordered.length) return { steps: [{ agent: CHIEF, task: question.trim() }], rationale: rationale || "Answering directly." };
+  return {
+    steps: ordered.map((s) => (s.after.length ? { agent: s.agent, task: s.task, after: s.after } : { agent: s.agent, task: s.task })),
+    rationale, ...(chiefTask ? { chiefTask } : {}),
+  };
+}
+
+// Reviewers whose roster `reviews` covers the producer and who are relevant to this finding: the copy editor only for
+// content; the fact checker for content and for marketing/analytics findings with numbers; the CoE lead only when the
+// finding has numbers.
+export function reviewersFor(producerId: string, text: string): AgentDef[] {
+  const numbers = hasNumbers(text);
+  return AGENTS.filter((r) => r.id !== producerId && r.reviews?.includes(producerId) && relevantReviewer(r.id, producerId, numbers));
+}
+
+function relevantReviewer(reviewer: string, producer: string, numbers: boolean): boolean {
+  switch (reviewer) {
+    case "copy-editor": return producer === "content-strategist";
+    case "fact-checker": return producer === "content-strategist" || numbers;
+    case "coe-lead": return numbers;
+    default: return true;
+  }
+}
+
+const ACTION_KINDS: ActionKind[] = ["github_issue", "content_draft", "pause_ad", "discord_post"];
+
+// propose_action's result -> a proposal event. Reads ids from data (flat or nested) or from the returned nodes.
+export function toProposal(agent: string, args: unknown, r: ToolResult): ProposalRecord | undefined {
+  const d = (r.data && typeof r.data === "object" ? r.data : {}) as Record<string, unknown>;
+  const a = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
+  const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  const nested = (k: string): Record<string, unknown> => (d[k] && typeof d[k] === "object" ? d[k] as Record<string, unknown> : {});
+  const byLabel = (label: string) => r.nodes.find((n) => n.label === label);
+  const rec = str(d.recommendationId) ?? str(nested("recommendation").id) ?? byLabel("Recommendation")?.id;
+  const appr = str(d.approvalId) ?? str(nested("approval").id) ?? byLabel("Approval")?.id;
+  if (!rec || !appr) return undefined;
+  const kindRaw = str(d.kind) ?? str(a.kind) ?? str(nested("recommendation").kind);
+  const kind = ACTION_KINDS.find((k) => k === kindRaw) ?? "content_draft";
+  const title = str(d.title) ?? str(nested("recommendation").title) ?? str(a.title) ?? byLabel("Recommendation")?.name ?? "Proposal";
+  return { agent, recommendationId: rec, approvalId: appr, title, kind };
+}
+
+// The key of show_path's id list in its input shape (zod 4: unwrap optional/default/nullable to find the array).
+export function arrayArgKey(shape: Record<string, unknown>): string | undefined {
+  const isArray = (s: unknown): boolean => {
+    let cur = s as { def?: { type?: string; innerType?: unknown } } | undefined;
+    for (let i = 0; i < 5 && cur?.def; i++) {
+      if (cur.def.type === "array") return true;
+      cur = cur.def.innerType as typeof cur;
+    }
+    return false;
+  };
+  const keys = Object.keys(shape).filter((k) => isArray(shape[k]));
+  return keys.find((k) => k === "ids") ?? keys[0];
+}
+
+// ---------- the turn ----------
+
+interface RunOpts {
+  phase: RunPhase;
+  system: string;
+  prompt: string;
+  tools: AlleviaTool[];
+  outputSchema?: object;
+  streamText?: boolean;
+  maxTurns: number;
+}
+
+class Turn {
+  readonly agents: string[] = [];
+  readonly failed: string[] = [];
+  readonly findings = new Map<string, FindingRecord>(); // by agent
+  readonly reviews: ReviewRecord[] = [];
+  readonly proposals: ProposalRecord[] = [];
+  path?: { nodes: NodeRef[]; edges: EdgeRef[] };
+  readonly touched = new TouchedSet();
+
+  constructor(readonly input: TurnInput, readonly deps: TurnDeps, readonly emit: Emit) {}
+
+  private involve(agentId: string): void {
+    if (!this.agents.includes(agentId)) this.agents.push(agentId);
+  }
+
+  private ctx(agentId: string): ToolContext {
+    const { graph, now, embedQuery, readOnly } = this.deps;
+    return {
+      graph, tenant: this.input.tenant, turnId: this.input.turnId, agentId, asker: this.input.asker, touched: this.touched, now,
+      ...(embedQuery ? { embedQuery } : {}), ...(readOnly !== undefined ? { readOnly } : {}),
+    };
+  }
+
+  private model(agent: AgentDef): string { return this.deps.model ?? agent.model; }
+
+  private tools(agent: AgentDef): AlleviaTool[] { return this.deps.getTools(agent.tools); }
+
+  private system(agent: AgentDef, tools: AlleviaTool[]): string {
+    return agentSystemPrompt(agent, tools, { now: this.deps.now, tenant: this.input.tenant });
+  }
+
+  readonly onToolResult: NonNullable<RunInput["onToolResult"]> = ({ agent, name, args, result }) => {
+    if (name === "show_path") {
+      this.path = { nodes: result.nodes, edges: result.edges };
+      this.emit({ type: "path", nodes: result.nodes, edges: result.edges });
+    } else if (name === "propose_action") {
+      const p = toProposal(agent, args, result);
+      if (p) {
+        this.proposals.push(p);
+        this.emit({ type: "proposal", ...p });
+      }
+    }
+  };
+
+  private runInput(agent: AgentDef, o: RunOpts, signal?: AbortSignal): RunInput {
+    return {
+      agentId: agent.id, model: this.model(agent), system: o.system, prompt: o.prompt, tools: o.tools, ctx: this.ctx(agent.id),
+      maxTurns: o.maxTurns, phase: o.phase, onToolResult: this.onToolResult,
+      ...(o.outputSchema ? { outputSchema: o.outputSchema } : {}), ...(o.streamText ? { streamText: true } : {}), ...(signal ? { signal } : {}),
+    };
+  }
+
+  // One agent run with a timeout that also aborts the runtime.
+  private async runAgent(agent: AgentDef, o: RunOpts): Promise<RunOutput> {
+    this.involve(agent.id);
+    const ms = this.deps.agentTimeoutMs ?? AGENT_TIMEOUT_MS;
+    const ac = new AbortController();
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => { ac.abort(); reject(new Error(`timed out after ${Math.round(ms / 1000)}s`)); }, ms);
+    });
+    const run = this.deps.runtime.run(this.runInput(agent, o, ac.signal), this.emit);
+    run.catch(() => {}); // a run that loses the race may reject later
+    try {
+      return await Promise.race([run, timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // An agent run bracketed by agent_start/agent_done. Returns undefined when it failed (and says why).
+  private async step<T>(agent: AgentDef, task: string, work: () => Promise<T>): Promise<T | undefined> {
+    this.involve(agent.id);
+    this.emit({ type: "agent_start", agent: agent.id, task });
+    const t0 = Date.now();
+    try {
+      const v = await work();
+      this.emit({ type: "agent_done", agent: agent.id, ms: Date.now() - t0, ok: true });
+      return v;
+    } catch (e) {
+      this.emit({ type: "agent_status", agent: agent.id, text: clip(`Couldn't finish: ${e instanceof Error ? e.message : String(e)}`, 160) });
+      this.emit({ type: "agent_done", agent: agent.id, ms: Date.now() - t0, ok: false });
+      return undefined;
+    }
+  }
+
+  // ----- plan -----
+
+  async plan(): Promise<Plan> {
+    const chief = agentById(CHIEF)!;
+    const out = await this.step(chief, "Planning who does what", () => this.runAgent(chief, {
+      phase: "plan", system: planSystemPrompt({ now: this.deps.now, tenant: this.input.tenant }),
+      prompt: planPrompt({ question: this.input.question, recall: this.input.recall.text }), tools: [], outputSchema: PLAN_SCHEMA, maxTurns: 3,
+    }));
+    const plan = normalisePlan(out ? out.structured ?? tryParseJson(out.text) : undefined, this.input.question);
+    if (!out) plan.rationale = "Planning didn't finish, so I'm answering directly.";
+    this.emit({ type: "plan", by: CHIEF, steps: plan.steps, rationale: plan.rationale });
+    return plan;
+  }
+
+  // ----- work (DAG) -----
+
+  async work(steps: PlanStep[]): Promise<void> {
+    const running = new Map<string, Promise<void>>();
+    for (const s of steps) { // topologically ordered by normalisePlan
+      const deps = (s.after ?? []).map((a) => running.get(a)).filter((p): p is Promise<void> => !!p);
+      running.set(s.agent, Promise.all(deps).then(() => this.runStep(s)));
+    }
+    await Promise.all(running.values());
+  }
+
+  private toFinding(out: RunOutput, base: { id: string; agent: string; task: string; depIds: string[] }): FindingRecord {
+    const s = (out.structured ?? tryParseJson(out.text)) as Record<string, unknown> | undefined;
+    const text = clip((typeof s?.text === "string" ? s.text : out.text).trim(), FINDING_MAX_CHARS);
+    if (!text) throw new Error("returned an empty finding");
+    const known = new Set([...this.findings.values()].map((f) => f.id));
+    return {
+      id: base.id, agent: base.agent, task: base.task, text,
+      citations: unique([...extractCitations(text), ...strings(s?.citations).filter((id) => this.touched.has(id))]),
+      basedOn: unique([...base.depIds, ...strings(s?.basedOn).filter((id) => known.has(id) && id !== base.id)]),
+      proposals: strings(s?.proposals).slice(0, 5),
+      revised: false, rejected: false,
+    };
+  }
+
+  private emitFinding(f: FindingRecord): void {
+    this.emit({ type: "finding", agent: f.agent, findingId: f.id, text: f.text, citations: f.citations, ...(f.basedOn.length ? { basedOn: f.basedOn } : {}) });
+  }
+
+  private async runStep(s: PlanStep): Promise<void> {
+    const agent = agentById(s.agent)!;
+    const inputs = (s.after ?? []).map((a) => this.findings.get(a)).filter((f): f is FindingRecord => !!f);
+    const failedDeps = (s.after ?? []).filter((a) => !this.findings.has(a));
+    for (const f of inputs) this.emit({ type: "handoff", from: f.agent, to: agent.id, note: clip(`${nameOf(f.agent)}'s finding: ${f.text.replace(/\s+/g, " ")}`, 120) });
+    const tools = this.tools(agent);
+    const finding = await this.step(agent, s.task, async () => {
+      const out = await this.runAgent(agent, {
+        phase: "work", system: this.system(agent, tools), tools, outputSchema: FINDING_SCHEMA, maxTurns: 12,
+        prompt: workPrompt({ question: this.input.question, task: s.task, recall: this.input.recall.text, inputs: inputs.map(this.view), failedDeps }),
+      });
+      const f = this.toFinding(out, { id: findingId(this.input.turnId, agent.id), agent: agent.id, task: s.task, depIds: inputs.map((x) => x.id) });
+      this.findings.set(agent.id, f);
+      this.emitFinding(f);
+      return f;
+    });
+    if (!finding) { this.failed.push(agent.id); return; }
+    await this.review(finding, agent);
+  }
+
+  // ----- review (+ one revision) -----
+
+  private async review(f: FindingRecord, producer: AgentDef): Promise<void> {
+    const reviewers = reviewersFor(producer.id, f.text);
+    if (!reviewers.length) return;
+    const got = (await Promise.all(reviewers.map((r) => this.runReview(r, f, producer)))).filter((v): v is ReviewRecord => !!v);
+    this.reviews.push(...got);
+    if (got.some((v) => v.verdict === "reject")) { f.rejected = true; return; }
+    const fixes = got.filter((v) => v.verdict === "fix");
+    if (fixes.length) await this.revise(f, producer, fixes);
+  }
+
+  private async runReview(reviewer: AgentDef, f: FindingRecord, producer: AgentDef): Promise<ReviewRecord | undefined> {
+    const tools = this.tools(reviewer);
+    return this.step(reviewer, `Reviewing ${producer.name}'s finding`, async () => {
+      const out = await this.runAgent(reviewer, {
+        phase: "review", system: this.system(reviewer, tools), tools, outputSchema: REVIEW_SCHEMA, maxTurns: 6,
+        prompt: reviewPrompt({ question: this.input.question, reviewer, finding: this.view(f) }),
+      });
+      const s = (out.structured ?? tryParseJson(out.text)) as Record<string, unknown> | undefined;
+      const verdict = s?.verdict === "fix" || s?.verdict === "reject" ? s.verdict : "ok";
+      const note = clip(typeof s?.note === "string" ? s.note.trim() : out.text.trim(), 400);
+      const r: ReviewRecord = { reviewer: reviewer.id, findingId: f.id, verdict, note };
+      this.emit({ type: "review", agent: reviewer.id, findingId: f.id, verdict, note });
+      return r;
+    });
+  }
+
+  private async revise(f: FindingRecord, producer: AgentDef, notes: ReviewRecord[]): Promise<void> {
+    const tools = this.tools(producer);
+    await this.step(producer, "Revising after review", async () => {
+      const out = await this.runAgent(producer, {
+        phase: "revise", system: this.system(producer, tools), tools, outputSchema: FINDING_SCHEMA, maxTurns: 8,
+        prompt: revisePrompt({ question: this.input.question, task: f.task, finding: this.view(f), notes: notes.map((n) => ({ reviewer: n.reviewer, verdict: n.verdict, note: n.note })) }),
+      });
+      const next = this.toFinding(out, { id: f.id, agent: f.agent, task: f.task, depIds: f.basedOn });
+      Object.assign(f, { text: next.text, citations: next.citations, basedOn: next.basedOn, proposals: next.proposals.length ? next.proposals : f.proposals, revised: true });
+      this.emitFinding(f);
+    });
+  }
+
+  private readonly view = (f: FindingRecord): FindingView => ({
+    id: f.id, agent: f.agent, text: f.text, citations: f.citations, proposals: f.proposals, rejected: f.rejected,
+    reviews: this.reviews.filter((r) => r.findingId === f.id).map((r) => ({ reviewer: r.reviewer, verdict: r.verdict, note: r.note })),
+  });
+
+  // ----- answer -----
+
+  async answer(plan: Plan, fast: boolean): Promise<{ text: string; ok: boolean }> {
+    const chief = agentById(CHIEF)!;
+    const tools = this.tools(chief);
+    const findings = plan.steps.map((s) => this.findings.get(s.agent)).filter((f): f is FindingRecord => !!f);
+    let failure = "";
+    const text = await this.step(chief, fast ? plan.steps[0]!.task : "Writing the answer", async () => {
+      try {
+        const out = await this.runAgent(chief, {
+          phase: fast ? "direct" : "synthesis", system: this.system(chief, tools), tools, streamText: true, maxTurns: fast ? 12 : 8,
+          prompt: fast
+            ? directPrompt({ question: this.input.question, recall: this.input.recall.text, task: plan.steps[0]!.task })
+            : synthesisPrompt({ question: this.input.question, recall: this.input.recall.text, findings: findings.map(this.view), failed: this.failed, ...(plan.chiefTask ? { chiefTask: plan.chiefTask } : {}) }),
+        });
+        if (!out.text.trim()) throw new Error("wrote no answer");
+        return out.text.trim();
+      } catch (e) {
+        failure = e instanceof Error ? e.message : String(e);
+        throw e;
+      }
+    });
+    if (text) {
+      if (!this.path) await this.fallbackPath(chief, text);
+      return { text, ok: true };
+    }
+    // The Chief failed: answer with what the desks found, so the owner isn't left with nothing.
+    this.emit({ type: "error", agent: CHIEF, message: `The Chief of Staff could not write the answer${failure ? `: ${failure}` : ""}.` });
+    const fallback = findings.length
+      ? `I couldn't finish writing the full answer. Here is what the team found:\n\n${findings.map((f) => `**${nameOf(f.agent)}:** ${f.text}`).join("\n\n")}`
+      : "I couldn't answer this one just now. Please ask again in a moment.";
+    this.emit({ type: "text", agent: CHIEF, delta: fallback });
+    return { text: fallback, ok: false };
+  }
+
+  // The Chief didn't call show_path: call it with the answer's cited ids, in order of appearance.
+  private async fallbackPath(chief: AgentDef, answer: string): Promise<void> {
+    const showPath = this.deps.getTools(["show_path"]).find((t) => t.name === "show_path");
+    const ids = extractCitations(answer).filter((id) => this.touched.has(id)).slice(0, MAX_PATH_IDS);
+    if (!showPath || !ids.length) return;
+    const key = arrayArgKey(showPath.input) ?? "ids";
+    const input = this.runInput(chief, { phase: "synthesis", system: "", prompt: "", tools: [showPath], maxTurns: 1 });
+    await invokeTool(showPath, { [key]: ids }, input, this.emit, nextCallId(CHIEF));
+  }
+}
+
+function recallNodes(r: RecallBrief): NodeRef[] {
+  return r.nodes ?? r.ids.map((id) => ({ id, label: typeFromId(id) ?? "Entity", name: id }));
+}
+
+export async function runTurn(input: TurnInput, deps: TurnDeps, emit: Emit): Promise<TurnOutcome> {
+  const t = new Turn(input, deps, emit);
+  // What the brief showed the agents counts as seen: they may cite it.
+  if (input.recall.ids.length) t.touched.add({ data: input.recall.text, nodes: recallNodes(input.recall), edges: [], sources: [] });
+  emit({ type: "recall", brief: input.recall.text, ids: input.recall.ids } satisfies AgentEvent);
+
+  const plan = await t.plan();
+  const fastPath = plan.steps.length === 1 && plan.steps[0]!.agent === CHIEF;
+  if (!fastPath) await t.work(plan.steps);
+  const { text, ok } = await t.answer(plan, fastPath);
+
+  const findings = plan.steps.map((s) => t.findings.get(s.agent)).filter((f): f is FindingRecord => !!f);
+  return {
+    ok, answer: text, plan, fastPath, findings, reviews: t.reviews, proposals: t.proposals, agents: t.agents, failed: t.failed, touched: t.touched,
+    ...(t.path ? { path: t.path } : {}),
+  };
+}
