@@ -1,0 +1,127 @@
+/* Allevia tokens: "ledger paper, indigo ink, one gold mark" (from allevia-ai-website/tokens.css), plus an
+ * "indigo night office" dark theme. Gold is the single highlight: the lit path, the active speaker, the file in flight. */
+:root {
+  color-scheme: light;
+  --color-paper: oklch(97.6% 0.006 265);
+  --color-paper-2: oklch(94.6% 0.010 265);
+  --color-card: oklch(99.3% 0.003 265);
+  --color-rule: oklch(85% 0.014 265);
+  --color-rule-2: oklch(91% 0.010 265);
+  --color-muted: oklch(47% 0.032 268);
+  --color-ink: oklch(23% 0.070 270);
+  --color-ink-2: oklch(33% 0.060 270);
+  --color-band: oklch(27% 0.088 270);
+  --color-band-ink: oklch(95% 0.012 265);
+  --color-band-muted: oklch(78% 0.030 265);
+  --color-band-rule: oklch(38% 0.070 270);
+  --color-accent: oklch(72% 0.125 85);
+  --color-accent-soft: oklch(93% 0.045 88);
+  --color-accent-ink: oklch(52% 0.110 80);
+  --color-focus: oklch(48% 0.160 268);
+  --color-ok: oklch(50% 0.115 152);
+  --color-ok-soft: oklch(94% 0.035 152);
+  --color-warn: oklch(55% 0.140 60);
+  --color-warn-soft: oklch(94% 0.045 75);
+  --color-bad: oklch(51% 0.160 27);
+  --color-bad-soft: oklch(94% 0.030 27);
+  --room-l: 93.5%;
+  --room-c: 0.028;
+
+  --font-display: "Newsreader Variable", "Newsreader", "Iowan Old Style", Georgia, serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-md: 1.0625rem;
+  --text-lg: 1.375rem;
+  --text-xl: 1.75rem;
+  --text-2xl: 2.25rem;
+
+  --space-3xs: 0.125rem;
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2.5rem;
+  --space-2xl: 4rem;
+
+  --radius-sm: 4px;
+  --radius-md: 10px;
+  --rule: 1px solid var(--color-rule);
+  --shadow-whisper: 0 1px 2px oklch(23% 0.07 270 / 0.08);
+  --shadow-lift: 0 2px 4px oklch(23% 0.07 270 / 0.06), 0 12px 32px -8px oklch(23% 0.07 270 / 0.18);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+  --dur-long: 520ms;
+
+  --topbar-h: 56px;
+}
+
+/* Indigo night office */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-paper: oklch(18.5% 0.045 272);
+  --color-paper-2: oklch(22.5% 0.052 272);
+  --color-card: oklch(21% 0.05 272);
+  --color-rule: oklch(35% 0.055 270);
+  --color-rule-2: oklch(28% 0.05 270);
+  --color-muted: oklch(74% 0.035 266);
+  --color-ink: oklch(95% 0.014 265);
+  --color-ink-2: oklch(86% 0.022 265);
+  --color-band: oklch(14.5% 0.04 272);
+  --color-band-ink: oklch(95% 0.012 265);
+  --color-band-muted: oklch(76% 0.03 265);
+  --color-band-rule: oklch(30% 0.05 270);
+  --color-accent: oklch(79% 0.13 85);
+  --color-accent-soft: oklch(32% 0.06 80);
+  --color-accent-ink: oklch(83% 0.12 86);
+  --color-focus: oklch(76% 0.12 268);
+  --color-ok: oklch(78% 0.13 152);
+  --color-ok-soft: oklch(30% 0.05 152);
+  --color-warn: oklch(80% 0.13 70);
+  --color-warn-soft: oklch(32% 0.06 70);
+  --color-bad: oklch(74% 0.14 27);
+  --color-bad-soft: oklch(30% 0.06 27);
+  --room-l: 27%;
+  --room-c: 0.045;
+  --shadow-whisper: 0 1px 2px oklch(5% 0.02 270 / 0.5);
+  --shadow-lift: 0 2px 4px oklch(5% 0.02 270 / 0.35), 0 16px 40px -8px oklch(5% 0.02 270 / 0.6);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-paper: oklch(18.5% 0.045 272);
+    --color-paper-2: oklch(22.5% 0.052 272);
+    --color-card: oklch(21% 0.05 272);
+    --color-rule: oklch(35% 0.055 270);
+    --color-rule-2: oklch(28% 0.05 270);
+    --color-muted: oklch(74% 0.035 266);
+    --color-ink: oklch(95% 0.014 265);
+    --color-ink-2: oklch(86% 0.022 265);
+    --color-band: oklch(14.5% 0.04 272);
+    --color-band-ink: oklch(95% 0.012 265);
+    --color-band-muted: oklch(76% 0.03 265);
+    --color-band-rule: oklch(30% 0.05 270);
+    --color-accent: oklch(79% 0.13 85);
+    --color-accent-soft: oklch(32% 0.06 80);
+    --color-accent-ink: oklch(83% 0.12 86);
+    --color-focus: oklch(76% 0.12 268);
+    --color-ok: oklch(78% 0.13 152);
+    --color-ok-soft: oklch(30% 0.05 152);
+    --color-warn: oklch(80% 0.13 70);
+    --color-warn-soft: oklch(32% 0.06 70);
+    --color-bad: oklch(74% 0.14 27);
+    --color-bad-soft: oklch(30% 0.06 27);
+    --room-l: 27%;
+    --room-c: 0.045;
+    --shadow-whisper: 0 1px 2px oklch(5% 0.02 270 / 0.5);
+    --shadow-lift: 0 2px 4px oklch(5% 0.02 270 / 0.35), 0 16px 40px -8px oklch(5% 0.02 270 / 0.6);
+  }
+}

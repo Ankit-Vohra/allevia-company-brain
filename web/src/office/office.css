@@ -1,0 +1,84 @@
+.office-wrap { position: relative; width: 100%; height: 100%; min-height: 200px; display: grid; place-items: center; }
+@media (max-width: 860px) { .office-wrap { height: auto; min-height: 0; } }
+.office-frame { position: relative; }
+.office-canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--color-rule), var(--shadow-whisper);
+}
+.office-overlay { position: absolute; inset: 0; pointer-events: none; }
+
+/* floor-plan room labels, like an architect's drawing */
+.room-label {
+  position: absolute; transform: translate(-50%, -50%);
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: max(9px, calc(var(--k) * 4.6px)); font-weight: 500;
+  letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
+  color: oklch(from var(--color-ink) l c h / 0.62);
+  transition: color var(--dur-short) var(--ease-out);
+}
+.room-label::before {
+  content: ""; width: 6px; height: 6px; border-radius: 1px;
+  background: oklch(62% 0.11 var(--hue));
+}
+.room-label.is-active { color: var(--color-ink); }
+.room-label.is-active::before { background: var(--color-accent); box-shadow: 0 0 0 2px oklch(from var(--color-accent) l c h / 0.3); }
+
+/* one hit area per agent: sprite + desk; the name sits under the desk */
+.agent-hit {
+  position: absolute; pointer-events: auto; padding: 0; margin: 0;
+  background: transparent; border: 0; border-radius: 4px; cursor: pointer;
+  transition: background-color var(--dur-short) var(--ease-out);
+}
+.agent-hit:hover { background: oklch(from var(--color-accent) l c h / 0.12); }
+.agent-hit:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.agent-hit.is-selected { box-shadow: 0 0 0 2px var(--color-accent); }
+.agent-name {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 6px 1px 5px; border-radius: 3px;
+  background: var(--color-card); border: 1px solid var(--color-rule);
+  font-size: max(10px, calc(var(--k) * 5px)); font-weight: 600; line-height: 1.35; color: var(--color-ink);
+  white-space: nowrap; box-shadow: var(--shadow-whisper);
+}
+.agent-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--color-rule); }
+.agent-hit.is-working .agent-name { border-color: var(--color-accent); }
+.agent-hit.is-working .agent-dot { background: var(--color-accent); animation: dot-pulse 1s var(--ease-out) infinite; }
+.agent-hit.is-done .agent-dot { background: var(--color-ok); }
+@keyframes dot-pulse { 50% { transform: scale(1.6); opacity: 0.6; } }
+
+/* speech bubbles */
+.bubble {
+  --lift: 0px;
+  position: absolute; transform: translate(-50%, calc(-100% + var(--lift)));
+  max-width: 172px; width: max-content;
+  display: grid; gap: 2px;
+  padding: 4px 7px 5px; border-radius: 6px;
+  background: var(--color-card); color: var(--color-ink);
+  border: 1.5px solid var(--color-ink);
+  font-size: 11px; line-height: 1.3;
+  box-shadow: 0 2px 0 oklch(from var(--color-ink) l c h / 0.12);
+  animation: bubble-in var(--dur-short) var(--ease-out);
+  z-index: 2;
+}
+.bubble::after {
+  content: ""; position: absolute; left: 50%; bottom: -5px; width: 7px; height: 7px;
+  transform: translateX(-50%) rotate(45deg);
+  background: inherit; border-right: 1.5px solid var(--color-ink); border-bottom: 1.5px solid var(--color-ink);
+}
+.bubble-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bubble-tool {
+  justify-self: start; font-family: var(--font-mono); font-size: 10px; line-height: 1.3;
+  padding: 0 4px; border-radius: 2px; background: var(--color-paper-2); color: var(--color-ink-2);
+}
+.bubble.tone-speak { border-color: var(--color-accent); background: var(--color-accent-soft); }
+.bubble.tone-speak::after { border-color: var(--color-accent); }
+.bubble.tone-ok { border-color: var(--color-ok); }
+.bubble.tone-ok::after { border-color: var(--color-ok); }
+.bubble.tone-bad { border-color: var(--color-bad); }
+.bubble.tone-bad::after { border-color: var(--color-bad); }
+.bubble.tone-handoff { border-color: var(--color-accent-ink); }
+.bubble.tone-handoff::after { border-color: var(--color-accent-ink); }
+@keyframes bubble-in { from { opacity: 0; } }
