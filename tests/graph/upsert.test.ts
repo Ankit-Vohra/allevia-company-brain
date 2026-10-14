@@ -43,15 +43,35 @@ describe("temporal upsert (integration)", () => {
       "MATCH (:Entity {id:'task:sitemap'})-[:HAD_VERSION]->(v) RETURN v.props AS props, v.since AS since, v.until AS until, labels(v) AS labels, v.of AS of");
     expect(v!.labels).toEqual(expect.arrayContaining(["Entity", "Version"]));
     expect(v!.of).toBe("task:sitemap");
-    expect(v!.since).toBe(T0);
-    expect(v!.until).toBe(T0 + 100);
+    // source time: the old state held from its source's date to the new source's date
+    expect(v!.since).toBe(Date.parse("2026-10-14"));
+    expect(v!.until).toBe(Date.parse("2026-10-15"));
     expect(JSON.parse(v!.props)).toMatchObject({ status: "open", title: "Fix sitemap", asOf: "2026-10-14" });
     const [cur] = await g.roQuery<Record<string, unknown>>("MATCH (n:Entity {id:'task:sitemap'}) RETURN n.status AS status, n.updatedAt AS u, n.asOf AS asOf");
     expect(cur).toEqual({ status: "done", u: T0 + 100, asOf: "2026-10-15" });
     // a second change: the new Version's since is when the previous state began
-    await upsertNode(g, { type: "Task", id: "task:sitemap", name: "Fix sitemap", props: { status: "reopened" } }, T0 + 200);
+    await upsertNode(g, { type: "Task", id: "task:sitemap", name: "Fix sitemap", props: { status: "reopened" }, asOf: "2026-10-16" }, T0 + 200);
     const vs = await g.roQuery<{ since: number; until: number }>("MATCH (:Entity {id:'task:sitemap'})-[:HAD_VERSION]->(v) RETURN v.since AS since, v.until AS until ORDER BY v.until");
-    expect(vs).toEqual([{ since: T0, until: T0 + 100 }, { since: T0 + 100, until: T0 + 200 }]);
+    expect(vs).toEqual([
+      { since: Date.parse("2026-10-14"), until: Date.parse("2026-10-15") },
+      { since: Date.parse("2026-10-15"), until: Date.parse("2026-10-16") },
+    ]);
+  });
+
+  it("2d. Versions use record time (now) where the source has no date", async () => {
+    const id = "task:undated";
+    await upsertNode(g, { type: "Task", id, name: "U", props: { status: "open" } }, T0);
+    await upsertNode(g, { type: "Task", id, name: "U", props: { status: "doing" } }, T0 + 10);
+    // a dated source next: the undated state ran until that source's date
+    const dated = Date.parse("2026-10-20");
+    await upsertNode(g, { type: "Task", id, name: "U", props: { status: "done" }, asOf: "2026-10-20" }, dated + 99);
+    const vs = await g.roQuery<{ since: number; until: number; props: string }>(
+      "MATCH (:Entity {id:$id})-[:HAD_VERSION]->(v) RETURN v.since AS since, v.until AS until, v.props AS props ORDER BY since", { id });
+    expect(vs.map((v) => ({ since: v.since, until: v.until, status: JSON.parse(v.props).status }))).toEqual([
+      { since: T0, until: T0 + 10, status: "open" },
+      { since: T0 + 10, until: dated, status: "doing" },
+    ]);
+    expect((await g.roQuery("MATCH (n:Entity {id:$id}) RETURN n.stateSince AS s", { id }))[0]).toEqual({ s: dated });
   });
 
   it("2b. an untracked change updates in place without a Version; a first-time tracked value is not a change", async () => {
@@ -153,6 +173,20 @@ describe("temporal upsert (integration)", () => {
     // a newer source still moves the state on
     expect(await upsertNode(g, { ...old, props: { status: "archived" }, asOf: "2026-10-20" }, T0 + 40)).toEqual({ created: false, versioned: true, updated: true });
     expect(await versions()).toHaveLength(2);
+  });
+
+  it("an older source still adds what the node lacks, without overwriting anything", async () => {
+    const id = "task:backfill";
+    await upsertNode(g, { type: "Task", id, name: "Backfill", props: { status: "done", owner_note: "current" }, src: "document:new", asOf: "2026-10-14" }, T0);
+    const old = { type: "Task" as const, id, name: "Backfill", summary: "From the old doc", src: "document:old", asOf: "2026-09-01",
+      props: { status: "open", owner_note: "old note", priority: "high" } };
+    expect(await upsertNode(g, old, T0 + 1)).toEqual({ created: false, versioned: true, updated: true });
+    const [n] = await g.roQuery<Record<string, unknown>>(
+      "MATCH (n:Entity {id:$id}) RETURN n.status AS status, n.owner_note AS note, n.priority AS priority, n.summary AS summary, n.src AS src, n.asOf AS asOf", { id });
+    expect(n).toEqual({ status: "done", note: "current", priority: "high", summary: "From the old doc", src: "document:new", asOf: "2026-10-14" });
+    // replaying it changes nothing
+    expect(await upsertNode(g, old, T0 + 2)).toEqual({ created: false, versioned: false, updated: false });
+    expect(await count("MATCH (:Entity {id:$id})-[:HAD_VERSION]->(v) RETURN count(v) AS c", { id })).toBe(1);
   });
 
   it("a functional close sets until to the new edge's since and retiredAt to now", async () => {
