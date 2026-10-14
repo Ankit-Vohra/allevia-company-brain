@@ -1,6 +1,6 @@
 {
   "source_file": "detector/patterns.js",
-  "note": "Data tables from the avoid-ai-writing detection engine, converted from JS literals. Regexes are stored as {source, flags}. The detection logic itself is not vendored.",
+  "note": "Data tables from the avoid-ai-writing detection engine, converted from JS literals. Regexes are stored as {source, flags}; `gated` marks patterns the upstream engine reports only after extra logic that is not vendored. The detection logic itself is not vendored.",
   "contextExempt": [
     "robust",
     "comprehensive",
@@ -556,31 +556,38 @@
       "patterns": [
         {
           "source": "\\binterestingly\\b",
-          "flags": "gi"
+          "flags": "gi",
+          "gated": "upstream reports these only when 3 or more occur in the same text"
         },
         {
           "source": "\\bsurprisingly\\b",
-          "flags": "gi"
+          "flags": "gi",
+          "gated": "upstream reports these only when 3 or more occur in the same text"
         },
         {
           "source": "\\bimportantly\\b",
-          "flags": "gi"
+          "flags": "gi",
+          "gated": "upstream reports these only when 3 or more occur in the same text"
         },
         {
           "source": "\\bsignificantly\\b",
-          "flags": "gi"
+          "flags": "gi",
+          "gated": "upstream reports these only when 3 or more occur in the same text"
         },
         {
           "source": "\\bcertainly\\b",
-          "flags": "gi"
+          "flags": "gi",
+          "gated": "upstream reports these only when 3 or more occur in the same text"
         },
         {
           "source": "\\bundoubtedly\\b",
-          "flags": "gi"
+          "flags": "gi",
+          "gated": "upstream reports these only when 3 or more occur in the same text"
         },
         {
           "source": "\\bwithout\\s+a\\s+doubt\\b",
-          "flags": "gi"
+          "flags": "gi",
+          "gated": "upstream reports these only when 3 or more occur in the same text"
         }
       ]
     },
@@ -1007,11 +1014,13 @@
         },
         {
           "source": "(?:\\b(?:is|are|was|were)(?:n['\\u2019]t|\\s+not)|\\b(?:it|this|that|they|he|she|we|you)['\\u2019](?:s|re)\\s+not)\\s+(?!(?:just|merely|simply)\\b)[^,;:.!?\\n\\u2014\\u2013]{1,80}?(?:\\s*[,;:]|\\s*[\\u2014\\u2013]|\\s+--)\\s*(?:it|this|that|they)(?:['\\u2019](?:s|re)|\\s+(?:is|are|was|were))\\b",
-          "flags": "gi"
+          "flags": "gi",
+          "gated": "upstream reports a contrast frame only when another negative-parallelism frame sits within 2 sentences"
         },
         {
           "source": "(?:\\b(?:is|are|was|were)(?:n['\\u2019]t|\\s+not)|\\b(?:it|this|that|they|he|she|we|you)['\\u2019](?:s|re)\\s+not)\\s+(?:just|merely|simply)\\s+[^,;:.!?\\n\\u2014\\u2013]{1,80}?[.!]\\s+(?:it|this|that|they)(?:['\\u2019](?:s|re)|\\s+(?:is|are|was|were))\\b",
-          "flags": "gi"
+          "flags": "gi",
+          "gated": "upstream reports a contrast frame only when another negative-parallelism frame sits within 2 sentences"
         }
       ]
     },
@@ -1348,7 +1357,8 @@
       "patterns": [
         {
           "source": "^(?:#{1,6}[ \\t]+)?([A-Z][a-z]+(?:[ \\t]+(?:[A-Z][a-z]+|A|I|[A-Z]{2,}|and|or|of|the|in|for|to|a|an))+[ \\t]+[A-Z][a-z]+)[ \\t]*$",
-          "flags": "gm"
+          "flags": "gm",
+          "gated": "upstream applies a token-count and interior-function-word filter, skips code fences and technical context"
         }
       ]
     },

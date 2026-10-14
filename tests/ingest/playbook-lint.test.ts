@@ -59,6 +59,21 @@ describe("voiceLint", () => {
     expect(voiceLint("")).toEqual([]);
   });
 
+  // The upstream engine reports these only after logic that is not vendored, so the data marks them `gated` and
+  // voiceLint skips them: alone they are ordinary English.
+  it("leaves ordinary English alone: contrast frames, title-case lines and a lone confidence word", () => {
+    expect(voiceLint("It isn't raining, it's snowing.")).toEqual([]);
+    expect(voiceLint("This isn't a bug. It's a feature request, and we filed it.")).toEqual([]);
+    expect(voiceLint("Apply Now For Jobs In Raipur")).toEqual([]);
+    expect(voiceLint("## Benefits And Strategic Considerations")).toEqual([]);
+    expect(voiceLint("Certainly worth a look, and importantly, free.")).toEqual([]);
+  });
+
+  it("still flags the ungated negative-parallelism reveal", () => {
+    const hits = voiceLint("This is not just a platform, it's a movement.");
+    expect(hits.some((h) => h.category === "negative-parallelism")).toBe(true);
+  });
+
   it("reports each distinct hit once", () => {
     const hits = voiceLint("Delve. Delve. DELVE deep. Moreover this. Moreover that.");
     expect(hits.filter((h) => h.category === "tier1" && h.match === "delve")).toHaveLength(1);

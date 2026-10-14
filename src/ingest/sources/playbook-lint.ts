@@ -57,12 +57,17 @@ function lintTables(): LintTables {
   tables = {
     tier1Words: new Map(Object.entries(tiers.tier1.words)),
     // A phrase with a `guard` needs the detector's context logic (the verb/noun test for "features"); without it the
-    // pattern would flag ordinary nouns, so guarded phrases are left out.
+    // pattern would flag ordinary nouns, so guarded phrases are left out (same reasoning as `gated` below).
     tier1Phrases: tiers.tier1.phrases.filter((p) => !p.guard)
       .map((p) => ({ re: compile(p.pattern), category: p.clarity ? "tier1-clarity" : "tier1", suggestion: p.replace })),
     tier2Words: new Map(Object.entries(tiers.tier2.words)),
     tier2Conditional: tiers.tier2.conditional.map((c) => ({ word: c.word, re: new RegExp(c.pattern.source, c.pattern.flags.replace("g", "")), suggestion: c.suggestion })),
-    categories: Object.entries(categories).map(([category, c]) => ({ category, res: c.patterns.map(compile) })),
+    // `gated` patterns are ones the upstream engine reports only after extra logic (a contrast needs a nearby second
+    // frame, a title-case header is filtered, confidence words must stack up) that is not vendored. On their own they
+    // flag ordinary English ("It isn't raining, it's snowing."), so they are left out.
+    categories: Object.entries(categories)
+      .map(([category, c]) => ({ category, res: c.patterns.filter((p) => !p.gated).map(compile) }))
+      .filter((c) => c.res.length > 0),
   };
   return tables;
 }

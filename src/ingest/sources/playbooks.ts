@@ -11,7 +11,7 @@ import { entityId } from "../../util/ids.js";
 import { channelId, channelNode, type ChannelKey } from "./channels.js";
 import { matchIndustry, JOB_NEGATIVES } from "./playbook-industry.js";
 import {
-  PACKS, documentId, loadAuditIssues, loadGoogleAdsPolicy, loadGoogleUpdates, loadHooks, loadIndustryTemplates,
+  PACKS, checkHookOrder, documentId, loadAuditIssues, loadGoogleAdsPolicy, loadGoogleUpdates, loadHooks, loadIndustryTemplates,
   loadMetaAdsPolicy, loadPatterns, loadRubric, packAsOf, packPath, playbookId, ruleId, upstreamUrl,
   type IndustryTemplate, type Pack, type RuleKind,
 } from "./playbook-data.js";
@@ -32,6 +32,7 @@ const words = (id: string): string => id.replace(/[_-]+/g, " ");
 class PackBuilder {
   nodes: NodeInput[] = [];
   edges: EdgeInput[] = [];
+  skipped: SourceResult["skipped"] = []; // things inside a pack that could not be used; the pack itself still maps
   readonly asOf: string;
   readonly playbook: string;
   private channels = new Set<ChannelKey>();
@@ -91,6 +92,11 @@ function instagram(b: PackBuilder): void {
   const hooks = loadHooks();
   const doc = b.doc("hooks.json", hooks.hash);
   const order = new Map(hooks.data.classify_order.map((id, i) => [id, i + 1]));
+  const o = checkHookOrder(hooks.data);
+  const ref = packPath(b.pack, "hooks.json");
+  for (const id of o.unknownIds) b.skipped.push({ ref: `${ref}#classify_order:${id}`, reason: "classify_order names a hook id that does not exist" });
+  for (const id of o.duplicateIds) b.skipped.push({ ref: `${ref}#classify_order:${id}`, reason: "hook id appears more than once in classify_order" });
+  for (const h of o.missing) b.skipped.push({ ref: `${ref}#hook:${h.id} ${h.name}`, reason: "not in classify_order, so classifyHook can never return it" });
   for (const h of hooks.data.hooks) {
     b.rule("hook", h.name, `Hook: ${h.name}`, `${h.template} Best for: ${h.best_for} Trap: ${h.trap}`, doc, ["instagram"], {
       template: h.template, example: h.example, onScreen: h.on_screen, bestFor: h.best_for, trap: h.trap, match: h.match,
@@ -184,6 +190,9 @@ function ads(b: PackBuilder, industry: string | undefined): void {
   b.appliesTo(["google-ads", "meta-ads"]);
 }
 
+// Where owned writing goes: captions and posts on Instagram, copy on the website.
+const VOICE_CHANNELS: ChannelKey[] = ["instagram", "website"];
+
 function voice(b: PackBuilder): void {
   const patterns = loadPatterns();
   const doc = b.doc("patterns.json", patterns.hash);
@@ -195,14 +204,15 @@ function voice(b: PackBuilder): void {
     { key: "overused-word", label: "Overused word", severity: "low", weight: 2, text: `Words that become a tell only through density: ${tier3.words.slice(0, 8).join(", ")}.`, n: tier3.words.length },
   ];
   for (const t of tiers) {
-    b.rule("voice-pattern", t.key, `Voice: ${t.label}`, t.text, doc, [], { severity: t.severity, weight: t.weight, patternCount: t.n });
+    b.rule("voice-pattern", t.key, `Voice: ${t.label}`, t.text, doc, VOICE_CHANNELS, { severity: t.severity, weight: t.weight, patternCount: t.n });
   }
   for (const [category, c] of Object.entries(patterns.data.categories)) {
     const label = c.label ?? words(category);
     b.rule("voice-pattern", category, `Voice: ${label}`,
       `${label}: a stock pattern of AI-written text (${c.patterns.length} pattern${c.patterns.length === 1 ? "" : "s"}, severity ${c.severity}). Rewrite the sentence in plain words.`,
-      doc, [], { severity: c.severity, weight: c.weight ?? undefined, patternCount: c.patterns.length, category });
+      doc, VOICE_CHANNELS, { severity: c.severity, weight: c.weight ?? undefined, patternCount: c.patterns.length, category });
   }
+  b.appliesTo(VOICE_CHANNELS);
 }
 
 // ---------- entry point ----------
@@ -228,6 +238,7 @@ export function loadPlaybooks(opts: PlaybooksOptions): SourceResult {
       }
       for (const [id, n] of added) nodes.set(id, n);
       for (const e of b.edges) edges.set(`${e.from}|${e.type}|${e.to}`, e);
+      skipped.push(...b.skipped);
     } catch (err) {
       skipped.push({ ref: packPath(pack, ""), reason: err instanceof Error ? err.message : String(err) });
     }

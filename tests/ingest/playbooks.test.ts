@@ -150,6 +150,10 @@ describe("loadPlaybooks: rules", () => {
     expect(applies(entityId("Rule", "seo-check missing-title"))).toEqual(["channel:website"]);
     expect(applies(entityId("Rule", "policy google-ads rsa-character-limits"))).toEqual(["channel:google-ads"]);
     expect(applies(entityId("Rule", "policy meta-ads meta-learning-phase"))).toEqual(["channel:meta-ads"]);
+    for (const id of ["voice-pattern chatbot", "voice-pattern ai-vocabulary", "voice-pattern word-cluster"]) {
+      expect(applies(entityId("Rule", id)).sort(), id).toEqual(["channel:instagram", "channel:website"]);
+    }
+    expect(res.write.edges.filter((e) => e.type === "APPLIES_TO" && e.from === "playbook:conorbronsdon-avoid-ai-writing").map((e) => e.to).sort()).toEqual(["channel:instagram", "channel:website"]);
     const channels = byType("Channel").map((c) => c.id).sort();
     expect(channels).toEqual(["channel:google-ads", "channel:google-search", "channel:instagram", "channel:meta-ads", "channel:website"]);
   });
@@ -165,6 +169,13 @@ describe("loadPlaybooks: Google updates", () => {
       expect(e.props?.at).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(res.write.edges.some((x) => x.type === "AFFECTS" && x.from === e.id && x.to === "channel:google-search")).toBe(true);
       expect(res.write.edges.some((x) => x.type === "SOURCED_FROM" && x.from === e.id)).toBe(true);
+    }
+  });
+  it("only carries https URLs from the vendored data", () => {
+    for (const e of events) expect(e.props?.sourceUrl, e.id).toMatch(/^https:\/\//);
+    for (const n of nodes) for (const k of ["url", "sourceUrl", "source"]) {
+      const v = n.props?.[k];
+      if (typeof v === "string" && /^[a-z][a-z0-9+.-]*:/i.test(v)) expect(v, `${n.id}.${k}`).toMatch(/^https:\/\//);
     }
   });
   it("never loads the unverified claims", () => {

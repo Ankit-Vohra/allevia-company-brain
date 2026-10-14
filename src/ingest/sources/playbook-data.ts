@@ -81,13 +81,31 @@ export const ruleId = (kind: RuleKind, key: string): string => entityId("Rule", 
 
 // ---------- file shapes (only the fields we read; extra keys are ignored) ----------
 
-const Re = z.object({ source: z.string(), flags: z.string() });
+// Third-party regex strings are only ever compiled after this check: plain flags, and the pattern must compile.
+const SAFE_FLAGS = /^[gimsuy]*$/;
+export function compiles(source: string, flags: string): boolean {
+  if (!SAFE_FLAGS.test(flags)) return false;
+  try {
+    new RegExp(source, flags);
+    return true;
+  } catch {
+    return false;
+  }
+}
+const Re = z.object({
+  source: z.string(), flags: z.string(),
+  gated: z.string().optional(), // upstream reports it only after logic that is not vendored; the linter skips it
+}).refine((r) => compiles(r.source, r.flags), { message: "regex does not compile, or uses flags other than gimsuy" });
+
+// URLs read from vendored data end up on graph nodes, so they must be https.
+const Https = z.string().startsWith("https://");
 
 const HooksFile = z.object({
   classify_order: z.array(z.number()),
   hooks: z.array(z.object({
     id: z.number(), name: z.string(), template: z.string(), example: z.string(), on_screen: z.string(),
-    best_for: z.string(), trap: z.string(), match: z.string(),
+    best_for: z.string(), trap: z.string(),
+    match: z.string().refine((m) => compiles(m, "i"), { message: "match is not a valid regex" }),
   })),
 });
 
@@ -105,7 +123,7 @@ const AuditFile = z.object({
 const GoogleUpdatesFile = z.object({
   last_verified: z.string(),
   updates: z.array(z.object({
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), name: z.string(), kind: z.string(), source: z.string(), notes: z.string().optional(),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), name: z.string(), kind: z.string(), source: Https, notes: z.string().optional(),
   })),
 });
 
@@ -124,7 +142,7 @@ const PolicyFile = z.object({
   last_full_review: z.string(),
   entries: z.array(z.object({
     id: z.string(), category: z.string(), rule: z.string(), volatility: z.string(), last_verified: z.string(),
-    source: z.string(), source_url: z.string().nullable(), notes: z.string(), stale_after_days: z.number(),
+    source: z.string(), source_url: Https.nullable(), notes: z.string(), stale_after_days: z.number(),
   })),
 });
 
@@ -138,7 +156,8 @@ const PatternsFile = z.object({
       words: z.record(z.string(), z.string()),
       conditional: z.array(z.object({ word: z.string(), pattern: Re, suggestion: z.string() })),
     }),
-    tier3: z.object({ words: z.array(z.string()) }),
+    // tier 3 is density-gated, so voiceLint does not use it; it is still validated like every other vendored regex
+    tier3: z.object({ words: z.array(z.string()), phrases: z.array(Re) }),
   }),
   categories: z.record(z.string(), z.object({ severity: z.string(), weight: z.number().nullable(), label: z.string().nullable(), patterns: z.array(Re) })),
 });
@@ -146,6 +165,23 @@ const PatternsFile = z.object({
 export type HooksData = z.infer<typeof HooksFile>;
 export type PatternsData = z.infer<typeof PatternsFile>;
 export type RegexSpec = z.infer<typeof Re>;
+
+export const SCHEMAS = { hooks: HooksFile, googleUpdates: GoogleUpdatesFile, policy: PolicyFile, patterns: PatternsFile };
+
+// classify_order is how hooks are told apart (most specific first), so it must name every hook exactly once and
+// nothing else. The mapper reports each problem in `skipped`; classifyHook only walks ids that exist.
+export interface HookOrderIssues { unknownIds: number[]; missing: Array<{ id: number; name: string }>; duplicateIds: number[] }
+export function checkHookOrder(h: HooksData): HookOrderIssues {
+  const known = new Set(h.hooks.map((x) => x.id));
+  const listed = new Set(h.classify_order);
+  const seen = new Set<number>();
+  const duplicateIds = h.classify_order.filter((id) => (seen.has(id) ? true : (seen.add(id), false)));
+  return {
+    unknownIds: h.classify_order.filter((id) => !known.has(id)),
+    missing: h.hooks.filter((x) => !listed.has(x.id)).map((x) => ({ id: x.id, name: x.name })),
+    duplicateIds: [...new Set(duplicateIds)],
+  };
+}
 
 // ---------- loading ----------
 
