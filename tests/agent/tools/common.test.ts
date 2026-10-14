@@ -11,7 +11,6 @@ function fakeGraph(log: Array<number | undefined>): GraphHandle {
   const g = {
     name: "fake",
     async roQuery(_c: string, _p?: Record<string, unknown>, o?: QueryOpts) { log.push(o?.timeoutMs); return []; },
-    async copyTo(_dest: string) { return fakeGraph(log); },
   };
   return g as unknown as GraphHandle;
 }
@@ -24,14 +23,14 @@ describe("tool plumbing", () => {
     expect(() => parseAsOf("last tuesday")).toThrow(InputError);
   });
 
-  it("bounded caps every read, also on projections it copies to", async () => {
+  it("bounded caps every read and passes everything else through", async () => {
     const log: Array<number | undefined> = [];
     const g = bounded(fakeGraph(log), 8000);
     await g.roQuery("RETURN 1");
     await g.roQuery("RETURN 1", {}, { timeoutMs: 60_000 });
     await g.roQuery("RETURN 1", {}, { timeoutMs: 2000 });
-    await (await g.copyTo("x")).roQuery("RETURN 1");
-    expect(log).toEqual([8000, 8000, 2000, 8000]);
+    expect(log).toEqual([8000, 8000, 2000]);
+    expect(g.name).toBe("fake");
     expect(READ_TIMEOUT_MS).toBeLessThanOrEqual(8000);
   });
 
@@ -59,7 +58,7 @@ describe("tool plumbing", () => {
   });
 
   it("compactProps drops vectors, turns epochs into ISO and clips long text", () => {
-    const out = compactProps([["embedding", [1, 2]], ["createdAt", 0], ["text", "x".repeat(500)], ["tags", Array.from({ length: 25 }, (_, i) => `t${i}`)], ["n", null]]);
+    const out = compactProps([["embedding", [1, 2]], ["rev", 3], ["_mergeToken", "x"], ["createdAt", 0], ["text", "x".repeat(500)], ["tags", Array.from({ length: 25 }, (_, i) => `t${i}`)], ["n", null]]);
     expect(out).toEqual({ createdAt: "1970-01-01T00:00:00.000Z", text: `${"x".repeat(399)}…`, tags: [...Array.from({ length: 20 }, (_, i) => `t${i}`), "…5 more"] });
     expect(clip("short")).toBe("short");
     expect(median([3, 1, 2])).toBe(2);

@@ -83,15 +83,14 @@ export function ro<T = Record<string, unknown>>(ctx: ToolContext, cypher: string
   return ctx.graph.roQuery<T>(cypher, params, { timeoutMs: Math.min(timeoutMs, READ_TIMEOUT_MS) });
 }
 
-// The graph core's algorithms call roQuery without a timeout; this view caps every read they make, including reads
-// on the throwaway projection they copy to.
+// The graph core's algorithms call roQuery without a timeout; this view caps the reads they make on the tenant graph
+// (paths, projection builds). Queries they run on a projection handle use the core's own default.
 export function bounded(g: GraphHandle, ms = READ_TIMEOUT_MS): GraphHandle {
   return new Proxy(g, {
     get(target, key) {
       if (key === "roQuery") {
         return (c: string, p?: Record<string, unknown>, o?: QueryOpts) => target.roQuery(c, p, { ...o, timeoutMs: Math.min(o?.timeoutMs ?? ms, ms) });
       }
-      if (key === "copyTo") return async (dest: string) => bounded(await target.copyTo(dest), ms);
       const v = Reflect.get(target, key, target) as unknown;
       return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(target) : v;
     },
@@ -233,7 +232,7 @@ export function median(xs: number[]): number | null {
 }
 
 const EPOCH_PROPS = new Set(["createdAt", "updatedAt", "recordedAt", "retiredAt", "at", "since", "until"]);
-const DROP_PROPS = new Set(["embedding", "textEmbedding", "stateSince", "closedCost"]);
+const DROP_PROPS = new Set(["embedding", "textEmbedding", "stateSince", "closedCost", "rev", "_mergeToken"]);
 
 // Node props for the model: no vectors, epoch ms as ISO, long text clipped, long lists shortened.
 export function compactProps(kv: Array<[string, unknown]>): Record<string, unknown> {
