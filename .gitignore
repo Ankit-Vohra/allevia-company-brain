@@ -21,3 +21,6 @@ models/
 .DS_Store
 coverage/
 *.log
+
+# subagent worktrees (Claude Code)
+.claude/worktrees/
