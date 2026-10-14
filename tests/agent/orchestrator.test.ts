@@ -78,6 +78,21 @@ describe("normalisePlan", () => {
     expect(p.steps[2]).toEqual({ agent: "tech-lead", task: "t" }); // cycle broken here
     expect(p.steps[3]).toEqual({ agent: "ops-manager", task: "o", after: ["tech-lead"] });
   });
+  it("infers `after` when a task names another planned desk (id, title or name) that the model left out", () => {
+    const p = normalisePlan({ rationale: "", steps: [
+      { agent: "growth-marketer", task: "After the data-analyst breakdown, check spend" },
+      { agent: "data-analyst", task: "Break down signups" },
+      { agent: "coe-lead", task: "Sanity-check Kabir's numbers and the Growth Marketer's budget" },
+      { agent: "tech-lead", task: "Check the dev deploy" },
+    ] }, "q");
+    expect(p.steps).toEqual([
+      { agent: "data-analyst", task: "Break down signups" },
+      { agent: "tech-lead", task: "Check the dev deploy" },
+      { agent: "growth-marketer", task: "After the data-analyst breakdown, check spend", after: ["data-analyst"] },
+      { agent: "coe-lead", task: "Sanity-check Kabir's numbers and the Growth Marketer's budget", after: ["growth-marketer", "data-analyst"] },
+    ]);
+  });
+
   it("turns the Chief alongside desks into a synthesis note, and nothing usable into a fast path", () => {
     const p = normalisePlan({ rationale: "r", steps: [{ agent: "chief-of-staff", task: "keep it short" }, { agent: "librarian", task: "l" }] }, "q");
     expect(p.steps).toEqual([{ agent: "librarian", task: "l" }]);

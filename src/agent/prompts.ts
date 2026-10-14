@@ -14,6 +14,7 @@ export const HOUSE_RULES = `House rules (every Allevia agent):
 - Answer only from this turn's tool results, the findings handed to you, and the "what we already know" brief. If it isn't there, say "not recorded". Never guess.
 - Cite every claim with the node id it came from, written [[id]] (for example [[metric:signups]]). Use only ids you saw in a tool result or the brief; never invent, shorten or alter an id.
 - Every number carries its date or period ("55 signups in the week to 2026-10-05"). Copy numbers exactly as the tools gave them; you may only round to fewer digits.
+- Don't do your own arithmetic: no percentages, sums or differences the tools didn't return. Give the numbers the tools gave ("from 58 to 41") instead.
 - If any data you use is marked simulated, say "simulated" next to it.
 - If the newest data you use is more than 7 days old, say "as of <date>".
 - Reply in the language of the question: Hindi in, Hindi out (ids and numbers stay as they are).
@@ -142,7 +143,7 @@ export function planSystemPrompt(opts: { now: number; tenant: string }): string 
     `The desks:\n${desks}\n- ${CHIEF}: you. Tools: ${chief.tools.join(", ")}. Take a quick lookup yourself.`,
     `How to plan:
 - Choose the fewest desks that can answer well. A simple factual question gets ONE step: one desk, or "${CHIEF}" yourself for a quick lookup (search, an entity, a path, what we already know).
-- Use "after" (a list of agent ids) only when a desk needs another desk's finding, e.g. growth-marketer after data-analyst. Steps without "after" run in parallel.
+- When a desk needs another desk's finding, list that desk's id in its "after" (e.g. growth-marketer with after ["data-analyst"]); saying so in the task alone is not enough. Steps without "after" run in parallel.
 - Content requests (reel ideas, posts, briefs, a content calendar) go to content-strategist. The copy editor and fact checker review its work automatically: do not plan them.
 - Numbers-heavy work (KPIs, trends, spend) goes to data-analyst, growth-marketer or coe-lead. The CoE lead reviews analysts' and marketers' figures automatically.
 - At most ${MAX_PLAN_STEPS} steps, one per desk. Each task is one sentence telling that desk exactly what to find.

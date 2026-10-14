@@ -72,9 +72,20 @@ export function tryParseJson(text: string): unknown {
   try { return JSON.parse(text.slice(a, b + 1)); } catch { return undefined; }
 }
 
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Does a task text refer to a desk: its id or title (any case), or its person name (capitalised)?
+export function mentionsDesk(task: string, agentId: string): boolean {
+  const a = agentById(agentId);
+  if (!a) return false;
+  const words = (alts: string[], flags: string) => new RegExp(`(?<![\\p{L}\\p{N}-])(?:${alts.map(escapeRe).join("|")})(?![\\p{L}\\p{N}-])`, flags);
+  return words([a.id, a.id.replace(/-/g, " "), a.title], "iu").test(task) || words([a.name], "u").test(task);
+}
+
 // Validates the Chief's plan: unknown agents dropped, one step per agent (tasks merged), at most 5 steps, `after`
-// limited to planned agents, topologically ordered (a cycle is broken by dropping the stuck step's unmet deps). The
-// Chief alongside other desks becomes a note for synthesis. Nothing usable -> a single chief-of-staff step.
+// limited to planned agents (plus desks a task names), topologically ordered (a cycle is broken by dropping the stuck
+// step's unmet deps). The Chief alongside other desks becomes a note for synthesis. Nothing usable -> a single
+// chief-of-staff step.
 export function normalisePlan(raw: unknown, question: string): Plan {
   const r = (raw && typeof raw === "object" ? raw : {}) as { steps?: unknown; rationale?: unknown };
   const merged = new Map<string, { agent: string; task: string; after: string[] }>();
@@ -99,7 +110,10 @@ export function normalisePlan(raw: unknown, question: string): Plan {
   steps = steps.slice(0, MAX_PLAN_STEPS);
   const planned = new Set(steps.map((s) => s.agent));
   for (const s of steps) {
-    s.after = s.after.filter((a) => a !== s.agent && planned.has(a));
+    // A task that names another planned desk ("using the data-analyst's breakdown", "after Kabir's numbers") needs its
+    // finding, even when the model forgot to say so in `after`.
+    for (const other of steps) if (other.agent !== s.agent && mentionsDesk(s.task, other.agent)) s.after.push(other.agent);
+    s.after = unique(s.after.filter((a) => a !== s.agent && planned.has(a)));
     if (!s.task) s.task = question.trim();
   }
   const ordered: typeof steps = [];
