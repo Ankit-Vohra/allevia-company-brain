@@ -125,7 +125,13 @@ service over MCP**. None of their code is copied.
 - Indexes:
   - Range index on `Entity.id`.
   - Full-text index on `Entity.name` and `Entity.summary`, and on `Chunk.text`.
-  - Vector index (cosine, 384 dims) on `Entity.embedding` and `Chunk.embedding`.
+  - Vector index (cosine, 384 dims) on `Entity.embedding`, and on `Chunk.textEmbedding`. Chunks also carry the `Entity`
+    label, so their vectors live in a separate property (use `vectorPropFor(type)`) and don't crowd entities out of
+    entity search.
+- Bookkeeping props:
+  - `stateSince` records when the current state began; it becomes `Version.since`.
+  - Closed edges get `closedCost` so `algo.SPpaths` skips them.
+  - The other algorithms run on a projection with closed edges removed (or edges not valid at `asOf`).
 
 ### 5.2 Node types
 | Label | What | Key props |
