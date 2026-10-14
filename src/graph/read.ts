@@ -12,7 +12,7 @@ export interface RawEdge { id: number; relationshipType: string; sourceId: numbe
 export interface RawPath { nodes: RawNode[]; edges: RawEdge[] }
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const HIDDEN_PROPS = new Set(["embedding", "textEmbedding", "closedCost"]);
+const HIDDEN_PROPS = new Set(["embedding", "textEmbedding", "closedCost", "asOfMs", "retiredAsOfMs"]);
 
 // Cypher predicate for "this edge holds now" or, with a param name, "held at $param" (epoch ms):
 //   currentEdge('r')         -> r.until IS NULL
