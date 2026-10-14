@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { GraphHandle } from "../../../src/graph/client.js";
-import { cypher, writeReason } from "../../../src/agent/tools/cypher.js";
+import { CYPHER_CHAR_CAP, CYPHER_NODE_CAP, boundRows, cypher, writeReason } from "../../../src/agent/tools/cypher.js";
 import { call, ids, makeCtx, seededGraph } from "../../helpers/tools.js";
 
 describe("cypher", () => {
@@ -16,6 +16,43 @@ describe("cypher", () => {
       "MATCH (n:`SET`) RETURN n", "MATCH (n) RETURN n /* no DELETE here */", "CALL db.idx.fulltext.queryNodes('Entity', 'x') YIELD node RETURN node",
       "MATCH (n) WHERE n.text CONTAINS \"merge requests\" RETURN n",
     ]) expect(writeReason(q), q).toBeNull();
+  });
+
+  it("allows only read procedures, however the name is quoted or spaced", () => {
+    for (const q of [
+      "CALL `db.idx.fulltext.drop`('Entity')", "CALL db . idx . fulltext . drop('Entity')", "CALL `db`.`idx`.`fulltext`.`createNodeIndex`('X', 'y')",
+      "CALL db.idx.vector.createNodeIndex({label:'X'})", "CALL dbms.setConfig('x', 1)", "MATCH (n) CALL   /* hi */ db.idx.fulltext.drop('Entity') RETURN n",
+      "CALL algo.pageRank(null, null) YIELD node RETURN node", "CALL ('x')",
+    ]) expect(writeReason(q), q).not.toBeNull();
+    expect(writeReason("CALL algo.BFS(n, 3, null) YIELD nodes RETURN nodes")).toMatch(/important, topics, find_paths/);
+    for (const q of [
+      "CALL `db.labels`()", "CALL db . labels() YIELD label RETURN label", "CALL db.idx.vector.queryNodes('Entity', 'embedding', 5, vecf32($v)) YIELD node RETURN node.id",
+      "MATCH (n:Task) CALL { WITH n MATCH (n)<-[:OWNS]-(o) RETURN o.id AS owner } RETURN n.id, owner", "MATCH (n) WHERE n.note = 'CALL db.idx.fulltext.drop' RETURN n",
+      "MATCH (n) RETURN n.recall, n.`CALL`",
+    ]) expect(writeReason(q), q).toBeNull();
+  });
+
+  it("refuses range() lists too big to build, literal or as a parameter", () => {
+    expect(writeReason("UNWIND range(1, 100000000) AS i RETURN count(i)")).toMatch(/range/);
+    expect(writeReason("UNWIND range(0, $n) AS i RETURN i", { n: 5e7 })).toMatch(/range/);
+    expect(writeReason("UNWIND range(1, 100000000, 1000) AS i RETURN i")).toBeNull();
+    expect(writeReason("UNWIND range(1, 500) AS i RETURN i")).toBeNull();
+    expect(writeReason("MATCH (n) RETURN n.range(1, 99999999999)")).toBeNull();
+  });
+
+  it("bounds the rows the server sends: the last RETURN of every UNION branch ends in LIMIT <= cap", () => {
+    expect(boundRows("MATCH (n) RETURN n", undefined, 201).query).toBe("MATCH (n) RETURN n\nLIMIT 201");
+    expect(boundRows("MATCH (n) RETURN n // done", undefined, 201).query).toBe("MATCH (n) RETURN n // done\nLIMIT 201");
+    expect(boundRows("MATCH (n) WITH n LIMIT 1000000 MATCH (m) RETURN m", undefined, 201).query).toMatch(/RETURN m\nLIMIT 201$/);
+    expect(boundRows("MATCH (n) RETURN n ORDER BY n.id LIMIT 5000", undefined, 201).query).toBe("MATCH (n) RETURN n ORDER BY n.id LIMIT 201");
+    expect(boundRows("MATCH (n) RETURN n LIMIT 7", undefined, 201).query).toBe("MATCH (n) RETURN n LIMIT 7");
+    expect(boundRows("MATCH (n) RETURN n LIMIT $k", { k: 10_000 }, 201)).toEqual({ query: "MATCH (n) RETURN n LIMIT $k", params: { k: 201 } });
+    expect(boundRows("RETURN 1 AS i UNION ALL MATCH (n) RETURN n.x AS i", undefined, 201).query)
+      .toBe("RETURN 1 AS i \nLIMIT 201\nUNION ALL MATCH (n) RETURN n.x AS i\nLIMIT 201");
+    expect(boundRows("CALL db.labels() YIELD label", undefined, 201).query).toBe("CALL db.labels() YIELD label\nRETURN * LIMIT 201");
+    expect(boundRows("MATCH (n) CALL { WITH n RETURN n.id AS x } RETURN x", undefined, 201).query).toMatch(/RETURN x\nLIMIT 201$/);
+    expect(boundRows("MATCH (n) WHERE n.name = 'RETURN me' RETURN n.id", undefined, 201).query).toMatch(/RETURN n.id\nLIMIT 201$/);
+    expect(boundRows("CALL db.labels()", undefined, 201).query).toBe("CALL db.labels()");
   });
 
   describe("integration", () => {
@@ -40,6 +77,10 @@ describe("cypher", () => {
       expect(r.note).toMatch(/Capped at 200/);
       const big = await call(cypher, { query: "UNWIND range(1, 500) AS i RETURN i LIMIT 300" }, makeCtx(g));
       expect(big.data.rowCount).toBe(200);
+      const union = await call(cypher, { query: "UNWIND range(1, 300) AS i RETURN i UNION ALL UNWIND range(1, 300) AS i RETURN i" }, makeCtx(g));
+      expect(union.data).toMatchObject({ rowCount: 200, truncated: true });
+      const commented = await call(cypher, { query: "UNWIND range(1, 500) AS i RETURN i // all of them" }, makeCtx(g));
+      expect(commented.data).toMatchObject({ rowCount: 200, truncated: true });
       const small = await call(cypher, { query: "UNWIND range(1, 5) AS i RETURN i;" }, makeCtx(g));
       expect(small.data).toMatchObject({ rowCount: 5, truncated: false });
     });
@@ -61,6 +102,38 @@ describe("cypher", () => {
       expect(t.data.rows).toEqual([{ id: "task:fix-sitemap", name: "Fix sitemap errors" }, { id: "task:schedule-reels", name: "Schedule two reels a week" }]);
       expect(ids(t.nodes).sort()).toEqual(["task:fix-sitemap", "task:schedule-reels"]);
       expect(ids(t.sources)).toContain("document:pending");
+    });
+
+    it("keeps the output small: long lists shortened, a character budget, a cap on returned nodes", async () => {
+      const lists = await call(cypher, { query: "RETURN [i IN range(1, 300) | toString(i)] AS xs, range(1, 300) AS ns" }, makeCtx(g));
+      expect(lists.data.rows[0].xs).toHaveLength(51);
+      expect(lists.data.rows[0].xs.at(-1)).toBe("…250 more");
+      expect(lists.data.rows[0].ns).toBe("[300 numbers]");
+
+      const pad = "x".repeat(300);
+      const wide = await call(cypher, { query: `UNWIND range(1, 150) AS i RETURN i, [j IN range(1, 10) | '${pad}'] AS pad` }, makeCtx(g));
+      expect(JSON.stringify(wide.data.rows).length).toBeLessThanOrEqual(CYPHER_CHAR_CAP);
+      expect(wide.data).toMatchObject({ truncated: true });
+      expect(wide.data.rowCount).toBeLessThan(150);
+      expect(wide.note).toMatch(/characters/);
+
+      const all = await call(cypher, { query: "MATCH (n:Entity) RETURN collect(n) AS everything" }, makeCtx(g));
+      expect(all.nodes.length).toBeLessThanOrEqual(CYPHER_NODE_CAP);
+      expect(all.data.rows[0].everything.length).toBeLessThanOrEqual(51);
+    });
+
+    it("an edge's src document counts as a source; bare values get a hint to return ids", async () => {
+      const r = await call(cypher, { query: "MATCH (o:Observation)-[r:MEASURES]->(:Entity {id:'channel:instagram'}) RETURN r ORDER BY o.id LIMIT 1" }, makeCtx(g));
+      expect(ids(r.sources)).toEqual(expect.arrayContaining(["document:ig-insights-oct"]));
+      const v = await call(cypher, { query: "MATCH (t:Task) RETURN t.name AS name ORDER BY name" }, makeCtx(g));
+      expect(v.note).toMatch(/Return ids/);
+    });
+
+    it("refuses write procedures before they reach the server", async () => {
+      const r = await call(cypher, { query: "CALL `db.idx.fulltext.drop`('Entity')" }, makeCtx(g));
+      expect(r.data).toMatchObject({ refused: true });
+      const hits = await call(cypher, { query: "CALL db.idx.fulltext.queryNodes('Entity', 'instagram') YIELD node RETURN node.id AS id" }, makeCtx(g));
+      expect(hits.data.rowCount).toBeGreaterThan(0);
     });
 
     it("runs a bare CALL … YIELD (no LIMIT allowed there) and returns query errors as fixable", async () => {

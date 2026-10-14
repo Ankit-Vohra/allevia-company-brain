@@ -2,6 +2,9 @@
 // provenance (the Documents behind returned nodes), temporal predicates for `asOf`, full-text helpers, and the caps
 // that keep results small. Every read goes through roQuery with a timeout of at most READ_TIMEOUT_MS.
 //
+// Provenance: every result's `sources` holds, first, one Document behind EACH returned node and each returned edge's
+// `src` (so nothing comes back without its source when one exists), then further sources up to SOURCE_CAP.
+//
 // Errors: bad input the model can fix (unknown id, empty query, refused write) is thrown as InputError and comes back
 // as a normal ToolResult with `data.error` and `note`, so the model can correct itself. Anything else throws.
 import type { z } from "zod";
@@ -16,7 +19,13 @@ import { toIso } from "../../util/time.js";
 export const READ_TIMEOUT_MS = 8_000;
 export const DEFAULT_ROWS = 25;
 export const TEXT_CAP = 400;
-export const SOURCE_CAP = 20;
+export const SOURCE_CAP = 20;          // sources beyond the one-per-node cover
+export const SOURCE_COVER_CAP = 100;   // hard ceiling on the cover itself (tools keep their node counts well below)
+// Graph algorithms (paths, PageRank, communities) also read projection graphs this module cannot reach: dev's
+// algorithms.ts takes no timeout yet, so those reads use the graph core's default. Pass { timeoutMs: ALGO_TIMEOUT_MS }
+// to shortestPaths/pageRank/communities once they accept it; until then bounded() applies it to every read they make
+// on the tenant graph.
+export const ALGO_TIMEOUT_MS = 8_000;
 
 // Types that are plumbing, not business facts: hidden from neighbour lists unless asked for.
 export const BOOKKEEPING_TYPES: EntityType[] = ["Version", "Turn", "Session", "Observation", "Chunk"];
@@ -85,7 +94,7 @@ export function ro<T = Record<string, unknown>>(ctx: ToolContext, cypher: string
 
 // The graph core's algorithms call roQuery without a timeout; this view caps the reads they make on the tenant graph
 // (paths, projection builds). Queries they run on a projection handle use the core's own default.
-export function bounded(g: GraphHandle, ms = READ_TIMEOUT_MS): GraphHandle {
+export function bounded(g: GraphHandle, ms = ALGO_TIMEOUT_MS): GraphHandle {
   return new Proxy(g, {
     get(target, key) {
       if (key === "roQuery") {
@@ -100,12 +109,12 @@ export function bounded(g: GraphHandle, ms = READ_TIMEOUT_MS): GraphHandle {
 // ---------- rows -> refs ----------
 
 export interface NodeRow { id: string; labels: string[]; name: string | null; asOf: string | null; simulated: boolean | null }
-export interface EdgeRow { from: string; type: string; to: string; since: number | null; until: number | null }
+export interface EdgeRow { from: string; type: string; to: string; since: number | null; until: number | null; src?: string | null }
 export interface Brief { id: string; type: string; name: string }
 
 // Cypher map projections; every query that returns nodes or edges uses these, so conversion is uniform.
 export const NODE = (a: string): string => `{id: ${a}.id, labels: labels(${a}), name: ${a}.name, asOf: ${a}.asOf, simulated: ${a}.simulated}`;
-export const EDGE = (r: string): string => `{from: startNode(${r}).id, type: type(${r}), to: endNode(${r}).id, since: ${r}.since, until: ${r}.until}`;
+export const EDGE = (r: string): string => `{from: startNode(${r}).id, type: type(${r}), to: endNode(${r}).id, since: ${r}.since, until: ${r}.until, src: ${r}.src}`;
 
 export function typeOf(row: Pick<NodeRow, "labels">): string {
   return typeOfLabels(row.labels) ?? row.labels.find((l) => l !== "Entity") ?? "Entity";
@@ -130,6 +139,7 @@ export class Collector {
   readonly nodes = new Map<string, NodeRef>();
   readonly edges = new Map<string, EdgeRef>();
   private readonly prov = new Set<string>();
+  private readonly edgeSrc = new Set<string>();
 
   node(row: NodeRow | null | undefined): NodeRef | undefined {
     if (!row || typeof row.id !== "string") return undefined;
@@ -142,7 +152,7 @@ export class Collector {
 
   edge(row: EdgeRow | null | undefined): void {
     if (!row || typeof row.from !== "string" || typeof row.to !== "string") return;
-    this.edgeRef(toEdge(row));
+    this.edgeRef(toEdge(row), row.src);
   }
 
   // Refs that are already shaped (e.g. from algorithms.shortestPaths).
@@ -150,8 +160,10 @@ export class Collector {
     if (!this.nodes.has(ref.id)) this.nodes.set(ref.id, ref);
   }
 
-  edgeRef(e: EdgeRef): void {
+  // `src` is the edge's own provenance (the document that stated the relationship), when it has one.
+  edgeRef(e: EdgeRef, src?: unknown): void {
     this.edges.set(`${e.from}|${e.type}|${e.to}|${e.since ?? ""}`, e);
+    if (typeof src === "string" && src) this.edgeSrc.add(src);
   }
 
   // Ids whose sources count, without returning them as nodes (e.g. observations summarised into data).
@@ -160,18 +172,20 @@ export class Collector {
   }
 
   async result<T>(ctx: ToolContext, data: T, note?: string): Promise<ToolResult<T>> {
-    const sources = await sourcesFor(ctx, [...this.nodes.keys(), ...this.prov]);
+    const sources = await sourcesFor(ctx, [...this.nodes.keys(), ...this.edgeSrc, ...this.prov]);
     return { data, nodes: [...this.nodes.values()], edges: [...this.edges.values()], sources, ...(note ? { note } : {}) };
   }
 }
 
 // Documents behind the given ids, in the ids' order: the id itself when it is a Document, its SOURCED_FROM targets,
-// and the Document named by its `src` prop.
+// the Document named by its `src` prop, and a Chunk's parent Document.
 export interface SourceRow { of: string; id: string; title: string | null; asOf: string | null }
+
+const SOURCE_IDS_CAP = 1_000;
 
 // One row per (id, Document behind it), in the ids' order.
 export async function sourceRows(ctx: ToolContext, ids: string[]): Promise<SourceRow[]> {
-  const list = [...new Set(ids)].slice(0, 300);
+  const list = [...new Set(ids)].slice(0, SOURCE_IDS_CAP);
   if (!list.length) return [];
   const cols = "oid AS of, d.id AS id, coalesce(d.title, d.name) AS title, d.asOf AS asOf";
   const rows = await ro<SourceRow>(ctx,
@@ -179,18 +193,31 @@ export async function sourceRows(ctx: ToolContext, ids: string[]): Promise<Sourc
      UNION ALL
      UNWIND $ids AS oid MATCH (:Entity {id:oid})-[:SOURCED_FROM]->(d:Document) RETURN ${cols}
      UNION ALL
-     UNWIND $ids AS oid MATCH (n:Entity {id:oid}) WHERE n.src IS NOT NULL WITH oid, n.src AS src MATCH (d:Entity {id:src}) WHERE d:Document RETURN ${cols}`,
+     UNWIND $ids AS oid MATCH (n:Entity {id:oid}) WHERE n.src IS NOT NULL WITH oid, n.src AS src MATCH (d:Entity {id:src}) WHERE d:Document RETURN ${cols}
+     UNION ALL
+     UNWIND $ids AS oid MATCH (d:Document)-[:HAS_CHUNK]->(:Entity {id:oid}) RETURN ${cols}`,
     { ids: list });
   const order = new Map(list.map((id, i) => [id, i]));
   return rows.sort((a, b) => (order.get(a.of) ?? 0) - (order.get(b.of) ?? 0));
 }
 
+// First one source per id (the cover: nothing returned is left without its source), then the rest up to `cap`.
 export async function sourcesFor(ctx: ToolContext, ids: string[], cap = SOURCE_CAP): Promise<SourceRef[]> {
   const rows = await sourceRows(ctx, ids);
   const out = new Map<string, SourceRef>();
-  for (const r of rows) {
-    if (out.size >= cap) break;
+  const add = (r: SourceRow) => {
     if (!out.has(r.id)) out.set(r.id, { id: r.id, title: r.title ?? r.id, ...(r.asOf ? { asOf: r.asOf } : {}) });
+  };
+  const covered = new Set<string>();
+  for (const r of rows) {
+    if (covered.has(r.of) || out.size >= SOURCE_COVER_CAP) continue;
+    covered.add(r.of);
+    add(r);
+  }
+  const limit = Math.max(cap, out.size);
+  for (const r of rows) {
+    if (out.size >= limit) break;
+    add(r);
   }
   return [...out.values()];
 }

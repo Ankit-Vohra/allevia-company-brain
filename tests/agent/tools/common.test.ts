@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { GraphHandle, QueryOpts } from "../../../src/graph/client.js";
 import { MissingEndpoint } from "../../../src/graph/errors.js";
 import {
-  InputError, READ_TIMEOUT_MS, bounded, clip, compactProps, defineTool, median, parseAsOf, serial,
+  ALGO_TIMEOUT_MS, InputError, READ_TIMEOUT_MS, SOURCE_CAP, bounded, clip, compactProps, defineTool, median, parseAsOf, serial, sourcesFor,
 } from "../../../src/agent/tools/common.js";
 import { makeCtx } from "../../helpers/tools.js";
 
@@ -32,6 +32,17 @@ describe("tool plumbing", () => {
     expect(log).toEqual([8000, 8000, 2000]);
     expect(g.name).toBe("fake");
     expect(READ_TIMEOUT_MS).toBeLessThanOrEqual(8000);
+  });
+
+  it("sources cover every id first (one each), then fill up to the cap", async () => {
+    // 30 nodes, each with its own document plus a shared one listed first for the first node.
+    const rows = [{ of: "n0", id: "d:shared", title: "Shared", asOf: null }, ...Array.from({ length: 30 }, (_, i) => ({ of: `n${i}`, id: `d:${i}`, title: `Doc ${i}`, asOf: null }))];
+    const g = { name: "fake", async roQuery() { return rows; } } as unknown as GraphHandle;
+    const got = (await sourcesFor(makeCtx(g), Array.from({ length: 30 }, (_, i) => `n${i}`))).map((s) => s.id);
+    expect(got.length).toBeGreaterThan(SOURCE_CAP);
+    for (let i = 1; i < 30; i++) expect(got).toContain(`d:${i}`);
+    expect(got).toContain("d:shared");
+    expect(ALGO_TIMEOUT_MS).toBeLessThanOrEqual(READ_TIMEOUT_MS);
   });
 
   it("defineTool turns input errors, missing endpoints and timeouts into results; other errors throw", async () => {
