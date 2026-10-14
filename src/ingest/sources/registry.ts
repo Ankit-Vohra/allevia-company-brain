@@ -12,9 +12,11 @@
 // the underlying infrastructure, credential names and locations are never copied. Every string that is kept goes through
 // `redact`. A reference to an id that is unknown, denied by the path policy, or reserved is dropped and counted.
 //
-// The registry never states who OWNS what, and the ontology has no "agent uses system" relation. So agent -> tool and
-// agent -> connector links are kept as list props (`tools`, `connectors`, `usedByAgents`), and become edges only when the
-// caller names a relation in ctx.agentSystemRel (e.g. KNOWS_ABOUT today, USES once the schema has it).
+// The registry never states who OWNS what, so there are no OWNS edges. Who uses what is USES:
+//   agent -> system   the tools and connectors (skills are tools with type: skill) an agent lists, and the systems that
+//                     list the agent under `used_by`; the file that states the link is its source
+//   team  -> system   what the team's members use (props.via = "members"), because a department file lists no tools
+// A retired agent uses nothing, so it contributes no edge. Every edge goes through `isAllowed` before it is emitted.
 import { parse as parseYaml } from "yaml";
 import type { EdgeInput, NodeInput, Prim } from "../../graph/upsert.js";
 import { isAllowed, type EntityType, type RelType } from "../../graph/schema.js";
@@ -31,7 +33,6 @@ const NON_NODE_ACTORS = new Set(["founder"]); // legitimate in reports_to / used
 
 export interface RegistryCtx {
   asOf: string;
-  agentSystemRel?: RelType;
 }
 
 interface Entry { kind: Kind; id: string; y: Record<string, unknown>; path: string; docId: string; nodeId: string }
@@ -130,12 +131,15 @@ export function mapRegistry(files: Array<{ path: string; text: string }>, ctx: R
     Object.fromEntries(Object.entries(props).filter(([, v]) => v !== undefined && !(Array.isArray(v) && v.length === 0))) as Record<string, Prim>;
   const status = (v: unknown): string | undefined => (typeof v === "string" ? v.trim().toLowerCase().slice(0, 40) || undefined : undefined);
 
+  const declared = new Map<string, string[]>(); // agent id -> the system ids its own file lists
   for (const e of entries) {
     const y = e.y;
     const base = { src: e.docId, asOf: ctx.asOf };
     const name = clean(y.name, 120) ?? e.id;
     if (e.kind === "agent") {
       const reportsTo = list(y.reports_to)[0];
+      // tools and connectors become USES edges below; resolving them here reports the ones that point nowhere
+      declared.set(e.id, [...resolve(e, "tools", list(y.tools), systems), ...resolve(e, "connectors", list(y.connectors), systems)]);
       nodes.push({
         type: "Agent", id: e.nodeId, name, summary: clean(y.does ?? y.purpose, 500), ...base,
         props: put({
@@ -146,7 +150,6 @@ export function mapRegistry(files: Array<{ path: string; text: string }>, ctx: R
           replacedBy: resolve(e, "replaced_by", list(y.replaced_by), agents)[0],
           delegatesTo: resolve(e, "delegates_to", list(y.delegates_to), agents),
           usesAgents: resolve(e, "uses_agents", list(y.uses_agents), agents),
-          tools: resolve(e, "tools", list(y.tools), systems), connectors: resolve(e, "connectors", list(y.connectors), systems),
           notes: note(y.notes),
         }),
       });
@@ -161,8 +164,7 @@ export function mapRegistry(files: Array<{ path: string; text: string }>, ctx: R
         type: "System", id: e.nodeId, name, summary: clean(y.purpose ?? y.does, 500), ...base,
         props: put({
           kind: e.kind, toolType: clean(y.type, 40), status: status(y.status), repo: clean(y.repo, 80), schedule: clean(y.schedule, 100),
-          unverified: y.unverified === true ? true : undefined, lastVerified: clean(y.last_verified, 60),
-          usedByAgents: list(y.used_by).filter((u) => agents.has(u)), notes: note(y.notes),
+          unverified: y.unverified === true ? true : undefined, lastVerified: clean(y.last_verified, 60), notes: note(y.notes),
         }),
       });
     }
@@ -214,23 +216,32 @@ export function mapRegistry(files: Array<{ path: string; text: string }>, ctx: R
     }
   }
 
-  // Optional: agent -> system usage, with a relation the caller chose
-  if (ctx.agentSystemRel) {
-    let refused = false;
-    for (const a of agents.values()) {
-      for (const id of [...list(a.y.tools), ...list(a.y.connectors)]) {
-        const s = systems.get(id);
-        if (s && !link(a, ctx.agentSystemRel, s, a)) refused = true;
-      }
-    }
-    for (const s of systems.values()) {
-      for (const u of list(s.y.used_by)) {
-        const a = agents.get(u);
-        if (a && !link(a, ctx.agentSystemRel, s, s)) refused = true;
-      }
-    }
-    if (refused) skipped.push({ ref: "registry", reason: `agent -> system edges not emitted: ${ctx.agentSystemRel} is not allowed from Agent to System` });
+  // USES. First collect who uses what with the file that says so (an agent's own list wins over a system's used_by), then
+  // emit agent edges and, from the members, team edges.
+  const retired = (a: Entry): boolean => status(a.y.status) === "retired";
+  const usage = new Map<string, Map<string, Entry>>(); // agent id -> system id -> source file
+  const uses = (a: Entry, s: Entry, src: Entry) => {
+    const m = usage.get(a.id) ?? new Map<string, Entry>();
+    if (!m.has(s.id)) m.set(s.id, src);
+    usage.set(a.id, m);
+  };
+  for (const a of agents.values()) {
+    if (!retired(a)) for (const id of declared.get(a.id) ?? []) uses(a, systems.get(id)!, a);
   }
+  for (const s of systems.values()) {
+    for (const u of list(s.y.used_by)) {
+      const a = agents.get(u);
+      if (a && !retired(a)) uses(a, s, s);
+    }
+  }
+  let refused = 0;
+  for (const a of agents.values()) {
+    for (const [sid, src] of usage.get(a.id) ?? []) if (!link(a, "USES", systems.get(sid)!, src)) refused++;
+  }
+  for (const m of members.values()) {
+    for (const [sid, src] of usage.get(m.a.id) ?? []) if (!link(m.t, "USES", systems.get(sid)!, src, { via: "members" })) refused++;
+  }
+  if (refused) skipped.push({ ref: "registry", reason: `${refused} USES edge(s) not emitted: the ontology does not allow them` });
 
   for (const [path, fields] of unresolved) {
     skipped.push({ ref: path, reason: `unresolved references dropped (unknown, denied or reserved ids): ${[...fields].map(([f, n]) => `${f}×${n}`).join(", ")}` });

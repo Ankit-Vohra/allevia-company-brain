@@ -79,17 +79,17 @@ describe("mapRegistry: nodes", () => {
     expect(a.props).toEqual({
       kind: "always-on-service", status: "active", department: "research", model: "sonnet", schedule: "always on", repo: "widget-brain",
       trigger: "a new chat message → the bridge → one assistant run", reportsTo: "founder",
-      tools: ["widget-bridge", "mcp-widget-ops"], connectors: ["chat", "source-host"],
     });
-    expect(node("agent:planner").props).toMatchObject({ status: "planned", unverified: true, reportsTo: "scout", delegatesTo: ["pinger"], connectors: ["analytics-db"] });
-    expect(node("agent:pinger").props).toMatchObject({ kind: "edge-function", usesAgents: ["scout"], connectors: ["analytics-db", "sms-gateway"] });
+    expect(node("agent:planner").props).toMatchObject({ status: "planned", unverified: true, reportsTo: "scout", delegatesTo: ["pinger"] });
+    expect(node("agent:pinger").props).toMatchObject({ kind: "edge-function", usesAgents: ["scout"] });
     expect(node("agent:old-writer").props).toMatchObject({ status: "retired", retiredOn: "2026-09-24", replacedBy: "planner" });
-    expect(node("agent:stray").props!.tools).toEqual(["mcp-widget-ops"]); // the unknown tool is dropped
+    // which tools and connectors an agent uses is a USES edge, not a list prop
+    for (const n of w.nodes) for (const k of ["tools", "connectors", "usedByAgents"]) expect(n.props ?? {}, `${n.id}.${k}`).not.toHaveProperty(k);
   });
 
-  it("systems: kind tool|connector, status (YAML comments stripped, last duplicate key wins), usedByAgents", () => {
-    expect(node("system:widget-bridge").props).toMatchObject({ kind: "tool", toolType: "internal-service", status: "active", repo: "widget-brain", usedByAgents: ["scout"] });
-    expect(node("system:mcp-widget-ops").props).toMatchObject({ kind: "tool", toolType: "mcp", usedByAgents: ["scout", "planner", "stray"] });
+  it("systems: kind tool|connector, status (YAML comments stripped, last duplicate key wins)", () => {
+    expect(node("system:widget-bridge").props).toMatchObject({ kind: "tool", toolType: "internal-service", status: "active", repo: "widget-brain" });
+    expect(node("system:mcp-widget-ops").props).toMatchObject({ kind: "tool", toolType: "mcp" });
     expect(node("system:nightly-report").props).toMatchObject({ kind: "tool", toolType: "cron-job", status: "paused", schedule: "03:45 daily" });
     expect(node("system:dup-keys").props).toMatchObject({ status: "active" });
     expect(node("system:chat").props).toMatchObject({ kind: "connector", status: "connected", lastVerified: "first week of October 2026 (from the notes)" });
@@ -144,16 +144,57 @@ describe("mapRegistry: edges", () => {
     for (const e of w.edges) expect(e.functional).toBeUndefined();
   });
 
-  it("agent -> system usage becomes edges only when the caller names a relation (the ontology has no 'uses')", () => {
-    const withUses = mapRegistry(FILES, { ...ctx, agentSystemRel: "KNOWS_ABOUT" });
-    const k = withUses.write.edges.filter((e) => e.type === "KNOWS_ABOUT");
-    expect(k).toHaveLength(11);
-    expect(k.filter((e) => e.from === "agent:scout").map((e) => e.to).sort()).toEqual(["system:chat", "system:mcp-widget-ops", "system:source-host", "system:widget-bridge"]);
-    checkEdges(withUses);
-    // a relation the schema does not allow for Agent -> System is refused, not emitted
-    const bad = mapRegistry(FILES, { ...ctx, agentSystemRel: "DEPENDS_ON" });
-    expect(bad.write.edges.some((e) => e.from.startsWith("agent:") && e.type === "DEPENDS_ON")).toBe(false);
-    expect(bad.skipped.some((s) => /DEPENDS_ON/.test(s.reason))).toBe(true);
+  it("USES: an agent uses the tools and connectors it lists and the systems that list it under used_by (each edge once)", () => {
+    const fromAgents = w.edges.filter((e) => e.type === "USES" && e.from.startsWith("agent:"));
+    expect(fromAgents.map((e) => `${e.from} -> ${e.to}`).sort()).toEqual([
+      "agent:pinger -> system:analytics-db", "agent:pinger -> system:nightly-report", "agent:pinger -> system:sms-gateway",
+      "agent:planner -> system:analytics-db", "agent:planner -> system:chat", "agent:planner -> system:mcp-widget-ops",
+      "agent:scout -> system:chat", "agent:scout -> system:mcp-widget-ops", "agent:scout -> system:source-host", "agent:scout -> system:widget-bridge",
+      "agent:stray -> system:mcp-widget-ops", // its unknown tool is dropped, not linked
+    ]);
+    expect(new Set(fromAgents.map((e) => `${e.from}|${e.to}`)).size).toBe(fromAgents.length);
+    expect(w.edges.some((e) => e.type === "USES" && e.to.startsWith("agent:"))).toBe(false);
+    expect(w.edges.some((e) => e.type === "KNOWS_ABOUT")).toBe(false);
+  });
+
+  it("USES edges name the file that states them: the agent's own, or the system's used_by", () => {
+    const src = (from: string, to: string) => w.edges.find((e) => e.type === "USES" && e.from === from && e.to === to)!.src;
+    expect(src("agent:scout", "system:chat")).toBe("document:registry-agents-scout-yaml"); // scout lists it (chat lists scout too)
+    expect(src("agent:planner", "system:chat")).toBe("document:registry-connectors-chat-yaml"); // only the connector says so
+    expect(src("agent:pinger", "system:nightly-report")).toBe("document:registry-tools-nightly-report-yaml");
+  });
+
+  it("USES: a team uses what its members use, marked via: members, sourced from the file that says so", () => {
+    const fromTeams = w.edges.filter((e) => e.type === "USES" && e.from.startsWith("team:"));
+    expect(fromTeams.map((e) => `${e.from} -> ${e.to}`).sort()).toEqual([
+      "team:platform -> system:analytics-db", "team:platform -> system:nightly-report", "team:platform -> system:sms-gateway",
+      "team:research -> system:analytics-db", "team:research -> system:chat", "team:research -> system:mcp-widget-ops",
+      "team:research -> system:source-host", "team:research -> system:widget-bridge",
+    ]);
+    for (const e of fromTeams) expect(e.props).toEqual({ via: "members" });
+    expect(fromTeams.find((e) => e.to === "system:nightly-report")!.src).toBe("document:registry-tools-nightly-report-yaml");
+    // stray names a department that has no file, so it is nobody's member and no team inherits its tools
+    expect(w.edges.some((e) => e.type === "MEMBER_OF" && e.from === "agent:stray")).toBe(false);
+  });
+
+  it("a retired agent uses nothing, and a team does not inherit from it", () => {
+    const r = mapRegistry([
+      { path: "registry/agents/gone.yaml", text: "id: gone\nname: Gone\ndepartment: ops\nstatus: retired\ntools: [legacy-tool]\nconnectors: [legacy-hub]" },
+      { path: "registry/agents/live.yaml", text: "id: live\nname: Live\ndepartment: ops\nstatus: active\ntools: [legacy-tool]" },
+      { path: "registry/departments/ops.yaml", text: "id: ops\nname: Ops\nagents:\n  active: [live]\n  retired: [gone]" },
+      { path: "registry/tools/legacy-tool.yaml", text: "id: legacy-tool\nname: Legacy tool\nused_by: [gone]" },
+      { path: "registry/connectors/legacy-hub.yaml", text: "id: legacy-hub\nname: Legacy hub\nused_by: [gone]" },
+    ], ctx);
+    const uses = r.write.edges.filter((e) => e.type === "USES").map((e) => `${e.from} -> ${e.to}`).sort();
+    expect(uses).toEqual(["agent:live -> system:legacy-tool", "team:ops -> system:legacy-tool"]);
+    checkEdges(r);
+  });
+
+  it("never emits an edge the ontology refuses: USES is legal for Agent -> System and Team -> System", () => {
+    expect(isAllowed("Agent", "USES", "System")).toBe(true);
+    expect(isAllowed("Team", "USES", "System")).toBe(true);
+    expect(w.edges.filter((e) => e.type === "USES").length).toBeGreaterThan(0);
+    checkEdges(res); // every edge, USES included, passes isAllowed and has both endpoints
   });
 
   it("reports references it could not resolve once per file, without echoing them", () => {
@@ -262,6 +303,8 @@ describe("mapRegistry (integration)", () => {
     const one = async (cy: string) => (await g.roQuery<{ c: number }>(cy))[0]!.c;
     expect(await one("MATCH (:Entity:Agent)-[r:MEMBER_OF]->(:Entity:Team) WHERE r.until IS NULL RETURN count(r) AS c")).toBe(4);
     expect(await one("MATCH (:Entity:System)-[r:DEPENDS_ON]->(:Entity:System) WHERE r.until IS NULL RETURN count(r) AS c")).toBe(4);
+    expect(await one("MATCH (:Entity:Agent)-[r:USES]->(:Entity:System) WHERE r.until IS NULL RETURN count(r) AS c")).toBe(11);
+    expect(await one("MATCH (:Entity:Team)-[r:USES]->(:Entity:System) WHERE r.until IS NULL RETURN count(r) AS c")).toBe(8);
     expect(await scanGraph(g)).toEqual([]);
   });
 });
@@ -288,6 +331,11 @@ describe.skipIf(!existsSync(join(VAULT, "registry", "agents")))("real vault regi
     expect(new Set(r.write.nodes.map((n) => n.id)).size).toBe(r.write.nodes.length);
     expect(r.write.edges.filter((e) => e.type === "MEMBER_OF").length).toBeGreaterThanOrEqual(10);
     expect(r.write.edges.filter((e) => e.type === "DEPENDS_ON").length).toBeGreaterThanOrEqual(10);
+    const uses = r.write.edges.filter((e) => e.type === "USES");
+    expect(uses.filter((e) => e.from.startsWith("agent:")).length).toBeGreaterThanOrEqual(20);
+    expect(uses.filter((e) => e.from.startsWith("team:")).length).toBeGreaterThanOrEqual(10);
+    expect(uses.every((e) => e.to.startsWith("system:"))).toBe(true);
+    expect(r.skipped.some((s) => /USES/.test(s.reason))).toBe(false);
   });
 
   it("every edge is allowed by the ontology and resolves to a node", () => {
