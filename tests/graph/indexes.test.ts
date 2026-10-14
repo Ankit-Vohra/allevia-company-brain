@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
 import { ensureIndexes, listIndexes, VECTOR_DIM, vectorPropFor } from "../../src/graph/indexes.js";
 import { upsertNode } from "../../src/graph/upsert.js";
+import { searchableTypesPredicate } from "../../src/graph/read.js";
 import { testGraph } from "../helpers/graph.js";
 
 const unit = (i: number) => Array.from({ length: VECTOR_DIM }, (_, j) => (j === i ? 1 : 0));
@@ -42,5 +43,15 @@ describe("ensureIndexes (integration)", () => {
     expect(ev.map((r) => r.id)).toEqual(["decision:discord-brain"]);
     const cv = await g.roQuery<{ id: string }>("CALL db.idx.vector.queryNodes('Chunk', 'textEmbedding', 5, vecf32($q)) YIELD node RETURN node.id AS id", { q: unit(0) });
     expect(cv.map((r) => r.id)).toEqual(["chunk:d1:0"]);
+  });
+
+  it("keeps chunks, versions and observations out of filtered entity search", async () => {
+    // rename: writes a Version holding the old name, which must not surface as a search hit
+    expect((await upsertNode(g, { type: "Decision", id: "decision:discord-brain", name: "Discord agent brain", summary: "Use the subscription agent" })).versioned).toBe(true);
+    const raw = await g.roQuery<{ id: string; labels: string[] }>("CALL db.idx.fulltext.queryNodes('Entity', 'brain') YIELD node RETURN node.id AS id, labels(node) AS labels");
+    expect(raw.map((r) => r.id).sort()).toEqual(["chunk:d1:0", "decision:discord-brain"]); // the Version has no searchable name
+    const hits = await g.roQuery<{ id: string }>(
+      `CALL db.idx.fulltext.queryNodes('Entity', 'brain') YIELD node WITH node WHERE ${searchableTypesPredicate("node")} RETURN node.id AS id`);
+    expect(hits.map((r) => r.id)).toEqual(["decision:discord-brain"]);
   });
 });

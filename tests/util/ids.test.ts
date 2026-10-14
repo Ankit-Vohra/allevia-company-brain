@@ -26,6 +26,7 @@ describe("ids", () => {
     expect(typeFromId("brand-rule:no-jargon")).toBe("BrandRule");
     expect(typeFromId("decision:x")).toBe("Decision");
     expect(typeFromId("nope:x")).toBeUndefined();
+    expect(typeFromId("obs:followers:channel:instagram:2026-10-14")).toBe("Observation");
   });
   it("falls back to a hash when the key has no sluggable characters", () => {
     const id = entityId("Task", "???");

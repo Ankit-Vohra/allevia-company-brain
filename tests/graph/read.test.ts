@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { currentEdge, edgeValidAt, toNodeRef, toPathResult, shapeValue, isRawNode, isRawPath } from "../../src/graph/read.js";
+import {
+  currentEdge, edgeValidAt, toNodeRef, toPathResult, shapeValue, isRawNode, isRawPath, searchableTypesPredicate, isSearchable,
+} from "../../src/graph/read.js";
+import { SEARCHABLE } from "../../src/graph/schema.js";
 
 const rawPath = {
   nodes: [
@@ -15,6 +18,20 @@ describe("read helpers", () => {
     expect(currentEdge("r", "asOf")).toBe("(r.since IS NULL OR r.since <= $asOf) AND (r.until IS NULL OR r.until > $asOf)");
     expect(() => currentEdge("r) OR (1=1")).toThrow();
     expect(() => currentEdge("r", "a b")).toThrow();
+  });
+  it("filters to searchable types", () => {
+    const p = searchableTypesPredicate("node");
+    expect(p.startsWith("(node:Business OR node:Person OR ")).toBe(true);
+    expect(p.split(" OR ")).toHaveLength(SEARCHABLE.length);
+    for (const hidden of ["Chunk", "Version", "Observation", "Turn"]) expect(p).not.toContain(`node:${hidden})`);
+    expect(p).not.toMatch(/node:(Chunk|Version|Observation)\b/);
+    expect(() => searchableTypesPredicate("n) OR (true")).toThrow();
+    expect(isSearchable(["Entity", "Decision"])).toBe(true);
+    expect(isSearchable(["Entity", "Version"])).toBe(false);
+  });
+  it("falls back to the id when a node has no display name", () => {
+    expect(toNodeRef({ id: 1, labels: ["Entity", "Version"], properties: { id: "version:task:a@1-abcd", name: "" } }).name)
+      .toBe("version:task:a@1-abcd");
   });
   it("evaluates edge validity in JS the same way", () => {
     expect(edgeValidAt({})).toBe(true);

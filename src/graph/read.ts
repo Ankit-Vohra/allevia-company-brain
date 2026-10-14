@@ -1,6 +1,6 @@
 // Read-side helpers: temporal predicates ("current" or "as of t") and conversion of raw FalkorDB results (nodes,
 // edges, paths) into the small refs the agent, API and UI pass around. Vectors never leave this layer.
-import { isEntityType, type EntityType, type RelType } from "./schema.js";
+import { SEARCHABLE, isEntityType, type EntityType, type RelType } from "./schema.js";
 
 export interface NodeRef { id: string; label: EntityType; name: string; asOf?: string; simulated?: boolean }
 export interface EdgeRef { from: string; type: RelType; to: string; since?: number; until?: number | null }
@@ -24,6 +24,20 @@ export function currentEdge(alias: string, asOfParam?: string): string {
   return `(${alias}.since IS NULL OR ${alias}.since <= $${asOfParam}) AND (${alias}.until IS NULL OR ${alias}.until > $${asOfParam})`;
 }
 
+// Cypher predicate keeping only SEARCHABLE types. The Entity full-text and vector indexes also cover Chunks, Versions,
+// Observations, Turns…; put this after the index CALL:
+//   CALL db.idx.fulltext.queryNodes('Entity', $q) YIELD node, score WITH node, score WHERE <predicate> …
+// searchableTypesPredicate('node') -> "(node:Business OR node:Person OR …)"
+export function searchableTypesPredicate(alias: string): string {
+  if (!IDENT.test(alias)) throw new Error(`bad alias ${JSON.stringify(alias)}`);
+  return `(${SEARCHABLE.map((t) => `${alias}:${t}`).join(" OR ")})`;
+}
+
+const SEARCHABLE_SET = new Set<string>(SEARCHABLE);
+export function isSearchable(labels: readonly string[]): boolean {
+  return labels.some((l) => SEARCHABLE_SET.has(l));
+}
+
 // The same rule in JS, for post-filtering edges already fetched.
 export function edgeValidAt(props: Record<string, unknown>, asOf?: number): boolean {
   const since = typeof props.since === "number" ? props.since : null;
@@ -44,11 +58,11 @@ export function isRawPath(v: unknown): v is RawPath {
   return isObj(v) && Array.isArray(v.nodes) && Array.isArray(v.edges) && v.nodes.every(isRawNode);
 }
 
-// `label` is the type label (the one that is not `Entity`).
+// `label` is the type label (the one that is not `Entity`). Nodes without a display name (Versions) show their id.
 export function toNodeRef(n: RawNode): NodeRef {
   const p = n.properties;
   const label = (n.labels.find((l) => l !== "Entity" && isEntityType(l)) ?? n.labels.find((l) => l !== "Entity") ?? "Entity") as EntityType;
-  const ref: NodeRef = { id: String(p.id ?? `#${n.id}`), label, name: String(p.name ?? p.id ?? `#${n.id}`) };
+  const ref: NodeRef = { id: String(p.id ?? `#${n.id}`), label, name: String(p.name || p.id || `#${n.id}`) };
   if (typeof p.asOf === "string") ref.asOf = p.asOf;
   if (typeof p.simulated === "boolean") ref.simulated = p.simulated;
   return ref;

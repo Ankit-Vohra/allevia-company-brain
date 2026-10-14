@@ -48,8 +48,10 @@ describe("schema", () => {
     for (const f of FUNCTIONAL_RELS) expect(rels.has(f.rel)).toBe(true);
   });
   it("tracks the listed props and keeps chunks/versions out of search", () => {
-    expect(TRACKED_PROPS.Task).toEqual(["status", "title"]);
-    expect(TRACKED_PROPS.Page).toEqual(["title", "statusCode", "metaDescription"]);
+    expect(TRACKED_PROPS.Task).toEqual(["status", "title", "name"]);
+    expect(TRACKED_PROPS.Page).toEqual(["title", "statusCode", "metaDescription", "name"]);
+    // the display title lives in `name`, so wherever `title` is tracked, renames are too
+    for (const [t, props] of Object.entries(TRACKED_PROPS)) if (props.includes("title")) expect(props, t).toContain("name");
     expect(SEARCHABLE).toContain("Decision");
     expect(SEARCHABLE).not.toContain("Chunk");
     expect(SEARCHABLE).not.toContain("Version");

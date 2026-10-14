@@ -156,13 +156,14 @@ export function functionalRule(rel: RelType, fromType: EntityType, toType: Entit
   return FUNCTIONAL_RELS.find((f) => f.rel === rel && (!f.fromType || f.fromType === fromType) && (!f.toType || f.toType === toType));
 }
 
-// Properties whose change writes a Version node (old values kept one hop away via HAD_VERSION). Observation values
+// Properties whose change writes a Version node (old values kept one hop away via HAD_VERSION). Wherever `title` is
+// tracked, `name` is too: the display title lives in `name`, so a rename is a change of state. Observation values
 // are tracked so a number corrected by a later source keeps its earlier reading.
 export const TRACKED_PROPS: Partial<Record<EntityType, string[]>> = {
-  Task: ["status", "title"],
-  Decision: ["status", "title"],
+  Task: ["status", "title", "name"],
+  Decision: ["status", "title", "name"],
   Channel: ["status", "handle"],
-  Page: ["title", "statusCode", "metaDescription"],
+  Page: ["title", "statusCode", "metaDescription", "name"],
   Campaign: ["status"],
   Recommendation: ["status"],
   Approval: ["status"],

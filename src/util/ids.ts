@@ -27,7 +27,12 @@ export function idPrefix(type: EntityType): string {
   return type.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
 }
 
-const TYPE_BY_PREFIX = new Map<string, EntityType>(ENTITY_TYPES.map((t) => [idPrefix(t), t]));
+// Observation ids are minted by observationId() as `obs:<metric>:<subject>:<date>`, so "obs" maps back too.
+export const OBSERVATION_ID_PREFIX = "obs";
+const TYPE_BY_PREFIX = new Map<string, EntityType>([
+  ...ENTITY_TYPES.map((t): [string, EntityType] => [idPrefix(t), t]),
+  [OBSERVATION_ID_PREFIX, "Observation"],
+]);
 
 export function typeFromId(id: string): EntityType | undefined {
   const i = id.indexOf(":");

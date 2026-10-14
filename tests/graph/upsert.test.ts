@@ -61,6 +61,17 @@ describe("temporal upsert (integration)", () => {
     expect(await count("MATCH (:Entity {id:'task:untracked'})-[:HAD_VERSION]->(v) RETURN count(v) AS c")).toBe(0);
   });
 
+  it("2c. renaming a Decision (its display title is `name`) writes a Version", async () => {
+    await upsertNode(g, { type: "Decision", id: "decision:rename-me", name: "Discord brain", props: { status: "accepted" } }, T0);
+    expect(await upsertNode(g, { type: "Decision", id: "decision:rename-me", name: "Discord agent brain" }, T0 + 7))
+      .toEqual({ created: false, versioned: true, updated: true });
+    const [v] = await g.roQuery<{ props: string; changed: string[]; name: string }>(
+      "MATCH (:Entity {id:'decision:rename-me'})-[:HAD_VERSION]->(v) RETURN v.props AS props, v.changed AS changed, v.name AS name");
+    expect(JSON.parse(v!.props).name).toBe("Discord brain");
+    expect(v!.changed).toEqual(["name"]);
+    expect(v!.name).toBe(""); // a Version never shows up as an entity-search hit
+  });
+
   it("3. upserting the same edge twice leaves exactly one current edge", async () => {
     await upsertNode(g, { type: "System", id: "system:gsc", name: "Search Console" }, T0);
     await upsertNode(g, { type: "System", id: "system:ops-mcp", name: "Ops MCP" }, T0);
@@ -125,6 +136,10 @@ describe("temporal upsert (integration)", () => {
 
   it("validates node input", async () => {
     await expect(upsertNode(g, { type: "Decision", id: "task:sitemap", name: "wrong type" })).rejects.toThrow(/Task/);
+    await expect(upsertNode(g, { type: "Task", id: "decision:x", name: "x" })).rejects.toBeInstanceOf(InvalidWrite);
+    await expect(upsertNode(g, { type: "Task", id: "nocolon", name: "x" })).rejects.toThrow(/prefix/);
+    await expect(upsertNode(g, { type: "Observation", id: "task:x", name: "x" })).rejects.toBeInstanceOf(InvalidWrite);
+    expect((await upsertNode(g, { type: "BrandRule", id: "brand-rule:no-jargon", name: "No jargon" })).created).toBe(true);
     await expect(upsertNode(g, { type: "Task", id: "task:bad", name: "x", props: { "bad-key": 1 } })).rejects.toBeInstanceOf(InvalidWrite);
     await expect(upsertNode(g, { type: "Task", id: "task:bad", name: "x", props: { createdAt: 1 } })).rejects.toThrow(/reserved/);
     await expect(upsertNode(g, { type: "Task", id: "task:bad", name: "x", embedding: [1, 2, 3] })).rejects.toThrow(/384/);

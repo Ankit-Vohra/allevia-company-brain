@@ -14,8 +14,7 @@ import {
 } from "./schema.js";
 import { CHUNK_VECTOR_PROP, ENTITY_VECTOR_PROP, VECTOR_DIM, vectorPropFor } from "./indexes.js";
 import { DisallowedRelationship, InvalidWrite, MissingEndpoint } from "./errors.js";
-import { sha256 } from "../util/ids.js";
-import { toIso } from "../util/time.js";
+import { sha256, typeFromId } from "../util/ids.js";
 
 export { DisallowedRelationship, InvalidWrite, MissingEndpoint };
 
@@ -98,6 +97,10 @@ const nonEmpty = (s: unknown): s is string => typeof s === "string" && s.trim() 
 function validateNode(n: NodeInput): void {
   if (!isEntityType(n.type)) throw new InvalidWrite(`unknown entity type ${JSON.stringify(n.type)}`);
   if (!nonEmpty(n.id)) throw new InvalidWrite(`node id must be a non-empty trimmed string, got ${JSON.stringify(n.id)}`);
+  const idType = typeFromId(n.id);
+  if (idType !== n.type) {
+    throw new InvalidWrite(`${n.id}: id prefix says ${idType ?? "no known type"}, not ${n.type} (build ids with entityId/observationId)`);
+  }
   if (typeof n.name !== "string" || n.name.trim() === "") throw new InvalidWrite(`${n.id}: name must be a non-empty string`);
   checkProps(n.props, NODE_RESERVED, n.id);
   if (n.embedding && (n.embedding.length !== VECTOR_DIM || !n.embedding.every(Number.isFinite))) {
@@ -168,7 +171,7 @@ export async function upsertNode(g: GraphHandle, n: NodeInput, now: number = Dat
     const snapshot = JSON.stringify(old);
     params.version = defined({
       id: `version:${n.id}@${now}-${sha256(snapshot).slice(0, 8)}`,
-      name: `${String(old.name ?? n.id)} (until ${toIso(now)})`,
+      name: "", // no display name: a Version must not surface as an entity-search hit (the old name is in `props`)
       of: n.id,
       props: snapshot,
       changed: tracked,
