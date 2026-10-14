@@ -203,9 +203,9 @@ export async function seedMini(g: GraphHandle): Promise<void> {
   await node({ type: "Playbook", id: "playbook:seo-basics", name: "SEO basics", src: "document:seo-checklist" });
   await node({ type: "Rule", id: "rule:seo-meta-description", name: "Meta description present", summary: "Every indexable page needs a meta description",
     props: { kind: "seo_check", severity: "high", text: "Every indexable page needs a 140-160 character meta description.",
-      howToFix: "Write a unique meta description that names the city and the job type." }, src: "document:seo-checklist" });
+      howToFix: "Write a unique meta description that names the city and the job type.", rank: 0.6 }, src: "document:seo-checklist" });
   await node({ type: "Rule", id: "rule:seo-h1", name: "One H1 per page", summary: "Exactly one H1 per page",
-    props: { kind: "seo_check", severity: "medium", text: "Exactly one H1 per page.", howToFix: "Keep one H1 that matches the search intent." }, src: "document:seo-checklist" });
+    props: { kind: "seo_check", severity: "medium", text: "Exactly one H1 per page.", howToFix: "Keep one H1 that matches the search intent.", rank: 0.3 }, src: "document:seo-checklist" });
   for (const r of ["rule:seo-meta-description", "rule:seo-h1"]) await edge("playbook:seo-basics", "INCLUDES", r);
   await edge("playbook:seo-basics", "APPLIES_TO", "channel:website");
   const pages: Array<[string, string, string]> = [
