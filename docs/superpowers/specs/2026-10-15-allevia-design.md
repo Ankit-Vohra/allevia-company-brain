@@ -253,7 +253,7 @@ Three layers, each tested:
 3. **Redaction.** These are replaced with `[redacted:<kind>]` before any LLM or graph write:
    - IPv4 addresses, AWS ids (`i-…`, `sg-…`, `vpc-…`, `arn:aws:…`), emails, phone numbers.
    - Token and secret shapes, `NAME=value` assignments for `*KEY/*TOKEN/*SECRET/*PASSWORD`, URLs with credentials,
-     local secret paths (`~/Documents/aamdani-secrets`, `~/.config/…`, `/home/…/secrets`).
+     local secret paths (any home-directory folder with `secret` in its name, `~/.config/…`, `/home/…/secrets`).
    - CIN, D-U-N-S, Apple Team IDs and Supabase project refs.
 
 `allevia privacy-scan <tenant>` scans every string property in the graph for the same patterns and must report 0.
