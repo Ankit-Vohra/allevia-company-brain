@@ -12,6 +12,7 @@ import { redact } from "../redact.js";
 import { FOUNDER_ID, founderNode } from "../actors.js";
 
 export interface Adr {
+  file: string;            // the file name without directory or .md, e.g. "004-hosted-scheduler": the Decision's identity
   number: string;          // "008" ("" when neither the heading nor the file name has one)
   title: string;
   status: string;          // lower-case keyword: accepted, proposed, superseded, ... ("unknown" when absent)
@@ -144,6 +145,7 @@ export function parseAdr(path: string, md: string): Adr {
   supersedes.delete(number);
 
   const adr: Adr = {
+    file: (path.replace(/\\/g, "/").split("/").pop() ?? "").replace(/\.md$/i, ""),
     number,
     title: clean(title),
     status: normStatus(statusRaw),
@@ -168,10 +170,21 @@ export interface AdrCtx {
   adrIds?: ReadonlyMap<string, string>;
 }
 
-export const adrDecisionId = (a: Pick<Adr, "number" | "title">): string => entityId("Decision", [a.number, a.title].filter(Boolean).join(" "));
+// The Decision id is the ADR's file name ("decision:004-hosted-scheduler"), not its title: retitling a record, or
+// fixing the number in its heading, updates the same node (and writes a Version) instead of minting a second one.
+export const adrDecisionId = (a: Pick<Adr, "file">): string => entityId("Decision", a.file);
 
+// Number -> Decision id. A number that two different files claim is ambiguous: it is left out, so a reference to it
+// writes no edge rather than a wrong one.
 export function adrIdIndex(adrs: Adr[]): Map<string, string> {
-  return new Map(adrs.filter((a) => a.number).map((a) => [a.number, adrDecisionId(a)]));
+  const byNumber = new Map<string, Set<string>>();
+  for (const a of adrs) {
+    if (!a.number) continue;
+    const ids = byNumber.get(a.number) ?? new Set<string>();
+    ids.add(adrDecisionId(a));
+    byNumber.set(a.number, ids);
+  }
+  return new Map([...byNumber].filter(([, ids]) => ids.size === 1).map(([n, ids]) => [n, [...ids][0]!]));
 }
 
 export function adrToWrite(a: Adr, ctx: AdrCtx): GraphWrite {

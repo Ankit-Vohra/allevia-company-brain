@@ -26,6 +26,7 @@ describe("isAdrPath", () => {
 describe("parseAdr: bold run-in style", () => {
   it("reads number, title, status, date, decider and the three sections", () => {
     expect(adr("001")).toEqual({
+      file: "001-shared-handbook",
       number: "001",
       title: "Keep the shop handbook in one shared folder",
       status: "accepted",
@@ -72,6 +73,7 @@ describe("parseAdr: bold run-in style", () => {
 describe("parseAdr: heading style with front matter", () => {
   it("reads ADR-nnn headings, ## Context/Decision/Consequences, and front matter fields", () => {
     expect(adr("006")).toEqual({
+      file: "006-heading-style",
       number: "006",
       title: "Use heading-style records",
       status: "accepted",
@@ -129,6 +131,12 @@ describe("parseAdr: edge cases", () => {
     expect("supersedes" in parseAdr("60-decisions/005-x.md", "# 005 — T\n**Status** superseded by 007")).toBe(false);
   });
 
+  it("records the file name without directory or .md (any case) as `file`", () => {
+    expect(parseAdr("60-decisions/008-weekly-stock-count.md", "# 008 — T").file).toBe("008-weekly-stock-count");
+    expect(parseAdr("a\\b\\012-Use-X.MD", "# 012 — T").file).toBe("012-Use-X");
+    expect(parseAdr("012-no-dir.md", "# 012 — T").file).toBe("012-no-dir");
+  });
+
   it("does not crash on odd input", () => {
     for (const md of ["", "\n", "# ", "**Status**", "---\n:\n---\n# T", "# 001 — T\n" + "**x** ".repeat(50_000), "x".repeat(200_000)]) {
       expect(() => parseAdr("60-decisions/001-x.md", md)).not.toThrow();
@@ -140,15 +148,46 @@ describe("adrToWrite", () => {
   const ctx = { docId: "document:60-decisions-004-hosted-scheduler-md", asOf: "2026-10-12" };
   const index = adrIdIndex([...adrs.values()]);
 
-  it("builds the Decision node: id from number + title, tracked status/title, decidedAt", () => {
+  it("builds the Decision node: id from the file name, tracked status/title, decidedAt", () => {
     const w = adrToWrite(adr("001"), { ...ctx, docId: "document:001" });
     const d = w.nodes.find((n) => n.type === "Decision")!;
-    expect(d.id).toBe(entityId("Decision", "001 Keep the shop handbook in one shared folder"));
+    expect(d.id).toBe(entityId("Decision", "001-shared-handbook"));
+    expect(d.id).toBe("decision:001-shared-handbook");
     expect(d.id).toBe(adrDecisionId(adr("001")));
     expect(d.name).toBe("ADR 001: Keep the shop handbook in one shared folder");
     expect(d.props).toEqual({ status: "accepted", title: "Keep the shop handbook in one shared folder", number: "001", decidedAt: "2026-10-02" });
     expect(d.summary).toContain("plain markdown, synced to the shop laptop");
     expect(d).toMatchObject({ src: "document:001", asOf: ctx.asOf });
+  });
+
+  it("keeps the Decision id when the title or the number in the heading changes: the file name is the identity", () => {
+    const id = (md: string) => adrDecisionId(parseAdr("60-decisions/021-pick-a-courier.md", md));
+    const a = id("# 021 — Pick a courier\n**Status** proposed");
+    expect(a).toBe("decision:021-pick-a-courier");
+    expect(id("# 021 — Pick a different courier after all\n**Status** accepted")).toBe(a);
+    expect(id("# ADR-22: Renumbered in the heading\n**Status** accepted")).toBe(a);
+  });
+
+  it("resolves SUPERSEDES through file-name ids; a number two files claim is ambiguous and is left out, not guessed", () => {
+    const mk = (file: string, md: string) => parseAdr(`60-decisions/${file}.md`, md);
+    const old1 = mk("010-first-plan", "# 010 — First plan\n**Status** superseded by 012");
+    const old2 = mk("011-second-plan", "# 011 — Second plan\n**Status** superseded by 012");
+    const dup = mk("011-second-plan-copy", "# 011 — Second plan, copy\n**Status** accepted");
+    const newer = mk("012-third-plan", "# 012 — Third plan\n**Status** accepted · **Supersedes** 010, 011");
+    expect(newer.supersedes).toEqual(["010", "011"]);
+
+    const idx = adrIdIndex([old1, old2, newer]);
+    expect(idx.get("010")).toBe("decision:010-first-plan");
+    expect(idx.get("011")).toBe("decision:011-second-plan");
+    const edges = (i: ReadonlyMap<string, string>) =>
+      adrToWrite(newer, { docId: "document:x", asOf: ctx.asOf, adrIds: i }).edges.filter((e) => e.type === "SUPERSEDES").map((e) => `${e.from} -> ${e.to}`);
+    expect(edges(idx)).toEqual(["decision:012-third-plan -> decision:010-first-plan", "decision:012-third-plan -> decision:011-second-plan"]);
+
+    const ambiguous = adrIdIndex([old1, old2, dup, newer]);
+    expect(ambiguous.has("011")).toBe(false);
+    expect(edges(ambiguous)).toEqual(["decision:012-third-plan -> decision:010-first-plan"]);
+    // the same file listed twice is not ambiguous
+    expect(adrIdIndex([old2, old2]).get("011")).toBe("decision:011-second-plan");
   });
 
   it("DECIDED from the founder only when the ADR says the founder decided, and emits the founder node", () => {
@@ -217,6 +256,24 @@ describe("adrToWrite (integration)", () => {
     expect(await count("MATCH (:Entity {id:'person:founder'})-[r:DECIDED]->(:Decision) WHERE r.until IS NULL RETURN count(r) AS c")).toBe(4);
     expect(await count("MATCH (:Decision)-[r:SUPERSEDES]->(:Decision) WHERE r.until IS NULL RETURN count(r) AS c")).toBe(3);
     expect(await count("MATCH (d:Decision)-[:SOURCED_FROM]->(:Document) RETURN count(d) AS c")).toBe(6);
+    // every Decision id is its file name
+    const ids = (await g.roQuery<{ id: string }>("MATCH (d:Entity:Decision) RETURN d.id AS id")).map((r) => r.id).sort();
+    expect(ids).toEqual(files.map((f) => `decision:${f.replace(/\.md$/, "")}`));
+  });
+
+  it("a retitled ADR updates the same Decision (with a Version of the old title) instead of minting a second node", async () => {
+    const f = files.find((x) => x.startsWith("001"))!;
+    const md = readFileSync(new URL(f, DIR), "utf8").replace("Keep the shop handbook in one shared folder", "Keep the shop handbook in one shared place");
+    const a = parseAdr(`60-decisions/${f}`, md);
+    expect(a.title).toBe("Keep the shop handbook in one shared place");
+    const docId = entityId("Document", `60-decisions/${f}`);
+    const s = await writeBatch(g, adrToWrite(a, { docId, asOf: "2026-10-15" }));
+    expect(s).toMatchObject({ nodesCreated: 0, errors: [] });
+    expect(s.nodesUpdated).toBeGreaterThanOrEqual(1);
+    expect(s.versions).toBeGreaterThanOrEqual(1);
+    const count = async (cypher: string) => (await g.roQuery<{ c: number }>(cypher))[0]!.c;
+    expect(await count("MATCH (d:Entity:Decision) RETURN count(d) AS c")).toBe(6);
+    expect(await count("MATCH (:Entity {id:'decision:001-shared-handbook'})-[:HAD_VERSION]->(v:Version) RETURN count(v) AS c")).toBeGreaterThanOrEqual(1);
   });
 });
 
