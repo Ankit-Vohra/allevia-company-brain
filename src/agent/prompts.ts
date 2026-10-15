@@ -269,6 +269,7 @@ export function revisePrompt(o: { question: string; task: string; finding: Findi
 // ---------- SYNTHESIS (the Chief, streamed answer, then show_path) ----------
 
 const ANSWER_RULES = `Write the answer to the owner now:
+- Write nothing before your lookups are done: no working notes, no "let me check", no plan. Everything you write is shown to the owner as the answer.
 - Lead with the answer in one or two sentences, then bullets (at most 5 per group), then one next action.
 - Cite [[id]] for every claim, using the entity ids the findings cite (never the finding ids). Numbers with their dates. The "simulated", "as of <date>" and data-source rules apply.
 - Don't narrate the team's process unless it helps the owner trust the answer (for example "Isha double-checked the figures").

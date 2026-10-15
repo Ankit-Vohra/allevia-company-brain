@@ -370,37 +370,78 @@ export function arrayArgKey(shape: Record<string, unknown>): string | undefined 
   return keys.find((k) => k === "ids") ?? keys[0];
 }
 
-// The Chief's streamed answer. What the owner saw stream IS the answer: text deltas are forwarded and kept. Once an
-// answer has been written and show_path is called, anything more (a model re-writing its answer after the tool call)
-// is dropped from both the stream and the answer. If nothing streamed, the run's final text is sent once.
+// The Chief's streamed answer. What the owner saw stream IS the answer: text deltas are forwarded and kept, and the
+// stored answer is exactly what the stream shows at the end. The Chief's tool calls split its text into segments:
+// - text written before a lookup (any tool but show_path and the write tools) is a working note ("Owner is agent:ops.
+//   Check its team.", eval 2026-10-15 two-hop-cron-team): it leaves the answer, the stream gets a `reset` to the answer
+//   so far, and the note goes to the work log as the Chief's status. So does text before a show_path drawn before any
+//   answer was written;
+// - text before a write tool (propose_action) is part of the answer: proposing an action doesn't end it;
+// - once an answer has been written and show_path is called, it is sealed: anything more (a model re-writing its answer
+//   after the tool call) is dropped from both the stream and the answer.
+// If nothing is left at the end, the last note long enough to be an answer is the answer (a model that wrote its answer
+// and then looked something up, then stopped); failing that, the run's final text is sent once.
 const MIN_ANSWER_CHARS = 80;
+const NOTE_STATUS_CHARS = 160;
 
 export class AnswerStream {
-  private parts: string[] = [];
+  private kept = "";            // answer text before a write tool call: settled
+  private parts: string[] = []; // the current segment (since the last tool call)
+  private notes: string[] = []; // segments that turned out to be notes
   private sealed = false;
+  private any = false;          // has any text streamed at all
 
   constructor(private out: Emit) {}
 
+  private current(): string { return this.kept + this.parts.join(""); }
+
   readonly emit: Emit = (e) => {
-    if (e.type === "tool_call" && e.agent === CHIEF && e.name === "show_path" && this.parts.join("").trim().length >= MIN_ANSWER_CHARS) {
-      this.sealed = true;
+    if (e.type === "tool_call" && e.agent === CHIEF && !this.sealed) {
+      if (e.name === "show_path" && this.written()) this.sealed = true;
+      else if (isWriteTool({ name: e.name })) { this.kept = this.current(); this.parts = []; }
+      else this.takeBackNote();
     }
     if (e.type === "text" && e.agent === CHIEF) {
       if (this.sealed) return;
-      this.parts.push(e.delta);
+      // The answer never starts with blank lines (the paragraph break the SDK puts before a new text block).
+      const blank = !this.current().trim();
+      const delta = blank ? e.delta.trimStart() : e.delta;
+      if (!delta) return;
+      this.parts.push(delta);
+      this.any = true;
+      this.out(delta === e.delta ? e : { ...e, delta });
+      return;
     }
     this.out(e);
   };
 
+  // The current segment was a working note: out of the answer and the stream, into the log.
+  private takeBackNote(): void {
+    const note = this.parts.join("").trim();
+    this.parts = [];
+    if (!note) return;
+    this.notes.push(note);
+    this.out({ type: "text", agent: CHIEF, delta: this.kept, reset: true });
+    this.out({ type: "agent_status", agent: CHIEF, text: clip(note.replace(/\s+/g, " "), NOTE_STATUS_CHARS) });
+  }
+
   // The answer, if it was written in full and its path drawn (show_path called after it).
-  sealedAnswer(): string | undefined { return this.sealed ? this.parts.join("").trim() || undefined : undefined; }
+  sealedAnswer(): string | undefined { return this.sealed ? this.current().trim() || undefined : undefined; }
 
   // Has the Chief written an answer yet (as much as sealing needs)?
-  written(): boolean { return this.parts.join("").trim().length >= MIN_ANSWER_CHARS; }
+  written(): boolean { return this.current().trim().length >= MIN_ANSWER_CHARS; }
 
   finish(finalText: string): string {
-    const streamed = this.parts.join("").trim();
+    const streamed = this.current().trim();
     if (streamed) return streamed;
+    // Everything written was taken back as notes: the last one long enough to be an answer (else the last) is the best
+    // there is, and better than the run's whole text, which holds every note.
+    const best = [...this.notes].reverse().find((n) => n.length >= MIN_ANSWER_CHARS) ?? this.notes.at(-1);
+    if (best) {
+      this.out({ type: "text", agent: CHIEF, delta: best, reset: true });
+      return best;
+    }
+    if (this.any) return "";
     const text = finalText.trim();
     if (text) this.out({ type: "text", agent: CHIEF, delta: text });
     return text;

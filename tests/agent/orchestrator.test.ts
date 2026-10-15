@@ -7,6 +7,7 @@ import {
   MAX_REVIEWERS, MAX_TURNS, PATH_FIRST_NOTE, asksToRemember, notePathFirst, toolRounds, normalisePlan, rememberRefusal, reviewersFor, runTurn, toProposal, toolsFor, arrayArgKey,
   type TurnDeps, type TurnInput,
 } from "../../src/agent/orchestrator.js";
+import { directPrompt, synthesisPrompt } from "../../src/agent/prompts.js";
 import { FakeRuntime, type FakeScript, type RunInput } from "../../src/agent/runtime.js";
 import type { AlleviaTool } from "../../src/agent/tool.js";
 import { fakeTool, recorder, result, NOW } from "../helpers/agent.js";
@@ -377,13 +378,84 @@ describe("runTurn: fast path", () => {
       "chief-of-staff:plan": plan([{ agent: "chief-of-staff", task: "Look it up" }]),
       "chief-of-staff:direct": {
         preText: answer,
-        calls: [{ name: "search", args: { query: "stories" } }, { name: "show_path", args: { ids: ["decision:pause-stories"] } }],
+        calls: [{ name: "show_path", args: { ids: ["decision:pause-stories"] } }],
         text: "To recap: we paused daily stories [[decision:pause-stories]].",
       },
     });
     const out = await run();
     expect(out.answer).toBe(answer);
     expect(events.filter(is("text")).map((e) => (e as { delta: string }).delta).join("")).toBe(answer);
+  });
+
+  // Eval 2026-10-15 (two-hop-cron-team): the answer began with the Chief's working note "Owner is agent:ops (OWNS). Check
+  // its team.", written before a lookup. Text written before a lookup is a note: it leaves the answer (stored and shown)
+  // and goes to the work log as the Chief's status.
+  describe("the Chief's working notes", () => {
+    const ANSWER = "The publish-due cron is owned by the Ops agent, which belongs to the Operations team [[decision:pause-stories]].";
+    const shown = (events: AgentEvent[]) => events.filter(is("text", "chief-of-staff"))
+      .reduce((s, e) => ((e as { reset?: boolean }).reset ? (e as { delta: string }).delta : s + (e as { delta: string }).delta), "");
+
+    it("text written before a lookup is a note: not in the answer, taken back from the stream, shown as the Chief's status", async () => {
+      const note = "Owner is agent:ops (OWNS). Check its team.";
+      const { events, run } = setup({
+        "chief-of-staff:plan": plan([{ agent: "chief-of-staff", task: "Look it up" }]),
+        "chief-of-staff:direct": {
+          turns: [
+            { text: note, calls: [{ name: "search", args: { query: "publish-due cron" } }] },
+            { text: ANSWER, calls: [{ name: "show_path", args: { ids: ["decision:pause-stories"] } }] },
+          ],
+        },
+      });
+      const out = await run();
+      expect(out.answer).toBe(ANSWER);
+      expect(shown(events)).toBe(ANSWER);
+      expect(events.some(is("text", "chief-of-staff", (e) => e.reset === true))).toBe(true);
+      expect(events.find(is("agent_status", "chief-of-staff", (e) => e.text.includes("Check its team")))).toBeTruthy();
+      // the note is taken back before the lookup runs
+      expect(idx(events, is("text", "chief-of-staff", (e) => e.reset === true))).toBeLessThan(idx(events, is("tool_call", "chief-of-staff", (e) => e.name === "search")));
+    });
+
+    it("a short note before a path drawn too early is a note as well", async () => {
+      const { events, run } = setup({
+        "chief-of-staff:plan": plan([{ agent: "chief-of-staff", task: "Look it up" }]),
+        "chief-of-staff:direct": { turns: [{ text: "Drawing the path first.", calls: [{ name: "show_path", args: { ids: ["decision:pause-stories"] } }] }, { text: ANSWER }] },
+      });
+      const out = await run();
+      expect(out.answer).toBe(ANSWER);
+      expect(shown(events)).toBe(ANSWER);
+    });
+
+    it("text before a proposal is part of the answer: an action doesn't make it a note", async () => {
+      const first = "Worst: the sitemap is broken [[decision:pause-stories]]. I've drafted a fix for your approval.";
+      const second = "It waits for you in Approvals.";
+      const { events, run } = setup({
+        "chief-of-staff:plan": plan([{ agent: "chief-of-staff", task: "Look it up" }]),
+        "chief-of-staff:direct": {
+          turns: [
+            { text: first, calls: [{ name: "propose_action", args: { title: "Fix the sitemap", kind: "github_issue" } }] },
+            { text: second, calls: [{ name: "show_path", args: { ids: ["decision:pause-stories"] } }] },
+          ],
+        },
+      });
+      const out = await run();
+      expect(out.answer).toBe(`${first}\n\n${second}`);
+      expect(shown(events).trim()).toBe(`${first}\n\n${second}`);
+    });
+
+    it("an answer written before a last lookup, with nothing after it, is kept rather than lost", async () => {
+      const { events, run } = setup({
+        "chief-of-staff:plan": plan([{ agent: "chief-of-staff", task: "Look it up" }]),
+        "chief-of-staff:direct": { turns: [{ text: ANSWER, calls: [{ name: "search", args: { query: "double-check" } }] }] },
+      });
+      const out = await run();
+      expect(out.answer).toBe(ANSWER);
+      expect(shown(events)).toBe(ANSWER);
+    });
+
+    it("the direct and synthesis prompts tell the Chief to write nothing before its lookups are done", () => {
+      expect(directPrompt({ question: "q", recall: "" })).toMatch(/nothing before/i);
+      expect(synthesisPrompt({ question: "q", recall: "", findings: [], failed: [] })).toMatch(/nothing before/i);
+    });
   });
 
   // Eval 2026-10-15 (memory-ig-token): the Chief drew the path before writing anything, then wrote only "Everything is

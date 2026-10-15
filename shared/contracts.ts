@@ -37,7 +37,9 @@ export type AgentEvent =
   | { type: "review"; agent: AgentId; findingId: string; verdict: "ok" | "fix" | "reject"; note: string }
   | { type: "proposal"; agent: AgentId; recommendationId: string; approvalId: string; title: string; kind: ActionKind }
   | { type: "agent_done"; agent: AgentId; ms: number; ok: boolean }
-  | { type: "text"; agent: AgentId; delta: string }                                   // the final answer streaming (Chief of Staff)
+  // The final answer streaming (Chief of Staff). With `reset`, the answer shown so far is replaced by `delta`: text the
+  // Chief wrote before a lookup was a working note, not the answer, and is taken back (it goes to the log as a status).
+  | { type: "text"; agent: AgentId; delta: string; reset?: true }
   | { type: "path"; nodes: NodeRef[]; edges: EdgeRef[] }                              // the explanation path, ordered
   | { type: "final"; turnId: string; answer: string; citations: string[]; checks: TurnChecks; agents: AgentId[]; ms: number }
   // Studio (product design §6, §7): an Asset appeared, Tara assessed a photo, a rule was learned from an approval
