@@ -354,6 +354,8 @@ export const api = {
   async disconnectSearchConsole(t: string): Promise<ConnectorStatus> {
     if (mode === "mock") throw new ApiError(CONNECT_LIVE_ONLY, 501);
     return sendJson(`/api/${enc(t)}/connectors/search-console/disconnect`, "POST", {});
+  },
+
   /** The brand library: what the team puts on posters. */
   async brand(t: string): Promise<{ assets: BrandAssetDto[]; logo: BrandAssetDto | null }> {
     if (mode === "mock") return { assets: [], logo: null };
