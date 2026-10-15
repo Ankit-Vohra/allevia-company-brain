@@ -224,7 +224,7 @@ class DocResolver {
     const metric = metricSlug(o.metric);
     if (!metric) return `observation metric "${o.metric}" has no usable name`;
     if (!Number.isFinite(o.value)) return "observation value is not a number";
-    const quote = quoteProblem(o.evidence, this.normDoc) ?? numberProblem(o.value, o.evidence);
+    const quote = quoteProblem(o.evidence, this.normDoc, { value: o.value }) ?? numberProblem(o.value, o.evidence);
     if (quote) return `observation: ${quote}`;
     const [asOf, windowStart, windowEnd] = [o.asOf, o.windowStart, o.windowEnd].map(isoDay);
     const bad = ([["asOf", o.asOf, asOf], ["windowStart", o.windowStart, windowStart], ["windowEnd", o.windowEnd, windowEnd]] as const)

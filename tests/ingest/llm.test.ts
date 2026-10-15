@@ -7,6 +7,7 @@ const input = { system: "sys", prompt: "hi", schema: { type: "object" }, model: 
 const success = (out: unknown) => ({ type: "result", subtype: "success", structured_output: out }) as unknown as SDKMessage;
 const failure = (subtype: string) => ({ type: "result", subtype }) as unknown as SDKMessage;
 const assistantError = (error: string) => ({ type: "assistant", error, message: { content: [] } }) as unknown as SDKMessage;
+const init = (apiKeySource: string = "none") => ({ type: "system", subtype: "init", apiKeySource }) as unknown as SDKMessage;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const noDelay = { min: 0, max: 0 };
 
@@ -52,7 +53,7 @@ describe("AgentSdkRunner", () => {
     let cwdAtCall: string[] | undefined;
     const { fn, seen } = fakeQuery([(o) => {
       cwdAtCall = readdirSync(o.cwd!);
-      return yields({ type: "system" } as SDKMessage, success({ ok: 1 }));
+      return yields(init(), success({ ok: 1 }));
     }]);
     expect(await new AgentSdkRunner({ queryFn: fn }).structured(input)).toEqual({ ok: 1 });
     expect(seen[0]).toMatchObject({
@@ -68,7 +69,7 @@ describe("AgentSdkRunner", () => {
       ANTHROPIC_API_KEY: "key-placeholder", ANTHROPIC_AUTH_TOKEN: "token-placeholder", ANTHROPIC_BASE_URL: "https://proxy.example",
       DISCORD_BOT_TOKEN: "discord-placeholder",
     });
-    const { fn, seen } = fakeQuery([() => yields(success({}))]);
+    const { fn, seen } = fakeQuery([() => yields(init(), success({}))]);
     await new AgentSdkRunner({ queryFn: fn }).structured(input);
     const env = seen[0]!.env!;
     for (const k of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "DISCORD_BOT_TOKEN"]) expect(k in env).toBe(false);
@@ -76,7 +77,7 @@ describe("AgentSdkRunner", () => {
   });
 
   it("retries once after a pause, then gives up with an LlmError", async () => {
-    const ok = fakeQuery([() => yields(failure("error_max_structured_output_retries")), () => yields(success({ n: 2 }))]);
+    const ok = fakeQuery([() => yields(init(), failure("error_max_structured_output_retries")), () => yields(init(), success({ n: 2 }))]);
     const t0 = Date.now();
     expect(await new AgentSdkRunner({ queryFn: ok.fn, retryDelayMs: { min: 40, max: 60 } }).structured(input)).toEqual({ n: 2 });
     expect(Date.now() - t0).toBeGreaterThanOrEqual(39);
@@ -84,7 +85,7 @@ describe("AgentSdkRunner", () => {
 
     const bad = fakeQuery([
       () => { throw new Error("spawn failed"); },
-      () => yields(assistantError("overloaded"), success(undefined)),
+      () => yields(init(), assistantError("overloaded"), success(undefined)),
     ]);
     const err = await new AgentSdkRunner({ queryFn: bad.fn, retryDelayMs: noDelay }).structured(input).catch((e: unknown) => e) as Error;
     expect(err).toBeInstanceOf(LlmError);
@@ -93,13 +94,13 @@ describe("AgentSdkRunner", () => {
   });
 
   it("does not retry an auth failure or an abort", async () => {
-    const auth = fakeQuery([() => yields(assistantError("authentication_failed"), failure("error_during_execution")), () => yields(success({}))]);
+    const auth = fakeQuery([() => yields(init(), assistantError("authentication_failed"), failure("error_during_execution")), () => yields(init(), success({}))]);
     const e1 = await new AgentSdkRunner({ queryFn: auth.fn, retryDelayMs: noDelay }).structured(input).catch((e: unknown) => e) as Error;
     expect(e1).toBeInstanceOf(FatalLlmError);
     expect(e1.message).toMatch(/authentication_failed/);
     expect(auth.seen).toHaveLength(1);
 
-    const abort = fakeQuery([() => { throw Object.assign(new Error("The operation was aborted"), { name: "AbortError" }); }, () => yields(success({}))]);
+    const abort = fakeQuery([() => { throw Object.assign(new Error("The operation was aborted"), { name: "AbortError" }); }, () => yields(init(), success({}))]);
     const e2 = await new AgentSdkRunner({ queryFn: abort.fn, retryDelayMs: noDelay }).structured(input).catch((e: unknown) => e) as Error;
     expect(e2).toBeInstanceOf(FatalLlmError);
     expect(abort.seen).toHaveLength(1);
@@ -117,6 +118,47 @@ describe("AgentSdkRunner", () => {
     expect(aborted).toEqual([true, true]);
   });
 
+  it("fails closed when the init message says an API key would be billed: aborts, never retries, drops the output", async () => {
+    for (const src of ["ANTHROPIC_API_KEY", "apiKeyHelper", "/login managed key", "something-new"]) {
+      const after: string[] = [];
+      const { fn, seen } = fakeQuery([
+        () => (async function* () {
+          yield init(src);
+          after.push("kept reading");
+          yield success({ billed: true });
+        })(),
+        () => yields(init(), success({})),
+      ]);
+      const lines: string[] = [];
+      const err = await new AgentSdkRunner({ queryFn: fn, retryDelayMs: noDelay, log: (l) => lines.push(l) }).structured(input)
+        .catch((e: unknown) => e) as Error;
+      expect(err).toBeInstanceOf(FatalLlmError);
+      expect(err.message).toContain(`apiKeySource ${JSON.stringify(src)}`);
+      expect(err.message).toMatch(/subscription/);
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.abortController!.signal.aborted).toBe(true);
+      expect(after).toEqual([]);
+      expect(lines).toEqual([]);
+    }
+  });
+
+  it("fails closed when a result arrives without an init message", async () => {
+    const { fn, seen } = fakeQuery([() => yields({ type: "system", subtype: "status" } as unknown as SDKMessage, success({ ok: 1 })), () => yields(init(), success({}))]);
+    const err = await new AgentSdkRunner({ queryFn: fn, retryDelayMs: noDelay, log: () => {} }).structured(input).catch((e: unknown) => e) as Error;
+    expect(err).toBeInstanceOf(FatalLlmError);
+    expect(err.message).toMatch(/without a system:init message/);
+    expect(seen).toHaveLength(1);
+  });
+
+  it("logs the key source once per runner", async () => {
+    const { fn } = fakeQuery([() => yields(init("none"), success({})), () => yields(init("none"), success({}))]);
+    const lines: string[] = [];
+    const runner = new AgentSdkRunner({ queryFn: fn, log: (l) => lines.push(l) });
+    await runner.structured(input);
+    await runner.structured(input);
+    expect(lines).toEqual([expect.stringMatching(/apiKeySource "none"/)]);
+  });
+
   it("limits concurrent calls (default 3)", async () => {
     let active = 0;
     let peak = 0;
@@ -124,6 +166,7 @@ describe("AgentSdkRunner", () => {
       peak = Math.max(peak, ++active);
       await sleep(10);
       active--;
+      yield init();
       yield success({});
     })();
     const { fn } = fakeQuery(Array.from({ length: 8 }, () => slow));

@@ -1,13 +1,15 @@
 // Structured LLM calls for ingestion. AgentSdkRunner runs Claude through the Agent SDK on the founder's subscription:
 // an allow-listed env (subscriptionEnv: no API key, token or base URL), no tools, no user/project settings, a fresh
 // empty cwd per call (removed afterwards) so no CLAUDE.md is read, no session transcripts on disk, and a JSON-schema
-// output format. At most `concurrency` calls run at once. A failed or timed-out call is retried `retries` times after
-// a 1-2 s jittered pause; auth/billing failures and aborts are not retried.
+// output format. It fails closed off the subscription: the SDK's system:init message must report an apiKeySource that
+// is not an API key (assertSubscription) before any result is used; otherwise the call is aborted and not retried. At
+// most `concurrency` calls run at once. A failed or timed-out call is retried `retries` times after a 1-2 s jittered
+// pause; auth/billing failures, a non-subscription key source and aborts are not retried.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { subscriptionEnv } from "../agent/sdk-env.js";
+import { assertSubscription, subscriptionEnv } from "../agent/sdk-env.js";
 
 export interface StructuredInput { system: string; prompt: string; schema: object; model: string }
 
@@ -60,6 +62,7 @@ export interface AgentSdkRunnerOpts {
   retryDelayMs?: { min: number; max: number }; // default 1-2 s
   cwd?: string;                                // default: a fresh empty temp dir per call, removed afterwards
   queryFn?: QueryFn;
+  log?: (line: string) => void;                // default console.error; gets the key source once per runner
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -72,6 +75,8 @@ export class AgentSdkRunner implements LlmRunner {
   private readonly retryDelay: { min: number; max: number };
   private readonly queryFn: QueryFn;
   private readonly cwd: string | undefined;
+  private readonly log: (line: string) => void;
+  private keySourceLogged = false;
 
   constructor(opts: AgentSdkRunnerOpts = {}) {
     this.sem = new Semaphore(opts.concurrency ?? 3);
@@ -81,6 +86,7 @@ export class AgentSdkRunner implements LlmRunner {
     this.retryDelay = opts.retryDelayMs ?? { min: 1_000, max: 2_000 };
     this.queryFn = opts.queryFn ?? query;
     this.cwd = opts.cwd;
+    this.log = opts.log ?? ((line) => console.error(line));
   }
 
   structured(input: StructuredInput): Promise<unknown> {
@@ -128,13 +134,32 @@ export class AgentSdkRunner implements LlmRunner {
         },
       });
       let sdkError: string | undefined;
+      let onSubscription = false;
       for await (const m of messages) {
+        if (m.type === "system" && m.subtype === "init") {
+          let source: string;
+          try {
+            source = assertSubscription(m);
+          } catch (e) {
+            ac.abort(); // stop the child before it makes a billed request
+            throw new FatalLlmError((e as Error).message);
+          }
+          onSubscription = true;
+          if (!this.keySourceLogged) {
+            this.keySourceLogged = true;
+            this.log(`[llm] Claude runs on the subscription (apiKeySource ${JSON.stringify(source)})`);
+          }
+          continue;
+        }
         if (m.type === "assistant" && m.error) {
           if (FATAL_SDK_ERRORS.has(m.error)) throw new FatalLlmError(`SDK error ${m.error}`);
           sdkError = m.error;
           continue;
         }
         if (m.type !== "result") continue;
+        if (!onSubscription) {
+          throw new FatalLlmError("the SDK sent a result without a system:init message, so the call cannot be confirmed to run on the subscription");
+        }
         if (m.subtype === "success" && m.structured_output !== undefined) return m.structured_output;
         throw new Error(`result ${m.subtype}${m.subtype === "success" ? " without structured output" : ""}${sdkError ? ` (${sdkError})` : ""}`);
       }

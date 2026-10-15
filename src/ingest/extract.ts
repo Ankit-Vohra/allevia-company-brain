@@ -5,7 +5,9 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ONTOLOGY_VERSION, type EntityType, type RelType } from "../graph/schema.js";
 import { sha256 } from "../util/ids.js";
-import { PROMPT_VERSION, extractionPrompt, extractionSchema, type BusinessContext, type Extraction } from "./extract-schema.js";
+import {
+  LIMITS, PROMPT_VERSION, TRUNCATION_MARKER, extractionPrompt, extractionSchema, type BusinessContext, type Extraction,
+} from "./extract-schema.js";
 import type { LlmRunner } from "./llm.js";
 import type { RawDoc } from "./types.js";
 
@@ -16,19 +18,34 @@ export * from "./resolve-evidence.js";
 export type { LlmRunner, StructuredInput } from "./llm.js";
 export { AgentSdkRunner } from "./llm.js";
 
-// Cache key: the redacted text's hash, the ontology and prompt versions, the text of the system prompt (which carries
-// the business context) and of the JSON schema, so any wording change re-extracts, and the model alias. The resolved
-// model id is only known after a call, so it is not part of the key. Title and date are left out on purpose (a
-// re-fetched web page with a new date but the same text is not re-extracted); observation dates that fall back to the
-// document date are filled in at resolution time, not cached.
-export function cacheKey(
-  doc: Pick<RawDoc, "hash">, business: BusinessContext, model: string,
-  versions = { ontology: ONTOLOGY_VERSION, prompt: PROMPT_VERSION },
-): string {
-  const { system } = extractionPrompt({ id: "document:key", kind: "note", title: "", text: "", hash: "" }, business, { nonce: "0" });
+// Cache key: the redacted text's hash and the document kind (both shape what the model sees); the ontology and prompt
+// versions; the text of the system prompt (which carries the business context), of the user-prompt template and of the
+// JSON schema, so any wording change re-extracts; the cut limits and the truncation marker (a long document's prompt
+// depends on them); and the model alias. The template is the user prompt around placeholder documents, with and without
+// the optional path and date lines. The resolved model id is only known after a call, so it is not part of the key.
+// Title and date are left out on purpose (a re-fetched web page with a new date but the same text is not re-extracted);
+// observation dates that fall back to the document date are filled in at resolution time, not cached. The options
+// override the module's constants and are only for tests.
+export interface CacheKeyOpts {
+  ontology?: number;
+  prompt?: number;
+  docChars?: number;
+  lineChars?: number;
+  marker?: string;
+  build?: typeof extractionPrompt;
+}
+
+export function cacheKey(doc: Pick<RawDoc, "hash" | "kind">, business: BusinessContext, model: string, opts: CacheKeyOpts = {}): string {
+  const build = opts.build ?? extractionPrompt;
+  const placeholder: RawDoc = { id: "document:key", kind: "note", title: "{title}", text: "{text}", hash: "" };
+  const bare = build(placeholder, business, { nonce: "{nonce}" });
+  const full = build({ ...placeholder, path: "{path}", asOf: "2000-01-01" }, business, { nonce: "{nonce}" });
   return sha256([
-    doc.hash, `ontology:${versions.ontology}`, `prompt:${versions.prompt}`, `system:${sha256(system)}`,
-    `schema:${sha256(JSON.stringify(extractionSchema()))}`, `model:${model}`,
+    doc.hash, `kind:${doc.kind}`, `ontology:${opts.ontology ?? ONTOLOGY_VERSION}`, `prompt:${opts.prompt ?? PROMPT_VERSION}`,
+    `system:${sha256(bare.system)}`, `user:${sha256(JSON.stringify([bare.prompt, full.prompt]))}`,
+    `schema:${sha256(JSON.stringify(extractionSchema()))}`,
+    `docChars:${opts.docChars ?? LIMITS.docChars}`, `lineChars:${opts.lineChars ?? LIMITS.lineChars}`,
+    `marker:${opts.marker ?? TRUNCATION_MARKER}`, `model:${model}`,
   ].join("|"));
 }
 
