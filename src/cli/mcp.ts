@@ -14,6 +14,16 @@ function stdoutToStderr(): void {
   console.debug = toErr;
 }
 
+// A check of `Authorization: Bearer <token>` against the owner tokens: valid for this business, or the operator's.
+export async function bearerFor(tenant: string): Promise<(req: Request) => Promise<boolean>> {
+  const { verifyToken, OPERATOR_SCOPE } = await import("../auth/tokens.js");
+  return async (req) => {
+    const m = /^Bearer ([^\s]+)$/.exec(req.headers.get("authorization") ?? "");
+    const v = m ? await verifyToken(m[1]) : null;
+    return !!v && (v.scope === tenant || v.scope === OPERATOR_SCOPE);
+  };
+}
+
 export const commands: Command[] = [
   {
     name: "mcp",
@@ -42,7 +52,10 @@ export const commands: Command[] = [
       const how = `${mcp.MCP_TOOL_NAMES.length} read-only tools, ${embedQuery ? "full-text + vector" : "full-text"} search`;
 
       if (http) {
-        const { url, close } = await mcp.serveHttp({ ...opts, port, ...(values.host ? { host: values.host } : {}) });
+        // With ALLEVIA_AUTH=1 the HTTP transport needs this business's owner token (or the operator's) as a bearer token.
+        // stdio has no caller to ask: whoever can run this command is the operator, as with every other CLI command.
+        const authorize = (await import("../config.js")).loadConfig().authRequired ? await bearerFor(tenant) : undefined;
+        const { url, close } = await mcp.serveHttp({ ...opts, port, ...(authorize ? { authorize } : {}), ...(values.host ? { host: values.host } : {}) });
         console.error(`Allevia MCP (${tenant}, ${how}) on ${url}`);
         const { untilStopped } = await import("../server/main.js");
         await untilStopped(close);
