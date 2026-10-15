@@ -1,6 +1,6 @@
 // The JSON shapes the API returns. They mirror web/src/types-ext.ts field for field (the web app's contract for
 // Milestone 4.1); change both together. AgentEvent, NodeRef, EdgeRef and SourceRef come from shared/contracts.ts.
-import type { ActionKind, AgentId, EdgeRef, NodeRef, SourceRef, TurnChecks } from "../../shared/contracts.js";
+import type { ActionKind, AgentEvent, AgentId, EdgeRef, NodeRef, SourceRef, TurnChecks } from "../../shared/contracts.js";
 
 export interface TenantDto {
   id: string;
@@ -127,6 +127,14 @@ export interface ApprovalDto {
   decidedAt?: string;
   result?: string;
   simulated?: boolean;
+}
+
+// POST /api/:t/approvals/:id answers with the card as it stands plus what the decision did: the `learned` AgentEvents
+// (the "applied: your edit" chip; one per rule learned from an edit, in the JSON rather than a stream, since a decision
+// is one short request) and the Action the executor recorded (status done | failed | skipped | dry_run).
+export interface DecisionDto extends ApprovalDto {
+  learned: Array<Extract<AgentEvent, { type: "learned" }>>;
+  action: { id: string; kind: ActionKind; status: "done" | "failed" | "skipped" | "dry_run"; result: string; url?: string; simulated?: boolean } | null;
 }
 
 export interface BriefDto { id: string; title: string; asOf?: string; text: string }

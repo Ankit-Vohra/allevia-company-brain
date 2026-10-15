@@ -5,7 +5,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { AgentEvent, OnboardEvent } from "../../shared/contracts.js";
 import { upsertEdge, upsertNode } from "../../src/graph/upsert.js";
 import type { OnboardStart } from "../../src/server/app.js";
-import type { ApprovalDto, SessionDetailDto, SessionSummaryDto } from "../../src/server/types.js";
+import type { ApprovalDto, DecisionDto, SessionDetailDto, SessionSummaryDto } from "../../src/server/types.js";
 import { SEED_NOW } from "../fixtures/seed-graph.js";
 import { harness, post, sseBlocks, sseEvents, type Harness } from "./harness.js";
 
@@ -36,30 +36,31 @@ describe("server: writes and public mode (integration)", () => {
 
   const count = async (cypher: string, params?: Record<string, unknown>) => (await h.g.roQuery<{ c: number }>(cypher, params))[0]!.c;
 
-  it("approve with an edit: status edited, the pending state kept as a Version, decidedAt, decisionMs, editedPayload, hook called", async () => {
+  it("approve with an edit: the real executor saves the draft, the pending state kept as a Version, decidedAt, decisionMs, editedPayload, hook called", async () => {
     const seen: Array<{ tenant: string; approval: ApprovalDto }> = [];
     const app = h.make({ onDecision: (tenant, approval) => { seen.push({ tenant, approval }); } });
     const edited = { title: "Double down on salary reels", body: "Two salary reels a week, Raipur jobs first." };
     const res = await post(app, "/api/mini/approvals/approval%3At-001-1", { decision: "approve", editedPayload: edited });
     expect(res.status).toBe(200);
-    const a = await res.json() as ApprovalDto;
-    expect(a).toMatchObject({ id: "approval:t-001-1", status: "edited", editedPayload: edited, decidedAt: new Date(NOW).toISOString() });
-    expect(seen).toEqual([{ tenant: "mini", approval: expect.objectContaining({ id: "approval:t-001-1", status: "edited" }) }]);
+    const a = await res.json() as DecisionDto;
+    expect(a).toMatchObject({ id: "approval:t-001-1", status: "executed", editedPayload: edited, decidedAt: new Date(NOW).toISOString(), learned: [] });
+    expect(a.action).toMatchObject({ kind: "content_draft", status: "done", result: expect.stringMatching(/^Draft saved to drafts\/mini\/t-001-1\.md.*Not published\.$/) });
+    expect(seen).toEqual([{ tenant: "mini", approval: expect.objectContaining({ id: "approval:t-001-1", status: "executed" }) }]);
 
-    const [row] = await h.g.roQuery<{ status: string; decidedAt: number; decisionMs: number; edited: string }>(
-      "MATCH (a:Approval {id:'approval:t-001-1'}) RETURN a.status AS status, a.decidedAt AS decidedAt, a.decisionMs AS decisionMs, a.editedPayload AS edited");
-    expect(row).toMatchObject({ status: "edited", decidedAt: NOW });
+    const [row] = await h.g.roQuery<{ status: string; decidedAt: number; decisionMs: number; edited: string; fp: boolean }>(
+      "MATCH (a:Approval {id:'approval:t-001-1'}) RETURN a.status AS status, a.decidedAt AS decidedAt, a.decisionMs AS decisionMs, a.editedPayload AS edited, a.firstPass AS fp");
+    expect(row).toMatchObject({ status: "executed", decidedAt: NOW, fp: false });
     expect(row!.decisionMs).toBeGreaterThan(0);
     expect(JSON.parse(row!.edited)).toEqual(edited);
-    const [v] = await h.g.roQuery<{ props: string; changed: string[] }>(
+    const versions = await h.g.roQuery<{ props: string; changed: string[] }>(
       "MATCH (:Approval {id:'approval:t-001-1'})-[:HAD_VERSION]->(v:Version) RETURN v.props AS props, v.changed AS changed");
-    expect(JSON.parse(v!.props)).toMatchObject({ status: "pending" });
-    expect(v!.changed).toEqual(["status"]);
+    expect(versions.map((v) => (JSON.parse(v.props) as { status: string }).status).sort()).toEqual(["edited", "pending"]);
+    expect(versions.every((v) => v.changed.includes("status"))).toBe(true);
 
     // Decided once: a second decision is a conflict, and the list shows it decided.
     expect((await post(app, "/api/mini/approvals/approval%3At-001-1", { decision: "reject" })).status).toBe(409);
     const list = await (await app.request("/api/mini/approvals")).json() as ApprovalDto[];
-    expect(list.find((x) => x.id === "approval:t-001-1")!.status).toBe("edited");
+    expect(list.find((x) => x.id === "approval:t-001-1")!.status).toBe("executed");
     expect((await (await app.request("/api/mini/recommendations")).json() as Array<{ id: string; status: string }>)
       .find((r) => r.id === "recommendation:double-down-on-salary-reels")!.status).toBe("approved");
   });
@@ -73,7 +74,8 @@ describe("server: writes and public mode (integration)", () => {
 
     await upsertNode(h.g, { type: "Approval", id: "approval:t-003-1", name: "discord_post: Hello", props: { status: "pending", kind: "discord_post", title: "Hello", payload: JSON.stringify({ title: "Hello", body: "Hi all" }) } }, SEED_NOW);
     const same = await post(app, "/api/mini/approvals/approval%3At-003-1", { decision: "approve", editedPayload: { title: "Hello", body: "Hi all" } });
-    expect(await same.json()).toMatchObject({ status: "approved" });
+    // a Discord post is a dry run without ALLEVIA_ACTIONS_LIVE=1: recorded, nothing sent
+    expect(await same.json()).toMatchObject({ status: "approved", action: { kind: "discord_post", status: "dry_run", result: expect.stringMatching(/^Dry run: would post "Hello"/) } });
     expect((await post(app, "/api/mini/approvals/approval%3Anope", { decision: "approve" })).status).toBe(404);
     expect((await post(app, "/api/mini/approvals/approval%3At-003-1", { decision: "maybe" })).status).toBe(400);
   });

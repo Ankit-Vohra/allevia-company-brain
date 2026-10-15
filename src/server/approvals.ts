@@ -1,12 +1,19 @@
-// The owner's decision on an Approval card (spec §9). For now a decision only records itself: the Approval's status
-// moves pending -> approved | edited | rejected through upsertNode (status is TRACKED, so the pending state is kept as a
-// Version), with decidedAt, decisionMs (proposal to decision) and, for an edit, the editedPayload. Executors and the
-// learning loop hang off the server's onDecision hook, which runs after this returns.
+// The owner's decision on an Approval card (spec §9), the same on every surface: the API's POST /api/:t/approvals/:id
+// and Discord's Approve/Reject buttons both come through decide(). It runs the action layer (src/actions/approvals.ts):
+// the card is claimed once, the decision recorded (status, decidedAt, firstPass, decisionMs, editDistance, the edited
+// payload; the pending state kept as a Version), an edit teaches learned rules (each a `learned` AgentEvent), and an
+// approve runs the real executor on what was approved. GitHub issues and Discord posts are a dry run unless
+// ALLEVIA_ACTIONS_LIVE=1 (or actions.live): the Action records status 'dry_run' and what would have been created.
+// content_draft saves a draft (never publishes) and pause_ad only touches simulated campaigns, so those always run.
+// Then the optional onDecision hook (a notification): its failure is logged, never the owner's problem.
+import type { LearnedEvent } from "../actions/learning.js";
+import { ApprovalNotFound, decideApproval } from "../actions/approvals.js";
+import type { ActionView, Drafter, ExecutorDeps, GhRunner, HttpFn } from "../actions/executors.js";
+import type { LlmRunner } from "../ingest/llm.js";
+import { loadConfig } from "../config.js";
 import type { GraphHandle } from "../graph/client.js";
-import { upsertNode } from "../graph/upsert.js";
-import { serial } from "../agent/tools/common.js";
 import { approval as readApproval } from "./reads.js";
-import type { ApprovalDto, ApprovalPayload, ApprovalStatus } from "./types.js";
+import type { ApprovalDto, ApprovalPayload, DecisionDto } from "./types.js";
 
 export class DecisionError extends Error {
   constructor(readonly status: 404 | 409, message: string) {
@@ -16,41 +23,49 @@ export class DecisionError extends Error {
 
 export interface Decision { decision: "approve" | "reject"; editedPayload?: ApprovalPayload }
 
-const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
-
-// `current` is the stored payload as the card shows it; an approve with an edited payload that differs is "edited".
-export async function decideApproval(
-  g: GraphHandle, id: string, d: Decision, current: ApprovalPayload, now: number = Date.now(),
-): Promise<{ status: ApprovalStatus; decidedAt: number; decisionMs: number }> {
-  return serial(`decide:${g.name}`, async () => {
-    const [row] = await g.roQuery<{ name: string | null; status: string | null; createdAt: number | null }>(
-      "MATCH (a:Approval {id:$id}) RETURN a.name AS name, a.status AS status, a.createdAt AS createdAt LIMIT 1", { id });
-    if (!row) throw new DecisionError(404, `No approval ${id}.`);
-    if ((row.status ?? "pending") !== "pending") throw new DecisionError(409, `${id} was already decided (${row.status}).`);
-    const edited = d.decision === "approve" && d.editedPayload && !sameJson(d.editedPayload, current) ? d.editedPayload : undefined;
-    const status: ApprovalStatus = d.decision === "reject" ? "rejected" : edited ? "edited" : "approved";
-    const decisionMs = Math.max(0, now - (typeof row.createdAt === "number" ? row.createdAt : now));
-    await upsertNode(g, {
-      type: "Approval", id, name: row.name || id,
-      props: { status, decidedAt: now, decisionMs, ...(edited ? { editedPayload: JSON.stringify(edited) } : {}) },
-    }, now);
-    return { status, decidedAt: now, decisionMs };
-  });
-}
-
-// Called after a decision is recorded (ServerDeps.onDecision: executors and the learning loop plug in here).
+// Called after a decision is recorded and its action has run.
 export type OnDecision = (tenant: string, approval: ApprovalDto) => Promise<void> | void;
 
-// The whole decision as every surface makes it (the API's POST /api/:t/approvals/:id, Discord's Approve/Reject
-// buttons): record it, then run the onDecision hook. The hook's failure is logged, never the owner's problem: the
-// decision stands. Returns the card as it stands afterwards.
-export async function decideAndNotify(
-  g: GraphHandle, tenant: string, id: string, d: Decision,
-  o: { now?: number; onDecision?: OnDecision; log?: (line: string) => void } = {},
-): Promise<ApprovalDto> {
+// How approved actions run. Everything is optional: the defaults are the real executors, with GitHub and Discord in
+// dry-run mode unless ALLEVIA_ACTIONS_LIVE=1.
+export interface ActionOpts {
+  live?: boolean;
+  gh?: GhRunner;
+  http?: HttpFn;
+  drafter?: Drafter;
+  config?: ExecutorDeps["config"];
+  llm?: LlmRunner;            // optional Haiku summary of a complex edit (off when absent)
+}
+
+export interface DecideOpts {
+  now?: number;
+  actor?: string;
+  onDecision?: OnDecision;
+  actions?: ActionOpts;
+  log?: (line: string) => void;
+}
+
+export async function decide(g: GraphHandle, tenant: string, id: string, d: Decision, o: DecideOpts = {}): Promise<DecisionDto> {
   const before = await readApproval(g, id);
   if (!before) throw new DecisionError(404, "No such approval.");
-  await decideApproval(g, id, d, before.payload, o.now ?? Date.now());
+  if (before.status !== "pending") throw new DecisionError(409, `${id} was already decided (${before.status}).`);
+  const a = o.actions ?? {};
+  const executors: Omit<ExecutorDeps, "tenant"> = {
+    dryRun: !(a.live ?? loadConfig().actionsLive),
+    ...(a.gh ? { gh: a.gh } : {}), ...(a.http ? { http: a.http } : {}), ...(a.drafter ? { drafter: a.drafter } : {}), ...(a.config ? { config: a.config } : {}),
+  };
+  const learned: LearnedEvent[] = [];
+  let action: ActionView | null = null;
+  try {
+    const r = await decideApproval(g, {
+      approvalId: id, decision: d.decision, ...(d.editedPayload ? { editedPayload: { ...d.editedPayload } } : {}), ...(o.actor ? { actor: o.actor } : {}), now: o.now ?? Date.now(),
+    }, { tenant, executors, ...(a.llm ? { llm: a.llm } : {}), onLearned: (e) => learned.push(e) });
+    if (r.alreadyDecided) throw new DecisionError(409, `${id} was already decided (${r.approval.status}).`);
+    action = r.action;
+  } catch (e) {
+    if (e instanceof ApprovalNotFound) throw new DecisionError(404, "No such approval.");
+    throw e;
+  }
   const after = (await readApproval(g, id))!;
   if (o.onDecision) {
     try {
@@ -59,5 +74,15 @@ export async function decideAndNotify(
       (o.log ?? ((l: string) => console.error(l)))(`[approvals] onDecision for ${id} failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-  return (await readApproval(g, id)) ?? after;
+  return {
+    ...((await readApproval(g, id)) ?? after),
+    learned,
+    action: action ? { id: action.id, kind: action.kind, status: action.status, result: action.result, ...(action.url ? { url: action.url } : {}), ...(action.simulated ? { simulated: true } : {}) } : null,
+  };
+}
+
+// The card as it stands after the decision (Discord's buttons need no more).
+export async function decideAndNotify(g: GraphHandle, tenant: string, id: string, d: Decision, o: DecideOpts = {}): Promise<ApprovalDto> {
+  const { learned: _learned, action: _action, ...card } = await decide(g, tenant, id, d, o);
+  return card;
 }

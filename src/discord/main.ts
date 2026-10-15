@@ -44,12 +44,13 @@ export async function startDiscordBot(o: { tenant: string; model?: string; log?:
   // The approval hook the API server is given (executors and learning plug in there), so a button press and a web
   // card do the same thing.
   const { productionDeps } = await import("../server/main.js");
-  const { onDecision } = productionDeps({ publicMode: false });
+  const { onDecision, actions } = productionDeps({ publicMode: false });
 
   const bot = new AlleviaBot({
     tenant: o.tenant, guildId, channelId, webBase: cfg.webBaseUrl, graph,
     ask: (input, emit) => ask(input, { ...deps, ...(timeZone ? { timeZone } : {}) }, emit),
     ...(onDecision ? { onDecision } : {}),
+    ...(actions ? { actions } : {}),
     log,
   });
   const { startClient } = await import("./client.js");

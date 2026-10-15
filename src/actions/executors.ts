@@ -7,6 +7,8 @@
 //   pause_ad       simulated: the simulated Campaign's status becomes paused (TRACKED, so a Version keeps "active").
 //                  A real campaign is never touched: the action is skipped and says so.
 //   discord_post   posts to config.discord.channelId; skipped when there is no token.
+// With dryRun, github_issue and discord_post touch nothing outside the graph: the Action records status 'dry_run' and
+// what would have been created. The API and Discord decide cards with dryRun on unless ALLEVIA_ACTIONS_LIVE=1.
 // The outside world (gh, HTTP, the drafting model) is injected. Tests must inject gh and HTTP: the defaults refuse to
 // run under vitest, so a test can never open a real issue or post a real message.
 // Exactly once: the Action id is derived from the Approval id, and an Action already on record is returned as it is.
@@ -36,6 +38,7 @@ export interface ExecutorDeps {
   gh?: GhRunner;
   http?: HttpFn;
   drafter?: Drafter;
+  dryRun?: boolean;           // github_issue and discord_post record what they would do, and do nothing
 }
 
 export interface ExecInput {
@@ -47,7 +50,7 @@ export interface ExecInput {
   now: number;
 }
 
-export type ActionStatus = "done" | "failed" | "skipped";
+export type ActionStatus = "done" | "failed" | "skipped" | "dry_run";
 export interface ActionView {
   id: string; kind: ActionKind; status: ActionStatus; result: string; at: number; url?: string; simulated?: boolean;
   affects: string[]; produced: string[]; rulesApplied?: string[];
@@ -93,6 +96,12 @@ async function githubIssue(g: GraphHandle, input: ExecInput, deps: ExecutorDeps)
   const p = input.payload;
   const body = `${p.body}\n\n---\nProposed by Allevia (${agentName(input.agent)}) and approved by the owner. Approval: ${input.approvalId}.`;
   const create = ["issue", "create", "--repo", repo, "--title", clip(p.title, 240), "--body", body, "--label", ISSUE_LABEL];
+  if (deps.dryRun) {
+    return {
+      status: "dry_run", produced: [],
+      result: `Dry run: would open a GitHub issue on ${repo} titled "${clip(p.title, 160)}" with the label ${ISSUE_LABEL}. Nothing was created; ALLEVIA_ACTIONS_LIVE=1 creates it.`,
+    };
+  }
   let out: string;
   try {
     out = await gh(create);
@@ -193,6 +202,12 @@ async function pauseAd(g: GraphHandle, input: ExecInput): Promise<Outcome> {
 async function discordPost(input: ExecInput, deps: ExecutorDeps): Promise<Outcome> {
   const discord = deps.config?.discord ?? loadConfig().discord;
   const channel = str(input.payload.channelId)?.match(/^\d+$/) ? str(input.payload.channelId)! : discord.channelId;
+  if (deps.dryRun) {
+    return {
+      status: "dry_run", produced: [],
+      result: `Dry run: would post "${clip(input.payload.title, 160)}" to ${channel ? "the Allevia Discord channel" : "Discord (no channel is configured)"}. Nothing was posted; ALLEVIA_ACTIONS_LIVE=1 posts it.`,
+    };
+  }
   if (!discord.token || !channel) return { status: "skipped", result: "Skipped: no Discord bot token or channel is configured.", produced: [] };
   const content = clip(`**${input.payload.title}**\n${input.payload.body}`, 2000);
   const res = await (deps.http ?? defaultHttp)(`https://discord.com/api/v10/channels/${channel}/messages`, {

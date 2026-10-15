@@ -1,5 +1,8 @@
 // Harness for server tests: createApp over a seeded throwaway graph (seedMini plus the AI roster), one registered tenant
 // ("mini") whose graph is that graph, and ask() deps from the real wiring with a scripted FakeRuntime.
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Hono } from "hono";
 import type { AgentEvent } from "../../shared/contracts.js";
 import { ensureRoster } from "../../src/agent/memory.js";
@@ -42,7 +45,10 @@ export const useRuntime = (make: () => AgentRuntime): void => { runtime = make; 
 export const resetRuntime = (): void => { runtime = () => new FakeRuntime(SCRIPTS); };
 
 export async function harness(): Promise<Harness> {
-  const { g, cleanup } = await seededGraph();
+  const { g, cleanup: dropGraph } = await seededGraph();
+  // approved content drafts land here, never in the repo's data/; GitHub and Discord stay dry runs (no ALLEVIA_ACTIONS_LIVE)
+  const dataDir = mkdtempSync(join(tmpdir(), "allevia-api-"));
+  const cleanup = async () => { await dropGraph(); rmSync(dataDir, { recursive: true, force: true }); };
   await ensureRoster(g, { businessId: TENANT.businessId }, SEED_NOW);
   await upsertNode(g, {
     type: "Business", id: TENANT.businessId, name: "Aamdani",
@@ -63,6 +69,8 @@ export async function harness(): Promise<Harness> {
       return { ...deps, now: () => (clock += 60_000) };
     },
     embedQuery: async () => async (t: string) => fakeEmbed(t),
+    actions: { config: { dataDir } },
+    directiveLlm: null,
     heartbeatMs: 0,
     replaySpeed: 0,
     now: () => SEED_NOW + 3_600_000,

@@ -17,6 +17,7 @@ export interface AlleviaConfig {
   opsSsh: { host: string; user: string; keyPath: string; remoteDir: string; via: string };
   githubActionRepo: string;
   publicMode: boolean;
+  actionsLive: boolean; // approved github_issue / discord_post cards really create the issue / post (default: dry run)
   port: number;
   webBaseUrl: string; // where the web app is reached, for links from Discord (default http://127.0.0.1:<port>)
 }
@@ -77,6 +78,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
     },
     githubActionRepo: get("ALLEVIA_ACTION_REPO") ?? "Ankit-Vohra/allevia",
     publicMode: /^(1|true|yes|on)$/i.test(get("ALLEVIA_PUBLIC_MODE") ?? ""),
+    actionsLive: (get("ALLEVIA_ACTIONS_LIVE") ?? "") === "1",
     port,
     webBaseUrl: (get("ALLEVIA_WEB_URL") ?? `http://127.0.0.1:${port}`).replace(/\/+$/, ""),
   };

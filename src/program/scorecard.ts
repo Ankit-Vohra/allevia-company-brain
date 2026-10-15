@@ -80,6 +80,17 @@ export async function getProgram(g: GraphHandle, opts: ProgramOpts = {}): Promis
   };
 }
 
+// Each goal's newest complete period as a reading on the goal, so the morning brief's goal pulse is current. Nothing
+// when the business is not enrolled.
+export async function refreshGoalReadings(g: GraphHandle, o: { now?: number; businessId?: string } = {}): Promise<number> {
+  const now = o.now ?? Date.now();
+  const biz = await findBusiness(g, o.businessId);
+  const program = biz ? await currentProgram(g, biz) : null;
+  if (!biz || !program) return 0;
+  const [b] = await g.roQuery<{ tz: string | null }>("MATCH (b:Business {id:$id}) RETURN b.timeZone AS tz", { id: biz });
+  return (await measureGoals(g, { program: program.id, businessId: biz, today: localDate(now, b?.tz ?? undefined), now })).length;
+}
+
 async function programName(g: GraphHandle, id: string): Promise<string | undefined> {
   return (await g.roQuery<{ n: string }>("MATCH (p:Program {id:$id}) RETURN p.name AS n", { id }))[0]?.n;
 }
