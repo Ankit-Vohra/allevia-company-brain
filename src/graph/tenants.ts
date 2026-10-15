@@ -9,7 +9,13 @@ import { entityId } from "../util/ids.js";
 
 export const META_GRAPH = "allevia_meta";
 
-export interface TenantInput { slug: string; name: string; domain?: string; industry?: string; city?: string }
+// Region and template (product design §2.4) ride along so the API can report in the owner's currency and time zone
+// without opening the tenant's graph.
+export interface TenantInput {
+  slug: string; name: string; domain?: string; industry?: string; city?: string;
+  country?: string; currency?: string; locale?: string; timeZone?: string; templateKey?: string;
+}
+const OPTIONAL = ["domain", "industry", "city", "country", "currency", "locale", "timeZone", "templateKey"] as const;
 export interface Tenant extends TenantInput {
   graph: string;
   businessId: string;
@@ -30,7 +36,7 @@ function toTenant(p: Record<string, unknown>): Tenant {
     slug: String(p.slug), name: String(p.name), graph: String(p.graph), businessId: String(p.businessId),
     ontologyVersion: Number(p.ontologyVersion), createdAt: Number(p.createdAt), updatedAt: Number(p.updatedAt),
   };
-  for (const k of ["domain", "industry", "city"] as const) if (typeof p[k] === "string") t[k] = p[k];
+  for (const k of OPTIONAL) if (typeof p[k] === "string") t[k] = p[k];
   return t;
 }
 
@@ -71,7 +77,7 @@ export async function ensureTenant(input: TenantInput, opts?: TenantOpts): Promi
   const props: Record<string, unknown> = {
     slug: input.slug, name: input.name.trim(), graph, businessId: businessId(input.slug), ontologyVersion: ONTOLOGY_VERSION,
   };
-  for (const k of ["domain", "industry", "city"] as const) if (input[k] !== undefined) props[k] = input[k];
+  for (const k of OPTIONAL) if (input[k] !== undefined) props[k] = input[k];
 
   const meta = await openGraphByName(metaName(opts));
   await ensureIndexes(meta, [{ label: "Tenant", prop: "slug", type: "RANGE" }]);
@@ -84,7 +90,7 @@ export async function ensureTenant(input: TenantInput, opts?: TenantOpts): Promi
 
   const g = await openGraph(input.slug);
   await ensureIndexes(g);
-  const bizProps = Object.fromEntries(Object.entries({ slug: input.slug, domain: input.domain, industry: input.industry, city: input.city })
+  const bizProps = Object.fromEntries([["slug", input.slug], ...OPTIONAL.map((k) => [k, input[k]])]
     .filter(([, v]) => v !== undefined)) as Record<string, Prim>;
   await upsertNode(g, { type: "Business", id: businessId(input.slug), name: input.name.trim(), props: bizProps }, now);
   return (await getTenant(input.slug, opts))!;

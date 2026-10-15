@@ -1,13 +1,17 @@
 // Website onboarding (spec §10 Onboard, product design §2.1 "Reading your business"): paste a URL, watch the graph
 // grow. onboard() checks the URL, ensures the tenant, then runs and streams the stages OnboardEvent defines, in order:
-//   crawl (a `page` event per page) → brand → seo → understand → playbooks → index (embeddings) → done (counts).
+//   crawl (a `page` event per page) → brand → seo → understand → profile (country, currency, locale, time zone,
+//   industry template) → playbooks → goals (Allevia 90 and its goals) → baseline (Day-0 baselines from real data, the
+//   Day-0 checkpoint) → index (embeddings) → capabilities (the ladder) → done (counts).
+// Without a website (`website: false`, or no URL) the website stages, playbooks and index are skipped: that is how a
+// business already in the graph is enrolled in Allevia 90 (`npm run cli -- enroll <tenant>`), with no crawl and no model.
 // Every write is followed by a `nodes` event with what it touched. A failing stage emits an `error` event and the
 // run carries on with what it has; nothing written is rolled back. Re-running is idempotent: ids are deterministic,
 // writes MERGE, extraction and the two LLM questions are cached under data/cache, a fact that stopped being true
 // (an SEO check that now passes, a colour no longer on the site) is closed, not deleted.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { EdgeRef, NodeRef, OnboardEvent } from "../../shared/contracts.js";
+import type { CapabilityState, EdgeRef, NodeRef, OnboardEvent } from "../../shared/contracts.js";
 import { loadConfig } from "../config.js";
 import { openGraph, type GraphHandle } from "../graph/client.js";
 import { SEARCHABLE, typeOfLabels, type EntityType } from "../graph/schema.js";
@@ -23,11 +27,28 @@ import {
   extractPages, findSocials, linksWrite, makeAsk, normalizeUrl, pageDocId, pageId, pageWrite, profileBusiness, profileWrite,
   seoRulesWrite, seoWrite, understandingLinks, websiteChannelWrite, type BrandVoice, type CrawlOptions, type CrawlResult, type PageData,
 } from "../ingest/sources/website/index.js";
+import type { BaselineResult } from "../program/program.js";
+import { baselineStage, capabilitiesStage, goalsStage, profileStage, type GoalsResult, type ProfileResult, type ProgramStageCtx } from "./enroll.js";
+import type { ResolvedRegion } from "./region.js";
 
-export interface OnboardInput { name: string; slug: string; url: string; instagram?: string; industry?: string }
+export interface OnboardInput {
+  name: string;
+  slug: string;
+  url?: string;              // the website; absent (or website: false) skips the website stages
+  website?: boolean;         // false: enrol a business already in the graph, without a crawl
+  domain?: string;           // when there is no URL to take it from
+  instagram?: string;
+  industry?: string;
+  vertical?: string;         // the owner's pick of business type; picks the template like industry does
+  country?: string;
+  currency?: string;
+  locale?: string;
+  timeZone?: string;
+}
 
 export interface OnboardDeps {
-  runner: LlmRunner;                                   // AgentSdkRunner (subscription) in production, a fake in tests
+  runner?: LlmRunner;                                  // AgentSdkRunner (subscription) in production, a fake in tests; only the website stages need it
+  signal?: AbortSignal;                                // the client went away: stop between stages
   model?: string;                                      // default ALLEVIA_EXTRACT_MODEL (haiku)
   dataDir?: string;                                    // default config dataDir (gitignored data/)
   crawl?: (url: string, opts: CrawlOptions) => Promise<CrawlResult>;
@@ -50,6 +71,11 @@ export interface OnboardResult {
   stats: OnboardStats;
   errors: string[];
   reportPath?: string;
+  region?: ResolvedRegion;
+  templateKey?: string;
+  program?: GoalsResult;
+  goals?: BaselineResult[];
+  capabilities?: CapabilityState[];
 }
 
 const MAX_REFS = 400;
@@ -102,20 +128,29 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
   };
 
   // ---------- input and tenant ----------
-  let start: string;
+  const website = input.website !== false && !!input.url?.trim();
+  let start = "";
   try {
     if (!input.name?.trim()) throw new Error("the business needs a name");
-    start = startUrl(input.url, deps.crawlOptions?.allowHosts);
+    if (website) start = startUrl(input.url!, deps.crawlOptions?.allowHosts);
+    else if (input.website !== false) throw new Error("a website address is needed (or website: false to enrol without one)");
+    if (website && !deps.runner) throw new Error("reading a website needs a language model runner");
   } catch (e) {
     fail("input", e);
     return result;
   }
-  const domain = new URL(start).hostname;
+  const domain = website ? new URL(start).hostname : input.domain?.trim() || undefined;
   const name = input.name.trim();
+  const runner = deps.runner!;
+  const stopped = () => {
+    if (!deps.signal?.aborted) return false;
+    if (!errors.some((x) => x.startsWith("stopped:"))) fail("stopped", "the client went away");
+    return true;
+  };
   let g: GraphHandle;
   let businessId: string;
   try {
-    const t = await retrying(() => ensureTenant({ slug: input.slug, name, domain, ...(input.industry ? { industry: input.industry } : {}) }, deps.tenantOpts));
+    const t = await retrying(() => ensureTenant({ slug: input.slug, name, ...(domain ? { domain } : {}), ...(input.industry ? { industry: input.industry } : {}) }, deps.tenantOpts));
     businessId = t.businessId;
     g = await openGraph(input.slug);
   } catch (e) {
@@ -163,10 +198,11 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
   const day = asOf.slice(0, 10);
   const formDoc = entityId("Document", `onboarding form ${input.slug}`);
 
-  // ---------- crawl ----------
-  stage("crawl", `Reading ${domain}`);
   let crawl: CrawlResult | undefined;
   let pages: PageData[] = [];
+  if (website) {
+  // ---------- crawl ----------
+  stage("crawl", `Reading ${domain}`);
   try {
     await write("crawl", {
       nodes: [{ type: "Document", id: formDoc, name: `Onboarding form: ${name}`, asOf,
@@ -198,7 +234,7 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
   }
   const home = pages.find((p) => p.status >= 200 && p.status < 300 && !p.error);
   const homeDoc = home ? pageDocId(home.finalUrl) : undefined;
-  const ask = makeAsk(deps.runner, { model, cacheDir: join(dataDir, "cache", "onboard") });
+  const ask = makeAsk(runner, { model, cacheDir: join(dataDir, "cache", "onboard") });
 
   // ---------- brand ----------
   stage("brand", home ? "Reading colours, fonts, logo and tone" : "Skipped: no page to read");
@@ -265,7 +301,7 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
       const existing = await retrying(() => knownEntities(g));
       const business = { id: businessId, name, ...(input.industry ? { industry: input.industry } : {}) };
       await extractPages(pages, {
-        business, runner: deps.runner, model, cacheDir: join(dataDir, "cache", "extract"), existing, websiteHost: domain,
+        business, runner, model, cacheDir: join(dataDir, "cache", "extract"), existing, websiteHost: domain!,
         maxPages: deps.maxUnderstandPages,
         onDoc: (d) => write("understand", d.write),
         onError: (p, m) => fail("understand", `${new URL(p.finalUrl).pathname}: ${m}`),
@@ -276,8 +312,8 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
     try {
       const profile = await profileBusiness(ask, { name, ...(input.industry ? { industry: input.industry } : {}) }, pages);
       const docs = pages.filter((p) => p === home || /about|contact|story|studio/i.test(new URL(p.finalUrl).pathname)).slice(0, 3).map((p) => pageDocId(p.finalUrl));
-      await write("understand", profileWrite(profile, { businessId, name, domain, docs, asOf }));
-      if (profile.city) await ensureTenant({ slug: input.slug, name, domain, city: profile.city, ...(input.industry ? { industry: input.industry } : {}) }, deps.tenantOpts);
+      await write("understand", profileWrite(profile, { businessId, name, domain: domain!, docs, asOf }));
+      if (profile.city) await ensureTenant({ slug: input.slug, name, domain: domain!, city: profile.city, ...(input.industry ? { industry: input.industry } : {}) }, deps.tenantOpts);
     } catch (e) {
       fail("understand", e);
     }
@@ -295,24 +331,73 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
     }
   }
 
-  // ---------- playbooks ----------
-  stage("playbooks", "Loading SEO, Instagram, ads and writing playbooks for your industry");
-  try {
-    const pb = loadPlaybooks({ tenantSlug: input.slug, ...(input.industry ? { industry: input.industry } : {}) });
-    await write("playbooks", pb.write);
-    for (const s of pb.skipped.slice(0, 5)) log(`[onboard] playbooks skipped ${s.ref}: ${s.reason}`);
-  } catch (e) {
-    fail("playbooks", e);
+  } // website
+
+  // ---------- profile, playbooks, goals, baseline, index, capabilities ----------
+  const ctx: ProgramStageCtx = {
+    g, slug: input.slug, name, businessId, now, write, stage, send, retry: retrying, ...(deps.tenantOpts ? { tenantOpts: deps.tenantOpts } : {}),
+  };
+  let profile: ProfileResult | undefined;
+  if (!stopped()) {
+    try {
+      profile = await profileStage(ctx, {
+        ...Object.fromEntries((["industry", "vertical", "country", "currency", "locale", "timeZone"] as const).filter((k) => input[k]).map((k) => [k, input[k]])),
+        ...(domain ? { domain } : {}),
+      });
+      result.region = profile.region;
+      result.templateKey = profile.template.key;
+      log(`[onboard] profile: ${profile.region.country ?? "country unknown"} (${profile.region.from}); ${[profile.region.currency, profile.region.locale, profile.region.timeZone].filter(Boolean).join(", ")}; template ${profile.template.key}`);
+    } catch (e) {
+      fail("profile", e);
+    }
   }
 
-  // ---------- index ----------
-  stage("index", "Indexing for search (local embeddings)");
-  try {
-    const n = await embedMissing(g, deps.embed ?? embedPassages, now);
-    log(`[onboard] index: ${n.entities} entities and ${n.chunks} chunks embedded`);
-  } catch (e) {
-    fail("index", e);
+  if (website && !stopped()) {
+    stage("playbooks", "Loading SEO, Instagram, ads and writing playbooks for your industry");
+    try {
+      const pb = loadPlaybooks({ tenantSlug: input.slug, ...(input.industry ? { industry: input.industry } : {}) });
+      await write("playbooks", pb.write);
+      for (const s of pb.skipped.slice(0, 5)) log(`[onboard] playbooks skipped ${s.ref}: ${s.reason}`);
+    } catch (e) {
+      fail("playbooks", e);
+    }
   }
+
+  let goals: GoalsResult | undefined;
+  if (profile && !stopped()) {
+    try {
+      goals = await goalsStage(ctx, profile);
+      result.program = goals;
+    } catch (e) {
+      fail("goals", e);
+    }
+  }
+  if (profile && goals && !stopped()) {
+    try {
+      result.goals = await baselineStage(ctx, profile, goals);
+    } catch (e) {
+      fail("baseline", e);
+    }
+  }
+
+  if (website && !stopped()) {
+    stage("index", "Indexing for search (local embeddings)");
+    try {
+      const n = await embedMissing(g, deps.embed ?? embedPassages, now);
+      log(`[onboard] index: ${n.entities} entities and ${n.chunks} chunks embedded`);
+    } catch (e) {
+      fail("index", e);
+    }
+  }
+
+  if (!stopped()) {
+    try {
+      result.capabilities = await capabilitiesStage(ctx);
+    } catch (e) {
+      fail("capabilities", e);
+    }
+  }
+  if (deps.signal?.aborted) return result;
 
   // ---------- done ----------
   try {
@@ -328,13 +413,13 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
     mkdirSync(dir, { recursive: true });
     result.reportPath = join(dir, `${asOf.replace(/[:.]/g, "-")}-onboard.json`);
     writeFileSync(result.reportPath, JSON.stringify({
-      url: start, startedAt: asOf, finishedAt: new Date(now()).toISOString(), model, ...result,
+      url: start || undefined, startedAt: asOf, finishedAt: new Date(now()).toISOString(), model, ...result,
       crawl: crawl ? { origin: crawl.origin, requests: crawl.requests, skipped: crawl.skipped, robots: crawl.robots, sitemapUrls: crawl.sitemapUrls, screenshots: crawl.screenshots } : undefined,
     }, null, 1));
   } catch (e) {
     log(`[onboard] run report not written: ${msg(e)}`);
   }
-  stage("done", `${result.counts.pagesCrawled} pages read; ${Object.entries(result.counts).filter(([k]) => /^[A-Z]/.test(k)).reduce((n, [, v]) => n + v, 0)} nodes in the graph`);
+  stage("done", `${website ? `${result.counts.pagesCrawled} pages read; ` : ""}${Object.entries(result.counts).filter(([k]) => /^[A-Z]/.test(k)).reduce((n, [, v]) => n + v, 0)} nodes in the graph`);
   send({ type: "done", tenant: input.slug, counts: result.counts });
   return result;
 }
