@@ -41,6 +41,20 @@ describe("the shipped skill packs", () => {
     }
   });
 
+  it("every person on the team has skills of their own: three to six", () => {
+    for (const a of AGENTS) {
+      const mine = catalog.forAgent(a.id);
+      expect(mine.length, `${a.name} has ${mine.length} skills`).toBeGreaterThanOrEqual(3);
+      expect(mine.length, `${a.name} has ${mine.length} skills`).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it("a shared skill belongs to people who all have its tools, and is listed for each of them", () => {
+    for (const s of packs.skills.filter((x) => basename(dirname(dirname(x.path!))) === SHARED)) {
+      for (const a of s.agents) expect(catalog.forAgent(a).map((x) => x.id), `${a} should list ${s.id}`).toContain(s.id);
+    }
+  });
+
   it("everyone who makes something owner-visible says what, and the ones that make nothing say so", () => {
     for (const s of packs.skills) {
       if (s.output === "creates") expect(s.makes, s.id).toBeTruthy();
