@@ -26,9 +26,9 @@ export class HiggsfieldTextEngine implements CreativeEngine {
   readonly name = "higgsfield";
   spent = 0;
   readonly log: SpendLine[] = [];
-  constructor(private o: { cap: number; model?: string; resolution?: string }) {}
+  constructor(private o: { cap: number; model?: string; resolution?: string; quality?: string }) {}
   private get model(): string { return this.o.model ?? "nano_banana_2_1"; }
-  private params(req: ImageRequest): string[] { return [this.model, "--prompt", req.prompt.replace(/^-+/, ""), "--aspect_ratio", req.aspect, "--resolution", this.o.resolution ?? "1k"]; }
+  private params(req: ImageRequest): string[] { return [this.model, "--prompt", req.prompt.replace(/^-+/, ""), "--aspect_ratio", req.aspect, "--resolution", this.o.resolution ?? "1k", ...(this.o.quality ? ["--quality", this.o.quality] : [])]; }
 
   async status(): Promise<EngineStatus> {
     const r = await run(["--json", "account", "status"], 25_000);

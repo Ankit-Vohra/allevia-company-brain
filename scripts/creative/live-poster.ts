@@ -23,7 +23,7 @@ import { CachedVision, ClaudeVision } from "../../src/studio/vision.js";
 import { HiggsfieldTextEngine } from "./hf-text-engine.js";
 
 const { values: a } = parseArgs({ options: {
-  tenant: { type: "string" }, site: { type: "string" }, out: { type: "string" }, cap: { type: "string" }, ask: { type: "string", multiple: true }, data: { type: "string" },
+  tenant: { type: "string" }, site: { type: "string" }, out: { type: "string" }, cap: { type: "string" }, ask: { type: "string", multiple: true }, data: { type: "string" }, model: { type: "string" }, quality: { type: "string" },
 } });
 if (!a.tenant || !a.site || !a.out || !a.ask?.length) throw new Error("usage: --tenant slug --site url --out dir --ask sentence [--ask ...] [--cap 10]");
 const tenant = a.tenant;
@@ -38,7 +38,7 @@ console.log("copy:", redis("GRAPH.COPY", `allevia_${tenant}`, copy));
 const g = await openGraphByName(copy);
 const store = new AssetStore(dataDir);
 const vision = new CachedVision(new ClaudeVision(), join(dataDir, "cache", "vision"));
-const engine = new HiggsfieldTextEngine({ cap: Number(a.cap ?? 10) });
+const engine = new HiggsfieldTextEngine({ cap: Number(a.cap ?? 10), ...(a.model ? { model: a.model } : {}), ...(a.quality ? { quality: a.quality } : {}) });
 const now = Date.now();
 const biz = businessId(tenant);
 
@@ -80,7 +80,7 @@ for (const [i, question] of a.ask.entries()) {
     writeFileSync(join(out, name), await sharp(f.data).jpeg({ quality: 86 }).toBuffer());
     files.push(name);
   }
-  report.push({ question, seconds: Math.round(secs), ok: res.ok, answer: res.answer, plan: events.find((e) => e.type === "plan"), made: made.map((d) => ({ kind: d.kind, title: d.title, notes: d.notes, options: d.options.map((o) => ({ label: o.label, badge: o.badge, note: o.note, layout: o.layout, aiEdited: o.aiEdited })) })), files, checks: res.checks });
+  report.push({ question, seconds: Math.round(secs), ok: res.ok, answer: res.answer, plan: events.find((e) => e.type === "plan"), made: made.map((d) => ({ kind: d.kind, title: d.title, notes: d.notes, options: d.options.map((o) => ({ label: o.label, badge: o.badge, note: o.note, layout: o.layout, aiEdited: o.aiEdited })) })), files, checks: res.checks, questions: events.filter((e) => e.type === "quick_replies") });
   console.log(`\n=== ${question}\n${secs.toFixed(1)} s, ok ${res.ok}\n${res.answer}\nfiles: ${files.join(", ")}`);
 }
 writeFileSync(join(out, "run.json"), JSON.stringify({ at: new Date(now).toISOString(), tenant, brand, report, spend: engine.log, creditsSpent: engine.spent }, null, 1));

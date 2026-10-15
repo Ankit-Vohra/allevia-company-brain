@@ -238,6 +238,15 @@ async function placeLogo(c: Ctx, base: Buffer, spot: LogoSpot): Promise<{ overla
     if (!fit.ok) throw new PosterTextDoesNotFit("name", text);
     const dx = spot.align === "center" ? spot.x : spot.align === "right" ? spot.x : spot.x;
     const drawn = drawText(fit.layout, { font: f, size: fit.size, color, letterSpacing: 0.01, align: spot.align ?? "left" }, dx, spot.y + (spot.h - fit.layout.height) / 2, spot.w);
+    // a busy backdrop (a photo with detail behind the name) or too little contrast: the name sits on a plate in the other colour
+    const busy = Math.max(region.channels[0]!.stdev, region.channels[1]!.stdev, region.channels[2]!.stdev) > 38;
+    if (busy || contrast(color, bg) < 4.5) {
+      const pad = round(fit.size * 0.35);
+      const plate = color === p.light ? p.dark : p.paper;
+      const b = drawn.box;
+      c.over += `<rect x="${(b.x - pad).toFixed(1)}" y="${(b.y - pad * 0.8).toFixed(1)}" width="${(b.w + 2 * pad).toFixed(1)}" height="${(b.h + pad * 1.6).toFixed(1)}" rx="${round(pad * 0.6)}" fill="${plate}" fill-opacity="0.88"/>` + drawn.svg;
+      return { overlays: [], info: { kind: "wordmark", box: { x: b.x - pad, y: b.y - pad * 0.8, w: b.w + 2 * pad, h: b.h + pad * 1.6 }, plate: true, plateColor: plate, scale: 1, sourceW: 0, soft: false } };
+    }
     c.over += drawn.svg;
     return { overlays: [], info: { kind: "wordmark", box: drawn.box, plate: false, scale: 1, sourceW: 0, soft: false } };
   }
