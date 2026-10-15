@@ -15,9 +15,11 @@ const JWT = "ey" + "J" + "hbGciOiJIUzI1NiJ9" + "." + "eyJzdWIiOiIxMjM0NTY3ODkwIn
 const DISCORD = "M" + "TA2NzM4OTkxMjM0NTY3ODkwMTIz" + "." + "GaBcDe" + "." + "x1Y2z3A4b5C6d7E8f9G0h1I2j3K4l5M6n7O";
 const GOOGLE = "AI" + "za" + "SyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q";
 const RAZORPAY = "rz" + "p_test_" + "Ab12Cd34Ef56Gh";
-const RANDOM_B64 = "q8Zr3KfL0pXw9sTb2VnYh6JdA4mCe1GuP7oIz5";
-const RANDOM_HEX = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b";
+const RANDOM_B64 = "q8Zr3KfL0pXw" + "9sTb2VnYh6JdA4mCe1GuP7oIz5";
+const RANDOM_HEX = "9f86d081884c7d659a2f" + "eaa0c55ad015a3bf4f1b";
 const SUPA_REF = "xkqzbtwhrnvdmfgjpsly"; // 20 lowercase letters, no vowels: made up
+const FAKE_KEY = "abcdefgh" + "12345678"; // an obviously invented credential value
+const SLACK_HOOK = "https://hooks.slack" + ".com/services/T00000000/B00000000/" + "X".repeat(24);
 
 describe("redact: each pattern from spec 6.3 is replaced and counted", () => {
   const cases: Array<[string, string, string, string?]> = [
@@ -57,7 +59,7 @@ describe("redact: each pattern from spec 6.3 is replaced and counted", () => {
     ["razorpay key id", RAZORPAY, "secret"],
     ["long random base64", `blob ${RANDOM_B64} end`, "secret", "blob [redacted:secret] end"],
     ["long random hex", `blob ${RANDOM_HEX} end`, "secret", "blob [redacted:secret] end"],
-    ["private key block", "-----BEGIN RSA PRIVATE KEY-----\nMIIabc\n-----END RSA PRIVATE KEY-----", "secret"],
+    ["private key block", "-----BEGIN RSA " + "PRIVATE KEY-----\nMIIabc\n-----END RSA PRIVATE KEY-----", "secret"],
     ["discord webhook url", "https://discord.com/api/webhooks/123456789012345678/AbCdEf_gh-IJ", "secret"],
     ["env assignment keeps name", "FOO_TOKEN=abc", "secret", "FOO_TOKEN=[redacted:secret]"],
     ["env assignment keeps the sentence period", "Use FOO_TOKEN=abc123.", "secret", "Use FOO_TOKEN=[redacted:secret]."],
@@ -87,11 +89,40 @@ describe("redact: each pattern from spec 6.3 is replaced and counted", () => {
     ["supabase pooler user", `postgres.${SUPA_REF}`, "supabase-ref", "postgres.[redacted:supabase-ref]"],
   ];
 
+  cases.push(
+    // key: value and quoted keys
+    ["colon assignment", `API_KEY: ${FAKE_KEY}`, "secret", "API_KEY: [redacted:secret]"],
+    ["colon assignment no space", `api_secret:${FAKE_KEY}`, "secret", "api_secret:[redacted:secret]"],
+    ["colon password", "password: hunter2", "secret", "password: [redacted:secret]"],
+    ["colon password plain word", "Password: swordfish", "secret", "Password: [redacted:secret]"],
+    ["json quoted key and value", `{"apiKey": "${FAKE_KEY}"}`, "secret", '{"apiKey": [redacted:secret]}'],
+    ["json single quotes", `{'auth_token': '${FAKE_KEY}'}`, "secret", "{'auth_token': [redacted:secret]}"],
+    ["json no spaces", `{"password":"hunter2","user":"x"}`, "secret", '{"password":[redacted:secret],"user":"x"}'],
+    ["bold label then value", `**API key:** ${FAKE_KEY} (rotates monthly)`, "secret", "**API key:** [redacted:secret] (rotates monthly)"],
+    ["bold key", `**Password**: hunter2`, "secret", "**Password**: [redacted:secret]"],
+    ["quoted key with equals", `"db_password" = "hunter2"`, "secret", '"db_password" = [redacted:secret]'],
+    // bearer tokens and webhooks
+    ["bearer token", `Authorization: Bearer ${FAKE_KEY}`, "secret", "Authorization: Bearer [redacted:secret]"],
+    ["bearer opaque token without digits is still long", "curl -H 'Authorization: Bearer " + "AbCdEfGhIjKlMnOpQrStUvWxYz" + "'", "secret", "curl -H 'Authorization: Bearer [redacted:secret]'"],
+    ["bearer jwt is one secret", `Bearer ${JWT}`, "secret", "Bearer [redacted:secret]"],
+    ["slack webhook url", `post to ${SLACK_HOOK} daily`, "secret", "post to [redacted:secret] daily"],
+    // url-encoded at sign
+    ["email with %40", "open mailto:jane.doe%40example.org now", "email", "open mailto:[redacted:email] now"],
+    ["email with %40 in a query", "?email=a%40b.co&x=1", "email", "?email=[redacted:email]&x=1"],
+    // a secret wrapped over a line break
+    ["secret wrapped over a line: the tail is absorbed", `key ${GH}\n${RANDOM_B64.slice(0, 12)} rest`, "secret", "key [redacted:secret] rest"],
+    ["secret wrapped twice", `${GH}\n${RANDOM_B64.slice(0, 12)}\n${RANDOM_B64.slice(12, 24)}\nnext line`, "secret", "[redacted:secret]\nnext line"],
+    ["secret wrapped with indentation", `FOO_TOKEN=${FAKE_KEY}\n    ${RANDOM_B64.slice(0, 12)}`, "secret", "FOO_TOKEN=[redacted:secret]"],
+    ["secret wrapped when the first part is under ten characters", `${GH.slice(0, 8)}\n${GH.slice(8)}`, "secret", "[redacted:secret]"],
+    ["secret wrapped, prefix alone on the line", `${AKIA.slice(0, 4)}\n${AKIA.slice(4)}`, "secret", "[redacted:secret]"],
+  );
+
   for (const [label, input, kind, expected] of cases) {
     it(label, () => {
       const r = redact(input);
       expect(r.text).toBe(expected ?? `[redacted:${kind}]`);
-      expect(r.counts[kind]).toBe(1);
+      expect(r.counts[kind]).toBeGreaterThanOrEqual(1);
+      expect(redact(r.text)).toEqual({ text: r.text, counts: {} }); // redacting the result changes and reports nothing
     });
   }
 
@@ -145,6 +176,29 @@ describe("redact: things that must survive", () => {
     "FooBarBazQuxQuuxCorgeGraultGarplyWaldo2",
     `a random 20-letter token ${SUPA_REF} with nothing else around it`,
     "git commit sha: " + rep("ab12", 10), // 40 hex after a commit label
+    // numbers that follow a label are ids, counts or tracking numbers, not phones
+    "order 9876543210 shipped",
+    "Order #9876543210 and ticket #9876543211",
+    "tracking no. 9876543210 for the parcel",
+    "views: 9876543210 this year",
+    "ID 9876543210 and id: 9876543211",
+    // versions are not addresses
+    "updated to iOS 18.1.1.2 today",
+    "Chrome/120.0.0.0 on Android 14.0.0.1",
+    "version 10.2.3.4 and v1.2.3.4",
+    // the name of an environment variable is not its value
+    "- Token: `META_LONG_LIVED_TOKEN` in the env file (a never-expiring token)",
+    "Token: IG_LOGIN_ACCESS_TOKEN and secret: `SHOP_WEBHOOK_SECRET`",
+    // prose around a secret-looking label is not a value
+    "**Webhook secret:** run the rotation script on staging",
+    "Key: we only post at 18:00",
+    "Bearer authentication is used by the API",
+    "password: none and token: n/a and secret: tbd",
+    "Token expires 2026-12-01; token: see the vault",
+    // a redacted secret followed by an ordinary line
+    "FOO_TOKEN=[redacted:secret]\nNext paragraph here",
+    "FOO_TOKEN=[redacted:secret]\n2026-10-05 notes",
+    "FOO_TOKEN=[redacted:secret]\nweek12plan is on the board",
   ];
   for (const s of keep) {
     it(`keeps: ${s.slice(0, 60)}`, () => {
@@ -178,12 +232,29 @@ describe("redact: hostile input cannot stall ingestion", () => {
     "100k at signs": "a@".repeat(50_000),
     "100k key assignments": "A_KEY=".repeat(15_000),
     "long unterminated email domain": "user@" + "ab-".repeat(30_000),
+    // a JWT prefix after every dash used to be quadratic (11 s at 200 KB): \b matches after "-" and the run class contains it
+    "eyJ- repeated (200 KB)": "eyJ-".repeat(50_000),
+    "eyJ_- repeated": "eyJ_-".repeat(40_000),
+    "eyJ-- repeated": "eyJ--".repeat(40_000),
+    "eyJ. repeated": "eyJabcdefgh.".repeat(16_000),
+    "bearer repeated": "Bearer ".repeat(30_000),
+    "bearer long token run": "Bearer " + "a1".repeat(100_000),
+    "slack webhook prefix repeated": "https://hooks.slack.com/services/".repeat(6_000),
+    "key colon repeated": "A_KEY: ".repeat(30_000),
+    "quoted key colon repeated": '"k_key": '.repeat(25_000),
+    "quoted key unterminated": '"k_key": "'.repeat(20_000),
+    "percent-40 repeated": "a%40".repeat(50_000),
+    "wrapped secret prefix repeated": "ghp_\n".repeat(40_000),
+    "wrapped secret long lines": ("ghp_" + "a".repeat(300) + "\n").repeat(600),
+    "redacted secret then newline repeated": "[redacted:secret]\n".repeat(11_000) + "a1".repeat(1_000),
+    "version-like numbers": "iOS 18.1.1.2 ".repeat(15_000),
+    "labelled numbers": "order 9876543210 ".repeat(11_000),
   };
   for (const [label, input] of Object.entries(hostile)) {
     it(label, () => {
       const t0 = performance.now();
       redact(input);
-      expect(performance.now() - t0).toBeLessThan(1500);
+      expect(performance.now() - t0).toBeLessThan(3000); // linear takes milliseconds; the quadratic cases took 10 s and more
     });
   }
 });

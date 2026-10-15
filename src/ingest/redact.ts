@@ -8,6 +8,9 @@
 // - Context rules (D-U-N-S, Team ID, Supabase refs, "NAME=value") keep their label and redact only the value.
 // - When unsure we prefer to redact: a lost word costs little, a leaked key costs a lot. The negative tests in
 //   tests/ingest/redact.test.ts pin down what must NOT be touched (dates, counts, versions, money, issue refs, URLs).
+// - Every rule must stay linear on hostile input. Two habits keep it so: quantifiers are bounded, and a rule whose run
+//   class contains "-", "." or "/" starts at a lookbehind like (?<![A-Za-z0-9_-]), never at \b (\b also matches after
+//   each "-", so "eyJ-eyJ-eyJ-…" restarted a full scan at every dash). tests/ingest/redact.test.ts probes each rule.
 
 export const REDACTION_KINDS = [
   "ipv4", "aws-id", "email", "phone", "secret", "url-credentials", "secret-path", "cin", "duns", "apple-team-id", "supabase-ref",
@@ -51,6 +54,8 @@ const privateKeyBlock = simple("secret",
 const urlCredentials = simple("url-credentials", /\b[a-z][a-z0-9+.-]{1,20}:\/\/[^\s:@/?#]{1,100}:[^\s@/]{0,200}@[^\s<>"'`)\]]*/gi);
 
 const discordWebhook = simple("secret", /https?:\/\/(?:[\w-]+\.)?discord(?:app)?\.com\/api\/(?:v\d+\/)?webhooks\/\d+\/[\w-]+/gi);
+// The URL is the credential: anyone who has it can post to the channel.
+const slackWebhook = simple("secret", /https?:\/\/hooks\.slack\.com\/(?:services|workflows|triggers)\/[\w/-]{1,200}/gi);
 
 // Quantifiers here are bounded and greedy runs start at a token boundary, so hostile input (a 200 KB "word", a
 // million slashes) cannot make the engine backtrack quadratically.
@@ -67,8 +72,9 @@ const secretPaths: Rule[] = [
 
 const FILE_TLDS = new Set(["png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "css", "js", "ts", "tsx", "json", "md", "yaml", "yml"]);
 // A service-account address cut off before its TLD ("search-sync@demo-project.") still names the cloud project.
-const truncatedEmail = simple("email", /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@[A-Za-z][A-Za-z0-9]{0,30}(?:-[A-Za-z0-9]{1,30}){1,6}\.(?![A-Za-z0-9])/g);
-const email = simple("email", /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9-]{1,63}\.){1,10}[A-Za-z]{2,24}\b/g,
+// "@" may arrive URL-encoded (?email=a%40b.co, mailto: links).
+const truncatedEmail = simple("email", /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}(?:@|%40)[A-Za-z][A-Za-z0-9]{0,30}(?:-[A-Za-z0-9]{1,30}){1,6}\.(?![A-Za-z0-9])/g);
+const email = simple("email", /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}(?:@|%40)(?:[A-Za-z0-9-]{1,63}\.){1,10}[A-Za-z]{2,24}\b/g,
   (m) => FILE_TLDS.has(m.slice(m.lastIndexOf(".") + 1).toLowerCase())); // icon@2x.png is a retina image, not a mailbox
 
 const awsIds: Rule[] = [
@@ -80,7 +86,7 @@ const awsIds: Rule[] = [
 ];
 
 // Credential shapes. Anchored on distinctive prefixes, so ordinary words are safe.
-const secretShapes: Rule[] = [
+const SECRET_SHAPES: RegExp[] = [
   /\bgh[pousr]_[A-Za-z0-9]{10,}\b/g,
   /\bgithub_pat_[A-Za-z0-9_]{10,}\b/g,
   /\bsk-[A-Za-z0-9_-]{8,}/g,
@@ -89,8 +95,8 @@ const secretShapes: Rule[] = [
   /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g,
   /\bxox[abprs]-[A-Za-z0-9-]{10,}/g,
   /\bxapp-[A-Za-z0-9-]{10,}/g,
-  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*/g,
-  /\beyJ[A-Za-z0-9_-]{30,}/g,
+  /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*/g, // lookbehind, not \b: see the header
+  /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{30,}/g,
   /\b[MNO][A-Za-z0-9_-]{23,27}\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,40}\b/g, // Discord bot token: id.timestamp.hmac
   /\bAIza[0-9A-Za-z_-]{35}\b/g,
   /\bsbp_[A-Za-z0-9]{20,}\b/g,
@@ -99,21 +105,62 @@ const secretShapes: Rule[] = [
   /\bhf_[A-Za-z0-9]{30,}\b/g,
   /\bnpm_[A-Za-z0-9]{30,}\b/g,
   /\bya29\.[A-Za-z0-9_-]{20,}/g,
-].map((re) => simple("secret", re));
+];
+const secretShapes: Rule[] = SECRET_SHAPES.map((re) => simple("secret", re));
 
-// NAME=value where NAME says it is a secret (FOO_TOKEN, db_password, authToken). Keeps the name, redacts the value.
-const SECRET_NAME = /(?:KEY|TOKEN|SECRET|PASSWORD|PASS|PWD)$|(?:^|_)(?:key|token|secret|password|pass|pwd)$|[a-z0-9](?:Key|Token|Secret|Password|Pass|Pwd)$/;
+// A credential that a hard-wrapped line broke in two ("ghp_a1B2\nc3D4…"). When the part before the break is too short
+// for its shape (under ten characters) nothing above would match it, so: a shape prefix at a token start, up to three
+// continuation lines, and the joined text must be a complete credential while the first part alone is not. If the first
+// part is already complete it is redacted by its own rule and absorbTail takes care of what follows.
+const SHAPE_PREFIX = "(?:gh[pousr]_|github_pat_|sk-|[sr]k_(?:live|test)_|rzp_(?:live|test)_|AKIA|ASIA|xox[abprs]-|xapp-|eyJ|AIza|sbp_|sb_(?:secret|publishable)_|EAA|hf_|npm_|ya29\\.)";
+const WRAPPED = new RegExp(`(?<![A-Za-z0-9_-])${SHAPE_PREFIX}[A-Za-z0-9_.-]{0,60}(?:[ \\t]*\\r?\\n[ \\t]*[A-Za-z0-9_.-]{1,200}){1,3}(?![A-Za-z0-9_.-])`, "g");
+const WHOLE_SHAPES = SECRET_SHAPES.map((re) => new RegExp(`^(?:${re.source})$`));
+const isShape = (t: string): boolean => WHOLE_SHAPES.some((re) => re.test(t));
+const wrappedSecret: Rule = (text, report) =>
+  text.replace(WRAPPED, (m: string) => {
+    const parts = m.split(/[ \t]*\r?\n[ \t]*/);
+    if (isShape(parts[0]!) || !isShape(parts.join(""))) return m;
+    report("secret", m);
+    return ph("secret");
+  });
+
+// "Authorization: Bearer <token>". Prose such as "Bearer authentication" is left alone: the value needs a digit, or to be
+// a long mixed-case run.
+const tokenShaped = (v: string): boolean => v.length >= 8 && (/\d/.test(v) || (v.length >= 20 && /[a-z]/.test(v) && /[A-Z]/.test(v)));
+const bearer: Rule = (text, report) =>
+  text.replace(/\b(Bearer[ \t]+)([A-Za-z0-9._~+/=-]{8,})/gi, (m: string, label: string, value: string) => {
+    if (!tokenShaped(value)) return m;
+    report("secret", value);
+    return `${label}${ph("secret")}`;
+  });
+
+// NAME=value, NAME: value, "name": "value" where NAME says it is a secret (FOO_TOKEN, db_password, authToken, password).
+// Keeps the name, redacts the value. The key may be quoted and wrapped in bold; `:` may be followed by a closing `**`.
+// `=` takes any bare value. `:` is ordinary prose far more often ("Key: we only post at 18:00", "**Webhook secret:** run
+// the script"), so after a colon a bare value must start with a letter or digit, must not be a filler word, and for the
+// weak names (a bare key/pass) must contain a digit. Quoted values always count, except an ALL_CAPS_SNAKE word, which is
+// the name of an environment variable ("Token: `IG_ACCESS_TOKEN` in the env file"), not a value.
+const SECRET_NAME = /(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|PWD)$|(?:^|_)(?:key|token|secret|password|passwd|pass|pwd)$|[a-z0-9](?:Key|Token|Secret|Password|Passwd|Pass|Pwd)$/;
+const BARE_NAME = /^(?:key|token|secret|password|passwd|pass|pwd)$/i; // "Password: …" and "KEY=…" in any case; "bypass" and "monkey" are not names
+const WEAK_NAME = /^(?:key|pass)$/i;
+const ENV_VAR_NAME = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
+const FILLER = /^(?:none|n\/?a|na|tbd|todo|unknown|empty|blank|the|an?|is|are|in|on|at|to|run|see|use|set|via|from|same|stored|kept|lives|expires|rotate|rotated|never|not|needed|required|yes|no)$/i;
 const PLACEHOLDER_VALUE = /^(?:\*+|[xX]+|\.{2,}|…|<[^<>]*>|\[[^[\]]*\]|\{[^{}]*\})$/; // KEY=***, KEY=<token>, KEY=[YOUR-KEY]
 const envAssignment: Rule = (text, report) =>
-  text.replace(/\b([A-Za-z][A-Za-z0-9_]*)([ \t]*=[ \t]*)("[^"\n]*"|'[^'\n]*'|`[^`\n]*`|[^\s,;)"'`&]+)/g,
-    (m: string, name: string, eq: string, value: string) => {
-      if (!SECRET_NAME.test(name)) return m;
+  text.replace(/(?<![A-Za-z0-9_])(["']?)([A-Za-z][A-Za-z0-9_]*)\1((?:\*\*|__)?[ \t]*)(:|=)((?:\*\*|__)?[ \t]*)("[^"\n]*"|'[^'\n]*'|`[^`\n]*`|[^\s,;)"'`&]+)/g,
+    (m: string, q: string, name: string, _pre: string, sep: string, gap: string, value: string) => {
+      if (!SECRET_NAME.test(name) && !BARE_NAME.test(name)) return m;
       const quoted = /^["'`]/.test(value);
       const tail = quoted ? "" : /[.,:;!?]+$/.exec(value)?.[0] ?? ""; // sentence punctuation after an unquoted value stays
       const inner = quoted ? value.slice(1, -1) : value.slice(0, value.length - tail.length);
-      if (inner === "" || inner.startsWith("$") || inner.startsWith(PLACEHOLDER_START) || PLACEHOLDER_VALUE.test(inner)) return m; // empty, a shell reference, already redacted, or a doc placeholder
+      if (inner === "" || inner.startsWith("$") || inner.startsWith("<") || inner.startsWith(PLACEHOLDER_START) || PLACEHOLDER_VALUE.test(inner)) return m; // empty, a shell reference, already redacted, or a doc placeholder
+      if (sep === ":" && ENV_VAR_NAME.test(inner)) return m;
+      if (sep === ":" && !quoted) {
+        if (!/^[A-Za-z0-9]/.test(inner) || FILLER.test(inner)) return m;
+        if (WEAK_NAME.test(name) && !(inner.length >= 6 && /\d/.test(inner))) return m;
+      }
       report("secret", inner);
-      return `${name}${eq}${ph("secret")}${tail}`;
+      return m.slice(0, m.length - value.length) + ph("secret") + tail;
     });
 
 const cin = simple("cin", /\b[LU]\d{5}[A-Z]{2}\d{4}[A-Z]{3}\d{6}\b/g);
@@ -149,14 +196,20 @@ const supabaseRefs: Rule[] = [
   }),
 ];
 
+// A version number often has the shape of an address: "iOS 18.1.1.2", "Chrome/120.0.0.0", "version 10.2.3.4".
+const VERSION_LABEL = /(?:\b(?:i?os|ipados|tvos|watchos|macos|android|version|ver|build|release|rev|node|python|java|chrome|chromium|safari|firefox|edge|opera|webkit|mozilla|api|sdk)\b[ \t.:=/-]{0,3}|\bv)$/i;
 const ipv4 = simple("ipv4",
-  /(?<![\w.])(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?!\d|\.\d)/g);
+  /(?<![\w.])(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?!\d|\.\d)/g,
+  (_m, offset, whole) => VERSION_LABEL.test(whole.slice(Math.max(0, offset - 16), offset)));
 
 // Phones: any "+CC …" number with 8-15 digits, and Indian mobiles (10 digits starting 6-9, optional 0 / 91 prefix).
 // Dates, counts, versions, money and ids never look like either.
+// A bare ten-digit number right after a label is an order, ticket or tracking number, a view count or an id: not a phone.
+const NUMBER_LABEL = /(?:\b(?:orders?|ids?|ref|tracking|track|awb|views?|invoice|ticket|case|uid)\b|#)[ \t:#.-]{0,4}(?:(?:no|num|number)\b[ \t:#.-]{0,4})?$/i;
 const phones: Rule[] = [
   simple("phone", /(?<![\w+])\+\d{1,3}(?:[ \t().-]*\d){7,14}\b/g),
-  simple("phone", /(?<![\w.+-])(?:0|91[ -]?)?[6-9]\d{4}[ -]?\d{5}(?![\w-]|\.\d)/g),
+  simple("phone", /(?<![\w.+-])(?:0|91[ -]?)?[6-9]\d{4}[ -]?\d{5}(?![\w-]|\.\d)/g,
+    (_m, offset, whole) => NUMBER_LABEL.test(whole.slice(Math.max(0, offset - 24), offset))),
 ];
 
 // Long random-looking tokens (>= 32 chars): API keys and secrets in shapes no specific rule knows. Slugs, paths, UUIDs,
@@ -195,9 +248,25 @@ const longRandom: Rule = (text, report) =>
     return ph("secret");
   });
 
+// What a hard-wrapped line leaves behind: "[redacted:secret]" then a newline and the rest of the credential. A random-looking
+// run (eight or more characters, a letter and a digit, and either mixed case or hex only) at the start of the next line
+// goes with it, up to three lines. Ordinary next lines survive: words, dates, plain numbers, "week12plan".
+const randomTail = (t: string): boolean =>
+  /\d/.test(t) && /[A-Za-z]/.test(t) && ((/[a-z]/.test(t) && /[A-Z]/.test(t)) || /^[0-9a-f]+$/i.test(t));
+const TAIL = /(\[redacted:secret\])[ \t]*\r?\n[ \t]*([A-Za-z0-9_+/=-]{8,})(?![A-Za-z0-9_+/=-])/;
+const absorbTail: Rule = (text) => {
+  let out = text;
+  for (let i = 0; i < 3; i++) {
+    const next = out.replace(new RegExp(TAIL.source, "g"), (m: string, label: string, tok: string) => (randomTail(tok) ? label : m));
+    if (next === out) break;
+    out = next;
+  }
+  return out;
+};
+
 const RULES: Rule[] = [
-  privateKeyBlock, urlCredentials, discordWebhook, ...secretPaths, email, truncatedEmail, ...awsIds, ...secretShapes, envAssignment,
-  cin, duns, appleTeamId, ...supabaseRefs, ipv4, ...phones, longRandom,
+  privateKeyBlock, urlCredentials, discordWebhook, slackWebhook, ...secretPaths, email, truncatedEmail, ...awsIds, wrappedSecret, ...secretShapes,
+  bearer, envAssignment, cin, duns, appleTeamId, ...supabaseRefs, ipv4, ...phones, longRandom, absorbTail,
 ];
 
 function run(text: string): { text: string; hits: Hit[] } {
