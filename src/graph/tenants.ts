@@ -17,6 +17,7 @@ export interface TenantInput {
 }
 const OPTIONAL = ["domain", "industry", "city", "country", "currency", "locale", "timeZone", "templateKey"] as const;
 export interface Tenant extends TenantInput {
+  demo?: boolean;   // a public demo business: with ALLEVIA_AUTH=1 its read-only pages open without an owner link (setDemo)
   graph: string;
   businessId: string;
   ontologyVersion: number;
@@ -29,7 +30,9 @@ export interface TenantOpts { metaGraph?: string }
 // "business:avs-atelier"). The graph name keeps the underscore: allevia_avs_atelier.
 export const businessId = (slug: string): string => entityId("Business", slug);
 
-const metaName = (opts?: TenantOpts) => opts?.metaGraph ?? process.env.ALLEVIA_META_GRAPH ?? META_GRAPH;
+// The registry graph this call uses (tests point it at a throwaway one). Exported for the token store, which keeps its
+// records in the same graph.
+export const metaName = (opts?: TenantOpts): string => opts?.metaGraph ?? process.env.ALLEVIA_META_GRAPH ?? META_GRAPH;
 
 function toTenant(p: Record<string, unknown>): Tenant {
   const t: Tenant = {
@@ -37,6 +40,7 @@ function toTenant(p: Record<string, unknown>): Tenant {
     ontologyVersion: Number(p.ontologyVersion), createdAt: Number(p.createdAt), updatedAt: Number(p.updatedAt),
   };
   for (const k of OPTIONAL) if (typeof p[k] === "string") t[k] = p[k];
+  if (p.demo === true) t.demo = true;
   return t;
 }
 
@@ -94,4 +98,13 @@ export async function ensureTenant(input: TenantInput, opts?: TenantOpts): Promi
     .filter(([, v]) => v !== undefined)) as Record<string, Prim>;
   await upsertNode(g, { type: "Business", id: businessId(input.slug), name: input.name.trim(), props: bizProps }, now);
   return (await getTenant(input.slug, opts))!;
+}
+
+// Marks (or unmarks) a registered business as a public demo. Only a demo business is readable without an owner link when
+// ALLEVIA_AUTH=1, and then only read-only. A business that is not registered cannot be marked. Returns whether it exists.
+export async function setDemo(slug: string, demo: boolean, opts?: TenantOpts): Promise<boolean> {
+  if (!(await getTenant(slug, opts))) return false;
+  const meta = await openGraphByName(metaName(opts));
+  await meta.query("MATCH (t:Tenant {slug:$slug}) SET t.demo = $demo", { slug, demo });
+  return true;
 }
