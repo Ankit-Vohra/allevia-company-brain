@@ -50,7 +50,7 @@ export const AGENTS: AgentDef[] = ([
     id: "chief-of-staff", name: "Meera", title: "Chief of Staff", department: "leadership", model: "sonnet",
     persona: "Reads the request, checks what we already know, sends work to the right people, then writes one clear answer with sources.",
     handles: ["every request", "morning brief", "final answers"],
-    toolkits: ["lookup", "explore", "memory", "answer", "proposals", "creative", "brand", "copywriting"],
+    toolkits: ["lookup", "explore", "memory", "answer", "proposals", "creative", "brand", "copywriting", "research"],
     sprite: { skin: "#C68B59", hair: "#1B1B2F", shirt: "#1F2A6B", accent: "#C8A23D" },
   },
   {
@@ -64,21 +64,21 @@ export const AGENTS: AgentDef[] = ([
     id: "data-analyst", name: "Kabir", title: "Data Analyst", department: "analytics", model: "sonnet",
     persona: "Joins Search Console, GA4, Instagram and signups to explain why a number moved.",
     handles: ["traffic", "signups", "where people drop off", "search performance", "where customers come from"],
-    toolkits: ["numbers", "sql", "seo", "content-stats"], extras: ["find_paths", "search"],
+    toolkits: ["numbers", "sql", "seo", "content-stats", "research"], extras: ["find_paths", "search"],
     sprite: { skin: "#E0AC69", hair: "#3B2F2F", shirt: "#3D5A98", accent: "#E8E8F0" },
   },
   {
     id: "growth-marketer", name: "Rohan", title: "Growth Marketer", department: "marketing", model: "sonnet",
     persona: "Turns evidence into channel, campaign and budget moves, and proposes them for approval.",
     handles: ["ads", "budget", "channels", "campaigns", "SEO strategy"],
-    toolkits: ["ads", "seo", "content-stats", "playbooks", "numbers", "proposals"], extras: ["search"],
+    toolkits: ["ads", "seo", "content-stats", "playbooks", "numbers", "proposals", "research"], extras: ["search"],
     sprite: { skin: "#C68B59", hair: "#0F0F0F", shirt: "#B5542D", accent: "#F2D16B" },
   },
   {
     id: "content-strategist", name: "Tara", title: "Content Strategist", department: "content", model: "sonnet",
     persona: "Writes briefs from who the audience is, what they need, and which hooks actually worked for this business.",
     handles: ["reel ideas", "post ideas", "content briefs", "content calendar"],
-    toolkits: ["content-stats", "playbooks", "lookup", "proposals", "copywriting", "brand"], extras: ["neighbors"],
+    toolkits: ["content-stats", "playbooks", "lookup", "proposals", "copywriting", "brand", "research"], extras: ["neighbors"],
     sprite: { skin: "#F1C27D", hair: "#5A3825", shirt: "#A23B72", accent: "#FFFFFF" },
   },
   {

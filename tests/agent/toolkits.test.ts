@@ -24,8 +24,9 @@ const BEFORE: Record<string, string[]> = {
 };
 // What was added: new tools only, to the agents that should have them.
 const ADDED: Record<string, string[]> = {
-  "chief-of-staff": ["make_poster", "generate_image", "make_reel_script_and_clip", "get_brand_asset", "write_copy"],
-  "content-strategist": ["write_copy", "get_brand_asset"],
+  "data-analyst": ["research"], "growth-marketer": ["research"],
+  "chief-of-staff": ["make_poster", "generate_image", "make_reel_script_and_clip", "get_brand_asset", "write_copy", "research"],
+  "content-strategist": ["write_copy", "get_brand_asset", "research"],
 };
 
 describe("toolkits", () => {
@@ -73,7 +74,7 @@ describe("toolkits", () => {
   it("the Chief calls across domains: lookup, memory, answers, proposals, brand, copy, research and making things", () => {
     const chief = agentById("chief-of-staff")!;
     const domains = new Set(chief.tools.map((t) => toolMeta(t)!.domain));
-    for (const d of ["knowledge", "memory", "answer", "brand", "creative", "content"] as const) expect(domains.has(d), d).toBe(true);
+    for (const d of ["knowledge", "memory", "answer", "brand", "creative", "content", "research"] as const) expect(domains.has(d), d).toBe(true);
     // the desks that review (Dev, Nisha) never get the tools that make things
     for (const id of ["copy-editor", "fact-checker"]) for (const t of agentById(id)!.tools) expect(toolMeta(t)!.mode, `${id} ${t}`).toBe("read");
     // only the Chief makes pictures (credits): the cost class stays with one desk

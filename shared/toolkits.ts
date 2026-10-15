@@ -55,6 +55,8 @@ export const TOOL_META: ToolMeta[] = [
   // tech and ops
   read("impact_of", "tech", "Shows what depends on something"),
   read("who_owns", "ops", "Finds who owns something and what is waiting"),
+  // research
+  { name: "research", domain: "research", mode: "read", cost: "model", needsOk: false, summary: "Looks something up on the web and cites where it found it" },
   // the brand library
   read("get_brand_asset", "brand", "Finds the business's logo, colours, fonts, guide and pictures"),
   // making things
@@ -83,6 +85,7 @@ export const TOOLKITS: Toolkit[] = [
   { id: "playbooks", label: "Voice and posting rules", domain: "content", tools: ["playbook"] },
   { id: "tech", label: "What depends on what", domain: "tech", tools: ["impact_of"] },
   { id: "ops", label: "Who owns what", domain: "ops", tools: ["who_owns"] },
+  { id: "research", label: "Web research", domain: "research", tools: ["research"] },
   { id: "brand", label: "The brand library", domain: "brand", tools: ["get_brand_asset"] },
   { id: "copywriting", label: "Write copy", domain: "content", tools: ["write_copy"] },
   { id: "creative", label: "Make posters, images and clips", domain: "creative", tools: ["make_poster", "generate_image", "make_reel_script_and_clip"] },

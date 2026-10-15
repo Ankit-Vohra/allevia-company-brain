@@ -7,6 +7,7 @@
 // layouts on a brand-colour ground and tell the owner the image generator is not connected, rather than faking a picture.
 import { productionStudioDeps } from "../studio/wiring.js";
 import type { GenerationEngine } from "../studio/engine.js";
+import { ClaudeResearch } from "./research.js";
 import { DEFAULT_MAX_CREDITS_PER_REQUEST, EngineUnavailable, type CreativeDeps, type CreativeEngine, type EngineStatus, type GeneratedImage } from "./ports.js";
 
 // Adapts a Studio GenerationEngine to the creating tools' port. An engine that only edits photos (RecordedEngine, the
@@ -28,5 +29,6 @@ export function productionCreativeDeps(dataDir: string, o: { engine?: CreativeEn
     engine: o.engine === undefined ? studioEngineAdapter(studio.engine) : o.engine,
     maxCreditsPerRequest: o.maxCreditsPerRequest ?? DEFAULT_MAX_CREDITS_PER_REQUEST,
     fonts: { fetchMissing: o.fetchMissingFonts ?? true },
+    research: new ClaudeResearch(),
   };
 }

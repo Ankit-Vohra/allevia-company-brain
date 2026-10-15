@@ -19,6 +19,7 @@ import { proposeAction } from "./actions.js";
 import { cypher } from "./cypher.js";
 import { useSkill } from "./skills.js";
 import { getBrandAsset } from "./brand.js";
+import { researchTool } from "./research.js";
 import { writeCopyTool } from "./copy.js";
 import { generateImageTool, makePosterTool, makeReelTool } from "./creative.js";
 
@@ -27,7 +28,7 @@ export const ALL_TOOLS: AlleviaTool[] = [
   contentPerformance, seoReport, adReport, playbook, history, recall, cypher, remember, proposeAction, showPath,
   useSkill,
   // what the team can make and what it can use to make it (the brand library); see shared/toolkits.ts for who holds them
-  getBrandAsset, writeCopyTool, makePosterTool, generateImageTool, makeReelTool,
+  getBrandAsset, writeCopyTool, makePosterTool, generateImageTool, makeReelTool, researchTool,
 ];
 
 const BY_NAME = new Map(ALL_TOOLS.map((t) => [t.name, t]));

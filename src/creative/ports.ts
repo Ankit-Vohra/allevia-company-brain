@@ -8,6 +8,7 @@
 import type { AssetStore } from "../studio/store.js";
 import type { VisionRunner } from "../studio/vision.js";
 import type { PosterFormat } from "./compose/formats.js";
+import type { ResearchRunner } from "./research.js";
 
 export interface ImageRequest {
   prompt: string;
@@ -58,6 +59,8 @@ export interface CreativeDeps {
   maxCreditsPerRequest: number;
   // Fetches a Google font family into the brand library when the business has none (the website step normally did). Off in tests.
   fonts?: { fetchMissing: boolean };
+  // Web research for the research tool (Claude on the subscription, read-only); absent: the tool says it isn't set up.
+  research?: ResearchRunner;
   // Set by the orchestrator for each turn: credits already spent by this request, so the cap is per request.
   spent?: { credits: number };
   log?: (line: string) => void;
