@@ -67,6 +67,7 @@ export interface BriefOpts {
 interface GoalRow {
   id: string; name: string; metricKey: string | null; unit: string | null; target: number | null; baseline: number | null;
   startAt: string | number | null; dueAt: string | null; createdAt: number | null; status: string | null; programStart: string | number | null;
+  own: boolean;
 }
 
 const toMs = (v: unknown): number | undefined => {
@@ -94,7 +95,7 @@ export async function goalPulse(g: Read, now: number, businessId: string | null)
      OPTIONAL MATCH (gl)-[pp:PART_OF]->(pr:Program)
      RETURN gl.id AS id, gl.name AS name, coalesce(gl.metricKey, m.key) AS metricKey, gl.unit AS unit, gl.target AS target,
             gl.baseline AS baseline, gl.startAt AS startAt, gl.dueAt AS dueAt, gl.createdAt AS createdAt, gl.status AS status,
-            pr.startAt AS programStart
+            pr.startAt AS programStart, gl.measure IS NOT NULL AS own
      ORDER BY coalesce(gl.priority, 99), id LIMIT 20`);
   const out: GoalPulse[] = [];
   for (const gl of goals) {
@@ -105,8 +106,10 @@ export async function goalPulse(g: Read, now: number, businessId: string | null)
          RETURN o.id AS id, o.value AS value, s.id AS subject, coalesce(o.windowEnd, o.asOf) AS at, o.baseline AS baseline
          ORDER BY at DESC, id LIMIT 500`, { key: gl.metricKey });
       const readings = obs.filter((o) => o.baseline !== true && typeof o.value === "number");
-      // The goal's own series first, then the business's, then whichever subject reported the metric last.
-      const subject = readings.some((o) => o.subject === gl.id) ? gl.id : businessId && readings.some((o) => o.subject === businessId) ? businessId : readings[0]?.subject;
+      // The goal's own series first, then the business's, then whichever subject reported the metric last. An Allevia 90
+      // goal (one that says how it is measured) is read from its own readings only: another subject's number (a daily
+      // count, a simulated campaign) is not the goal's period.
+      const subject = gl.own || readings.some((o) => o.subject === gl.id) ? gl.id : businessId && readings.some((o) => o.subject === businessId) ? businessId : readings[0]?.subject;
       const series = readings.filter((o) => o.subject === subject);
       if (series[0]) ({ value: current, at: currentAt, id: obsId } = { value: series[0].value, at: series[0].at ?? undefined, id: series[0].id });
       if (baseline === null || baseline === undefined) {
