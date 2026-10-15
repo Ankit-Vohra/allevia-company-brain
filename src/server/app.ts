@@ -9,6 +9,10 @@
 // - Public mode (ALLEVIA_PUBLIC_MODE=1, spec §11.3): every write is refused, threads show only showcase turns, and
 //   /ask replays a stored showcase turn (Turn.showcase = true) instead of running the model. GETs that bring the graph
 //   up to date as they read (program, capabilities) compute the same answer read-only.
+// - Live turns (POST /api/:t/ask, turns.ts) run on the server to the end even when the client goes away (owners close
+//   tabs); the thread shows the answer when they come back. GET /api/:t/turns/live and the thread's `running` say what
+//   is still working, GET /api/:t/turns/:id/events?after=N re-attaches, and only POST /api/:t/turns/:id/stop (or the
+//   turn-level time cap on top of the per-agent timeouts) cancels one.
 // - Approvals (POST /api/:t/approvals/:id) go through decide() in approvals.ts, the same function Discord's buttons
 //   use: the real executors, with GitHub issues and Discord posts as a dry run unless ALLEVIA_ACTIONS_LIVE=1. The
 //   answer is the card plus `learned` (the learned-rule AgentEvents, in the JSON) and `action`.
@@ -23,7 +27,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { z } from "zod";
 import type { AgentEvent, OnboardEvent } from "../../shared/contracts.js";
-import { ask, type AskDeps } from "../agent/ask.js";
+import { ask, STOPPED_MESSAGE, type AskDeps } from "../agent/ask.js";
 import type { ToolContext } from "../agent/tool.js";
 import type { GraphHandle } from "../graph/client.js";
 import type { LlmRunner } from "../ingest/llm.js";
@@ -34,8 +38,9 @@ import { registerTeamRoutes } from "./routes/team.js";
 import { registerWorkRoutes } from "./routes/work.js";
 import * as reads from "./reads.js";
 import { sse } from "./sse.js";
+import { LiveTurns, type LiveTurn, type LiveTurnsOpts } from "./turns.js";
 import { mountStudio, STUDIO_UPLOAD_PATH, studioDecisionHook, type StudioWiring } from "./studio.js";
-import type { TenantDto } from "./types.js";
+import type { SessionDetailDto, SessionSummaryDto, TenantDto, TurnEventsDto } from "./types.js";
 
 // ---------- deps ----------
 
@@ -92,6 +97,7 @@ export interface ServerDeps {
   heartbeatMs?: number;     // SSE keepalive comment interval; 0 turns it off (default 15 s)
   replaySpeed?: number;     // public-mode replay pacing; 1 = about real time, 0 = instant (default 1)
   maxLiveAsks?: number;     // concurrent live turns across tenants (default 2)
+  liveTurns?: LiveTurnsOpts; // how long finished turns stay re-attachable, and the turn-level time cap (turns.ts)
   tenantCacheMs?: number;   // how long the registry is cached (default 5 s)
   staticDir?: string;       // the built web app (web/dist); served with an index.html fallback
   corsOrigins?: string[];   // default: the Vite dev server
@@ -173,6 +179,7 @@ export function createApp(deps: ServerDeps): Hono {
   const origins = deps.corsOrigins ?? VITE_DEV_ORIGINS;
   let live = 0;
   let onboarding = false;
+  const turns = new LiveTurns({ now, ...deps.liveTurns });
 
   let cache: { at: number; list: Promise<RegistryTenant[]> } | undefined;
   const registry = (): Promise<RegistryTenant[]> => {
@@ -313,15 +320,70 @@ export function createApp(deps: ServerDeps): Hono {
   });
 
   app.get("/api/:t/sessions", async (c) => {
-    const { g } = await tenantOf(c);
-    return c.json(await reads.sessions(g, { showcaseOnly: deps.publicMode }));
+    const { reg, g } = await tenantOf(c);
+    const list: SessionSummaryDto[] = await reads.sessions(g, { showcaseOnly: deps.publicMode });
+    const working = deps.publicMode ? [] : turns.running(reg.slug);
+    const ids = new Set(working.map((t) => t.sessionId));
+    // a new thread whose first turn is still being set up is not in the graph yet: listed from the live turn
+    const fresh = working.filter((t) => t.sessionId && !list.some((s) => s.id === t.sessionId)).map((t): SessionSummaryDto => {
+      const d = t.dto();
+      return { id: d.sessionId, title: d.question, startedAt: d.startedAt, lastAt: d.startedAt, turns: 0, channel: "web", running: true };
+    });
+    return c.json([...fresh, ...list.map((s) => (ids.has(s.id) ? { ...s, running: true } : s))]);
   });
 
   app.get("/api/:t/sessions/:id", async (c) => {
-    const { g } = await tenantOf(c);
-    const s = await reads.sessionDetail(g, c.req.param("id"), { showcaseOnly: deps.publicMode });
+    const { reg, g } = await tenantOf(c);
+    const id = c.req.param("id");
+    const running = deps.publicMode ? undefined : turns.runningInSession(reg.slug, id);
+    const s: SessionDetailDto | null = await reads.sessionDetail(g, id, { showcaseOnly: deps.publicMode })
+      ?? (running ? { id, title: running.question, turns: [] } : null); // a new thread whose first turn is still being set up
     if (!s) throw new HttpError(404, "No such thread.");
-    return c.json(s);
+    return c.json(running && !s.turns.some((t) => t.id === running.turnId) ? { ...s, running: running.dto() } : s);
+  });
+
+  // ---- live turns (turns.ts): they run to the end on the server; anyone can re-attach, only stop() cancels ----
+  app.get("/api/:t/turns/live", async (c) => {
+    const { reg } = await tenantOf(c);
+    return c.json(turns.running(reg.slug).map((t) => t.dto()));
+  });
+
+  app.get("/api/:t/turns/:id/events", async (c) => {
+    const { reg, g } = await tenantOf(c);
+    const raw = c.req.query("after") ?? "0";
+    if (!/^\d{1,7}$/.test(raw)) throw new HttpError(400, "after must be an event index: 0 or more.");
+    const after = Number(raw);
+    const page = 500;
+    const id = c.req.param("id");
+    const t = turns.get(reg.slug, id);
+    if (t) {
+      const events = t.events.slice(after, after + page);
+      const next = Math.min(t.events.length, after + events.length);
+      const dto: TurnEventsDto = {
+        turnId: t.turnId, sessionId: t.sessionId, question: t.question, status: t.status, events, next, done: !t.running && next >= t.events.length,
+      };
+      return c.json(dto);
+    }
+    const stored = await reads.storedTurn(g, id, { showcaseOnly: deps.publicMode });
+    if (!stored) throw new HttpError(404, "No such turn.");
+    const events = stored.events.slice(after, after + page);
+    const next = Math.min(stored.events.length, after + events.length);
+    const dto: TurnEventsDto = {
+      turnId: stored.id, sessionId: stored.sessionId, question: stored.question,
+      status: stored.status === "ok" ? "done" : stored.error === STOPPED_MESSAGE ? "stopped" : "failed",
+      events, next, done: next >= stored.events.length,
+    };
+    return c.json(dto);
+  });
+
+  app.post("/api/:t/turns/:id/stop", async (c) => {
+    const { reg } = await tenantOf(c);
+    refuseInPublicMode();
+    const t = turns.get(reg.slug, c.req.param("id"));
+    if (!t) throw new HttpError(404, "That turn is not running on this server.");
+    if (!t.running) return c.json({ turnId: t.turnId, status: t.status });
+    t.stop("stopped by the owner");
+    return c.json({ turnId: t.turnId, status: "stopping" });
   });
 
   app.get("/api/:t/turns/:id/replay", async (c) => {
@@ -412,27 +474,26 @@ export function createApp(deps: ServerDeps): Hono {
 
     if (!question) throw new HttpError(400, "Ask a question first.");
     if (live >= maxLive) throw new HttpError(429, "The team is already working on other questions. Try again in a minute.");
+    // The live slot is held until the turn ends, not until this client leaves: the turn runs on (turns.ts).
     live++;
     let released = false;
     const release = () => { if (!released) { released = true; live--; } };
+    let turn: LiveTurn;
     try {
       const tz = (await tenantDto(reg, g)).timeZone;
       const askDeps = await deps.askDeps(reg.slug, tz ? { timeZone: tz } : {});
-      return sse<AgentEvent>(c, { heartbeatMs, log }, async (send, signal) => {
-        try {
-          await ask(
-            { tenant: reg.slug, question, channel: "web", ...(body.sessionId ? { sessionId: body.sessionId } : {}) },
-            { ...askDeps, ...(tz ? { timeZone: tz } : {}), signal },
-            send,
-          );
-        } finally {
-          release();
-        }
-      });
+      turn = turns.start(reg.slug, question, (emit, signal) => ask(
+        { tenant: reg.slug, question, channel: "web", ...(body.sessionId ? { sessionId: body.sessionId } : {}) },
+        { ...askDeps, ...(tz ? { timeZone: tz } : {}), signal },
+        emit,
+      ));
     } catch (e) {
       release();
       throw e;
     }
+    void turn.done.then(release);
+    // This stream follows the turn; when the client goes away only the following stops.
+    return sse<AgentEvent>(c, { heartbeatMs, log }, (send, signal) => turn.follow(0, send, signal));
   });
 
   mountStudio(app, {

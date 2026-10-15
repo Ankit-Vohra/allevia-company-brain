@@ -1,6 +1,9 @@
 // The JSON shapes the API returns. They mirror web/src/types-ext.ts field for field (the web app's contract for
 // Milestone 4.1); change both together. AgentEvent, NodeRef, EdgeRef and SourceRef come from shared/contracts.ts.
 import type { ActionKind, AgentEvent, AgentId, EdgeRef, NodeRef, SourceRef, TurnChecks } from "../../shared/contracts.js";
+import type { LiveStatus, LiveTurnDto } from "./turns.js";
+
+export type { LiveStatus, LiveTurnDto };
 
 export interface TenantDto {
   id: string;
@@ -27,7 +30,8 @@ export interface OverviewDto {
 
 export type Channel = "web" | "discord" | "cli";
 
-export interface SessionSummaryDto { id: string; title: string; startedAt: string; lastAt: string; turns: number; channel: Channel }
+// running: a turn in this thread is still working on the server (turns.ts); set only then.
+export interface SessionSummaryDto { id: string; title: string; startedAt: string; lastAt: string; turns: number; channel: Channel; running?: boolean }
 
 export interface TurnRecordDto {
   id: string;
@@ -40,7 +44,22 @@ export interface TurnRecordDto {
   checks: TurnChecks;
 }
 
-export interface SessionDetailDto { id: string; title: string; turns: TurnRecordDto[] }
+// running: the thread's turn still working on the server (not yet among `turns`); the web app re-attaches to it with
+// GET /api/:t/turns/:id/events.
+export interface SessionDetailDto { id: string; title: string; turns: TurnRecordDto[]; running?: LiveTurnDto }
+
+// GET /api/:t/turns/:id/events?after=N: the turn's events from index N (at most a page of them), `next` the index to ask
+// from next time, `done` once the turn has ended and every event has been sent. A turn no longer live on this server
+// answers from its stored log (done at once).
+export interface TurnEventsDto {
+  turnId: string;
+  sessionId: string;
+  question: string;
+  status: LiveStatus;
+  events: AgentEvent[];
+  next: number;
+  done: boolean;
+}
 
 export interface SearchHitDto { node: NodeRef; score: number; snippet?: string }
 

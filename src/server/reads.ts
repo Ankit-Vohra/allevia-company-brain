@@ -162,6 +162,23 @@ export async function turnEvents(g: GraphHandle, turnId: string, o: { showcaseOn
   return Array.isArray(events) ? (events as AgentEvent[]) : null;
 }
 
+// A stored Turn for GET /turns/:id/events when it is no longer live on this server: where it ran, how it ended and
+// its saved (compacted) event log.
+export interface StoredTurn { id: string; sessionId: string; question: string; status: "ok" | "failed"; error: string | null; events: AgentEvent[] }
+
+export async function storedTurn(g: GraphHandle, turnId: string, o: { showcaseOnly: boolean }): Promise<StoredTurn | null> {
+  const rows = await ro<{ q: string | null; sid: string | null; status: string | null; error: string | null; e: string | null; showcase: boolean | null }>(g,
+    `MATCH (t:Turn {id:$id}) RETURN t.question AS q, t.sessionId AS sid, t.status AS status, t.error AS error, t.events AS e,
+       t.showcase AS showcase LIMIT 1`, { id: turnId });
+  const r = rows[0];
+  if (!r || (o.showcaseOnly && r.showcase !== true)) return null;
+  const events = parseJson(r.e);
+  return {
+    id: turnId, sessionId: str(r.sid), question: str(r.q), status: r.status === "failed" ? "failed" : "ok", error: r.error ?? null,
+    events: Array.isArray(events) ? (events as AgentEvent[]) : [],
+  };
+}
+
 // Public mode: the stored showcase turn whose question matches (case and spacing ignored), or the one named by id.
 export async function findShowcaseTurn(g: GraphHandle, o: { question?: string; turnId?: string }): Promise<{ id: string; events: AgentEvent[] } | null> {
   const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
