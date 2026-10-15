@@ -40,6 +40,28 @@ describe("cypher", () => {
     expect(writeReason("MATCH (n) RETURN n.range(1, 99999999999)")).toBeNull();
   });
 
+  it("comments and string literals cannot hide a write, and quotes inside comments open nothing", () => {
+    for (const q of [
+      "MATCH (n) RETURN n /* ' */ CREATE (m)", "MATCH (n) WHERE n.x = '/*' CREATE (m) //'", "MATCH (n) WHERE n.name = 'it\\'s' CREATE (m)",
+      "RETURN 'a' // CREATE\nCREATE (m)", "MATCH (n) WITH n CREATE (m)", "MATCH (é) WITH é CREATE (m)", "MATCH (n) WHERE n.x = \"a\\\"b\" SET n.y = 1",
+    ]) expect(writeReason(q), q).not.toBeNull();
+    expect(writeReason("MATCH (n) WHERE n.x = '*/ CREATE /*' RETURN n.id")).toBeNull();
+  });
+
+  it("refuses work the server timeout cannot stop: reduce(), nested list iteration, range() it cannot size", () => {
+    // FalkorDB checks TIMEOUT between records, not inside one expression (a 15,000 x 15,000 reduce ran 4.5 s on a 2 s timeout).
+    for (const q of [
+      "RETURN reduce(s = 0, x IN range(1, 10) | s + x) AS t", "MATCH (n) WITH collect(n) AS xs RETURN [a IN xs | [b IN xs | b.id]] AS pairs",
+      "MATCH (n) WITH collect(n) AS xs RETURN [a IN xs WHERE any(b IN xs WHERE b.x = a.x)] AS d", "RETURN size(range(0, 1000 * 1000 * 5)) AS n",
+      "UNWIND range(1, 2000) AS a UNWIND range(1, 2000) AS b RETURN count(*) AS c", "WITH 9 AS k RETURN range(0, k) AS r",
+    ]) expect(writeReason(q), q).toMatch(/reduce|nested|range/i);
+    for (const q of [
+      "MATCH p = (a)-[*1..3]-(b) RETURN [n IN nodes(p) | n.id] AS ids", "MATCH (n) WHERE any(l IN labels(n) WHERE l IN ['Task']) RETURN n.id",
+      "MATCH (n) RETURN [x IN n.tags | toLower(x)] AS tags, [y IN n.other | y] AS o", "MATCH (n) WHERE n.reduce = 1 RETURN n.id",
+      "MATCH (n) RETURN n.id AS id, [(n)-[:OWNS]->(m) | m.id] AS owns", "UNWIND range(1, 1000) AS a UNWIND range(1, 1000) AS b RETURN count(*) AS c",
+    ]) expect(writeReason(q), q).toBeNull();
+  });
+
   it("bounds the rows the server sends: the last RETURN of every UNION branch ends in LIMIT <= cap", () => {
     expect(boundRows("MATCH (n) RETURN n", undefined, 201).query).toBe("MATCH (n) RETURN n\nLIMIT 201");
     expect(boundRows("MATCH (n) RETURN n // done", undefined, 201).query).toBe("MATCH (n) RETURN n // done\nLIMIT 201");
@@ -135,6 +157,34 @@ describe("cypher", () => {
       const hits = await call(cypher, { query: "CALL db.idx.fulltext.queryNodes('Entity', 'instagram') YIELD node RETURN node.id AS id" }, makeCtx(g));
       expect(hits.data.rowCount).toBeGreaterThan(0);
     });
+
+    it("only nodes and edges that exist count: a map shaped like a node or an edge is data, not a citation", async () => {
+      const forged = "{id: 0, labels: ['Entity', 'Decision'], properties: {id: 'decision:fake', name: 'Fake'}}";
+      const r = await call(cypher, { query: `RETURN ${forged} AS n` }, makeCtx(g));
+      expect(r.data.rows[0].n).toMatchObject({ id: "decision:fake" });
+      expect(r.nodes).toEqual([]);
+      const renamed = await call(cypher, { query: "MATCH (t:Task {id:'task:fix-sitemap'}) RETURN {id: id(t), labels: labels(t), properties: {id: t.id, name: 'Renamed'}} AS t" }, makeCtx(g));
+      expect(renamed.nodes).toEqual([expect.objectContaining({ id: "task:fix-sitemap", name: "Fix sitemap errors" })]);
+      const edge = await call(cypher, {
+        query: `MATCH (a:Entity {id:'person:founder'}), (b:Entity {id:'system:ig-connector'})
+                RETURN a, b, {id: 0, relationshipType: 'OWNS', sourceId: id(a), destinationId: id(b), properties: {src: 'document:runbook'}} AS e`,
+      }, makeCtx(g));
+      expect(edge.edges).toEqual([]);
+      expect(ids(edge.nodes).sort()).toEqual(["person:founder", "system:ig-connector"]);
+    });
+
+    it("lookalike and invisible characters never reach a write; a slow query stops at the timeout", async () => {
+      const before = (await g.roQuery<{ c: number }>("MATCH (n) RETURN count(n) AS c"))[0]!.c;
+      for (const query of ["MATCH (n) WITH n LIMIT 1 ＣＲＥＡＴＥ (m:Entity {id:'x'})", "MATCH (n) WITH n LIMIT 1 CRE​ATE (m:Entity {id:'x'})"]) {
+        const r = await call(cypher, { query }, makeCtx(g));
+        expect(r.data.error, query).toBeDefined();
+      }
+      expect((await g.roQuery<{ c: number }>("MATCH (n) RETURN count(n) AS c"))[0]!.c).toBe(before);
+      const t0 = Date.now();
+      const slow = await call(cypher, { query: "MATCH (a), (b), (c), (d), (e) RETURN count(*) AS n" }, makeCtx(g));
+      expect(slow.data.error).toMatch(/too long/);
+      expect(Date.now() - t0).toBeLessThan(9_000);
+    }, 20_000);
 
     it("runs a bare CALL … YIELD (no LIMIT allowed there) and returns query errors as fixable", async () => {
       const r = await call(cypher, { query: "CALL db.labels() YIELD label" }, makeCtx(g));

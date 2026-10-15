@@ -2,20 +2,26 @@
 // 1. Text checks, on the query with string literals, backtick names and comments blanked (same length, so
 //    `WHERE n.name = 'CREATE'` is fine): no write keyword, LOAD CSV (it reads files even in read-only mode) or FOREACH;
 //    CALL only of the read procedures in READ_PROCS (procedure names are compared with backticks and spaces removed,
-//    since the server accepts `db.labels` and db . labels); no range() too large to build in memory.
-// 2. GRAPH.RO_QUERY: the server itself refuses anything that would write, including write-mode procedures.
-// 3. A 5 s server-side timeout.
-// 4. Bounded output: the last RETURN of every UNION branch ends in LIMIT <= 201 (appended, or lowered), rows are cut
+//    since the server accepts `db.labels` and db . labels). Non-ASCII next to a keyword never hides it (\w is ASCII), and
+//    lookalike or invisible characters inside one make it no keyword at all, for the server too.
+// 2. Work the timeout cannot stop: FalkorDB checks TIMEOUT between records, not while it evaluates one expression
+//    (measured: a 15,000 x 15,000 reduce ran 4.5 s on a 2 s timeout). So reduce() and list iteration nested in list
+//    iteration are refused, range() bounds must be numbers or $params, and all range() calls of a query together may
+//    build at most RANGE_CAP values.
+// 3. GRAPH.RO_QUERY: the server itself refuses anything that would write, including write-mode procedures.
+// 4. A 5 s server-side timeout, which stops anything that streams records (a cartesian MATCH, chained UNWINDs).
+// 5. Bounded output: the last RETURN of every UNION branch ends in LIMIT <= 201 (appended, or lowered), rows are cut
 //    to 200, lists to 50 items, strings to 400 characters, the whole to CYPHER_CHAR_CAP characters, and at most
 //    CYPHER_NODE_CAP graph objects become NodeRefs.
-// Graph objects in the rows become NodeRef/EdgeRef, string values that are ids of existing entities count as returned
-// nodes, and an edge's `src` document counts as a source, so an answer can cite what a query found.
+// Graph objects in the rows become NodeRef/EdgeRef only once looked up by internal id (a map literal shaped like a node
+// or an edge arrives exactly like one, so it stays data and never becomes a citation); the stored node, and the stored
+// edge's `src` document, are what count. String values that are ids of existing entities count as returned nodes too,
+// so an answer can cite what a query found.
 import { z } from "zod";
 import type { ToolContext } from "../tool.js";
-import type { EdgeRef, NodeRef } from "../../../shared/contracts.js";
-import { isRawEdge, isRawNode, isRawPath, toNodeRef, toPathResult, type RawEdge, type RawNode } from "../../graph/read.js";
+import { isRawEdge, isRawNode, isRawPath, toNodeRef, type RawEdge, type RawNode } from "../../graph/read.js";
 import { typeFromId } from "../../util/ids.js";
-import { Collector, InputError, clip, compactProps, defineTool, edgeText, getNodes, ro } from "./common.js";
+import { Collector, EDGE, InputError, NODE, clip, compactProps, defineTool, getNodes, ro, type EdgeRow, type NodeRow } from "./common.js";
 
 export const CYPHER_TIMEOUT_MS = 5_000;
 export const CYPHER_ROW_CAP = 200;
@@ -61,19 +67,72 @@ export function procedures(q: string): Array<string | null> {
   return out;
 }
 
-// range(a, b[, step]) builds its whole list before any timeout check; literal or $param bounds are checked here.
+// The offset of the bracket closing the one at `open` (any of ( [ {), or -1. Literals are blanked, so counting works.
+function closing(bare: string, open: number): number {
+  let d = 0;
+  for (let i = open; i < bare.length; i++) {
+    const c = bare[i];
+    if (c === "(" || c === "[" || c === "{") d++;
+    else if ((c === ")" || c === "]" || c === "}") && --d === 0) return i;
+  }
+  return -1;
+}
+
+// The top-level comma-separated arguments of the call whose "(" is at `open`.
+function callArgs(bare: string, open: number): string[] {
+  const close = closing(bare, open);
+  const out: string[] = [];
+  let d = 0;
+  let from = open + 1;
+  for (let i = open + 1; i < (close < 0 ? bare.length : close); i++) {
+    const c = bare[i];
+    if (c === "(" || c === "[" || c === "{") d++;
+    else if (c === ")" || c === "]" || c === "}") d--;
+    else if (c === "," && d === 0) {
+      out.push(bare.slice(from, i));
+      from = i + 1;
+    }
+  }
+  out.push(bare.slice(from, close < 0 ? bare.length : close));
+  return out.map((a) => a.trim());
+}
+
+// range(a, b[, step]) builds its whole list inside one expression. Bounds must be numbers or $params, and the sizes
+// of every range() in the query multiplied (UNWIND range … UNWIND range …) stay within RANGE_CAP.
 function rangeReason(bare: string, params: Record<string, unknown>): string | null {
-  const arg = String.raw`\s*(-?\d+(?:\.\d+)?(?:e\d+)?|\$\w+)\s*`;
-  const re = new RegExp(String.raw`(?<![\w.$\`])range\s*\(${arg},${arg}(?:,${arg})?\)`, "gi");
-  const val = (s: string | undefined): number | null => {
-    if (s === undefined) return null;
-    const v = s.startsWith("$") ? params[s.slice(1)] : Number(s);
+  const val = (s: string): number | null => {
+    const v = /^\$\w+$/.test(s) ? params[s.slice(1)] : /^-?\d+(?:\.\d+)?(?:e\d+)?$/i.test(s) ? Number(s) : null;
     return typeof v === "number" && Number.isFinite(v) ? v : null;
   };
-  for (const m of bare.matchAll(re)) {
-    const [a, b, step] = [val(m[1]), val(m[2]), m[3] === undefined ? 1 : val(m[3])];
-    if (a === null || b === null || step === null || step === 0) continue;
-    if (Math.abs(b - a) / Math.abs(step) > RANGE_CAP) return `range() over more than ${RANGE_CAP.toLocaleString("en-US")} values is not allowed.`;
+  let product = 1;
+  for (const m of bare.matchAll(/(?<![\w.$`])range\s*\(/gi)) {
+    const xs = callArgs(bare, m.index + m[0].length - 1);
+    const [a, b, step] = [val(xs[0] ?? ""), val(xs[1] ?? ""), xs.length > 2 ? val(xs[2]!) : 1];
+    if (a === null || b === null || step === null) {
+      return "range() bounds must be numbers or $params, so its size is known before it runs; UNWIND a list instead.";
+    }
+    if (step === 0) continue; // the server refuses it
+    product *= Math.floor(Math.abs(b - a) / Math.abs(step)) + 1;
+    if (product > RANGE_CAP) return `range() calls in one query may build at most ${RANGE_CAP.toLocaleString("en-US")} values together.`;
+  }
+  return null;
+}
+
+const REDUCE = /(?<![\w.$`])reduce\s*\(/i;
+// List iteration: quantifiers (and the old extract/filter) and list comprehensions `[x IN list …]`.
+const ITERATE = /(?<![\w.$`])(?:any|all|none|single|extract|filter)\s*\(|\[\s*(?:[A-Za-z_]\w*\s+)?IN\s/gi;
+
+// Work inside one expression that the timeout cannot stop.
+function expressionReason(bare: string): string | null {
+  if (REDUCE.test(bare)) return "reduce() is not allowed: the timeout cannot stop it. UNWIND the list and aggregate with sum(), count() or collect().";
+  const spans = [...bare.matchAll(ITERATE)].map((m) => {
+    const open = m[0].startsWith("[") ? m.index : m.index + m[0].length - 1;
+    return [open, closing(bare, open)] as const;
+  });
+  for (const [open] of spans) {
+    if (spans.some(([o, c]) => o < open && (c < 0 || open < c))) {
+      return "Nested list iteration (a comprehension or any/all/none/single inside another) is not allowed: the timeout cannot stop it. UNWIND one of the lists instead.";
+    }
   }
   return null;
 }
@@ -88,7 +147,7 @@ export function writeReason(q: string, params: Record<string, unknown> = {}): st
     if (p.startsWith("algo.")) return `${p} is not available here: graph algorithms run in important, topics, find_paths and impact_of, over current edges only.`;
     if (!READ_PROCS.has(p)) return `Procedure ${p} is not allowed: cypher may only CALL ${[...READ_PROCS].join(", ")}.`;
   }
-  return rangeReason(bare, params);
+  return expressionReason(bare) ?? rangeReason(bare, params);
 }
 
 // Brace depth at each offset of a blanked query (map literals are balanced, so only subquery bodies stay open).
@@ -140,20 +199,39 @@ export function boundRows(q: string, params: Record<string, unknown> | undefined
 
 // ---------- shaping rows ----------
 
-interface Bag { nodes: NodeRef[]; edges: Array<{ e: EdgeRef; src: unknown }> }
+interface Bag { nodes: RawNode[]; edges: RawEdge[] }
+const LOOKUP_CAP = 1_000; // graph objects looked up by internal id
 
 // Raw FalkorDB values in what will be shown (lists cut to ARRAY_CAP, as shape() does).
-function walk(v: unknown, nodes: RawNode[], edges: RawEdge[]): void {
+function walk(v: unknown, bag: Bag): void {
+  if (bag.nodes.length + bag.edges.length >= LOOKUP_CAP) return;
   if (isRawPath(v)) {
-    nodes.push(...v.nodes.slice(0, ARRAY_CAP + 1));
-    edges.push(...v.edges.slice(0, ARRAY_CAP));
-  } else if (isRawNode(v)) nodes.push(v);
-  else if (isRawEdge(v)) edges.push(v);
-  else if (Array.isArray(v)) for (const x of v.slice(0, ARRAY_CAP)) walk(x, nodes, edges);
-  else if (v && typeof v === "object") for (const x of Object.values(v)) walk(x, nodes, edges);
+    bag.nodes.push(...v.nodes.slice(0, ARRAY_CAP + 1));
+    bag.edges.push(...v.edges.filter(isRawEdge).slice(0, ARRAY_CAP));
+  } else if (isRawNode(v)) bag.nodes.push(v);
+  else if (isRawEdge(v)) bag.edges.push(v);
+  else if (Array.isArray(v)) for (const x of v.slice(0, ARRAY_CAP)) walk(x, bag);
+  else if (v && typeof v === "object") for (const x of Object.values(v)) walk(x, bag);
 }
 
 const more = (n: number) => `…${n} more`;
+const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+// The stored nodes and edges behind raw values, by internal id. A value only counts when the stored object has the
+// same entity id (node) or the same type and endpoints (edge).
+async function lookup(ctx: ToolContext, bag: Bag): Promise<{ nodes: Map<number, NodeRow>; edges: Map<number, EdgeRow> }> {
+  const nodeIds = [...new Set([...bag.nodes.map((n) => n.id), ...bag.edges.flatMap((e) => [e.sourceId, e.destinationId])].map(num))]
+    .filter((i): i is number => i !== null).slice(0, LOOKUP_CAP);
+  const edgeKeys = [...new Map(bag.edges.filter((e) => num(e.id) !== null && num(e.sourceId) !== null && num(e.destinationId) !== null)
+    .map((e) => [e.id, { r: e.id, s: e.sourceId, d: e.destinationId }])).values()].slice(0, LOOKUP_CAP);
+  const [nodes, edges] = await Promise.all([
+    nodeIds.length ? ro<{ i: number; n: NodeRow }>(ctx, `UNWIND $ids AS i MATCH (n) WHERE id(n) = i RETURN i, ${NODE("n")} AS n`, { ids: nodeIds }) : [],
+    edgeKeys.length ? ro<{ i: number; e: EdgeRow }>(ctx,
+      `UNWIND $es AS x MATCH (a) WHERE id(a) = x.s WITH x, a MATCH (a)-[r]->(b) WHERE id(r) = x.r AND id(b) = x.d RETURN x.r AS i, ${EDGE("r")} AS e`,
+      { es: edgeKeys }) : [],
+  ]);
+  return { nodes: new Map(nodes.map((r) => [r.i, r.n])), edges: new Map(edges.map((r) => [r.i, r.e])) };
+}
 
 async function runCypher(args: { query: string; params?: Record<string, unknown> }, ctx: ToolContext) {
   const base = args.query.trim().replace(/;\s*$/, "");
@@ -173,41 +251,39 @@ async function runCypher(args: { query: string; params?: Record<string, unknown>
   const overRows = raw.length > CYPHER_ROW_CAP;
   const rows = raw.slice(0, CYPHER_ROW_CAP);
 
-  // Internal node ids -> entity ids, from the nodes in the result; edges whose endpoints are not there are looked up.
-  const rawNodes: RawNode[] = [];
-  const rawEdges: RawEdge[] = [];
-  walk(rows, rawNodes, rawEdges);
-  const ids = new Map(rawNodes.map((n) => [n.id, toNodeRef(n).id]));
-  const missing = [...new Set(rawEdges.flatMap((e) => [e.sourceId, e.destinationId]).filter((i) => !ids.has(i)))];
-  if (missing.length) {
-    for (const r of await ro<{ i: number; id: string }>(ctx, "MATCH (n) WHERE id(n) IN $ids RETURN id(n) AS i, n.id AS id", { ids: missing.slice(0, 500) })) ids.set(r.i, r.id);
-  }
-  const endpoints = (e: RawEdge) => ({ from: ids.get(e.sourceId) ?? `#${e.sourceId}`, to: ids.get(e.destinationId) ?? `#${e.destinationId}` });
-  const edgeRef = (e: RawEdge): EdgeRef => {
-    const p = e.properties;
-    return { ...endpoints(e), type: e.relationshipType, ...(typeof p.since === "number" ? { since: p.since } : {}), until: typeof p.until === "number" ? p.until : null };
+  const all: Bag = { nodes: [], edges: [] };
+  walk(rows, all);
+  const stored = await lookup(ctx, all);
+  const entityId = (i: number) => stored.nodes.get(i)?.id ?? `#${i}`;
+  const realNode = (v: RawNode): NodeRow | undefined => {
+    const n = stored.nodes.get(v.id);
+    return n && typeof n.id === "string" && n.id === v.properties.id ? n : undefined;
+  };
+  const realEdge = (v: RawEdge): EdgeRow | undefined => {
+    const e = stored.edges.get(v.id);
+    return e && e.type === v.relationshipType && e.from === entityId(v.sourceId) && e.to === entityId(v.destinationId) ? e : undefined;
   };
 
   const shape = (v: unknown, bag: Bag): unknown => {
     if (isRawPath(v)) {
-      const p = toPathResult(v);
-      bag.nodes.push(...p.nodes.slice(0, ARRAY_CAP + 1));
-      p.edges.slice(0, ARRAY_CAP).forEach((e, i) => bag.edges.push({ e, src: v.edges[i]!.properties.src }));
-      const cut = p.edges.length > ARRAY_CAP;
+      const nodes = v.nodes.slice(0, ARRAY_CAP + 1);
+      const edges = v.edges.filter(isRawEdge).slice(0, ARRAY_CAP);
+      bag.nodes.push(...nodes);
+      bag.edges.push(...edges);
+      const cut = v.edges.length > ARRAY_CAP;
       return {
-        path: [...p.nodes.slice(0, ARRAY_CAP + 1).map((n) => n.id), ...(cut ? [more(p.nodes.length - ARRAY_CAP - 1)] : [])],
-        steps: [...p.edges.slice(0, ARRAY_CAP).map(edgeText), ...(cut ? [more(p.edges.length - ARRAY_CAP)] : [])],
+        path: [...nodes.map((n) => toNodeRef(n).id), ...(cut ? [more(v.nodes.length - ARRAY_CAP - 1)] : [])],
+        steps: [...edges.map((e) => `${entityId(e.sourceId)} -[${e.relationshipType}]-> ${entityId(e.destinationId)}`), ...(cut ? [more(v.edges.length - ARRAY_CAP)] : [])],
       };
     }
     if (isRawNode(v)) {
       const ref = toNodeRef(v);
-      bag.nodes.push(ref);
+      bag.nodes.push(v);
       return { id: ref.id, type: ref.label, name: ref.name, props: compactProps(Object.entries(v.properties).filter(([k]) => k !== "id" && k !== "name")) };
     }
     if (isRawEdge(v)) {
-      const e = edgeRef(v);
-      bag.edges.push({ e, src: v.properties.src });
-      return { from: e.from, type: e.type, to: e.to, ...compactProps(Object.entries(v.properties)) };
+      bag.edges.push(v);
+      return { from: entityId(v.sourceId), type: v.relationshipType, to: entityId(v.destinationId), ...compactProps(Object.entries(v.properties)) };
     }
     if (typeof v === "string") return clip(v);
     if (Array.isArray(v)) {
@@ -236,20 +312,23 @@ async function runCypher(args: { query: string; params?: Record<string, unknown>
 
   const col = new Collector();
   let capped = false;
-  const addNode = (n: NodeRef) => {
+  const addNode = (n: NodeRow) => {
     if (col.nodes.has(n.id)) return;
     if (col.nodes.size >= CYPHER_NODE_CAP) capped = true;
-    else col.ref(n);
+    else col.node(n);
   };
   for (const bag of bags) {
-    bag.nodes.forEach(addNode);
-    for (const { e, src } of bag.edges) col.edgeRef(e, src);
+    for (const v of bag.nodes) {
+      const n = realNode(v);
+      if (n) addNode(n);
+    }
+    for (const v of bag.edges) col.edge(realEdge(v));
   }
 
   // Plain id strings (`RETURN p.id`) of existing entities count as returned nodes, so they can be cited.
   const idLike = new Set<string>();
   const scan = (v: unknown) => {
-    if (isRawNode(v) || isRawEdge(v) || isRawPath(v)) return; // already mapped; their props (src…) are not results
+    if (isRawNode(v) || isRawEdge(v) || isRawPath(v)) return; // looked up above; their props (src…) are not results
     if (typeof v === "string" && typeFromId(v) && !col.nodes.has(v) && idLike.size < CYPHER_NODE_CAP) idLike.add(v);
     else if (Array.isArray(v)) v.slice(0, ARRAY_CAP).forEach(scan);
     else if (v && typeof v === "object") Object.values(v).forEach(scan);
@@ -258,9 +337,7 @@ async function runCypher(args: { query: string; params?: Record<string, unknown>
   const found = await getNodes(ctx, [...idLike]);
   for (const id of idLike) {
     const n = found.get(id);
-    if (!n || col.nodes.has(id)) continue;
-    if (col.nodes.size >= CYPHER_NODE_CAP) capped = true;
-    else col.node(n);
+    if (n) addNode(n);
   }
 
   const notes = [
