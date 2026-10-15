@@ -222,7 +222,7 @@ where it applies, `conf` (0–1).
 | `00-command/PENDING.md` | table/line parser | Task (id N#), `OWNS` (founder/agent), status, linked issues |
 | `60-decisions/*.md` | ADR parser plus LLM | Decision, `BASED_ON`, `AFFECTS`, `DECIDED`, `SUPERSEDES` |
 | `70-reports/daily/*.md` (Jarvis morning briefs) | LLM extraction of dated numbers | Observation (with `asOf` = report date) |
-| `registry/**.yaml` | YAML mapper | Agent, Team, System (connectors, tools), `DEPENDS_ON`, `OWNS`, `MEMBER_OF` |
+| `registry/**.yaml` | YAML mapper | Agent, Team, System (connectors, tools), `DEPENDS_ON`, `USES`, `MEMBER_OF` |
 | vault git history | `git log` | `AUTHORED`, then `KNOWS_ABOUT` |
 | GitHub issues (aamdani repos, via `gh`) | REST | Task(kind=issue), labels, assignee `OWNS`, `MENTIONS` by name match |
 | `aamdani-ops` MCP over SSH (read tools only) | MCP client over `ssh … ops-mcp-launch.sh` stdio | snapshot JSON in `data/snapshots/<tenant>/<date>/` → Observation, Content, Page, Query, Channel |
