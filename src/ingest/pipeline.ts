@@ -217,12 +217,14 @@ async function loadKnown(g: GraphHandle): Promise<Map<string, KnownEntity>> {
   const types = EXTRACTABLE_TYPES.map((t) => `n:${t}`).join(" OR ");
   const out = new Map<string, KnownEntity>();
   for (let after = ""; ;) {
-    const rows = await g.roQuery<{ id: string; labels: string[]; name: string | null; aliases: unknown }>(
-      `MATCH (n:Entity) WHERE n.id > $after AND (${types}) RETURN n.id AS id, labels(n) AS labels, n.name AS name, n.aliases AS aliases ORDER BY n.id LIMIT $lim`,
+    const rows = await g.roQuery<{ id: string; labels: string[]; name: string | null; aliases: unknown; merged: string | null }>(
+      `MATCH (n:Entity) WHERE n.id > $after AND (${types}) RETURN n.id AS id, labels(n) AS labels, n.name AS name, n.aliases AS aliases, n.mergedInto AS merged ORDER BY n.id LIMIT $lim`,
       { after, lim: MAX_PAGE });
     for (const r of rows) {
       const type = typeOfLabels(r.labels);
-      if (!type || !r.name) continue;
+      // A duplicate the librarian merged is not offered to the resolver: its names are aliases of the canonical node
+      // now, so a new mention resolves there.
+      if (!type || !r.name || r.merged) continue;
       const aliases = Array.isArray(r.aliases) ? r.aliases.filter((a): a is string => typeof a === "string") : [];
       out.set(r.id, { id: r.id, type, name: r.name, ...(aliases.length ? { aliases } : {}) });
     }
@@ -571,7 +573,7 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
   report.librarian = await runLibrarian(g, { now: nowMs, log });
   totals.edgesCreated += report.librarian.knowsAbout.created;
   totals.edgesClosed += report.librarian.knowsAbout.closed;
-  totals.errors += report.librarian.knowsAbout.errors;
+  totals.errors += report.librarian.knowsAbout.errors + report.librarian.merge.errors.length;
 
   report.stats = { nodesCreated: totals.nodesCreated, nodesUpdated: totals.nodesUpdated, versions: totals.versions, edgesCreated: totals.edgesCreated, edgesClosed: totals.edgesClosed, observations: totals.observations, errors: totals.errors };
   report.graph = await graphCounts(g);
