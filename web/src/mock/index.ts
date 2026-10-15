@@ -4,8 +4,8 @@ import type { AgentEvent, AgentId, OnboardEvent } from "@shared/contracts";
 import { AGENTS } from "@shared/roster";
 import type { CapabilityState, DirectivePreview, LearnedRuleDto, ProgramScorecard } from "@shared/contracts";
 import type {
-  AgentDetail, AgentStats, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, FindingRecord, GraphData,
-  LearningFeed, NodeDetail, OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Tenant, TurnRecord,
+  AgentDetail, AgentStats, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, FindingRecord, GoalSetup, GraphData,
+  LearningFeed, NodeDetail, OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Tenant, TurnRecord, Usage,
 } from "../types-ext";
 import type { AgentPatch } from "../api";
 import { BRIEF, FRESHNESS, GRAPHS, KNOWS, PLAYBOOKS, TENANTS, seedApprovals, seedRecommendations } from "./data";
@@ -221,6 +221,9 @@ export const mockApi = {
   // ---- Allevia 90, the ladder, the team and what it learned (./program.ts) ----
 
   async program(t: string): Promise<ProgramScorecard | null> { return p90.programOf(t); },
+  async usage(t: string, month?: string): Promise<Usage> { return p90.usageOf(t, month); },
+  async goalSetup(t: string): Promise<GoalSetup[]> { return p90.goalSetupOf(t); },
+  async setGoal(t: string, id: string, target?: number): Promise<GoalSetup> { return p90.setGoal(t, id, target); },
   async capabilities(t: string): Promise<CapabilityState[]> { return p90.capabilitiesOf(t); },
   async team(t: string): Promise<AgentView[]> {
     const stats = await mockApi.agents(t);

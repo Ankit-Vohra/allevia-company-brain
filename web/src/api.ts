@@ -18,8 +18,8 @@ export interface StudioLatest {
 }
 import type { AgentMode, CapabilityState, DirectivePreview, LearnedRuleDto, ProgramScorecard } from "@shared/contracts";
 import type {
-  AgentDetail, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, GraphData, LearningFeed, NodeDetail,
-  OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Tenant,
+  AgentDetail, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, GoalSetup, GraphData, LearningFeed, LiveTurn, NodeDetail,
+  OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Tenant, TurnEventsPage, Usage,
 } from "./types-ext";
 
 /** PATCH /api/:t/agents/:id */
@@ -155,6 +155,16 @@ export const api = {
   async program(t: string): Promise<ProgramScorecard | null> {
     return mode === "mock" ? (await mock()).program(t) : getOrNull(`/api/${enc(t)}/program`);
   },
+  /** GET /api/:t/goals/setup: the goals the team suggests, and which ones the owner has said OK to. */
+  async goalSetup(t: string): Promise<GoalSetup[]> {
+    if (mode === "mock") return (await mock()).goalSetup(t);
+    return (await getJson<{ goals: GoalSetup[] }>(`/api/${enc(t)}/goals/setup`)).goals;
+  },
+  /** POST /api/:t/goals/:id: OK as suggested (no target), or OK with the owner's own number. */
+  async setGoal(t: string, id: string, target?: number): Promise<GoalSetup> {
+    if (mode === "mock") return (await mock()).setGoal(t, id, target);
+    return sendJson(`/api/${enc(t)}/goals/${enc(id)}`, "POST", target === undefined ? { confirm: true } : { target });
+  },
   async capabilities(t: string): Promise<CapabilityState[]> {
     return mode === "mock" ? (await mock()).capabilities(t) : getJson(`/api/${enc(t)}/capabilities`);
   },
@@ -180,6 +190,11 @@ export const api = {
   async retireRule(t: string, ruleId: string): Promise<LearnedRuleDto> {
     return mode === "mock" ? (await mock()).retireRule(t, ruleId) : sendJson(`/api/${enc(t)}/learning/${enc(ruleId)}`, "DELETE");
   },
+  /** GET /api/:t/usage?month=YYYY-MM: Studio credits used, answers given, and the honest flags (billing, live actions). */
+  async usage(t: string, month?: string): Promise<Usage> {
+    if (mode === "mock") return (await mock()).usage(t, month);
+    return getJson(`/api/${enc(t)}/usage${month ? `?month=${enc(month)}` : ""}`);
+  },
   /** GET /api/:t/brief: today's morning brief; null when none has been written. */
   async brief(t: string): Promise<Brief | null> {
     return mode === "mock" ? (await mock()).brief(t) : getOrNull(`/api/${enc(t)}/brief`);
@@ -187,6 +202,23 @@ export const api = {
   /** POST /api/:t/brief/run: bring the goals' readings up to date and write today's brief (no language model). */
   async runBrief(t: string): Promise<Brief> {
     return mode === "mock" ? (await mock()).runBrief(t) : sendJson(`/api/${enc(t)}/brief/run`, "POST");
+  },
+
+  // ---- live turns: they run on the server to the end even when the tab closes; only stopTurn cancels one ----
+
+  /** GET /api/:t/turns/live: the business's turns still working on the server, newest first. */
+  async liveTurns(t: string): Promise<LiveTurn[]> {
+    return mode === "mock" || publicMode ? [] : getJson(`/api/${enc(t)}/turns/live`);
+  },
+  /** GET /api/:t/turns/:id/events?after=N: re-attach to a turn (live server only). */
+  async turnEvents(t: string, turnId: string, after: number, signal?: AbortSignal): Promise<TurnEventsPage> {
+    if (mode === "mock") throw new ApiError("Re-attaching to a turn needs the live server.", 501);
+    return getJson(`/api/${enc(t)}/turns/${enc(turnId)}/events?after=${after}`, signal ? { signal } : undefined);
+  },
+  /** POST /api/:t/turns/:id/stop: the only way a live turn is cancelled. */
+  async stopTurn(t: string, turnId: string): Promise<{ turnId: string; status: string }> {
+    if (mode === "mock") throw new ApiError("Stopping a turn on the server needs the live server.", 501);
+    return sendJson(`/api/${enc(t)}/turns/${enc(turnId)}/stop`, "POST");
   },
 
   /** POST /api/:t/ask, an SSE stream of AgentEvent. `seekMs` (mock only) fast-forwards a scripted run. */

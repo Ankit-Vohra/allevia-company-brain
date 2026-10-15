@@ -4,7 +4,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import type { AgentEvent, CapabilityState, NodeRef } from "@shared/contracts";
-import { api } from "../api";
+import { api, getPublicMode } from "../api";
 import { AgentAvatar, ChecksBadges, agentDef, fmtAgo, fmtDate, fmtMs } from "../components/bits";
 import { AnswerModes } from "../components/Capabilities";
 import { Icon, type IconName } from "../components/Icon";
@@ -41,7 +41,7 @@ export default function AskPage() {
   const { sessionId } = useParams();
   const [params, setParams] = useSearchParams();
   const nav = useNavigate();
-  const { tenant, effectiveTheme, reducedMotion, speed } = useApp();
+  const { tenant, mode, effectiveTheme, reducedMotion, speed } = useApp();
   const snap = useRunStore();
   const narrow = useMedia("(max-width: 1080px)");
   const phone = useMedia("(max-width: 760px)");
@@ -66,6 +66,13 @@ export default function AskPage() {
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail.data, tenant.id]);
+
+  // a turn in this thread still working on the server (asked in a tab that has since closed, or elsewhere): follow it
+  const runningTurn = detail.data?.running;
+  useEffect(() => {
+    if (runningTurn?.status === "running") runStore.attach(tenant.id, runningTurn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runningTurn?.turnId, tenant.id]);
 
   // a run started on /ask before it has a thread id; once the session event arrives we move to /ask/:id
   const [pendingKey, setPendingKey] = useState<string | undefined>();
@@ -94,11 +101,14 @@ export default function AskPage() {
       const rk = replays[t.id];
       const rp = rk ? snap.runs.get(rk) : undefined;
       const liveTwin = liveRuns.find((r) => r.turnId === t.id);
+      // a stored turn that did not finish (stopped, or failed) says so, whether it ended here or before a reload
+      const ended: RunRecord["status"] = t.ended === "stopped" || liveTwin?.status === "stopped" ? "stopped" : t.ended === "failed" ? "error" : "done";
       return {
         key: t.id, turnId: t.id, question: t.question, at: t.at, record: t,
         events: rp ? rp.events : liveTwin?.events ?? logs[t.id] ?? [],
-        status: rp ? rp.status : "done",
+        status: rp ? rp.status : ended,
         replaying: rp?.status === "running",
+        ...(ended === "error" && t.error ? { error: t.error } : {}),
       };
     });
     for (const r of liveRuns) {
@@ -110,6 +120,7 @@ export default function AskPage() {
 
   const views = useMemo(() => turns.map((t) => deriveRun(t.events)), [turns]);
   const running = turns.some((t) => t.status === "running" && !t.replaying);
+  const liveRun = [...liveRuns].reverse().find((r) => r.status === "running");
 
   // which turn the graph shows: the newest, unless one was picked
   const [picked, setPicked] = useState<string | undefined>();
@@ -287,6 +298,11 @@ export default function AskPage() {
           )}
         </div>
 
+        {running && liveRun && mode === "live" && !getPublicMode() && (
+          <p className="composer-note" role="status">
+            {liveRun.stopping ? "Stopping the team…" : "The team keeps working if you close this tab. The answer will be here when you come back."}
+          </p>
+        )}
         <form className="composer" onSubmit={onSubmit} aria-label="Ask your team">
           <label htmlFor="ask-q" className="visually-hidden">Your question</label>
           <textarea
@@ -299,9 +315,15 @@ export default function AskPage() {
             placeholder={sessionId ? "Ask a follow-up…" : `Ask ${tenant.name}'s team…`}
             disabled={running}
           />
-          <button type="submit" className="btn btn-gold" disabled={!text.trim() || running}>
-            {running ? "Working…" : "Ask"} <Icon name="send" size={16} />
-          </button>
+          {running && liveRun ? (
+            <button type="button" className="btn btn-ghost" onClick={() => runStore.stop(liveRun.key)} disabled={liveRun.stopping}>
+              <Icon name="stop" size={14} /> {liveRun.stopping ? "Stopping…" : "Stop"}
+            </button>
+          ) : (
+            <button type="submit" className="btn btn-gold" disabled={!text.trim() || running}>
+              {running ? "Working…" : "Ask"} <Icon name="send" size={16} />
+            </button>
+          )}
         </form>
       </section>
 
@@ -334,6 +356,7 @@ function ThreadList({ sessions, loading, activeId, onPick }: { sessions?: Sessio
                 <span className="thread-meta">
                   <Icon name={CHANNEL_ICON[s.channel] ?? "globe"} size={12} />
                   {fmtAgo(s.lastAt)} · {s.turns} {s.turns === 1 ? "turn" : "turns"}
+                  {s.running && <span className="thread-live"><span className="pulse" aria-hidden="true" /> working</span>}
                 </span>
               </Link>
             </li>
@@ -391,7 +414,7 @@ function TurnBlock({ turn, view, caps, latest, inGraph, activeCite, onCite, onNo
             {lanesOpen && <WorkLanes view={view} nodes={view.nodes} onCite={onCite} onNodes={onNodes} activeCite={activeCite} />}
           </div>
 
-          {(view.answerStarted || view.final) && (
+          {turn.status !== "stopped" && (view.answerStarted || (view.final && (view.answer.trim() || turn.status === "done"))) && (
             <div className={`answer${view.final ? "" : " is-streaming"}`}>
               <div className="answer-by">
                 <AgentAvatar id="chief-of-staff" size={26} ring={!view.final} />

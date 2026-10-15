@@ -77,12 +77,22 @@ export function OfficePage() {
     return [...active].reverse().map((r) => ({ id: r.id, text: r.text, confidence: r.confidence, hue: (r.agents[0] && deptOf(r.agents[0])?.hue) || 60 }));
   }, [learning.data]);
 
-  // follow the tenant: show its latest run, if any
+  // follow the tenant: show its latest run, if any; else a turn still working on the server (asked in a tab that has
+  // since closed, or from another one), which the office then follows live
   useEffect(() => {
-    const latest = runStore.latest(tenant.id)?.key;
-    setRunKey(latest);
+    const latest = runStore.latest(tenant.id);
+    setRunKey(latest?.key);
     setTab(latest ? "log" : "p90");
-  }, [tenant.id]);
+    if (latest?.status === "running" || mode !== "live") return;
+    let live = true;
+    api.liveTurns(tenant.id).then((list) => {
+      const t = list[0];
+      if (!live || !t || runStore.latest(tenant.id, (r) => r.status === "running")) return;
+      setRunKey(runStore.attach(tenant.id, t));
+      setTab("log");
+    }, () => {});
+    return () => { live = false; };
+  }, [tenant.id, mode]);
 
   // ?ask=…&seek=ms starts a run straight away (used for demos and screenshots); ?tab=brief opens the brief
   useEffect(() => {
@@ -100,7 +110,9 @@ export function OfficePage() {
   const running = record?.status === "running";
   useEffect(() => {
     if (!running || !record) return;
-    const id = setInterval(() => setElapsed(Date.now() - record.startedAt), 250);
+    const tick = () => setElapsed(Date.now() - record.startedAt);
+    tick(); // a re-attached turn started before this page: show its real age at once
+    const id = setInterval(tick, 250);
     return () => clearInterval(id);
   }, [running, record]);
 
@@ -176,7 +188,9 @@ export function OfficePage() {
               </div>
             )}
             {running ? (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => runKey && runStore.stop(runKey)}><Icon name="stop" size={14} /> Stop</button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => runKey && runStore.stop(runKey)} disabled={record?.stopping}>
+                <Icon name="stop" size={14} /> {record?.stopping ? "Stopping…" : "Stop"}
+              </button>
             ) : (
               <button type="button" className="btn btn-ghost btn-sm" onClick={replayLatest} disabled={!sessions.data?.length}><Icon name="replay" size={14} /> Replay last request</button>
             )}

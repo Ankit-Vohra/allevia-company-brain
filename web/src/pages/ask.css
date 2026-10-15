@@ -210,6 +210,9 @@
 .composer-input:focus { outline: none; }
 .composer-input::placeholder { color: var(--color-muted); }
 .composer .btn { height: 38px; }
+.composer-note { margin: 0 clamp(16px, 2.4vw, 32px) 6px; font-size: var(--text-2xs); color: var(--color-muted); }
+.thread-live { display: inline-flex; align-items: center; gap: 4px; margin-left: 2px; color: var(--color-accent-ink); font-weight: 600; }
+.thread-live .pulse { width: 6px; height: 6px; }
 
 /* ---------- graph pane ---------- */
 .ask-graph { min-width: 0; min-height: 0; border-left: 1px solid var(--color-rule-2); background: var(--color-paper-2); }
@@ -271,7 +274,8 @@ dialog.drawer.sheet-left[open] { animation: sheet-in var(--dur-long) var(--ease-
   .ask-tabs { flex: none; }
   .ask-page.show-thread .ask-graph { display: none; }
   .ask-page.show-graph .ask-main { flex: none; }
-  .ask-page.show-graph .ask-scroll, .ask-page.show-graph .composer { display: none; }
+  .ask-page.show-graph .ask-scroll, .ask-page.show-graph .composer, .ask-page.show-graph .composer-note { display: none; }
+  .composer-note { margin: 0 12px 6px; }
   .ask-page.show-graph .ask-graph { flex: 1; border-left: 0; }
   .turn { padding: 20px 16px 22px; gap: 14px; }
   .turn-question { font-size: 1.25rem; }
