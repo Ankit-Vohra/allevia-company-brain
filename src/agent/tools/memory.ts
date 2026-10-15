@@ -74,7 +74,7 @@ async function runRecall(args: { ids?: string[]; query?: string }, ctx: ToolCont
   // repeats one of them cites a node this call returned, not an id copied from the old answer's text.
   const citedRows = picked.length ? await ro<{ tid: string; cs: Array<{ y: NodeRow; e: EdgeRow }> }>(ctx,
     `UNWIND $tids AS tid MATCH (t:Entity {id:tid})-[c:CITED]->(y:Entity) WHERE c.until IS NULL
-     WITH tid, y, c ORDER BY y.id
+     WITH tid, y, c ORDER BY tid, y.id
      WITH tid, collect({y: ${NODE("y")}, e: ${EDGE("c")}})[0..$k] AS cs RETURN tid, cs`, { tids: picked.map((t) => t.t.id), k: TURN_CITED }) : [];
   const citedBy = new Map(citedRows.map((r) => [r.tid, r.cs]));
   const turns = picked.map((t) => {
