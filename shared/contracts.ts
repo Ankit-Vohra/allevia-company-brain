@@ -52,6 +52,9 @@ export type AgentEvent =
   | { type: "skill_used"; agent: AgentId; skillId: string; name: string; source: "code" | "business" }
   // Something the team made on request (a poster, an image, a clip): the options, each checked, with a card waiting for the owner's OK
   | { type: "deliverable"; agent: AgentId; kind: DeliverableKind; title: string; approvalId: string; recommended: string; options: DeliverableOption[]; notes: string[]; credits?: number }
+  // The team needs a few answers before it can make something well: at most three short questions, each with tap-to-answer
+  // options (an empty list means a typed answer). Discord shows buttons, the web app chips; an answer is sent as the next message.
+  | { type: "quick_replies"; agent: AgentId; questions: Array<{ field: string; question: string; options: string[] }> }
   | { type: "error"; agent?: AgentId; message: string };
 
 // What the team can make from a request. Each becomes an Asset (with lineage) and waits for the owner's OK as a card.

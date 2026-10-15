@@ -403,6 +403,19 @@ export function createdProposals(agent: string, r: ToolResult): ProposalRecord[]
   return out;
 }
 
+// The questions a creating tool needs answered (data.quickReplies), as a `quick_replies` event: at most three, options clipped.
+export function toQuickReplies(agent: string, r: ToolResult): Extract<AgentEvent, { type: "quick_replies" }> | undefined {
+  const d = (r.data && typeof r.data === "object" ? r.data : {}) as Record<string, unknown>;
+  if (!Array.isArray(d.quickReplies) || !d.quickReplies.length) return undefined;
+  const questions = d.quickReplies.slice(0, 3).flatMap((x) => {
+    const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+    if (typeof o.question !== "string") return [];
+    const options = (Array.isArray(o.options) ? o.options : []).filter((v): v is string => typeof v === "string" && !!v.trim()).map((v) => v.slice(0, 70)).slice(0, 4);
+    return [{ field: typeof o.field === "string" ? o.field : "", question: o.question.slice(0, 200), options }];
+  });
+  return questions.length ? { type: "quick_replies", agent, questions } : undefined;
+}
+
 // What a creating tool made (data.deliverable), as a `deliverable` event; undefined when the shape is not right.
 export function toDeliverable(agent: string, r: ToolResult): DeliverableRecord | undefined {
   const d = (r.data && typeof r.data === "object" ? r.data : {}) as Record<string, unknown>;
@@ -678,6 +691,8 @@ class Turn {
           emit({ type: "proposal", ...p });
           commit(() => { this.proposals.push(p); });
         }
+        const q = toQuickReplies(agent, result);
+        if (q) emit(q);
         const d = toDeliverable(agent, result);
         if (d) {
           emit(d);

@@ -8,6 +8,7 @@
 import { productionStudioDeps } from "../studio/wiring.js";
 import type { GenerationEngine } from "../studio/engine.js";
 import { ClaudeResearch } from "./research.js";
+import { realReelVideo } from "./reel/render.js";
 import { DEFAULT_MAX_CREDITS_PER_REQUEST, EngineUnavailable, type CreativeDeps, type CreativeEngine, type EngineStatus, type GeneratedImage } from "./ports.js";
 
 // Adapts a Studio GenerationEngine to the creating tools' port. An engine that only edits photos (RecordedEngine, the
@@ -30,5 +31,6 @@ export function productionCreativeDeps(dataDir: string, o: { engine?: CreativeEn
     maxCreditsPerRequest: o.maxCreditsPerRequest ?? DEFAULT_MAX_CREDITS_PER_REQUEST,
     fonts: { fetchMissing: o.fetchMissingFonts ?? true },
     research: new ClaudeResearch(),
+    video: realReelVideo(),
   };
 }

@@ -158,6 +158,7 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   ...pat("BrandAsset", "DERIVED_FROM", "BrandAsset"),
   ...pat("BrandAsset", "SUPERSEDES", "BrandAsset"),
   ...pat("Asset", "GUIDED_BY", ["BrandRule", "Rule"]),
+  ...pat("Asset", "PROMOTES", ["Product", "Feature", "Business", "Content", "Page"]),
   ...pat("Asset", "DEPICTS", ["Product", "Page", "Business", "Event"]),
   ...pat(["Turn", "Finding", "Content"], "GUIDED_BY", ["Memory", "Rule", "BrandRule"]),
   // the librarian's merge pass (src/ingest/merge.ts): same type only, duplicate -> canonical

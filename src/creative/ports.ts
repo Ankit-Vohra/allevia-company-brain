@@ -9,6 +9,7 @@ import type { AssetStore } from "../studio/store.js";
 import type { VisionRunner } from "../studio/vision.js";
 import type { PosterFormat } from "./compose/formats.js";
 import type { ResearchRunner } from "./research.js";
+import type { ReelVideo } from "./reel/render.js";
 
 export interface ImageRequest {
   prompt: string;
@@ -61,6 +62,8 @@ export interface CreativeDeps {
   fonts?: { fetchMissing: boolean };
   // Web research for the research tool (Claude on the subscription, read-only); absent: the tool says it isn't set up.
   research?: ResearchRunner;
+  // ffmpeg, for reel drafts; absent: the reel tool writes the script and the scenes and says it can't make video here.
+  video?: ReelVideo | null;
   // Set by the orchestrator for each turn: credits already spent by this request, so the cap is per request.
   spent?: { credits: number };
   log?: (line: string) => void;

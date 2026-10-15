@@ -48,6 +48,7 @@ export interface SaveRequest {
   recommendedLabel?: string;
   parentId?: string;                   // the owner's photo, when it is the hero
   usesBrand: string[];                 // BrandAsset ids used (logo, fonts)
+  promotes?: string;                   // the graph node the brief sells (a product, a feature)
   guidedBy: string[];                  // BrandRule ids
   notes: string[];
   hfCredits: number;
@@ -105,6 +106,7 @@ export async function saveDeliverable(g: GraphHandle, deps: SaveDeps, r: SaveReq
     const parent = o.artworkId ?? r.parentId;
     if (parent) await upsertEdge(g, { from: id, type: "DERIVED_FROM", to: parent, props: { step: o.artworkId ? "composite-on-artwork" : "composite-on-photo", ...(o.layout ? { layout: o.layout } : {}) } }, deps.now).catch(() => undefined);
     for (const b of r.usesBrand) await upsertEdge(g, { from: id, type: "USES_ASSET", to: b }, deps.now).catch(() => undefined);
+    if (r.promotes) await upsertEdge(g, { from: id, type: "PROMOTES", to: r.promotes }, deps.now).catch(() => undefined);
     for (const rule of r.guidedBy.slice(0, 8)) await upsertEdge(g, { from: id, type: "GUIDED_BY", to: rule }, deps.now).catch(() => undefined);
     await upsertEdge(g, { from: agentNodeId(deps.agentId), type: "PRODUCED", to: id, props: { step: "make" } }, deps.now).catch(() => undefined);
     await upsertEdge(g, { from: agentNodeId(NISHA), type: "REVIEWED", to: id, props: { verdict: o.badge } }, deps.now).catch(() => undefined);

@@ -345,6 +345,15 @@ export class AlleviaBot {
     }
   }
 
+  // A question with tap-to-answer buttons; a question with no options is answered by typing in the thread.
+  private async postQuestions(thread: ThreadPort, q: Extract<AgentEvent, { type: "quick_replies" }>): Promise<void> {
+    for (const item of q.questions.slice(0, 3)) {
+      // the same tap-to-answer buttons as a quick question written in the answer: a tap is the owner's next message here
+      const buttons: ButtonSpec[] = item.options.slice(0, 4).map((text) => ({ customId: quickReplyId(text), label: clip(text, 70), style: "secondary" as const }));
+      await thread.send({ content: clip(`**${item.question}**${buttons.length ? "" : "\nReply here in your own words."}`, 1900), buttons });
+    }
+  }
+
   // ----- buttons -----
 
   async onButton(b: ButtonPort): Promise<void> {
@@ -425,8 +434,10 @@ export class AlleviaBot {
       const names = new Map<string, string>();
       let lastError: string | undefined;
       const made: Array<Extract<AgentEvent, { type: "deliverable" }>> = [];
+      const asks: Array<Extract<AgentEvent, { type: "quick_replies" }>> = [];
       const emit = (e: AgentEvent) => {
         if (e.type === "deliverable") made.push(e);
+        if (e.type === "quick_replies") asks.push(e);
         state.apply(e);
         collectNames(e, names);
         if (e.type === "error") lastError = e.message;
@@ -446,10 +457,13 @@ export class AlleviaBot {
       });
       for (const p of parts) await thread.send(p);
       // quick questions in the answer ("Quick question: What should this sell? [A] [B]") become buttons
-      for (const q of quickReplies(result?.answer ?? "")) {
+      const written = quickReplies(result?.answer ?? "");
+      for (const q of written) {
         await thread.send({ content: clip(q.question, 300), buttons: q.options.slice(0, 5).map((o) => ({ customId: quickReplyId(o), label: clip(o, 80), style: "secondary" as const })) });
       }
       for (const d of made) await this.postMade(thread, d);
+      // a creating tool's questions, unless the answer already wrote them as quick questions
+      if (!written.length) for (const q of asks.slice(-1)) await this.postQuestions(thread, q);
       this.log(`thread ${thread.id}: ${result?.ok ? "answered" : "failed"} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     } finally {
       this.gate.live--;

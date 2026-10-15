@@ -198,6 +198,25 @@ function placeStack(c: Ctx, o: { x: number; w: number; top: number; bottom: numb
   return y;
 }
 
+// The call to action as a full-width strip in the brand's accent along the bottom (above a story's reply box): the thing the
+// poster asks the viewer to do, where the eye lands last. Returns the strip's top, which is the bottom of the text above it.
+function ctaStrip(c: Ctx, bottomEdge: number): number {
+  const cta = c.content.cta?.trim();
+  if (!cta) return bottomEdge;
+  const { w, h, p } = c;
+  const f = pick(c.brand.body, true);
+  const bandH = Math.round(h * (c.F.key === "flyer" ? 0.07 : 0.085));
+  const fit = fitText(cta, { font: f, letterSpacing: 0.02, align: "center" }, { w: w - 2 * c.m, h: bandH * 0.62 }, { max: Math.round(w * 0.042), min: Math.round(w * 0.026), maxLines: 1 });
+  if (!fit.ok) throw new PosterTextDoesNotFit("call to action", cta, 8);
+  const y = bottomEdge - bandH;
+  const label = readableOn(p.accent, p.light, p.dark);
+  c.over += `<rect x="0" y="${y}" width="${w}" height="${bandH}" fill="${p.accent}"/>`;
+  const d = drawText(fit.layout, { font: f, size: fit.size, color: label, letterSpacing: 0.02, align: "center" }, c.m, y + (bandH - fit.layout.height) / 2, w - 2 * c.m);
+  c.over += d.svg;
+  c.texts.push({ role: "cta", text: cta, shown: d.lines.join(" "), box: { x: 0, y, w, h: bandH }, size: fit.size, font: f.family, color: label, lines: d.lines });
+  return y;
+}
+
 interface LogoSpot { x: number; y: number; w: number; h: number; align?: "left" | "center" | "right" }
 
 // The logo (or the name as a wordmark) in its spot, after the base is drawn: the plate decision needs the pixels behind it.
@@ -302,7 +321,12 @@ export async function composePoster(req: ComposeRequest): Promise<ComposedPoster
       c.under += `<rect x="0" y="${round(h - textH * 1.45)}" width="${w}" height="${round(textH * 1.45)}" fill="url(#scrim)"/>`;
       defs.push(gradient("topscrim", 0, 0, 0, 1, [[0, p.dark, 0.5], [1, p.dark, 0]]));
       c.under += `<rect x="0" y="0" width="${w}" height="${round(h * 0.2)}" fill="url(#topscrim)"/>`;
-      placeStack(c, { x: m, w: tw, top: top + logoH + 60, bottom, align: "left", onDark: true, at: "bottom" });
+      // the call to action is a strip along the bottom; the words sit above it
+      const stripTop = ctaStrip(c, F.key === "insta_story" ? bottom : h);
+      const heroContent: PosterContent = { ...req.content, cta: undefined };
+      const savedHero = c.content;
+      c.content = heroContent;
+      try { placeStack(c, { x: m, w: tw, top: top + logoH + 60, bottom: Math.min(bottom, stripTop - round(h * 0.035)), align: "left", onDark: true, at: "bottom" }); } finally { c.content = savedHero; }
       spot = { x: m, y: top, w: logoW, h: logoH };
       break;
     }
@@ -339,10 +363,11 @@ export async function composePoster(req: ComposeRequest): Promise<ComposedPoster
       const d = round(Math.min(w, h) * 0.3);
       const cx = w - m - d / 2, cy = top + logoH + d / 2 + round(h * 0.03);
       const offerText = req.content.offer?.trim();
-      const badgeContent: PosterContent = { ...req.content, offer: undefined };
+      const stripTop = ctaStrip(c, F.key === "insta_story" ? bottom : h);
+      const badgeContent: PosterContent = { ...req.content, offer: undefined, cta: undefined };
       const savedContent = c.content;
       c.content = badgeContent;
-      try { placeStack(c, { x: m, w: tw, top: top + logoH + d + round(h * 0.06), bottom, align: "left", onDark: true, at: "bottom" }); } finally { c.content = savedContent; }
+      try { placeStack(c, { x: m, w: tw, top: top + logoH + d + round(h * 0.06), bottom: Math.min(bottom, stripTop - round(h * 0.035)), align: "left", onDark: true, at: "bottom" }); } finally { c.content = savedContent; }
       if (offerText) {
         c.under += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(d / 2).toFixed(1)}" fill="${p.accent}"/><circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(d / 2 - 12).toFixed(1)}" fill="none" stroke="${readableOn(p.accent, p.light, p.dark)}" stroke-width="2" stroke-opacity="0.7"/>`;
         const inner = round(d * 0.66);

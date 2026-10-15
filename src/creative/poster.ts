@@ -33,6 +33,8 @@ export interface PosterRequest {
   scenes?: string[];               // what the artwork shows, one per option (generated artwork only)
   artwork: ArtworkSource;
   caption?: string;
+  promoted?: { id?: string; name: string; summary?: string }; // what the brief sells: its words are grounded, it is the hero
+  audience?: string;
 }
 
 // The request could not be made as asked; `plain` says why in the owner's words and what to change.
@@ -79,7 +81,8 @@ export async function makePoster(g: GraphHandle, req: PosterRequest, deps: Creat
   // 1. every claim on the poster comes from the owner or from the business's own record
   const words = [["headline", req.content.headline], ["eyebrow", req.content.eyebrow], ["subline", req.content.subline], ["offer", req.content.offer], ["cta", req.content.cta], ...(req.content.details ?? []).map((d) => ["detail", d] as const)]
     .filter((x): x is [string, string] => typeof x[1] === "string" && !!x[1].trim()).map(([role, text]) => ({ role, text }));
-  const bad = groundClaims(words, { request: req.question, facts: kit.facts });
+  const facts = [...kit.facts, ...(req.promoted ? [req.promoted.name, req.promoted.summary ?? ""] : [])];
+  const bad = groundClaims(words, { request: req.question, facts });
   if (bad.length) {
     throw new PosterRefused("claims", `I won't put ${bad.slice(0, 4).map((b) => `"${b.claim}" (in the ${b.role})`).join(", ")} on the poster: ${bad.length === 1 ? "it isn't" : "they aren't"} in what you asked for or in what I know about the business. Tell me the real ${bad.length === 1 ? "detail" : "details"}, or leave ${bad.length === 1 ? "it" : "them"} out.`);
   }
@@ -91,7 +94,8 @@ export async function makePoster(g: GraphHandle, req: PosterRequest, deps: Creat
   let parentId: string | undefined;
   if (req.artwork === "generate") {
     const scenes = (req.scenes?.filter((s) => s.trim()) ?? []);
-    const scene = scenes[0] ?? `a calm, warm, uncluttered scene that suits ${req.occasion === "general" ? "the business" : `a ${req.occasion} post`}`;
+    // the default hero is the thing being sold, as the business describes it
+    const scene = scenes[0] ?? (req.promoted ? `a scene that shows ${req.promoted.name}${req.promoted.summary ? `: ${req.promoted.summary}` : ""}${req.audience ? `, as ${req.audience} would see it` : ""}` : `a calm, warm, uncluttered scene that suits ${req.occasion === "general" ? "the business" : `a ${req.occasion} post`}`);
     const wanted = Array.from({ length: count }, (_, i) => {
       const sc = scenes[i] ?? scene;
       return { scene: sc, r: { prompt: artworkPrompt(kit, { scene: sc, occasion: req.occasion, format: req.format, variation: scenes[i] ? 0 : i }), aspect: FORMATS[req.format].aspect } };
@@ -152,6 +156,7 @@ export async function makePoster(g: GraphHandle, req: PosterRequest, deps: Creat
     kind: "poster", title, caption: req.caption?.trim() || captionOf(req.content), altText: alt(req.content), aspect: FORMATS[req.format].aspect === "9:16" ? "9:16" : FORMATS[req.format].aspect === "1:1" ? "1:1" : "4:5",
     channel: channelFor(req.format), format: req.format, request: req.question, options, ...(parentId ? { parentId } : {}),
     usesBrand: [...(kit.ids.logo ? [kit.ids.logo] : []), ...kit.ids.fonts], guidedBy: kit.ids.rules, notes, hfCredits,
+    ...(req.promoted?.id ? { promotes: req.promoted.id } : {}),
   });
   return { saved, notes, hfCredits, generated: arts.filter((a) => a.id !== parentId).length, layouts: composed.map((c) => c.poster.manifest.layout), verdicts };
 }

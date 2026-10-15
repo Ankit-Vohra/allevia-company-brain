@@ -49,7 +49,7 @@ describe("the creating tools", () => {
 
   it("make_poster makes checked options with the real logo, raises a card, posts nothing, and says what it did", async () => {
     engine = new FakeCreativeEngine();
-    const r = await run(makePosterTool, { headline: "A festival of light for your home", offer: "20% off", eyebrow: "Diwali sale", scene: ["warm lamps", "a brass diya"] }, ctx());
+    const r = await run(makePosterTool, { brief: { goal: "offer", promoting: "Design consultation", audience: "homeowners in Bristol", cta: "Visit kestrel.example", placement: "insta_post", message: "A festival of light for your home", offer: "20% off" }, eyebrow: "Diwali sale", scene: ["warm lamps", "a brass diya"] }, ctx());
     expect(r.data).toMatchObject({ made: true, kind: "poster", posted: false, waitingForOk: true, format: "insta_portrait" });
     const options = r.data.options as Array<{ label: string; id: string; check: string; layout: string }>;
     expect(options.map((o) => o.check)).toEqual(["checked", "checked"]);
@@ -64,26 +64,26 @@ describe("the creating tools", () => {
 
   it("make_poster refuses an invented claim in plain words and spends nothing", async () => {
     engine = new FakeCreativeEngine();
-    const r = await run(makePosterTool, { headline: "Diwali sale", offer: "50% off" }, ctx());
+    const r = await run(makePosterTool, { brief: { goal: "offer", promoting: "Design consultation", audience: "homeowners in Bristol", cta: "Visit kestrel.example", placement: "insta_post", message: "Diwali sale", offer: "50% off" } }, ctx());
     expect(r.data).toMatchObject({ made: false, reason: "claims", nothingSpent: true });
     expect(String(r.data.why)).toMatch(/50%/);
     expect(engine.generated).toHaveLength(0);
   }, 60_000);
 
   it("the tools that make things say so when creating is not set up, and refuse in read-only mode", async () => {
-    for (const [tool, args] of [[makePosterTool, { headline: "Open house" }], [generateImageTool, { scene: "a lamp on a table" }], [makeReelTool, { idea: "the new menu this week" }]] as const) {
+    for (const [tool, args] of [[makePosterTool, { brief: {} }], [generateImageTool, { brief: {} }], [makeReelTool, { brief: {} }]] as const) {
       const { creative: _drop, ...bare } = ctx();
       const r = await run(tool, args, bare as ToolContext);
       expect(r.data).toMatchObject({ made: false });
       expect(String(r.data.why)).toMatch(/isn't set up/);
     }
-    const ro = await run(makePosterTool, { headline: "Open house" }, ctx({ readOnly: true })).then((x) => x, (e: Error) => ({ error: e.message }));
+    const ro = await run(makePosterTool, { brief: {} }, ctx({ readOnly: true })).then((x) => x, (e: Error) => ({ error: e.message }));
     expect(JSON.stringify(ro)).toMatch(/read-only/);
   }, 60_000);
 
   it("generate_image makes a picture, checked, with its model and cost on the Asset, and a card", async () => {
     engine = new FakeCreativeEngine();
-    const r = await run(generateImageTool, { scene: "a quiet reading corner with a brass lamp at dusk", options: 2 }, ctx({ question: "make me a picture of a reading corner" }));
+    const r = await run(generateImageTool, { brief: { goal: "awareness", promoting: "Reading corners", placement: "insta_post" }, scene: "a quiet reading corner with a brass lamp at dusk", options: 2 }, ctx({ question: "make me a picture of a reading corner" }));
     expect(r.data).toMatchObject({ made: true, kind: "image", posted: false, imageEngineCredits: 3 });
     const [a] = await g.roQuery<{ k: string; credits: number; job: string; check: string }>("MATCH (a:Asset {kind:'image'}) RETURN a.kind AS k, a.hfCredits AS credits, a.hfJobId AS job, a.check AS check LIMIT 1");
     expect(a).toMatchObject({ k: "image", credits: 1.5, check: "ok" });
@@ -94,17 +94,17 @@ describe("the creating tools", () => {
     engine = new FakeCreativeEngine();
     engine.statusNow = { ok: false, reason: "no_credits", plain: "there are no Higgsfield credits left" };
     const before = (await g.roQuery("MATCH (a:Asset {kind:'image'}) RETURN a.id")).length;
-    const r = await run(generateImageTool, { scene: "a lamp on a wooden table" }, ctx());
+    const r = await run(generateImageTool, { brief: { goal: "awareness", promoting: "Reading corners", placement: "insta_post" }, scene: "a lamp on a wooden table" }, ctx());
     expect(r.data).toMatchObject({ made: false, nothingMadeNothingCharged: true });
     expect(String(r.data.why)).toContain("there are no Higgsfield credits left");
     expect((await g.roQuery("MATCH (a:Asset {kind:'image'}) RETURN a.id")).length).toBe(before);
-    const none = await run(generateImageTool, { scene: "a lamp on a wooden table" }, ctx({ creative: deps({ engine: null }) }));
+    const none = await run(generateImageTool, { brief: { goal: "awareness", promoting: "Reading corners", placement: "insta_post" }, scene: "a lamp on a wooden table" }, ctx({ creative: deps({ engine: null }) }));
     expect(String(none.data.why)).toMatch(/no image engine/);
   }, 60_000);
 
   it("generate_image holds back a picture that came out with lettering on it", async () => {
     engine = new FakeCreativeEngine();
-    const r = await run(generateImageTool, { scene: "a shop front at dusk", options: 1 }, ctx({ creative: deps({ vision: vision({ "fact-checker": PICTURES({ lettering: ["OPEN"] }) }) }) }));
+    const r = await run(generateImageTool, { brief: { goal: "awareness", promoting: "Reading corners", placement: "insta_post" }, scene: "a shop front at dusk", options: 1 }, ctx({ creative: deps({ vision: vision({ "fact-checker": PICTURES({ lettering: ["OPEN"] }) }) }) }));
     const opts = r.data.options as Array<{ check: string; note: string }>;
     expect(opts[0]).toMatchObject({ check: "held back" });
     expect(opts[0]!.note).toMatch(/lettering/);
@@ -114,7 +114,7 @@ describe("the creating tools", () => {
     engine = new FakeCreativeEngine();
     const idea = "a reel of the new menu starting Friday";
     // no picture yet: script only, and the owner is told what a clip needs
-    const a = await run(makeReelTool, { idea }, ctx({ question: idea }));
+    const a = await run(makeReelTool, { brief: { goal: "sell", promoting: "The new menu", audience: "regulars", message: "The new menu starts Friday", cta: "Come in on Friday" }, idea }, ctx({ question: idea }));
     expect(a.data).toMatchObject({ made: true, kind: "reel", posted: false });
     expect(String(a.data.script)).toMatch(/0-2 s .*On screen: New menu.*Film: Steam over the pass/);
     expect((a.data.clip as { made: boolean; why: string }).made).toBe(false);
@@ -122,15 +122,15 @@ describe("the creating tools", () => {
     expect(a.data.scriptCard).toBeTruthy();
     // a picture that is not approved: priced, not made
     await upsertNode(g, { type: "Asset", id: "asset:still-1", name: "Still", props: { kind: "image", status: "proposed", storageKey: store.put(TENANT, "a".repeat(64), Buffer.from("x"), "jpg") } }, NOW);
-    const b = await run(makeReelTool, { idea, image_asset_id: "asset:still-1" }, ctx({ question: idea }));
+    const b = await run(makeReelTool, { brief: { goal: "sell", promoting: "The new menu", audience: "regulars", message: "The new menu starts Friday", cta: "Come in on Friday" }, idea, image_asset_id: "asset:still-1" }, ctx({ question: idea }));
     expect((b.data.clip as { priceInImageCredits: number; why: string })).toMatchObject({ priceInImageCredits: 7.5 });
     expect((b.data.clip as { why: string }).why).toMatch(/would cost 7.5 Higgsfield credits; say OK/);
     expect(engine.clips).toHaveLength(0);
-    const c = await run(makeReelTool, { idea, image_asset_id: "asset:still-1", make_clip: true }, ctx({ question: idea }));
+    const c = await run(makeReelTool, { brief: { goal: "sell", promoting: "The new menu", audience: "regulars", message: "The new menu starts Friday", cta: "Come in on Friday" }, idea, image_asset_id: "asset:still-1", make_clip: true }, ctx({ question: idea }));
     expect((c.data.clip as { why: string }).why).toMatch(/isn't approved yet/);
     // approved: made, priced in the result, unchecked, with a card
     await upsertNode(g, { type: "Asset", id: "asset:still-1", name: "Still", props: { status: "approved" } }, NOW);
-    const d = await run(makeReelTool, { idea, image_asset_id: "asset:still-1", make_clip: true }, ctx({ question: idea, creative: deps({ maxCreditsPerRequest: 10 }) }));
+    const d = await run(makeReelTool, { brief: { goal: "sell", promoting: "The new menu", audience: "regulars", message: "The new menu starts Friday", cta: "Come in on Friday" }, idea, image_asset_id: "asset:still-1", make_clip: true }, ctx({ question: idea, creative: deps({ maxCreditsPerRequest: 10 }) }));
     expect(JSON.stringify(d.data.clip)).toContain("made\":true");
     expect(engine.clips).toHaveLength(1);
     expect(engine.clips[0]).toMatchObject({ seconds: 5, aspect: "9:16" });
@@ -138,7 +138,7 @@ describe("the creating tools", () => {
     expect(await g.roQuery("MATCH (a:Asset {kind:'clip', check:'unchecked'}) RETURN a.id")).toHaveLength(1);
     // too dear for this request: refused with the price
     engine.clipCost = 9;
-    const e = await run(makeReelTool, { idea, image_asset_id: "asset:still-1", make_clip: true }, ctx({ question: idea })); // the default limit of 6 is below any clip
+    const e = await run(makeReelTool, { brief: { goal: "sell", promoting: "The new menu", audience: "regulars", message: "The new menu starts Friday", cta: "Come in on Friday" }, idea, image_asset_id: "asset:still-1", make_clip: true }, ctx({ question: idea })); // the default limit of 6 is below any clip
     expect((e.data.clip as { made: boolean; why: string }).made).toBe(false);
     expect((e.data.clip as { why: string }).why).toMatch(/9 credits, more than this request is allowed to use \(6\)/);
   }, 60_000);
