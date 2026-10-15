@@ -39,4 +39,3 @@ export function footer(): string {
 </footer>`;
 }
 
-export const CTA_URL = CONTACT_URL;

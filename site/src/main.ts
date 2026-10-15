@@ -60,13 +60,12 @@ const saveData = (navigator as Navigator & { connection?: { saveData?: boolean }
 
 function startLoop() {
   if (!art || !video || !pause || reduce.matches || saveData) return;
-  for (const [type, src] of [["video/webm", video.dataset.webm], ["video/mp4", video.dataset.mp4]] as const) {
-    if (!src) continue;
-    const s = document.createElement("source");
-    s.type = type;
-    s.src = src;
-    video.append(s);
-  }
+  const src = video.dataset.mp4;
+  if (!src) return;
+  const s = document.createElement("source");
+  s.type = "video/mp4";
+  s.src = src;
+  video.append(s);
   video.addEventListener("playing", () => { art.classList.add("is-playing"); pause.hidden = false; }, { once: true });
   video.load();
   video.play().catch(() => { /* autoplay refused: the drawing stays */ });

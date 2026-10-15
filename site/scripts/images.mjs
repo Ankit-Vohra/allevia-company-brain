@@ -6,7 +6,7 @@
 //   ART_DIR=/path/to/renders npm run images
 //
 // ART_DIR holds: hero.png (job 856882d7), team.png (674ea36c), before-after.png (3292abb7, a stray camera mark painted
-// out), ledger.png (be3969c6), hero.mp4 and hero.webm (job 659c4095, re-encoded). See docs/higgsfield-spend.md.
+// out), ledger.png (be3969c6), hero.mp4 (job 659c4095, re-encoded to H.264). See docs/higgsfield-spend.md.
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -46,6 +46,6 @@ if (ART && existsSync(ART)) {
   for (const a of art) for (const w of a.widths) webp(join(ART, a.src), `${a.name}-${w}.webp`, w, 78);
   // Open Graph card: 1200×630 from the hero illustration
   execFileSync("ffmpeg", ["-v", "error", "-y", "-i", join(ART, "hero.png"), "-vf", "scale=1200:-2,crop=1200:630:0:90", "-q:v", "4", join(OUT, "og.jpg")]);
-  for (const v of ["hero.mp4", "hero.webm"]) copyFileSync(join(ART, v), join(OUT, `art-${v}`));
+  for (const v of ["hero.mp4"]) copyFileSync(join(ART, v), join(OUT, `art-${v}`));
 }
 console.log("images written to", OUT);
