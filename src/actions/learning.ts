@@ -144,6 +144,7 @@ export function extractRules(original: string, edited: string): Extraction {
     if (!del.length || !ins.length || del.length > 3 || ins.length > 3) continue;
     if ([...del, ...ins].some(numeric)) continue;                       // a corrected number is a fact, not a style
     if ([...del, ...ins].every((w) => STOP.has(w))) continue;           // "a" -> "the" teaches nothing
+    if (del.every((w) => STOP.has(w))) continue;                        // "the" -> "our" is one sentence rewritten, not a style (content trial)
     // The replacement as the owner wrote it ("by Friday"), except a capital that only marks a sentence start: "Villa"
     // -> "Home" at the start of a title teaches "home".
     let replace = keep.map((x) => x.raw).join(" ");

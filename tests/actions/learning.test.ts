@@ -18,6 +18,15 @@ describe("word diff and rule extraction (deterministic)", () => {
     expect(wordDiff(words("A stunning villa in Raipur"), words("A home in Raipur"))).toEqual([{ del: ["stunning", "villa"], ins: ["home"], delAt: [1, 2], insAt: [1] }]);
   });
 
+  // Content trial 2026-10-15: the owner rewrote "where the day begins" as "where our day begins"; the loop learned "say our, not the"
+  // and applied it to the whole caption ("beside our window of our room"). A bare article or preposition swapped for a word
+  // is a rewrite of one sentence, not a style.
+  it("never learns to swap a bare article or preposition for a word", () => {
+    expect(extractRules("A desk where the day begins slowly.", "The desk where our day begins.").rules.map((r) => r.id)).toEqual([]);
+    expect(extractRules("Dark stone beside the window", "Dark stone beside our window").rules).toEqual([]);
+    expect(extractRules("Dark stone and a small tree", "Dark stone and a bonsai").rules.map((r) => r.id)).toEqual(["rule:learned-say-bonsai-not-small-tree"]);
+  });
+
   it("learns a substitution, and a hype word cut next to it", () => {
     const { rules, complex } = extractRules("Tour this stunning villa in Raipur", "Tour this home in Raipur");
     expect(complex).toBe(false);
