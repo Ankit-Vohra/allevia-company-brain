@@ -87,7 +87,7 @@ export async function createAskDeps(opts: { tenant: string; model?: string }, ov
   const graph = over.graph ?? await tenantGraph(opts.tenant);
   const embedQuery = over.embedQuery === null ? undefined : over.embedQuery ?? await localEmbedder(over.modelsDir);
   // The tools that make things: files per business under the data dir, vision on the subscription, the capped image engine.
-  const creative = over.creative === null ? undefined : over.creative ?? (await import("../creative/wiring.js")).productionCreativeDeps(loadConfig().dataDir);
+  const creative = over.creative === null ? undefined : over.creative ?? (await import("../creative/wiring.js")).productionCreativeDeps(loadConfig().dataDir, { tenant: opts.tenant });
   const runtime = over.runtime
     ?? new ClaudeAgentSdkRuntime({ onInit: (init) => { assertSubscription(init); }, ...(over.sdk ? { sdk: over.sdk } : {}) });
   return {
