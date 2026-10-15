@@ -54,9 +54,8 @@ const SEARCH_CLICKS: GoalTemplate = {
   ],
 };
 
-// The same goal at another priority (the main goal is 1). Metric names are the contract a future connector fills:
-// gbp_actions is Google Business Profile's calls, direction requests and website clicks added together; ga4_sessions
-// is GA4's sessions.
+// The same goal at another priority (the main goal is 1). The metric keys below are the contract a future connector
+// fills: Business Profile calls, direction requests and website clicks added together, and GA4 sessions.
 const at = (g: GoalTemplate, priority: number): GoalTemplate => ({ ...g, priority });
 
 const GBP_ACTIONS: GoalTemplate = {
