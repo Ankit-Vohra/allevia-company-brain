@@ -44,13 +44,16 @@
   border-radius: var(--radius-sm); border: 1px solid var(--color-rule-2);
   background:
     linear-gradient(90deg, transparent 0 10px, oklch(from var(--color-bad) l c h / 0.22) 10px 11px, transparent 11px) 0 0 / 100% 100% no-repeat,
-    repeating-linear-gradient(180deg, transparent 0 23px, oklch(from var(--color-focus) l c h / 0.07) 23px 24px),
     var(--color-paper);
 }
 .doc-target { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-muted); overflow-wrap: anywhere; }
 .doc-target svg { flex: none; }
 .doc-title { font-weight: 600; line-height: 1.4; }
-.doc-body { white-space: pre-wrap; font-size: var(--text-sm); line-height: 24px; color: var(--color-ink-2); overflow-wrap: anywhere; }
+/* ruled like a notepad: one rule under every line of the draft */
+.doc-body {
+  white-space: pre-wrap; font-size: var(--text-sm); line-height: 24px; color: var(--color-ink-2); overflow-wrap: anywhere;
+  background: repeating-linear-gradient(180deg, transparent 0 23px, oklch(from var(--color-focus) l c h / 0.10) 23px 24px);
+}
 .doc-title-field { font-weight: 600; }
 .doc-body-field { resize: vertical; line-height: 1.6; font-size: var(--text-sm); min-height: 140px; }
 

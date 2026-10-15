@@ -35,7 +35,7 @@ export const BRIEF: Record<string, string> = {
 - /jobs pages lost 26% of search clicks while impressions held [[observation:gsc-jobs-clicks-2026-10]].
 - 41% of signups still drop at OTP [[observation:funnel-otp-drop-2026-10]].
 - 3 approvals wait on you.`,
-  "avs-atelier": `**Set up today from avsatelier.in.** We read 4 pages, 4 brand rules and 28 days of Search Console. The home page ranks on page 2 for "architect in london" [[observation:gsc-architect-london-2026-10]].`,
+  "avs-atelier": `**Set up from avsatelier.in.** We read 4 pages, 4 brand rules and 28 days of Search Console. The home page ranks on page 2 for "architect in london" [[observation:gsc-architect-london-2026-10]].`,
 };
 
 function rec(g: MockGraph, r: Omit<Recommendation, "evidence" | "evidenceEdges"> & { chain: string[] }): Recommendation {
@@ -79,7 +79,7 @@ export function seedRecommendations(): Record<string, Recommendation[]> {
         id: "rec:decision-evidence", area: "knowledge", by: "librarian", status: "open", score: 0.42, confidence: 0.9,
         title: "Decision 008 has no evidence linked",
         why: "Decision 008 was recorded on 9 Oct with no BASED_ON link [[decision:008-discord-brain-agent-subscription]].",
-        impact: "Keeps 'why' answers traceable", createdAt: "2026-10-15T06:00:00+05:30",
+        impact: "Keeps 'why' answers traceable", createdAt: "2026-10-14T22:00:00+05:30",
         chain: ["person:founder", "decision:008-discord-brain-agent-subscription"],
       }),
     ],
@@ -88,21 +88,21 @@ export function seedRecommendations(): Record<string, Recommendation[]> {
         id: "rec:avs-home-seo", area: "seo", by: "growth-marketer", status: "proposed", score: 0.88, confidence: 0.75,
         title: "Home page: title, H1 and LocalBusiness schema",
         why: "Page 2 for 'architect in london' (position 18.6) and the home page fails 4 checks [[observation:gsc-architect-london-2026-10]] [[rule:seo-generic-title]].",
-        impact: "Page 1 for local searches in about 6 weeks", value: { amount: 24000, currency: "GBP", note: "one won project, in fees" }, approvalId: "appr:avs-gh-home-seo", createdAt: "2026-10-15T10:30:00+05:30",
+        impact: "Page 1 for local searches in about 6 weeks", value: { amount: 24000, currency: "GBP", note: "one won project, in fees" }, approvalId: "appr:avs-gh-home-seo", createdAt: "2026-10-14T18:30:00+05:30",
         chain: ["query:architect-in-london", "page:avsatelier.in/", "rule:seo-generic-title", "rule:seo-no-localbusiness-schema"],
       }),
       rec(v, {
         id: "rec:avs-gbp", area: "seo", by: "ops-manager", status: "open", score: 0.7, confidence: 0.7,
         title: "Verify the Google Business Profile",
         why: "The profile is unverified, and it feeds local results [[channel:google-business-profile]].",
-        impact: "Map pack eligibility", createdAt: "2026-10-15T10:31:00+05:30",
+        impact: "Map pack eligibility", createdAt: "2026-10-14T18:31:00+05:30",
         chain: ["task:avs-gbp-verify", "channel:google-business-profile", "query:architect-in-london"],
       }),
       rec(v, {
         id: "rec:avs-cap-extensions", area: "ads", by: "growth-marketer", status: "proposed", score: 0.6, confidence: 0.55, simulated: true,
         title: "Cap 'House extensions' search ads at £20 a day (simulated)",
         why: "Each enquiry costs £68 against an account median of £31 [[observation:google-cpe-house-extensions]], and the broad match pulls in DIY searches [[campaign:google-house-extensions]]. Ad data is simulated in v1.",
-        impact: "Save about £140 a week (simulated)", value: { amount: 140, currency: "GBP", per: "week" }, approvalId: "appr:avs-cap-extensions", createdAt: "2026-10-15T10:34:00+05:30",
+        impact: "Save about £140 a week (simulated)", value: { amount: 140, currency: "GBP", per: "week" }, approvalId: "appr:avs-cap-extensions", createdAt: "2026-10-14T18:34:00+05:30",
         chain: ["observation:google-cpe-house-extensions", "campaign:google-house-extensions", "channel:google-ads", "audience:homeowners-london"],
       }),
     ],
@@ -150,12 +150,12 @@ export function seedApprovals(): Record<string, Approval[]> {
     "avs-atelier": [
       {
         id: "appr:avs-gh-home-seo", kind: "github_issue", status: "pending", by: "growth-marketer", recommendationId: "rec:avs-home-seo",
-        title: "Home page: title, H1 and LocalBusiness schema", createdAt: "2026-10-15T10:32:00+05:30",
+        title: "Home page: title, H1 and LocalBusiness schema", createdAt: "2026-10-14T18:32:00+05:30",
         payload: { title: "Home: title, H1, LocalBusiness schema, hero image", target: "Ankit-Vohra/allevia · label allevia-action", body: "1. Title and H1: \"Architects in London · AVS Atelier\".\n2. LocalBusiness JSON-LD with address and hours.\n3. Hero image to WebP under 200 KB (LCP 3.8 s now)." },
       },
       {
         id: "appr:avs-cap-extensions", kind: "pause_ad", status: "pending", by: "growth-marketer", recommendationId: "rec:avs-cap-extensions", simulated: true,
-        title: "Cap 'House extensions' at £20 a day (simulated)", createdAt: "2026-10-15T10:35:00+05:30",
+        title: "Cap 'House extensions' at £20 a day (simulated)", createdAt: "2026-10-14T18:35:00+05:30",
         payload: { title: "Lower the daily budget from £40 to £20", target: "Google Ads · House extensions (simulated)", body: "£68 per enquiry over 14 days against a £31 account median. Keep exact-match terms; drop broad match on \"extension ideas\" and \"DIY extension\"." },
       },
     ],

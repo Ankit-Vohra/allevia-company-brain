@@ -26,6 +26,12 @@ export const SUGGESTIONS: Record<string, string[]> = {
   "avs-atelier": ["Why don't we show up when people search 'architect in London'?"],
 };
 
+/** For a business set up a moment ago: questions any owner can ask on day one. */
+export const FIRST_DAY_QUESTIONS = [
+  "What should we fix first on the website, and why?",
+  "Who are our customers, and what do they need from us?",
+];
+
 export function OfficePage() {
   const { tenant, mode, effectiveTheme, reducedMotion, speed, setSpeed } = useApp();
   const snap = useRunStore();
@@ -94,7 +100,7 @@ export function OfficePage() {
     return { agent: a, tool: step && !step.done ? step.name : undefined, text: lane?.status ?? lane?.task ?? "" };
   }, [view, working]);
 
-  const suggestions = SUGGESTIONS[tenant.id] ?? SUGGESTIONS["avs-atelier"]!;
+  const suggestions = SUGGESTIONS[tenant.id] ?? FIRST_DAY_QUESTIONS;
   const today = fmtLongDate();
   const statusLine = running
     ? `${working.length ? `${working.map((a) => agentDef(a)?.name).join(", ")} working` : "Starting"} · ${fmtMs(Math.max(0, elapsed))}`

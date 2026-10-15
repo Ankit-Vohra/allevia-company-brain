@@ -142,5 +142,6 @@ dialog.drawer::backdrop { background: oklch(20% 0.06 270 / 0.28); animation: fad
 @keyframes fade-in { from { opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+  /* transitions off entirely (a 1 ms transition still makes layout code read stale positions); animations end at once */
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
 }

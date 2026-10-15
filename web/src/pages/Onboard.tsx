@@ -293,7 +293,7 @@ function Receipt({ run, host, region, onOpen, name }: { run: RunState; host: str
         <span className="receipt-avatars" aria-hidden="true">
           {AGENTS.map((a) => <AgentAvatar key={a.id} id={a.id} size={26} />)}
         </span>
-        <p>{AGENTS.length} staff in {DEPARTMENTS.length} departments are briefed, and report in {currencySymbol(region.currency)} for {region.country}.</p>
+        <p>{AGENTS.length} staff in {DEPARTMENTS.length} departments are briefed. Money shows in {region.currency} ({currencySymbol(region.currency)}), as a business in {region.country} reports it.</p>
       </div>
       <div className="receipt-actions">
         <button type="button" className="btn btn-gold" onClick={() => onOpen("/")}>Open {name}’s office</button>

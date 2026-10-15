@@ -301,26 +301,35 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
     return out;
   }, [view, transients]);
 
-  // keep bubbles from overlapping: lift a bubble above any earlier one it collides with
+  // keep bubbles from overlapping: lift a bubble above any earlier one it collides with. Re-run when a bubble changes
+  // size too (web fonts arriving, text rewrapping), or the measurements go stale.
   useLayoutEffect(() => {
     const root = overlayRef.current;
     if (!root) return;
     const els = [...root.querySelectorAll<HTMLElement>(".bubble")];
-    for (const el of els) el.style.setProperty("--lift", "0px");
-    const placed: DOMRect[] = [];
-    const sorted = els.map((el) => ({ el, r: el.getBoundingClientRect() })).sort((a, b) => b.r.top - a.r.top);
-    for (const { el, r } of sorted) {
-      let lift = 0;
-      let rect = r;
-      for (let guard = 0; guard < 4; guard++) {
-        const hit = placed.find((p) => rect.left < p.right + 4 && rect.right > p.left - 4 && rect.top < p.bottom + 3 && rect.bottom > p.top - 3);
-        if (!hit) break;
-        lift += rect.bottom - hit.top + 4;
-        rect = new DOMRect(r.left, r.top - lift, r.width, r.height);
+    const relayout = () => {
+      for (const el of els) el.style.setProperty("--lift", "0px");
+      const placed: DOMRect[] = [];
+      const sorted = els.map((el) => ({ el, r: el.getBoundingClientRect() })).sort((a, b) => b.r.top - a.r.top);
+      for (const { el, r } of sorted) {
+        let lift = 0;
+        let rect = r;
+        for (let guard = 0; guard < 4; guard++) {
+          const hit = placed.find((p) => rect.left < p.right + 4 && rect.right > p.left - 4 && rect.top < p.bottom + 8 && rect.bottom > p.top - 8);
+          if (!hit) break;
+          lift += rect.bottom - hit.top + 10;
+          rect = new DOMRect(r.left, r.top - lift, r.width, r.height);
+        }
+        el.style.setProperty("--lift", `${-lift}px`);
+        placed.push(rect);
       }
-      el.style.setProperty("--lift", `${-lift}px`);
-      placed.push(rect);
-    }
+    };
+    relayout();
+    let raf = 0;
+    const ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(relayout); });
+    els.forEach((el) => ro.observe(el));
+    document.fonts?.ready.then(() => requestAnimationFrame(relayout));
+    return () => { ro.disconnect(); cancelAnimationFrame(raf); };
   }, [bubbles, k, layout]);
 
   const ready = box.w > 0;

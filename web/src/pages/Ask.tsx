@@ -16,7 +16,7 @@ import { useApp, useAsync } from "../state/app";
 import { type RunView, deriveRun, laneOf } from "../state/derive";
 import { type RunRecord, runStore, useRunStore } from "../state/runs";
 import type { SessionSummary, TurnRecord } from "../types-ext";
-import { SUGGESTIONS } from "./Office";
+import { FIRST_DAY_QUESTIONS, SUGGESTIONS } from "./Office";
 import "./ask.css";
 
 const GraphView = lazy(() => import("../components/GraphView"));
@@ -194,7 +194,7 @@ export default function AskPage() {
 
   const title = detail.data?.title ?? pending?.question ?? (sessionId && detail.loading ? "" : "New thread");
   const notFound = sessionId && !detail.loading && detail.data === null && !liveRuns.length;
-  const suggestions = SUGGESTIONS[tenant.id] ?? [];
+  const suggestions = SUGGESTIONS[tenant.id] ?? FIRST_DAY_QUESTIONS;
 
   const threadList = (
     <ThreadList
