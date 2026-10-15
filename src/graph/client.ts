@@ -37,6 +37,7 @@ const BUSY = /max pending queries exceeded/i;
 type Param = null | string | number | boolean | Param[] | { [k: string]: Param };
 type Params = Record<string, Param>;
 export interface QueryOpts { timeoutMs?: number; unchecked?: boolean }
+export interface ConstraintInfo { type: "UNIQUE" | "MANDATORY"; label: string; props: string[]; status: "PENDING" | "OPERATIONAL" | "FAILED" }
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const MIN_NORMAL = 2.2250738585072014e-308; // the smallest double the server's parser accepts
@@ -124,6 +125,50 @@ export class GraphHandle {
       if (BUSY.test(String((e as Error).message))) throw new Error(`Query timed out: the server stayed busy for ${timeoutMs} ms`);
       throw e;
     }
+  }
+
+  // A read that sits in front of a write (does the node exist, what is stored). Sent on GRAPH.RO_QUERY so it does not
+  // queue behind the single writer (the write that follows is a compare-and-set, so a stale read only costs a retry);
+  // a graph that does not exist yet reads as empty.
+  async peek<T = Record<string, unknown>>(cypher: string, params?: Record<string, unknown>, opts?: QueryOpts): Promise<T[]> {
+    try {
+      return await this.roQuery<T>(cypher, params, opts);
+    } catch (e) {
+      if (/empty key/i.test(String((e as Error).message))) return [];
+      throw e;
+    }
+  }
+
+  // The plan the server would run, one line per operator (GRAPH.EXPLAIN: nothing executes, so unbound $params are fine).
+  // `Node By Index Scan` is an index, `Node By Label Scan` and `All Node Scan` are scans: tests/graph/explain.test.ts.
+  async explain(cypher: string): Promise<string[]> {
+    const lines = (await this.#g.explain(cypher)) as unknown;
+    return Array.isArray(lines) ? lines.map(String) : [String(lines)];
+  }
+
+  // Node constraints (GRAPH.CONSTRAINT): created asynchronously, PENDING until the server has checked the data, then
+  // OPERATIONAL, or FAILED when existing data breaks them. A graph that does not exist yet has none.
+  async constraints(): Promise<ConstraintInfo[]> {
+    try {
+      const rows = await this.roQuery<{ type: string; label: string; properties: string[]; entitytype: string; status: string }>(
+        "CALL db.constraints() YIELD type, label, properties, entitytype, status RETURN type, label, properties, entitytype, status");
+      return rows.filter((r) => r.entitytype === "NODE").map((r) => ({
+        type: r.type as ConstraintInfo["type"], label: r.label, props: [...r.properties], status: r.status as ConstraintInfo["status"],
+      }));
+    } catch (e) {
+      if (/empty key/i.test(String((e as Error).message))) return [];
+      throw e;
+    }
+  }
+
+  async createConstraint(type: ConstraintInfo["type"], label: string, prop: string): Promise<void> {
+    if (!IDENT.test(label) || !IDENT.test(prop)) throw new Error(`constraint label/prop must be plain identifiers, got ${label}.${prop}`);
+    await this.#g.constraintCreate(type as never, "NODE" as never, label, prop);
+  }
+
+  async dropConstraint(type: ConstraintInfo["type"], label: string, prop: string): Promise<void> {
+    if (!IDENT.test(label) || !IDENT.test(prop)) throw new Error(`constraint label/prop must be plain identifiers, got ${label}.${prop}`);
+    await this.#g.constraintDrop(type as never, "NODE" as never, label, prop);
   }
 
   // Deletes the whole graph, and its projections (`<name>__…`). Dropping a graph that does not exist (never written,

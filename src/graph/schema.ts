@@ -222,6 +222,17 @@ export const SEARCHABLE: EntityType[] = [
   "Recommendation", "Memory", "Finding", "Goal",
 ];
 
+// Searchable nodes also carry this label (upsertNode adds it on create, ensureIndexes backfills older graphs), so the
+// full-text and vector indexes sit on `Searchable` and hold only what search returns: observation names (one per
+// reading, 160k a year), Versions, Turns and the rest of the plumbing are not in them. It is not an entity type:
+// typeOfLabels skips it, but labels(n) lists it (by label id, so before or after the type label): never take "the
+// first label that is not Entity" as the type.
+export const SEARCHABLE_LABEL = "Searchable";
+
+// The lowercase key an Observation's metric is queried by (`o.metricKey = $key`), so a read never wraps the property
+// in toLower() (a function of the property is a label scan; the property itself is a range index).
+export const metricKeyOf = (metric: string): string => metric.toLowerCase();
+
 const TYPE_SET = new Set<string>(ENTITY_TYPES);
 const REL_SET = new Set<string>(REL_TYPES);
 export const isEntityType = (s: string): s is EntityType => TYPE_SET.has(s);

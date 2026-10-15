@@ -43,7 +43,7 @@ import { randomBytes } from "node:crypto";
 import {
   connect, onClose, onGraphDropped, openGraphByName, readBudget, GraphHandle, DEFAULT_READ_TIMEOUT_MS, MAX_PAGE,
 } from "./client.js";
-import { SEARCHABLE, typeOfLabels, type RelType } from "./schema.js";
+import { SEARCHABLE, SEARCHABLE_LABEL, typeOfLabels, type RelType } from "./schema.js";
 import { currentEdge } from "./read.js";
 import { ProjectionMismatch } from "./errors.js";
 
@@ -54,7 +54,7 @@ export interface ProjectionInfo { stale: boolean }
 export const STALE_PROJECTION_MS = 10 * 60_000;
 export const CACHE_TTL_MS = 5 * 60_000;
 export const WRITE_STAMP_TTL_MS = 24 * 60 * 60_000;
-export const SEARCHABLE_LABEL = "Searchable";
+export { SEARCHABLE_LABEL };
 
 const PROJECTION = /^allevia_\w+?__(?:cur|asof)_([0-9a-z]+)_[0-9a-f]{8}$/;
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
