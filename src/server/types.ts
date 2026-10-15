@@ -42,6 +42,8 @@ export interface TurnRecordDto {
   agents: AgentId[];
   citations: string[];
   checks: TurnChecks;
+  ended?: "stopped" | "failed"; // set only when the turn did not finish: stopped by the owner (or the time cap), or failed
+  error?: string;
 }
 
 // running: the thread's turn still working on the server (not yet among `turns`); the web app re-attaches to it with

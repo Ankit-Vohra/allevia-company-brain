@@ -190,6 +190,10 @@ describe("server: ask over SSE (integration)", () => {
     expect(Date.now() - t0).toBeLessThan(4_000); // well before the 5 s plan would have finished
     const page = await eventsPage(app, session.turnId, 0);
     expect(page).toMatchObject({ status: "stopped", done: true });
+    // the thread says it was stopped (a reload shows "Stopped", not an empty answer)
+    const thread = await (await app.request(`/api/mini/sessions/${encodeURIComponent(session.sessionId)}`)).json() as SessionDetailDto;
+    expect(thread.turns.find((t) => t.id === session.turnId)).toMatchObject({ ended: "stopped", error: STOPPED_MESSAGE });
+    expect(thread.turns.filter((t) => t.ended === undefined).every((t) => t.error === undefined)).toBe(true);
 
     // Stopping a finished turn changes nothing; an unknown one is a 404; public mode refuses.
     expect(await (await post(app, `/api/mini/turns/${encodeURIComponent(session.turnId)}/stop`, {})).json()).toEqual({ turnId: session.turnId, status: "stopped" });
