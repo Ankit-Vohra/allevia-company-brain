@@ -16,10 +16,14 @@ export interface StudioLatest {
     approval: { id: string; status: string; result: string | null; contentId: string | null } | null;
   };
 }
+import type { AgentMode, CapabilityState, DirectivePreview, LearnedRuleDto, ProgramScorecard } from "@shared/contracts";
 import type {
-  AgentDetail, AgentSummary, Approval, ApprovalDecision, GraphData, NodeDetail, OnboardRequest, Overview, Recommendation,
-  SearchHit, SessionDetail, SessionSummary, Tenant,
+  AgentDetail, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, GraphData, LearningFeed, NodeDetail,
+  OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Tenant,
 } from "./types-ext";
+
+/** PATCH /api/:t/agents/:id */
+export interface AgentPatch { enabled?: boolean; mode?: AgentMode; autonomy?: number; statusNote?: string | null }
 
 export type ApiMode = "live" | "mock";
 
@@ -45,6 +49,21 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 const enc = encodeURIComponent;
+
+/** A GET whose 404 means "not there yet" (no program, no brief), not a failure. */
+async function getOrNull<T>(path: string): Promise<T | null> {
+  try {
+    return await getJson<T>(path);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+const sendJson = <T>(path: string, method: string, body?: unknown): Promise<T> =>
+  getJson<T>(path, {
+    method, headers: { "content-type": "application/json", accept: "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
 
 async function withTimeout<T>(ms: number, fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const ctrl = new AbortController();
@@ -124,11 +143,50 @@ export const api = {
   async approvals(t: string): Promise<Approval[]> {
     return mode === "mock" ? (await mock()).approvals(t) : getJson(`/api/${enc(t)}/approvals`);
   },
-  async decide(t: string, id: string, d: ApprovalDecision): Promise<Approval> {
+  /** The decision, plus the `learned` events (one per rule an edit taught) and the Action the executor recorded. */
+  async decide(t: string, id: string, d: ApprovalDecision): Promise<DecisionResult> {
     if (mode === "mock") return (await mock()).decide(t, id, d);
-    return getJson(`/api/${enc(t)}/approvals/${enc(id)}`, {
-      method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(d),
-    });
+    return sendJson(`/api/${enc(t)}/approvals/${enc(id)}`, "POST", d);
+  },
+
+  // ---- Allevia 90, the capability ladder, the team and what it learned ----
+
+  /** GET /api/:t/program: the "Your 90 days" scorecard; null until the business is enrolled. */
+  async program(t: string): Promise<ProgramScorecard | null> {
+    return mode === "mock" ? (await mock()).program(t) : getOrNull(`/api/${enc(t)}/program`);
+  },
+  async capabilities(t: string): Promise<CapabilityState[]> {
+    return mode === "mock" ? (await mock()).capabilities(t) : getJson(`/api/${enc(t)}/capabilities`);
+  },
+  /** GET /api/:t/agents with settings: on, light or off, autonomy, the owner's instructions and learned rules. */
+  async team(t: string): Promise<AgentView[]> {
+    return mode === "mock" ? (await mock()).team(t) : getJson(`/api/${enc(t)}/agents`);
+  },
+  async setAgent(t: string, id: string, patch: AgentPatch): Promise<AgentView> {
+    return mode === "mock" ? (await mock()).setAgent(t, id, patch) : sendJson(`/api/${enc(t)}/agents/${enc(id)}`, "PATCH", patch);
+  },
+  /** "Tell your team": the owner's words as typed patches and a diff. Nothing is written until apply. */
+  async previewDirective(t: string, text: string): Promise<DirectivePreview> {
+    return mode === "mock" ? (await mock()).previewDirective(t, text) : sendJson(`/api/${enc(t)}/directives`, "POST", { text });
+  },
+  async applyDirective(t: string, id: string): Promise<DirectivePreview & { errors?: string[] }> {
+    return mode === "mock" ? (await mock()).applyDirective(t, id) : sendJson(`/api/${enc(t)}/directives/${enc(id)}/apply`, "POST");
+  },
+  async learning(t: string, since?: string): Promise<LearningFeed> {
+    if (mode === "mock") return (await mock()).learning(t);
+    return getJson(`/api/${enc(t)}/learning${since ? `?since=${enc(since)}` : ""}`);
+  },
+  /** Retire a learned rule: it stops applying to new drafts; the graph keeps it as a Version. */
+  async retireRule(t: string, ruleId: string): Promise<LearnedRuleDto> {
+    return mode === "mock" ? (await mock()).retireRule(t, ruleId) : sendJson(`/api/${enc(t)}/learning/${enc(ruleId)}`, "DELETE");
+  },
+  /** GET /api/:t/brief: today's morning brief; null when none has been written. */
+  async brief(t: string): Promise<Brief | null> {
+    return mode === "mock" ? (await mock()).brief(t) : getOrNull(`/api/${enc(t)}/brief`);
+  },
+  /** POST /api/:t/brief/run: bring the goals' readings up to date and write today's brief (no language model). */
+  async runBrief(t: string): Promise<Brief> {
+    return mode === "mock" ? (await mock()).runBrief(t) : sendJson(`/api/${enc(t)}/brief/run`, "POST");
   },
 
   /** POST /api/:t/ask, an SSE stream of AgentEvent. `seekMs` (mock only) fast-forwards a scripted run. */
