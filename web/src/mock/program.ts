@@ -480,6 +480,9 @@ export function previewDirective(t: string, text: string): DirectivePreview {
         return { patch: i, op: "add", target: `${id.replace("document:", "memory:")}-${i + 1}`, label: `Instruction for ${who}${ch ? ` on ${ch === "linkedin" ? "LinkedIn" : ch[0]!.toUpperCase() + ch.slice(1)}` : ""}`, after: p.text };
       }
       case "brand_rule.add": return { patch: i, op: "add", target: `brand-rule:${p.text.toLowerCase().replace(/\W+/g, "-").replace(/-$/, "")}`, label: `Brand rule (${p.ruleKind})`, after: p.text };
+      // the sample mode never produces these (its parser only knows the older shapes); shown plainly if one arrives
+      case "skill.rule": return { patch: i, op: "add", target: `${id.replace("document:", "memory:")}-${i + 1}`, label: `Rule for ${p.agents.map((a) => agentById(a)?.name).join(", ")}`, after: p.text };
+      case "skill.add": return { patch: i, op: "add", target: `${id.replace("document:", "memory:")}-${i + 1}`, label: `New skill: ${p.name}`, after: p.text };
     }
   });
   const preview: DirectivePreview = { id, text, actor: "person:owner", status: "preview", patches, diff, unparsed, notes, parser: "rules" };

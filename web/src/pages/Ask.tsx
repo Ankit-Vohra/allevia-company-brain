@@ -389,7 +389,7 @@ function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onRe
   const lane = working ? laneOf(view, working) : undefined;
   const status = plain(lane?.status ?? lane?.task ?? "").replace(/[.…]+$/, "").trim();
   const nm = working ? agentDef(working)?.name : undefined;
-  const workingLine = !live ? "" : !nm ? "Meera is reading your question…" : !status ? `${nm} is on it…` : /^\w+ing\b/i.test(status) ? `${nm} is ${status.charAt(0).toLowerCase()}${status.slice(1)}…` : `${nm}: ${status.charAt(0).toLowerCase()}${status.slice(1)}…`;
+  const workingLine = !live ? "" : !nm ? "Meera is reading your question…" : !status ? `${nm} is on it…` : status.startsWith(`${nm} is `) ? `${status}…` : /^\w+ing\b/i.test(status) ? `${nm} is ${status.charAt(0).toLowerCase()}${status.slice(1)}…` : `${nm}: ${status.charAt(0).toLowerCase()}${status.slice(1)}…`;
 
   return (
     <li className={`turn${live ? " is-live" : ""}`}>

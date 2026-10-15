@@ -146,6 +146,7 @@
 .lane-phase { flex: none; }
 .lane-done { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--color-ok); font-weight: 600; font-variant-numeric: tabular-nums; }
 .lane-task { font-size: var(--text-sm); line-height: 1.45; color: var(--color-ink); text-wrap: pretty; }
+.lane-skills { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); line-height: 1.45; color: var(--color-ink-2); }
 .lane-why { font-size: var(--text-xs); line-height: 1.5; color: var(--color-muted); text-wrap: pretty; }
 .lane-plan { list-style: none; display: grid; gap: 5px; font-size: var(--text-xs); line-height: 1.45; color: var(--color-ink-2); }
 .lane-plan li { display: grid; grid-template-columns: 16px 1fr; gap: 7px; align-items: start; }

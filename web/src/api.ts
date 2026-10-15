@@ -216,6 +216,11 @@ export const api = {
   async retireRule(t: string, ruleId: string): Promise<LearnedRuleDto> {
     return mode === "mock" ? (await mock()).retireRule(t, ruleId) : sendJson(`/api/${enc(t)}/learning/${enc(ruleId)}`, "DELETE");
   },
+  /** Take one of this business's own skill rules or skills out of use (the records keep it, retired). */
+  async retireSkillNote(t: string, id: string): Promise<void> {
+    if (mode === "mock") return;
+    await sendJson(`/api/${enc(t)}/skill-notes/${enc(id)}`, "DELETE");
+  },
   /** GET /api/:t/usage?month=YYYY-MM: Studio credits used, answers given, and the honest flags (billing, live actions). */
   async usage(t: string, month?: string): Promise<Usage> {
     if (mode === "mock") return (await mock()).usage(t, month);

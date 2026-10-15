@@ -1,6 +1,6 @@
 // API shapes the web app needs that shared/contracts.ts does not define yet. The backend (Milestone 4.1) should return
 // exactly these; when they move into shared/contracts.ts, re-export them from there and delete them here.
-import type { ActionKind, AgentEvent, AgentId, AgentSettings, EdgeRef, LearnedRuleDto, NodeRef, SourceRef, TurnChecks } from "@shared/contracts";
+import type { ActionKind, AgentEvent, AgentId, AgentSettings, EdgeRef, LearnedRuleDto, NodeRef, SkillView, SourceRef, TurnChecks } from "@shared/contracts";
 
 export interface Tenant {
   id: string;            // graph name, e.g. "aamdani"
@@ -160,6 +160,9 @@ export type ReplayLog = AgentEvent[];
 /** GET /api/:t/agents: each roster agent's stats, its settings and the active rules it learned (src/server/routes/team.ts). */
 export type AgentView = AgentSummary & AgentSettings & {
   learnedRules: Array<Pick<LearnedRuleDto, "id" | "text" | "confidence" | "appliedCount" | "learnedAt">>;
+  /** What this person can look at and do, in the owner's words, and how they work (absent in the sample mode). */
+  tools?: Array<{ name: string; words: string }>;
+  skills?: SkillView[];
 };
 
 /** GET /api/:t/learning?since= */
