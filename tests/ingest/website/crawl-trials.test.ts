@@ -30,14 +30,15 @@ describe("crawlSite on sites with redirects and long lists", () => {
   afterAll(async () => {
     await Promise.all(sites.map((s) => s.close()));
   });
-  const run = async (routes: Parameters<typeof startSite>[0]) => {
+  const run = (routes: Parameters<typeof startSite>[0]) => runWith({}, routes);
+  const runWith = async (opts: Partial<Parameters<typeof crawlSite>[1]>, routes: Parameters<typeof startSite>[0]) => {
     const site = await startSite({
       "/sitemap.xml": (send) => send(200, { "content-type": "application/xml" }, `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>`),
       "/robots.txt": (send) => send(200, { "content-type": "text/plain" }, "User-agent: *\nDisallow: /private/\n"),
       ...routes,
     });
     sites.push(site);
-    const crawl = await crawlSite(`${site.origin}/`, { allowHosts: [`127.0.0.1:${site.port}`], minDelayMs: 0, maxPages: 20, maxLinkChecks: 0 });
+    const crawl = await crawlSite(`${site.origin}/`, { allowHosts: [`127.0.0.1:${site.port}`], minDelayMs: 0, maxPages: 40, maxLinkChecks: 0, ...opts });
     return { site, crawl };
   };
   const ok = (send: (s: number, h: Record<string, string>, b?: string) => void, title: string, body = "") => send(200, { "content-type": "text/html" }, html(title, body));
@@ -91,5 +92,28 @@ describe("crawlSite on sites with redirects and long lists", () => {
     expect(paths).toHaveLength(12);
     expect(paths).toEqual(expect.arrayContaining(["/stories/our-farm", "/stories/the-team", "/stories/visiting"]));
     expect(paths.filter((p) => p.startsWith("/range/")).length).toBeLessThanOrEqual(8);
+  }, 60_000);
+
+  it("gives up on a page whose script never lets go, keeps what it has, and carries on with the rest", async () => {
+    const { crawl } = await runWith({ pageTimeoutMs: 2_000 }, {
+      "/": (send) => ok(send, "Home", `<a href="/stuck">Stuck</a><a href="/about">About</a>`),
+      "/stuck": (send) => send(200, { "content-type": "text/html" }, html("Stuck", `<script>while (true) {}</script>`)),
+      "/about": (send) => ok(send, "About"),
+    });
+    const by = Object.fromEntries(crawl.pages.map((p) => [new URL(p.finalUrl).pathname, p]));
+    expect(by["/about"]!.error).toBeUndefined();
+    expect(by["/stuck"]!.error).toMatch(/render failed/);
+  }, 60_000);
+
+  it("stops taking new pages when the whole crawl has used its time, and says so", async () => {
+    const links = Array.from({ length: 30 }, (_, i) => `/p${i}`);
+    const routes: Parameters<typeof startSite>[0] = { "/": (send) => ok(send, "Home", links.map((p) => `<a href="${p}">${p}</a>`).join("")) };
+    for (const p of links) routes[p] = (send) => ok(send, p);
+    const t0 = Date.now();
+    const { crawl } = await runWith({ maxCrawlMs: 2_500, minDelayMs: 300 }, routes);
+    expect(Date.now() - t0).toBeLessThan(15_000);
+    expect(crawl.pages.length).toBeGreaterThanOrEqual(2);
+    expect(crawl.pages.length).toBeLessThan(31);
+    expect(crawl.timedOut).toBe(true);
   }, 60_000);
 });

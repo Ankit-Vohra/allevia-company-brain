@@ -27,6 +27,7 @@ export interface CrawlOptions {
   maxHtmlBytes?: number;      // default 3 MB
   maxAssetBytes?: number;     // default 6 MB per script/style/image
   maxLinkChecks?: number;     // default 10 internal links outside the crawl, checked with HEAD
+  maxCrawlMs?: number;        // default 5 minutes for the whole crawl: after that no new page is taken
   brandPages?: number;        // default 3: home plus key pages whose styles are sampled
   allowHosts?: string[];      // exact "host:port" pairs that may be private (tests only)
   resolver?: Resolver;
@@ -47,13 +48,14 @@ export interface CrawlResult {
   linkStatus: Record<string, number>;   // internal URL → final HTTP status (0 = unreachable), crawled or link-checked
   screenshots: { desktop?: string; mobile?: string };
   requests: number;                      // crawler requests (not counting the browser's assets)
+  timedOut?: boolean;                    // the crawl used its whole time budget (maxCrawlMs) and stopped taking new pages
   startedAt: string;
   finishedAt: string;
 }
 
 const DEFAULTS = {
   maxPages: 40, pageTimeoutMs: 20_000, minDelayMs: 1_000, maxHtmlBytes: 3 * 1024 * 1024, maxAssetBytes: 6 * 1024 * 1024,
-  maxLinkChecks: 10, brandPages: 3,
+  maxLinkChecks: 10, brandPages: 3, maxCrawlMs: 5 * 60_000,
 };
 const MAX_CRAWL_DELAY_MS = 10_000;
 const MAX_SITEMAPS = 5;
@@ -97,6 +99,8 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
   const base: FetchOpts = { allowHosts: allow, resolver: o.resolver, userAgent: ua };
   const start = checkUrl(normalizeUrl(startUrl) ?? startUrl, allow).toString(); // throws BlockedUrlError
   const startedAt = new Date().toISOString();
+  const crawlStart = Date.now();
+  let timedOut = false;
   const pacer = new Pacer(o.minDelayMs);
   let requests = 0;
   const skipped: CrawlResult["skipped"] = [];
@@ -221,6 +225,26 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
     });
     await c.route("**/*", handleRoute);
     return c;
+  };
+
+  // A page whose script never lets go (a busy loop) can hang the browser's own calls, which have no timeout of their
+  // own: give each browser job a hard limit, and when it passes drop the whole context (and with it the stuck page).
+  const hardLimit = async <T,>(job: Promise<T>, why: string): Promise<T> => {
+    let timer: NodeJS.Timeout | undefined;
+    const limit = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const stuck = ctx;
+        ctx = undefined;
+        void stuck?.close().catch(() => {});
+        reject(new Error(`${why} within ${Math.round((o.pageTimeoutMs + 12_000) / 1000)} s`));
+      }, o.pageTimeoutMs + 12_000);
+    });
+    job.catch(() => {}); // a job that fails after the limit is not an unhandled rejection
+    try {
+      return await Promise.race([job, limit]);
+    } finally {
+      clearTimeout(timer);
+    }
   };
 
   const render = async (doc: FetchResult, brand: boolean, home: boolean, deadline: number) => {
@@ -374,7 +398,7 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
     } else {
       const brand = first || (brandCount < o.brandPages - 1 && it.prio >= 70);
       try {
-        const { cap, styles, loadMs } = await render({ ...doc, finalUrl: site }, brand, first, deadline);
+        const { cap, styles, loadMs } = await hardLimit(render({ ...doc, finalUrl: site }, brand, first, deadline), "the page never finished");
         if (brand && !first) brandCount++;
         const dom = fromCapture(cap, origin);
         const xrt = doc.headers["x-robots-tag"];
@@ -383,7 +407,7 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
           ...(xrt ? { robotsMeta: [dom.robotsMeta, xrt].filter(Boolean).join(", ") } : {}),
           timing: { responseMs: doc.responseMs, fetchMs: doc.totalMs, loadMs }, ...(styles ? { styles } : {}),
         };
-        if (first) await mobileShot({ ...doc, finalUrl: site });
+        if (first) await hardLimit(mobileShot({ ...doc, finalUrl: site }), "the mobile view never finished").catch((e) => log(`[crawl] mobile screenshot: ${msg(e)}`));
       } catch (e) {
         page = { ...emptyPage(it.url, doc, `render failed: ${msg(e)}`), finalUrl: site };
       }
@@ -431,7 +455,14 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
           }
         }
         sitemapCount = found;
-        for (let it = next(); it && pages.length < o.maxPages; it = next()) await visit(it, false);
+        for (let it = next(); it && pages.length < o.maxPages; it = next()) {
+          if (Date.now() - crawlStart > o.maxCrawlMs) {
+            timedOut = true;
+            log(`[crawl] stopped after ${Math.round(o.maxCrawlMs / 1000)} s with ${pages.length} pages: the time budget is used`);
+            break;
+          }
+          await visit(it, false);
+        }
 
         // internal links the crawl did not reach: a few HEAD checks, so broken links are found beyond the page cap
         const targets = [...new Set(pages.flatMap((p) => p.internalLinks))].filter((u) => !statusByUrl.has(u) && !skipped.some((s) => s.url === u));
@@ -458,7 +489,7 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
 
   return {
     startUrl: start, origin, pages, skipped, robots: robotsInfo, sitemapUrls: sitemapCount,
-    linkStatus: Object.fromEntries(statusByUrl), screenshots, requests, startedAt, finishedAt: new Date().toISOString(),
+    linkStatus: Object.fromEntries(statusByUrl), screenshots, requests, ...(timedOut ? { timedOut } : {}), startedAt, finishedAt: new Date().toISOString(),
   };
 }
 
