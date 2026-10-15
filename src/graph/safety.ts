@@ -3,11 +3,13 @@
 // (assertSafeQuery) and a test holds every query in src/ to the same rule (tests/graph/cypher-sources.test.ts).
 // Evidence and minimal reproductions: docs/notes/falkordb-nan-crash.md.
 //
-// 1. A sort that can tie. 6.0.2 sorts with a Rust sort whose comparator is not a total order when rows tie, and Rust's
-//    sort panics on that once it has 21 or more rows ("user-provided comparison function does not correctly implement
-//    a total order"). It needs a full sort (a LIMIT takes another path), and it depends on the rows, so a query can
-//    pass for months. Rule: the LAST key of every ORDER BY is unique (`x.id`, `id(x)`, an alias of one, or a pair of
-//    ids), so the order is total.
+// 1. A sort that can tie. When rows tie on the key, 6.0.2 orders them by comparing the rest of the row, and comparing
+//    maps in which some rows have a null where others have a value (every NODE() map: `asOf`, `simulated`) is not a
+//    total order. Rust's sort panics on that once it has 21 or more rows ("user-provided comparison function does
+//    not correctly implement a total order"). It needs a full sort (a LIMIT takes another path), and whether a given
+//    set of rows trips it depends on the rows and their count, so a query can pass for months. Scalar columns, and
+//    lists, did not trip it. Rule: the LAST key of every ORDER BY is unique (`x.id`, `id(x)`, an alias of one, or a
+//    pair of ids), or the keys are the grouping columns of an aggregation, so rows never tie.
 // 2. A NaN in a sort key (0.0/0.0, sqrt(-1), log(-1) ...) breaks the same comparator, whatever else is in the key list.
 //    Cypher float division by zero is NaN (0/0) or ±Infinity; integer division by zero is an error. Infinity sorts
 //    fine; NaN does not. Rule: guard every division (CASE WHEN d = 0 OR d IS NULL THEN null ELSE x / d END) or drop

@@ -2,7 +2,7 @@
 // docs/notes/falkordb-nan-crash.md): the last key of every ORDER BY is unique, and nothing sorted can be NaN. Reads the
 // source text, so it covers queries no test happens to run, and queries that only crash on a big or tied graph.
 import { describe, it, expect } from "vitest";
-import { nanRisks, unsafeSorts } from "../../src/graph/safety.js";
+import { blankLiterals, nanRisks, unsafeSorts } from "../../src/graph/safety.js";
 import { readSource, sourceFiles, stringLiterals } from "../helpers/ts-strings.js";
 
 // Strings that mention ORDER BY but are not queries (prompts, error text). Keep this empty unless one really is not.
@@ -40,6 +40,22 @@ describe("every Cypher string in src/", () => {
 
   it("never sorts a value that can be NaN", () => {
     const bad = found.flatMap((f) => nanRisks(f.text).map((r) => `${f.where}  ${r}`));
+    expect(bad).toEqual([]);
+  });
+
+  it("does no float math in Cypher: a ratio is computed in TypeScript, where a zero denominator is a null", () => {
+    // Division by zero is NaN in Cypher (0.0/0.0) and Infinity (x/0.0); sqrt(-1) and log(-1) are NaN. None of the
+    // 265 queries needs one, so none has one, and the database cannot produce a NaN that something later sorts.
+    const FLOAT_MATH = /\/|\^|(?<![\w.$`])(?:sqrt|log|log10|acos|asin|pow)\s*\(/i;
+    const bad: string[] = [];
+    for (const file of sourceFiles("src")) {
+      if (SKIP_FILES.has(file)) continue;
+      for (const lit of stringLiterals(readSource(file))) {
+        if (!/(?<![\w.])(MATCH|RETURN|UNWIND|CALL|MERGE|CREATE)\b/.test(lit.text) || !/\b(RETURN|SET|DELETE|YIELD|WITH)\b/.test(lit.text)) continue;
+        if (NOT_CYPHER_TEXT.some((re) => re.test(lit.text))) continue;
+        if (FLOAT_MATH.test(blankLiterals(lit.text))) bad.push(`${file}:${lit.line}  ${lit.text.replace(/\s+/g, " ").slice(0, 100)}`);
+      }
+    }
     expect(bad).toEqual([]);
   });
 

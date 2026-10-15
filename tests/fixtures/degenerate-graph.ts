@@ -51,12 +51,13 @@ const EXTRA: Partial<Record<EntityType, Record<string, unknown>>> = {
 const REPRESENTATIVE: EntityType[] = ["Task", "System", "Channel", "Document"];
 
 // Every sort key (dates, status, rank, order) is identical across satellites. What they show of themselves is not:
-// FalkorDB 6.0.2 only panicked when rows tied on the key but differed in the other columns, some null and some set
-// (`asOf` present or absent, `simulated` true or absent, a summary or none, three names), so the swarm has both.
+// FalkorDB 6.0.2 only panicked when rows tied on the key and a map column held a null on some rows and a value on
+// others (`asOf` present or absent, `simulated` true or absent), so the satellites differ that way, and in a summary
+// and a name.
 function props(t: EntityType, id: string, hub: boolean, i = 0): Record<string, unknown> {
   return {
     id, name: hub ? "Swarm hub" : `Swarm item ${i % 3}`,
-    ...(i % 2 === 0 ? { summary: "Swarm item, one of many that look the same.", asOf: DAY } : {}),
+    ...(i % 2 === 0 ? { summary: "Swarm item, one of many that look the same.", asOf: i % 4 === 0 ? DAY : "2026-10-01" } : {}),
     ...(i % 3 === 0 ? { simulated: true } : {}),
     src: "document:swarm-hub", createdAt: T0, updatedAt: T0, stateSince: T0, rev: 1, ...EXTRA[t],
   };
@@ -76,9 +77,11 @@ async function nodes(g: GraphHandle, label: EntityType, rows: Array<Record<strin
   }
 }
 
+// Each end is anchored on its own, with a WITH between (see tools/common.ts: an UNWIND variable in a pattern can skip
+// the id index, and `MATCH (a {id: r.f}), (b {id: r.t})` becomes a cross product on 4.22, which never finishes here).
 async function edges(g: GraphHandle, rel: RelType, rows: Array<{ f: string; t: string; p: Record<string, unknown> }>): Promise<void> {
   for (const part of chunks(rows, 500)) {
-    await g.query(`UNWIND $rows AS r MATCH (a:Entity {id: r.f}), (b:Entity {id: r.t}) CREATE (a)-[x:${rel}]->(b) SET x = r.p`, { rows: part });
+    await g.query(`UNWIND $rows AS r MATCH (a:Entity {id: r.f}) WITH r, a MATCH (b:Entity {id: r.t}) CREATE (a)-[x:${rel}]->(b) SET x = r.p`, { rows: part });
   }
 }
 

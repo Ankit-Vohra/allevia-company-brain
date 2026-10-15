@@ -4,6 +4,7 @@
 // every ratio is 0 / 0), subjects with no numbers, hubs with nothing attached (tests/fixtures/degenerate-graph.ts).
 // FalkorDB 6.0.2 panics, restarts and drops every unsaved write when it sorts tied rows or a NaN, so the one thing
 // asserted everywhere is that the server is still there, and has the same graph, after each call.
+import { appendFileSync } from "node:fs";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { GraphHandle } from "../../src/graph/client.js";
 import { closeAll } from "../../src/graph/client.js";
@@ -44,9 +45,11 @@ describe("every tool and query over a graph of ties, zeros and gaps (integration
   async function probe(name: string, fn: () => Promise<unknown>): Promise<void> {
     if (crashes.length) return;
     const t0 = Date.now();
+    // DEGENERATE_LOG=<file> appends each call as it starts and ends, to see which one a slow or stuck server is on.
+    if (process.env.DEGENERATE_LOG) appendFileSync(process.env.DEGENERATE_LOG, `start ${name}\n`);
     try {
       await fn();
-      if (process.env.DEGENERATE_VERBOSE && Date.now() - t0 > 500) console.log(`[slow ${Date.now() - t0} ms] ${name}`);
+      if (process.env.DEGENERATE_LOG) appendFileSync(process.env.DEGENERATE_LOG, `  done ${Date.now() - t0} ms\n`);
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
       (CRASHED.test(msg) ? crashes : problems).push(`${name}: ${msg.slice(0, 200)}`);
@@ -62,7 +65,12 @@ describe("every tool and query over a graph of ties, zeros and gaps (integration
 
   const ctx = () => makeCtx(g);
   const tool = (name: string) => ALL_TOOLS.find((t) => t.name === name)!;
-  const run = (name: string, args: Record<string, unknown>) => probe(`${name} ${JSON.stringify(args).slice(0, 90)}`, () => call(tool(name), args, ctx()));
+  // DEGENERATE_SKIP=find_paths,show_path leaves those tools out. FalkorDB 4.22's algo.SPpaths does not honour the
+  // query timeout: over this dense graph it runs until the server is restarted, where 6.0.2 answers in milliseconds.
+  const skipped = new Set((process.env.DEGENERATE_SKIP ?? "").split(",").filter(Boolean));
+  const run = async (name: string, args: Record<string, unknown>) => {
+    if (!skipped.has(name)) await probe(`${name} ${JSON.stringify(args).slice(0, 90)}`, () => call(tool(name), args, ctx()));
+  };
 
   beforeAll(async () => {
     ({ g, cleanup } = await whenFree(async () => {
