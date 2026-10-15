@@ -55,7 +55,7 @@ describe("decideApproval", () => {
     expect(r.action).toMatchObject({ kind: "github_issue", status: "done", affects: ["page:www.aamdani.ai/jobs"] });
     // pending -> approved -> executed: two Versions, oldest first
     const versions = await g.roQuery<{ s: string }>(
-      "MATCH (:Approval {id:$id})-[:HAD_VERSION]->(v:Version) RETURN v.props AS s ORDER BY v.since, v.until", { id: approval });
+      "MATCH (:Approval {id:$id})-[:HAD_VERSION]->(v:Version) RETURN v.props AS s ORDER BY v.since, v.until, id(v)", { id: approval });
     expect(versions.map((v) => JSON.parse(v.s).status)).toEqual(["pending", "approved"]);
     expect(await count("MATCH (:Approval {id:$id})-[:APPROVED_BY]->(:Person {id:'person:founder'}) RETURN count(*) AS c", { id: approval })).toBe(1);
     expect(await count("MATCH (r:Recommendation {id:$id}) WHERE r.status = 'approved' RETURN count(r) AS c", { id: rec })).toBe(1);
@@ -96,7 +96,7 @@ describe("decideApproval", () => {
     expect(r.approval).toMatchObject({ status: "executed", firstPass: false, editedPayload: { title: "SEO: rewrite the home page title for Raipur jobs" } });
     expect(r.approval.editDistance).toBeGreaterThan(0);
     expect(ghCalls[ghCalls.length - 1]).toEqual(expect.arrayContaining(["--title", "SEO: rewrite the home page title for Raipur jobs"]));
-    const versions = await g.roQuery<{ s: string }>("MATCH (:Approval {id:$id})-[:HAD_VERSION]->(v:Version) RETURN v.props AS s ORDER BY v.since, v.until", { id: approval });
+    const versions = await g.roQuery<{ s: string }>("MATCH (:Approval {id:$id})-[:HAD_VERSION]->(v:Version) RETURN v.props AS s ORDER BY v.since, v.until, id(v)", { id: approval });
     expect(versions.map((v) => JSON.parse(v.s).status)).toEqual(["pending", "edited"]);
   });
 

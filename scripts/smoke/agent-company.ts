@@ -56,7 +56,7 @@ function tools(): AlleviaTool[] {
     input: { metric: z.string().describe("metric name, e.g. signups") },
     async run(args, ctx): Promise<ToolResult> {
       const rows = await ctx.graph.roQuery<{ id: string; value: number; week: string; asOf: string }>(
-        "MATCH (o:Observation)-[:MEASURES]->(m:Metric) WHERE o.metric = $m RETURN o.id AS id, o.value AS value, o.windowEnd AS week, o.asOf AS asOf ORDER BY week",
+        "MATCH (o:Observation)-[:MEASURES]->(m:Metric) WHERE o.metric = $m RETURN o.id AS id, o.value AS value, o.windowEnd AS week, o.asOf AS asOf ORDER BY week, id",
         { m: String(args.metric).toLowerCase() });
       const points = rows.map((r, i) => ({ week: r.week, value: r.value, delta: i ? r.value - rows[i - 1]!.value : null }));
       return {

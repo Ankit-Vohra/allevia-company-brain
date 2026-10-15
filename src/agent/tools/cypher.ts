@@ -353,7 +353,7 @@ async function runCypher(args: { query: string; params?: Record<string, unknown>
 export const cypher = defineTool({
   name: "cypher",
   description:
-    "Read-only Cypher, only when no other tool fits. Nodes have label Entity plus a type label and an id; current edges have until IS NULL. Return ids so they can be cited. Refused: writes, LOAD CSV, algo.*, reduce() and nested list iteration; 5 s timeout, 200 rows. Example: {\"query\":\"MATCH (t:Task) WHERE t.status = $s RETURN t.id, t.name\",\"params\":{\"s\":\"open\"}}",
+    "Read-only Cypher, only when no other tool fits. Nodes have label Entity plus a type label and an id; current edges have until IS NULL. Return ids so they can be cited. Refused: writes, LOAD CSV, algo.*, reduce() and nested list iteration; 5 s timeout, 200 rows. ORDER BY must end in an id (, n.id). Example: {\"query\":\"MATCH (t:Task) WHERE t.status = $s RETURN t.id, t.name\",\"params\":{\"s\":\"open\"}}",
   input: {
     query: z.string().min(1).describe("A read-only Cypher query"),
     params: z.record(z.string(), z.unknown()).optional().describe("Query parameters, referenced as $name"),

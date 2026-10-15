@@ -134,12 +134,12 @@ describe("edge time (integration)", () => {
     const snapshot = async () => ({
       counts: (await g.roQuery("MATCH (n:Entity) WHERE n.id IN ['task:h1', 'task:h2'] OR n.of IN ['task:h1', 'task:h2'] RETURN count(n) AS nodes"))[0],
       versions: (await g.roQuery<{ since: number; until: number; props: string }>(
-        "MATCH (:Entity {id:'task:h1'})-[:HAD_VERSION]->(v) RETURN v.since AS since, v.until AS until, v.props AS props ORDER BY since, until"))
+        "MATCH (:Entity {id:'task:h1'})-[:HAD_VERSION]->(v) RETURN v.since AS since, v.until AS until, v.props AS props ORDER BY since, until, id(v)"))
         .map((v) => ({ since: v.since, until: v.until, status: JSON.parse(v.props).status as string })),
       edges: await g.roQuery(
         `MATCH (a:Entity)-[r]->(b:Entity) WHERE type(r) <> 'HAD_VERSION' AND (a.id IN $ids OR b.id IN $ids)
          RETURN a.id AS a, type(r) AS t, b.id AS b, r.since AS since, r.until AS until, r.src AS src, r.asOf AS asOf
-         ORDER BY a, t, b, since`, { ids: ["task:h1", "task:h2", "system:s1", "system:s2"] }),
+         ORDER BY a, t, b, since, id(r)`, { ids: ["task:h1", "task:h2", "system:s1", "system:s2"] }),
     });
     // Read weeks after the fact, so record time (now) is later than every document date.
     const NOW = day("2026-10-15");
@@ -188,7 +188,7 @@ describe("edge time (integration)", () => {
     const knows = (asOf: string, now: number, since?: number) =>
       upsertEdge(g, { from: "person:p2", type: "KNOWS_ABOUT", to: "system:s2", src: `document:${asOf}`, asOf, ...(since ? { since } : {}) }, now);
     const edges = () => g.roQuery<{ since: number; until: number | null; asOf: string }>(
-      "MATCH (:Entity {id:'person:p2'})-[r:KNOWS_ABOUT]->(:Entity {id:'system:s2'}) RETURN r.since AS since, r.until AS until, r.asOf AS asOf ORDER BY since");
+      "MATCH (:Entity {id:'person:p2'})-[r:KNOWS_ABOUT]->(:Entity {id:'system:s2'}) RETURN r.since AS since, r.until AS until, r.asOf AS asOf ORDER BY since, id(r)");
     await knows("2026-10-01", day("2026-10-01"), day("2026-10-01"));
     expect(await closeEdge(g, "person:p2", "KNOWS_ABOUT", "system:s2", day("2026-10-10"))).toBe(1);
     // dated before the ending: a re-assert of what we already know, with or without its own since
@@ -271,7 +271,7 @@ describe("edge time (integration)", () => {
   it("a re-assert refreshes the edge whose window covers its since, not the current one", async () => {
     const knows = (since: string, asOf: string, now: number) =>
       upsertEdge(g, { from: "person:p3", type: "KNOWS_ABOUT", to: "system:s1", since: day(since), asOf, src: `document:${asOf}` }, now);
-    const edges = () => g.roQuery("MATCH (:Entity {id:'person:p3'})-[r:KNOWS_ABOUT]->(:Entity {id:'system:s1'}) RETURN r.since AS since, r.until AS until, r.src AS src ORDER BY since");
+    const edges = () => g.roQuery("MATCH (:Entity {id:'person:p3'})-[r:KNOWS_ABOUT]->(:Entity {id:'system:s1'}) RETURN r.since AS since, r.until AS until, r.src AS src ORDER BY since, id(r)");
     await knows("2026-09-01", "2026-09-01", day("2026-09-01"));
     await closeEdge(g, "person:p3", "KNOWS_ABOUT", "system:s1", day("2026-09-10"));
     await knows("2026-09-20", "2026-09-20", day("2026-09-20"));
