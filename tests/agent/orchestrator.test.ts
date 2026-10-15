@@ -2,8 +2,11 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import type { AgentEvent } from "../../shared/contracts.js";
 import type { GraphHandle } from "../../src/graph/client.js";
-import { normalisePlan, reviewersFor, runTurn, toProposal, arrayArgKey, type TurnDeps, type TurnInput } from "../../src/agent/orchestrator.js";
-import { FakeRuntime, type FakeScript } from "../../src/agent/runtime.js";
+import { AGENTS, agentById } from "../../shared/roster.js";
+import {
+  MAX_REVIEWERS, MAX_TURNS, normalisePlan, reviewersFor, runTurn, toProposal, toolsFor, arrayArgKey, type TurnDeps, type TurnInput,
+} from "../../src/agent/orchestrator.js";
+import { FakeRuntime, type FakeScript, type RunInput } from "../../src/agent/runtime.js";
 import type { AlleviaTool } from "../../src/agent/tool.js";
 import { fakeTool, recorder, result, NOW } from "../helpers/agent.js";
 
@@ -57,14 +60,24 @@ const is = (type: string, agent?: string, extra: (e: any) => boolean = () => tru
 // ---------- pure helpers ----------
 
 describe("normalisePlan", () => {
-  it("drops unknown agents, merges duplicate desks and caps at 5 steps", () => {
-    const p = normalisePlan({ rationale: "r", steps: [
-      { agent: "data-analyst", task: "a" }, { agent: "ghost", task: "x" }, { agent: "data-analyst", task: "b" },
-      { agent: "tech-lead", task: "t" }, { agent: "growth-marketer", task: "g" }, { agent: "librarian", task: "l" },
-      { agent: "ops-manager", task: "o" }, { agent: "coe-lead", task: "c" },
-    ] }, "q");
-    expect(p.steps.map((s) => s.agent)).toEqual(["data-analyst", "tech-lead", "growth-marketer", "librarian", "ops-manager"]);
+  const SEVEN = [
+    { agent: "data-analyst", task: "a" }, { agent: "ghost", task: "x" }, { agent: "data-analyst", task: "b" },
+    { agent: "tech-lead", task: "t" }, { agent: "growth-marketer", task: "g" }, { agent: "librarian", task: "l" },
+    { agent: "ops-manager", task: "o" }, { agent: "coe-lead", task: "c" },
+  ];
+  it("drops unknown agents, merges duplicate desks and caps an ordinary question at 3 desks (the first listed)", () => {
+    const p = normalisePlan({ rationale: "r", steps: SEVEN }, "Why did signups drop last week?");
+    expect(p.steps.map((s) => s.agent)).toEqual(["data-analyst", "tech-lead", "growth-marketer"]);
     expect(p.steps[0]!.task).toBe("a; b");
+  });
+  it("allows up to 5 desks only for a broad review of the whole business", () => {
+    for (const q of ["How is the business doing overall?", "Give me the weekly review", "Morning brief please", "A full report across the business"]) {
+      expect(normalisePlan({ rationale: "r", steps: SEVEN }, q).steps.map((s) => s.agent)).toEqual(["data-analyst", "tech-lead", "growth-marketer", "librarian", "ops-manager"]);
+    }
+    for (const q of ["How's everything going?", "How are we doing overall?"]) expect(normalisePlan({ rationale: "r", steps: SEVEN }, q).steps.length).toBe(5);
+    for (const q of ["Which reel did best?", "Is everything in the sitemap fine?", "Why did signups drop overall in Mumbai?"]) {
+      expect(normalisePlan({ rationale: "r", steps: SEVEN }, q).steps.length).toBe(3);
+    }
   });
   it("keeps only `after` agents that are planned, orders topologically and breaks cycles", () => {
     const p = normalisePlan({ rationale: "", steps: [
@@ -72,7 +85,7 @@ describe("normalisePlan", () => {
       { agent: "data-analyst", task: "a" },
       { agent: "tech-lead", task: "t", after: ["ops-manager"] },
       { agent: "ops-manager", task: "o", after: ["tech-lead"] },
-    ] }, "q");
+    ] }, "weekly review");
     expect(p.steps.map((s) => s.agent)).toEqual(["data-analyst", "growth-marketer", "tech-lead", "ops-manager"]);
     expect(p.steps[1]).toEqual({ agent: "growth-marketer", task: "g", after: ["data-analyst"] });
     expect(p.steps[2]).toEqual({ agent: "tech-lead", task: "t" }); // cycle broken here
@@ -84,7 +97,7 @@ describe("normalisePlan", () => {
       { agent: "data-analyst", task: "Break down signups" },
       { agent: "coe-lead", task: "Sanity-check Kabir's numbers and the Growth Marketer's budget" },
       { agent: "tech-lead", task: "Check the dev deploy" },
-    ] }, "q");
+    ] }, "weekly review");
     expect(p.steps).toEqual([
       { agent: "data-analyst", task: "Break down signups" },
       { agent: "tech-lead", task: "Check the dev deploy" },
@@ -114,6 +127,31 @@ describe("reviewersFor (relevance rules)", () => {
   });
   it("desks nobody reviews get no reviewers", () => {
     expect(ids("tech-lead", "The sitemap returns 404.")).toEqual([]);
+  });
+  it("never more than MAX_REVIEWERS (2) per finding", () => {
+    expect(MAX_REVIEWERS).toBe(2);
+    for (const a of AGENTS) expect(reviewersFor(a.id, "Spend 5,000 on search for 41 signups [[metric:signups]]").length).toBeLessThanOrEqual(MAX_REVIEWERS);
+  });
+});
+
+describe("toolsFor (which tools a job gets)", () => {
+  const { getTools } = registry();
+  const names = (agent: string, phase: Parameters<typeof toolsFor>[1], lean = false) => toolsFor(agentById(agent)!, phase, getTools, { lean }).map((t) => t.name);
+  it("a desk's work gets its roster tools, including the write tools its roster lists", () => {
+    expect(names("tech-lead", "work")).toEqual(["get_entity", "seo_report", "search", "propose_action"]);
+    expect(names("data-analyst", "work")).not.toContain("propose_action");
+  });
+  it("reviews and revisions never get write tools", () => {
+    expect(names("tech-lead", "revise")).toEqual(["get_entity", "seo_report", "search"]);
+    expect(names("coe-lead", "review")).toEqual(["metric_trend", "get_entity", "search"]);
+  });
+  it("the Chief writing from findings gets only show_path and propose_action; answering alone, all its tools", () => {
+    expect(names("chief-of-staff", "synthesis", true)).toEqual(["show_path", "propose_action"]);
+    expect(names("chief-of-staff", "direct")).toEqual(["search", "get_entity", "show_path", "propose_action"]);
+  });
+  it("a registry that hands out more than asked for is cut back to the roster", () => {
+    const greedy = (n: string[]) => [...getTools(n), ...getTools(["propose_action", "metric_trend"])];
+    expect(toolsFor(agentById("librarian")!, "work", greedy).map((t) => t.name)).toEqual(["search"]);
   });
 });
 
@@ -421,5 +459,242 @@ describe("runTurn: failures and proposals", () => {
     expect(events.find(is("error", "chief-of-staff"))).toMatchObject({ message: "The Chief of Staff could not write the answer: overloaded." });
     expect(out.answer).toContain("**Arjun:** The sitemap is broken [[system:sitemap]].");
     expect(events.filter(is("text")).map((e) => (e as { delta: string }).delta).join("")).toBe(out.answer);
+  });
+});
+
+// ---------- latency: reviews overlap the work downstream ----------
+
+const CHECKED = "Signups fell from 55 to 41 in the week to 2026-10-05 [[metric:signups]].";
+const REVISED = "Signups fell from 55 (week to 2026-09-28) to 41 (week to 2026-10-05) [[metric:signups]].";
+const ANSWER = "Signups fell from 55 to 41 in the week to 2026-10-05 [[metric:signups]]. Next: hold paid search until the sitemap is fixed.";
+const ok = (note = "Fine.", delayMs = 0) => ({ delayMs, structured: { verdict: "ok", note } });
+const fix = (note: string, delayMs = 0) => ({ delayMs, structured: { verdict: "fix", note } });
+const trend = { name: "metric_trend", args: { metric: "signups" } };
+const texts = (events: AgentEvent[]) => events.filter(is("text")).map((e) => (e as { delta: string }).delta).join("");
+
+describe("runTurn: a finding's review runs alongside the desks that build on it", () => {
+  const scripts = (over: Record<string, FakeScript> = {}): Record<string, FakeScript> => ({
+    "chief-of-staff:plan": plan([{ agent: "data-analyst", task: "Signups" }, { agent: "growth-marketer", task: "Move", after: ["data-analyst"] }]),
+    "data-analyst:work": { calls: [trend], ...finding(CHECKED, { citations: ["metric:signups"] }) },
+    "data-analyst:revise": finding(REVISED),
+    "coe-lead:review": ok("Figures match.", 80),
+    "fact-checker:review": ok("Supported.", 80),
+    "growth-marketer:work": { delayMs: 5, ...finding("Hold paid search [[metric:signups]].") },
+    "chief-of-staff:synthesis": { text: ANSWER },
+    ...over,
+  });
+
+  it("a finding whose ids and numbers check out is handed on at once, marked as a draft", async () => {
+    const { events, run, runtime } = setup(scripts());
+    await run();
+    const startG = idx(events, is("agent_start", "growth-marketer"));
+    expect(startG).toBeLessThan(idx(events, is("agent_done", "coe-lead")));
+    expect(startG).toBeLessThan(idx(events, is("agent_done", "fact-checker")));
+    expect(events.find(is("handoff"))).toMatchObject({ from: "data-analyst", to: "growth-marketer", note: expect.stringContaining("(draft, review running)") });
+    const g = runtime.runs.find((r) => r.agentId === "growth-marketer")!.prompt;
+    expect(g).toContain("(draft: its review is still running)");
+    expect(g).toContain("rely on its cited data, not its wording");
+  });
+
+  it("a finding that fails the automatic check waits for its review before anyone builds on it", async () => {
+    const { events, run } = setup(scripts({ "data-analyst:work": { calls: [trend], ...finding("Signups fell to 41 [[made:up]].") } }));
+    await run();
+    const startG = idx(events, is("agent_start", "growth-marketer"));
+    expect(startG).toBeGreaterThan(idx(events, is("agent_done", "coe-lead")));
+    expect(startG).toBeGreaterThan(idx(events, is("agent_done", "fact-checker")));
+    expect(events.find(is("handoff"))).toMatchObject({ note: expect.not.stringContaining("draft") });
+  });
+
+  it("if reviewers then revise the draft, the Chief is told which finding built on the earlier version", async () => {
+    const { run, runtime } = setup(scripts({ "coe-lead:review": fix("Name the comparison week.", 40) }));
+    const out = await run();
+    expect(out.findings[0]).toMatchObject({ revised: true, text: REVISED });
+    const s = runtime.runs.filter((r) => r.phase === "synthesis").at(-1)!.prompt;
+    expect(s).toContain("Caveat: it built on an earlier draft of Kabir's finding [finding:t1-data-analyst], which reviewers then revised");
+    expect(s).toContain(REVISED);
+  });
+
+  it("a desk working from a draft proposes only once the draft is final, and not if reviewers changed it", async () => {
+    const propose = { calls: [trend, { name: "propose_action", args: { title: "Pause search ads", kind: "pause_ad" } }], ...finding("Pause search [[metric:signups]].") };
+    const a = setup(scripts({ "growth-marketer:work": propose }));
+    let reviewsWhenRun = -1;
+    const real = a.tools.propose_action!.run.bind(a.tools.propose_action);
+    a.tools.propose_action!.run = async (args, ctx) => { reviewsWhenRun = a.events.filter(is("review")).length; return real(args, ctx); };
+    const okRun = await a.run();
+    expect(reviewsWhenRun).toBe(2); // it waited for both reviews of the draft
+    expect(okRun.proposals).toHaveLength(1);
+
+    const b = setup(scripts({ "growth-marketer:work": propose, "coe-lead:review": fix("Name the comparison week.", 40) }));
+    const changed = await b.run();
+    expect(b.tools.propose_action!.calls).toHaveLength(0);
+    expect(changed.proposals).toHaveLength(0);
+    expect(b.events.find(is("tool_result", "growth-marketer", (e) => e.name === "propose_action"))).toMatchObject({ summary: expect.stringContaining("changed in review") });
+  });
+});
+
+describe("runTurn: the Chief drafts the answer while the last reviews finish", () => {
+  const scripts = (over: Record<string, FakeScript> = {}): Record<string, FakeScript> => ({
+    "chief-of-staff:plan": plan([{ agent: "data-analyst", task: "Signups" }]),
+    "data-analyst:work": { calls: [trend], ...finding(CHECKED, { citations: ["metric:signups"] }) },
+    "data-analyst:revise": finding(REVISED),
+    "coe-lead:review": ok("Figures match.", 60),
+    "fact-checker:review": ok("Supported.", 60),
+    "chief-of-staff:synthesis": {
+      preText: ANSWER,
+      calls: [{ name: "show_path", args: { ids: ["metric:signups"] } }, { name: "propose_action", args: { title: "Hold paid search", kind: "pause_ad" } }],
+    },
+    ...over,
+  });
+  const lastReview = (events: AgentEvent[]) => events.map((e, i) => (e.type === "review" ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
+
+  it("starts before the reviews end, shows nothing until they come back ok, then releases it", async () => {
+    const s = setup(scripts());
+    let reviewsWhenProposed = -1;
+    const real = s.tools.propose_action!.run.bind(s.tools.propose_action);
+    s.tools.propose_action!.run = async (args, ctx) => { reviewsWhenProposed = s.events.filter(is("review")).length; return real(args, ctx); };
+    const out = await s.run();
+    const { events, runtime } = s;
+    const start = idx(events, is("agent_start", "chief-of-staff", (e) => e.task === "Writing the answer"));
+    expect(start).toBeLessThan(idx(events, is("review")));
+    expect(events[start + 1]).toMatchObject({ type: "agent_status", agent: "chief-of-staff", text: "Drafting the answer while Isha and Nisha finish reviewing" });
+    expect(idx(events, is("text", "chief-of-staff"))).toBeGreaterThan(lastReview(events));
+    expect(idx(events, is("path"))).toBeGreaterThan(lastReview(events));
+    expect(reviewsWhenProposed).toBe(2); // a write waits for the release
+    expect(runtime.runs.filter((r) => r.phase === "synthesis")).toHaveLength(1);
+    expect(runtime.runs.find((r) => r.phase === "synthesis")!.prompt).not.toContain("(draft");
+    expect(out).toMatchObject({ ok: true, answer: ANSWER });
+    expect(texts(events)).toBe(ANSWER);
+    expect(out.path?.nodes.map((n) => n.id)).toEqual(["metric:signups"]);
+    expect(out.proposals).toHaveLength(1);
+    expect(events.filter(is("agent_start", "chief-of-staff"))).toHaveLength(2); // plan + one answer step
+  });
+
+  it("a reviewer sending the finding back sets the draft aside: its run is stopped, none of it is shown, and the Chief writes again", async () => {
+    const signals: Array<AbortSignal | undefined> = [];
+    const s = setup(scripts({
+      "coe-lead:review": fix("Name the comparison week.", 20),
+      "chief-of-staff:synthesis": (input: RunInput, n: number) => {
+        signals.push(input.signal);
+        return n === 0 ? { delayMs: 3_000, preText: "DRAFT that must never be seen [[metric:signups]]." } : { preText: ANSWER, calls: [{ name: "show_path", args: { ids: ["metric:signups"] } }] };
+      },
+    }));
+    const t0 = Date.now();
+    const out = await s.run();
+    expect(Date.now() - t0).toBeLessThan(2_000); // the draft was stopped, not waited out
+    expect(signals).toHaveLength(2);
+    expect(signals[0]!.aborted).toBe(true);
+    expect(texts(s.events)).toBe(ANSWER);
+    expect(s.events.some((e) => e.type === "path" && e.nodes.length !== 1)).toBe(false);
+    expect(s.runtime.runs.filter((r) => r.phase === "synthesis")[1]!.prompt).toContain(REVISED);
+    expect(s.events.find(is("agent_status", "chief-of-staff", (e) => /sent a finding back/.test(e.text)))).toBeDefined();
+    expect(s.events.filter(is("agent_done", "chief-of-staff"))).toHaveLength(2);
+    expect(out).toMatchObject({ ok: true, answer: ANSWER });
+  });
+
+  it("a draft that fails while held is written again once the reviews are in", async () => {
+    const s = setup(scripts({ "chief-of-staff:synthesis": [{ fail: "overloaded" }, { text: ANSWER }] }));
+    const out = await s.run();
+    expect(out).toMatchObject({ ok: true, answer: ANSWER });
+    expect(s.events.some((e) => e.type === "error")).toBe(false);
+    expect(idx(s.events, is("text", "chief-of-staff"))).toBeGreaterThan(lastReview(s.events));
+  });
+
+  it("with draftWhileReviewing off, the Chief starts only after every review", async () => {
+    const { events, run } = setup(scripts(), { draftWhileReviewing: false });
+    await run();
+    expect(idx(events, is("agent_start", "chief-of-staff", (e) => e.task === "Writing the answer"))).toBeGreaterThan(lastReview(events));
+  });
+
+  it("a finding already sent back when the last finding lands holds the Chief back until its revision lands", async () => {
+    const { events, run, runtime } = setup(scripts({
+      "chief-of-staff:plan": plan([{ agent: "data-analyst", task: "Signups" }, { agent: "librarian", task: "History" }]),
+      librarian: { delayMs: 40, ...finding("We paused daily stories [[decision:pause-stories]].") },
+      "coe-lead:review": fix("Name the comparison week.", 5),
+      "fact-checker:review": ok("Supported.", 5),
+      "data-analyst:revise": { delayMs: 80, ...finding(REVISED) },
+    }));
+    await run();
+    expect(idx(events, is("finding", "librarian"))).toBeLessThan(events.findLastIndex(is("finding", "data-analyst"))); // landed mid-revision
+    const revised = events.findLastIndex(is("agent_done", "data-analyst"));
+    expect(events[revised - 1]).toMatchObject({ type: "finding", text: REVISED });
+    expect(idx(events, is("agent_start", "chief-of-staff", (e) => e.task === "Writing the answer"))).toBeGreaterThan(revised);
+    expect(runtime.runs.filter((r) => r.phase === "synthesis")).toHaveLength(1);
+    expect(runtime.runs.find((r) => r.phase === "synthesis")!.prompt).toContain(REVISED);
+  });
+});
+
+describe("runTurn: budgets, timeouts and stopping", () => {
+  it("every job runs with its turn budget, and its prompt states the tool rounds", async () => {
+    const { run, runtime } = setup({
+      "chief-of-staff:plan": plan([{ agent: "data-analyst", task: "Signups" }]),
+      "data-analyst:work": { calls: [trend], ...finding(CHECKED, { citations: ["metric:signups"] }) },
+      "data-analyst:revise": finding(REVISED),
+      "coe-lead:review": fix("Name the comparison week."),
+      "fact-checker:review": ok(),
+      "chief-of-staff:synthesis": { text: ANSWER },
+    });
+    await run();
+    expect(new Set(runtime.runs.map((r) => r.phase))).toEqual(new Set(["plan", "work", "review", "revise", "synthesis"]));
+    for (const r of runtime.runs) expect(r.maxTurns).toBe(MAX_TURNS[r.phase!]);
+    expect(runtime.runs.find((r) => r.phase === "work")!.prompt).toContain(`at most ${MAX_TURNS.work - 2} rounds of tool calls`);
+    expect(runtime.runs.find((r) => r.phase === "review")!.prompt).toContain(`at most ${MAX_TURNS.review - 2} rounds of lookups`);
+    expect(runtime.runs.find((r) => r.phase === "synthesis")!.tools.map((t) => t.name)).toEqual(["show_path", "propose_action"]);
+  });
+
+  it("a desk that times out has its run aborted (so the SDK closes its process), not just abandoned", async () => {
+    const seen: Array<AbortSignal | undefined> = [];
+    const { run } = setup({
+      "chief-of-staff:plan": plan([{ agent: "librarian", task: "History" }]),
+      librarian: (input: RunInput) => { seen.push(input.signal); return { delayMs: 5_000, ...finding("late") }; },
+      "chief-of-staff:synthesis": { text: "Not recorded." },
+    }, { agentTimeoutMs: 40 });
+    const out = await run();
+    expect(out.failed).toEqual(["librarian"]);
+    expect(seen[0]!.aborted).toBe(true);
+    expect(String((seen[0]!.reason as Error).message)).toMatch(/timed out/);
+  });
+
+  it("the turn's signal stops every running agent at once", async () => {
+    const ac = new AbortController();
+    const seen: Array<AbortSignal | undefined> = [];
+    const slow = (input: RunInput) => { seen.push(input.signal); return { delayMs: 5_000, ...finding("late") }; };
+    const { run, events } = setup({
+      "chief-of-staff:plan": plan([{ agent: "librarian", task: "History" }, { agent: "tech-lead", task: "Site" }]),
+      librarian: slow, "tech-lead": slow,
+      "chief-of-staff:synthesis": { text: "never" },
+    }, { signal: ac.signal });
+    setTimeout(() => ac.abort(), 20);
+    const t0 = Date.now();
+    const out = await run();
+    expect(Date.now() - t0).toBeLessThan(1_000);
+    expect(seen).toHaveLength(2);
+    expect(seen.every((s) => s!.aborted)).toBe(true);
+    expect(out.failed.sort()).toEqual(["librarian", "tech-lead"]);
+    expect(out.ok).toBe(false);
+    expect(events.find(is("agent_status", "librarian"))).toMatchObject({ text: "Couldn't finish: the turn was stopped" });
+  });
+
+  it("an answer written in full and pathed is kept when the Chief's run fails afterwards (e.g. out of turns)", async () => {
+    const { events, run } = setup({
+      "chief-of-staff:plan": plan([{ agent: "chief-of-staff", task: "Look it up" }]),
+      "chief-of-staff:direct": { preText: ANSWER, calls: [{ name: "show_path", args: { ids: ["metric:signups"] } }], fail: "error_max_turns: max turns" },
+    });
+    const out = await run();
+    expect(out).toMatchObject({ ok: true, answer: ANSWER });
+    expect(texts(events)).toBe(ANSWER);
+    expect(events.some((e) => e.type === "error")).toBe(false);
+  });
+});
+
+describe("runTurn: findings nobody reviews", () => {
+  it("are final at once, so the Chief never drafts for them", async () => {
+    const { events, run, runtime } = setup({
+      "chief-of-staff:plan": plan([{ agent: "tech-lead", task: "Site" }]),
+      "tech-lead": { calls: [{ name: "get_entity", args: { id: "system:sitemap" } }], ...finding("The sitemap is broken [[system:sitemap]].") },
+      "chief-of-staff:synthesis": { text: "The sitemap is broken [[system:sitemap]]." },
+    });
+    await run();
+    expect(events.some(is("agent_status", "chief-of-staff", (e) => /Drafting/.test(e.text)))).toBe(false);
+    expect(runtime.runs.filter((r) => r.phase === "synthesis")).toHaveLength(1);
   });
 });
