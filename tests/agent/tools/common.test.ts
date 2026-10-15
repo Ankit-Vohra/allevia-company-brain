@@ -1,20 +1,11 @@
 import { describe, it, expect } from "vitest";
-import type { GraphHandle, QueryOpts } from "../../../src/graph/client.js";
+import type { GraphHandle } from "../../../src/graph/client.js";
 import { MissingEndpoint } from "../../../src/graph/errors.js";
 import {
-  InputError, READ_TIMEOUT_MS, TOOL_ALGO_TIMEOUT_MS, SOURCE_CAP, bounded, clip, compactProps, defineTool, median, parseAsOf, ro, serial,
+  InputError, READ_TIMEOUT_MS, TOOL_ALGO_TIMEOUT_MS, SOURCE_CAP, clip, compactProps, defineTool, median, parseAsOf, ro, serial,
   sourcesFor,
 } from "../../../src/agent/tools/common.js";
 import { makeCtx } from "../../helpers/tools.js";
-
-// A stand-in GraphHandle that records the options each read was given.
-function fakeGraph(log: Array<number | undefined>): GraphHandle {
-  const g = {
-    name: "fake",
-    async roQuery(_c: string, _p?: Record<string, unknown>, o?: QueryOpts) { log.push(o?.timeoutMs); return []; },
-  };
-  return g as unknown as GraphHandle;
-}
 
 describe("tool plumbing", () => {
   it("parseAsOf: a bare date means the end of that day; junk is an input error", () => {
@@ -24,15 +15,9 @@ describe("tool plumbing", () => {
     expect(() => parseAsOf("last tuesday")).toThrow(InputError);
   });
 
-  it("bounded caps every read and passes everything else through", async () => {
-    const log: Array<number | undefined> = [];
-    const g = bounded(fakeGraph(log), 8000);
-    await g.roQuery("RETURN 1");
-    await g.roQuery("RETURN 1", {}, { timeoutMs: 60_000 });
-    await g.roQuery("RETURN 1", {}, { timeoutMs: 2000 });
-    expect(log).toEqual([8000, 8000, 2000]);
-    expect(g.name).toBe("fake");
+  it("reads stay under the read cap, and algorithms get no more", () => {
     expect(READ_TIMEOUT_MS).toBeLessThanOrEqual(8000);
+    expect(TOOL_ALGO_TIMEOUT_MS).toBeLessThanOrEqual(READ_TIMEOUT_MS);
   });
 
   it("ro waits and retries while the server's query queue is full, and only then", async () => {

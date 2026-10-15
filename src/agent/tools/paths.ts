@@ -7,7 +7,7 @@ import type { ToolContext } from "../tool.js";
 import { REL_TYPES, type RelType } from "../../graph/schema.js";
 import { shortestPaths } from "../../graph/algorithms.js";
 import {
-  ALGO_BUDGET, Collector, EDGE, InputError, MEMORY_RELS, PATH_RELS, TOOL_ALGO_TIMEOUT_MS, bounded, clamp, defineTool, edgeText,
+  ALGO_BUDGET, Collector, EDGE, InputError, MEMORY_RELS, PATH_RELS, TOOL_ALGO_TIMEOUT_MS, clamp, defineTool, edgeText,
   getNodes, parseAsOf, requireNode, ro, type EdgeRow,
 } from "./common.js";
 
@@ -18,9 +18,7 @@ async function runFindPaths(args: { from: string; to: string; rels?: RelType[]; 
   if (args.from === args.to) throw new InputError("from and to are the same node.");
   const [a, b] = await Promise.all([requireNode(ctx, args.from), requireNode(ctx, args.to)]);
   const maxPaths = clamp(args.maxPaths, 3, 1, 3);
-  // A variable, not a literal: dev's shortestPaths options gain timeoutMs with the graph-core update (see common.ts).
-  const opts = { relTypes: args.rels?.length ? args.rels : PATH_RELS, maxPaths, asOf, ...ALGO_BUDGET };
-  const paths = await shortestPaths(bounded(ctx.graph), a.id, b.id, opts);
+  const paths = await shortestPaths(ctx.graph, a.id, b.id, { relTypes: args.rels?.length ? args.rels : PATH_RELS, maxPaths, asOf, ...ALGO_BUDGET });
   const col = new Collector();
   col.node(a);
   col.node(b);
@@ -84,8 +82,7 @@ async function runShowPath(args: { ids: string[] }, ctx: ToolContext) {
       unchecked.push({ from: a, to: b });
       continue;
     }
-    const opts = { maxPaths: 1, maxLen: 4, relTypes: PATH_RELS, timeoutMs: left };
-    const [p] = await shortestPaths(bounded(ctx.graph, left), a, b, opts);
+    const [p] = await shortestPaths(ctx.graph, a, b, { maxPaths: 1, maxLen: 4, relTypes: PATH_RELS, timeoutMs: left });
     if (p) {
       for (const n of p.nodes.slice(1)) col.ref(n);
       for (const pe of p.edges) col.edgeRef(pe);

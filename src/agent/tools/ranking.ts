@@ -4,17 +4,15 @@
 import { z } from "zod";
 import type { ToolContext } from "../tool.js";
 import { ENTITY_TYPES, REL_TYPES, isEntityType, isRelType, type EntityType, type RelType } from "../../graph/schema.js";
-import type { GraphHandle } from "../../graph/client.js";
 import { communities, pageRank } from "../../graph/algorithms.js";
 import {
-  ALGO_BUDGET, Collector, EDGE, InputError, NODE, SEARCH_TYPES, bounded, brief, clamp, defineTool, getNodes, ro, round, typeOf,
-  type AlgoBudget, type EdgeRow, type NodeRow,
+  ALGO_BUDGET, Collector, EDGE, InputError, NODE, SEARCH_TYPES, brief, clamp, defineTool, getNodes, ro, round, typeOf,
+  type EdgeRow, type NodeRow,
 } from "./common.js";
 
-// pageRank and communities with their trailing options argument, which carries timeoutMs once the graph-core update
-// lands on dev and is ignored until then (a function of fewer parameters fits this type, so it compiles either way).
-const pageRankIn = pageRank as (g: GraphHandle, label: EntityType | "Entity", rel: RelType | undefined, opts: AlgoBudget) => ReturnType<typeof pageRank>;
-const communitiesIn = communities as (g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[], opts: AlgoBudget) => ReturnType<typeof communities>;
+// While the graph is written faster than a consistent read (a busy ingest), the core runs the algorithm on its last
+// good projection and flags the rows stale; the tool says so rather than passing it off as the graph right now.
+const STALE_NOTE = "Computed on the last consistent snapshot: the graph is being updated right now, so the newest changes may be missing.";
 
 // ---------- important ----------
 
@@ -26,6 +24,7 @@ async function runImportant(args: { label?: EntityType; rel?: RelType; limit?: n
   const types = label === "Entity" ? SEARCH_TYPES : [label];
   let method: "stored" | "pagerank" = "pagerank";
   let ranked: Array<{ n: NodeRow; score: number }> = [];
+  let stale = false;
   if (!args.rel) {
     const [cov] = await ro<{ total: number; ranked: number }>(ctx,
       `MATCH (n:${label}) WHERE any(l IN labels(n) WHERE l IN $types) RETURN count(n) AS total, count(n.rank) AS ranked`, { types });
@@ -37,7 +36,9 @@ async function runImportant(args: { label?: EntityType; rel?: RelType; limit?: n
     }
   }
   if (method === "pagerank") {
-    const scores = (await pageRankIn(bounded(ctx.graph), label, args.rel, ALGO_BUDGET)).slice(0, 300);
+    const all = await pageRank(ctx.graph, label, args.rel, ALGO_BUDGET);
+    stale = all.stale === true;
+    const scores = all.slice(0, 300);
     const nodes = await getNodes(ctx, scores.map((s) => s.id));
     ranked = scores.map((s) => ({ n: nodes.get(s.id)!, score: s.score }))
       .filter((r) => r.n && types.includes(typeOf(r.n) as EntityType)).slice(0, limit);
@@ -54,7 +55,8 @@ async function runImportant(args: { label?: EntityType; rel?: RelType; limit?: n
        RETURN ${EDGE("r")} AS e LIMIT 100`, { ids: idList, rel: args.rel ?? null });
     for (const l of links) col.edge(l.e);
   }
-  return col.result(ctx, { label, rel: args.rel ?? null, method, items }, items.length ? undefined : "Nothing to rank for that label/relationship.");
+  const note = [items.length ? "" : "Nothing to rank for that label/relationship.", stale ? STALE_NOTE : ""].filter(Boolean).join(" ");
+  return col.result(ctx, { label, rel: args.rel ?? null, method, items }, note || undefined);
 }
 
 export const important = defineTool({
@@ -85,10 +87,13 @@ async function runTopics(args: { limit?: number }, ctx: ToolContext) {
     { per: Math.ceil(MEMBER_SAMPLE / (limit * 2)), groups: limit * 2 });
   const method = stored.length >= 2 ? "stored" : "label_propagation";
   let groups: Array<{ cid: string | number; size: number; ids: string[] }>;
+  let stale = false;
   if (method === "stored") groups = stored.map((s) => ({ cid: s.c, size: s.size, ids: s.ids }));
   else {
     const byId = new Map<string | number, string[]>();
-    for (const r of await communitiesIn(bounded(ctx.graph), [], TOPIC_RELS, ALGO_BUDGET)) byId.set(r.communityId, [...(byId.get(r.communityId) ?? []), r.id]);
+    const rows = await communities(ctx.graph, [], TOPIC_RELS, ALGO_BUDGET);
+    stale = rows.stale === true;
+    for (const r of rows) byId.set(r.communityId, [...(byId.get(r.communityId) ?? []), r.id]);
     groups = [...byId.entries()].map(([cid, ids]) => ({ cid, size: ids.length, ids })).sort((a, b) => b.size - a.size).slice(0, limit * 2);
   }
   const multi = groups.filter((x) => x.size >= 2);
@@ -120,7 +125,8 @@ async function runTopics(args: { limit?: number }, ctx: ToolContext) {
       { ids: shown });
     for (const l of links) col.edge(l.e);
   }
-  return col.result(ctx, { method, topics: out }, out.length ? undefined : "No topic clusters yet (documents need MENTIONS or LINKS_TO).");
+  const note = [out.length ? "" : "No topic clusters yet (documents need MENTIONS or LINKS_TO).", stale ? STALE_NOTE : ""].filter(Boolean).join(" ");
+  return col.result(ctx, { method, topics: out }, note || undefined);
 }
 
 export const topics = defineTool({

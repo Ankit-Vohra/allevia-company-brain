@@ -83,8 +83,10 @@ describe("get_entity, neighbors, history (integration)", () => {
       ["linked", "OWNS", "person:priya"],
       ["changed", "", ""],
     ]);
+    // A change is dated by its source, not by when it was written: the in_progress state was written on 6 Oct from
+    // PENDING.md as of 12 Oct, so the status changed on 12 Oct (and still sorts after the 5 Oct hand-over).
     const changed = r.data.events.find((e: { event: string }) => e.event === "changed");
-    expect(changed).toMatchObject({ at: "2026-10-06T00:00:00.000Z", changed: ["status"], before: { status: "open" }, after: { status: "in_progress" } });
+    expect(changed).toMatchObject({ at: "2026-10-12T00:00:00.000Z", changed: ["status"], before: { status: "open" }, after: { status: "in_progress" } });
     expect(r.data.events[2].at).toBe("2026-10-05T00:00:00.000Z");
     expect(r.edges).toEqual(expect.arrayContaining([expect.objectContaining({ from: "person:founder", type: "OWNS", until: Date.parse("2026-10-05") })]));
     expect(r.nodes.some((n: { label: string }) => n.label === "Version")).toBe(true);

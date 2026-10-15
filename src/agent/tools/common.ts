@@ -10,7 +10,7 @@
 import type { z } from "zod";
 import type { AlleviaTool, ToolContext } from "../tool.js";
 import type { EdgeRef, NodeRef, SourceRef, ToolResult } from "../../../shared/contracts.js";
-import type { GraphHandle, QueryOpts } from "../../graph/client.js";
+import type { AlgoOpts } from "../../graph/algorithms.js";
 import { currentEdge } from "../../graph/read.js";
 import { MissingEndpoint } from "../../graph/errors.js";
 import { REL_TYPES, SEARCHABLE, typeOfLabels, type EntityType, type RelType } from "../../graph/schema.js";
@@ -21,14 +21,10 @@ export const DEFAULT_ROWS = 25;
 export const TEXT_CAP = 400;
 export const SOURCE_CAP = 20;          // sources beyond the one-per-node cover
 export const SOURCE_COVER_CAP = 150;   // hard ceiling on the cover itself; every tool returns at most this many nodes
-// Graph algorithms (paths, PageRank, communities) get one budget per call. The graph core is gaining `timeoutMs` on
-// every algorithms.ts function (one budget across its projection reads and the algorithm query); until dev has it,
-// ALGO_BUDGET rides along in shapes both versions accept (inside shortestPaths' options object, and as a trailing
-// argument the current pageRank/communities ignore: see ranking.ts), and bounded() caps the reads they make on the
-// tenant graph. Once the update lands, bounded() can go.
+// Graph algorithms (paths, PageRank, communities) get one budget per call, passed as the graph core's `timeoutMs`
+// (one budget across its projection reads and the algorithm query).
 export const TOOL_ALGO_TIMEOUT_MS = 8_000;
-export interface AlgoBudget { timeoutMs: number }
-export const ALGO_BUDGET: AlgoBudget = { timeoutMs: TOOL_ALGO_TIMEOUT_MS };
+export const ALGO_BUDGET: AlgoOpts = { timeoutMs: TOOL_ALGO_TIMEOUT_MS };
 
 // Types that are plumbing, not business facts: hidden from neighbour lists unless asked for.
 export const BOOKKEEPING_TYPES: EntityType[] = ["Version", "Turn", "Session", "Observation", "Chunk"];
@@ -89,11 +85,10 @@ export function refuseIfReadOnly(ctx: ToolContext, tool: string): void {
   if (ctx.readOnly) throw new InputError(`${tool} is disabled in read-only mode; nothing was saved.`, { refused: true });
 }
 
-// dev's ToolContext gains `signal`, aborted when the agent's run is stopped (timeout, turn stopped): a write tool checks
-// it right before it commits, so a run stopped mid-call changes nothing. Read through a cast, so this compiles before
-// and after that field reaches this branch.
+// ctx.signal is aborted when the agent's run is stopped (timeout, turn stopped): a write tool checks it right before it
+// commits, so a run stopped mid-call changes nothing.
 export function refuseIfStopped(ctx: ToolContext, tool: string): void {
-  if ((ctx as { signal?: AbortSignal }).signal?.aborted) throw new InputError(`${tool} saved nothing: the run was stopped.`, { refused: true });
+  if (ctx.signal?.aborted) throw new InputError(`${tool} saved nothing: the run was stopped.`, { refused: true });
 }
 
 // ---------- reads ----------
@@ -134,20 +129,6 @@ export async function packed<T>(ctx: ToolContext, body: string, row: string, par
      UNWIND range(0, size(xs) - 1, $pack) AS i RETURN total, xs[i..i + $pack] AS part`,
     { ...params, cap, pack: PACK });
   return { rows: parts.flatMap((p) => p.part), total: parts[0]?.total ?? 0 };
-}
-
-// The graph core's algorithms call roQuery without a timeout; this view caps the reads they make on the tenant graph
-// (paths, projection builds). Queries they run on a projection handle use the core's own default.
-export function bounded(g: GraphHandle, ms = TOOL_ALGO_TIMEOUT_MS): GraphHandle {
-  return new Proxy(g, {
-    get(target, key) {
-      if (key === "roQuery") {
-        return (c: string, p?: Record<string, unknown>, o?: QueryOpts) => target.roQuery(c, p, { ...o, timeoutMs: Math.min(o?.timeoutMs ?? ms, ms) });
-      }
-      const v = Reflect.get(target, key, target) as unknown;
-      return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(target) : v;
-    },
-  });
 }
 
 // ---------- rows -> refs ----------
