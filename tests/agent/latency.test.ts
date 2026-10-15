@@ -6,8 +6,8 @@
 // - every agent run pays SPAWN: Agent SDK process start + initialize handshake, measured at 0.28-0.54 s on the dev Mac;
 // - every model round trip costs TURN = 4 s (haiku with tool results). This calibrates the live-like scenario under the
 //   old flow to 114.8 s, close to the 116 s live run with 6 haiku agents;
-// - a run makes min(wanted, maxTurns - 2) tool rounds (one turn is its final answer, one is slack), only with tools it
-//   was given, then one final turn;
+// - a run makes min(wanted, its job's tool-round budget) tool rounds (toolRounds: the budget its prompt states and its
+//   maxTurns allows), only with tools it was given, then one final turn;
 // - the Chief streams the answer in the turn after its lookups and calls show_path in that same turn; the round trip
 //   after show_path is one more TURN (show_path's fake sleeps it), so "first token" and "done" differ by one TURN.
 // The scenarios script what each desk wants to do; the orchestrator decides what actually runs and when.
@@ -17,7 +17,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { z } from "zod";
 import type { AgentEvent } from "../../shared/contracts.js";
 import type { GraphHandle } from "../../src/graph/client.js";
-import { runTurn, type TurnDeps, type TurnInput } from "../../src/agent/orchestrator.js";
+import { runTurn, toolRounds, type TurnDeps, type TurnInput } from "../../src/agent/orchestrator.js";
 import { FakeRuntime, type FakeScript, type FakeStep, type RunInput } from "../../src/agent/runtime.js";
 import type { AlleviaTool } from "../../src/agent/tool.js";
 import { fakeTool, result, NOW } from "../helpers/agent.js";
@@ -56,7 +56,7 @@ function registry(): (names: string[]) => AlleviaTool[] {
 
 const roundsFor = (input: RunInput, want: number, s: Stats, honourCaps: boolean): number => {
   if (!input.tools.length) return 0;
-  const cap = Math.max(0, (input.maxTurns ?? 10) - 2);
+  const cap = toolRounds(input.phase!);
   const r = honourCaps ? Math.min(want, cap) : want;
   if (r < want) s.capped++;
   return r;
@@ -90,7 +90,7 @@ type Scenario = { name: string; question: string; scripts: (s: Stats, caps: bool
 
 const SCENARIOS: Scenario[] = [
   {
-    name: "why (live-like: 3 desks, a dependency, 2 reviewers each)",
+    name: "why (live-like: 3 desks, a dependency, numbers reviewed)",
     question: "Why did employer signups drop last week?",
     scripts: (s, c) => ({
       "chief-of-staff:plan": plan(s, [
@@ -197,11 +197,13 @@ describe("latency harness (simulated per-call latency)", () => {
     for (const m of Object.values(results)) expect(m.wall).toBeGreaterThan(0);
     if (process.env.ALLEVIA_BENCH_BASELINE) return; // measuring an older flow: report only
     const [why, content, over, fast] = SCENARIOS.map((sc) => results[sc.name]!);
-    expect(why!.wall).toBeLessThan(70);        // old flow: 114.8 s
-    expect(why!.firstToken).toBeLessThan(70);  // old flow: 110.8 s
-    expect(content!.wall).toBeLessThan(66);    // old flow: 70 s (its draft is set aside by the copy editor's fix)
-    expect(over!.agents).toBeLessThanOrEqual(6);
-    expect(over!.wall).toBeLessThan(70);       // old flow: 126.8 s with 7 agents
+    expect(why!.wall).toBeLessThan(65);        // old flow: 114.8 s
+    expect(why!.firstToken).toBeLessThan(65);  // old flow: 110.8 s
+    expect(why!.turns).toBeLessThanOrEqual(27); // old flow: 41 model turns (usage)
+    expect(content!.wall).toBeLessThan(60);    // old flow: 70 s
+    expect(content!.redone).toBe(0);           // no draft for a content finding, so none is thrown away
+    expect(over!.agents).toBeLessThanOrEqual(5);
+    expect(over!.wall).toBeLessThan(65);       // old flow: 126.8 s with 7 agents
     expect(fast!.wall).toBeLessThan(26);       // unchanged: 24.8 s
   });
 });

@@ -72,7 +72,7 @@ describe("ask() (integration)", () => {
 
     expect(r.ok).toBe(true);
     expect(r.checks).toEqual({ citationsValid: true, invalidCitations: [], numbersGrounded: false, ungroundedNumbers: ["56"], simulatedDisclosed: true, freshnessDisclosed: true });
-    expect(r.agents).toEqual(["chief-of-staff", "data-analyst", "coe-lead", "fact-checker"]);
+    expect(r.agents).toEqual(["chief-of-staff", "data-analyst", "coe-lead"]); // its numbers checked out: one numbers reviewer
 
     // persisted: the Turn, its session, the full event log (text deltas merged), findings and reviews
     const stored = await getTurnEvents(g, r.turnId);
@@ -81,10 +81,10 @@ describe("ask() (integration)", () => {
     expect(session).toMatchObject({ channel: "cli", asker: "person:founder", title: "Why did signups drop?" });
     expect(session!.turns).toHaveLength(1);
     expect(session!.turns[0]).toMatchObject({ id: r.turnId, status: "ok", checks: r.checks });
-    expect(await count("MATCH (:Turn {id:$t})-[:HANDLED_BY]->(a:Agent) RETURN count(a) AS c", { t: r.turnId })).toBe(4);
+    expect(await count("MATCH (:Turn {id:$t})-[:HANDLED_BY]->(a:Agent) RETURN count(a) AS c", { t: r.turnId })).toBe(3);
     expect(await count("MATCH (:Turn {id:$t})-[:TOUCHED]->(:Metric {id:'metric:signups'}) RETURN count(*) AS c", { t: r.turnId })).toBe(1);
     expect(await count("MATCH (f:Finding)-[:PART_OF]->(:Turn {id:$t}) RETURN count(f) AS c", { t: r.turnId })).toBe(1);
-    expect(await count("MATCH (:Agent)-[r:REVIEWED]->(:Finding)-[:PART_OF]->(:Turn {id:$t}) RETURN count(r) AS c", { t: r.turnId })).toBe(2);
+    expect(await count("MATCH (:Agent)-[r:REVIEWED]->(:Finding)-[:PART_OF]->(:Turn {id:$t}) RETURN count(r) AS c", { t: r.turnId })).toBe(1);
     expect(await count("MATCH (:Agent {id:'agent:allevia-data-analyst'})-[r:KNOWS_ABOUT]->(:Metric {id:'metric:signups'}) RETURN r.weight AS c")).toBe(1);
   });
 

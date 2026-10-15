@@ -217,7 +217,10 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
     const who = agentById(f.agent);
     nodes.push({
       type: "Finding", id: f.id, name: clip(oneLine(`${who?.name ?? f.agent}: ${f.task}`), 120), summary: clip(f.text, 600),
-      props: { text: f.text, agent: f.agent, task: f.task, turnId: t.turnId, citations: f.citations, basedOn: f.basedOn, proposals: f.proposals, revised: f.revised, rejected: f.rejected },
+      props: {
+        text: f.text, agent: f.agent, task: f.task, turnId: t.turnId, citations: f.citations, basedOn: f.basedOn, proposals: f.proposals,
+        revised: f.revised, rejected: f.rejected, partial: f.partial === true,
+      },
     });
     edges.push({ from: f.id, type: "PART_OF", to: t.turnId });
     if (who) edges.push({ from: agentNodeId(f.agent), type: "PRODUCED", to: f.id });

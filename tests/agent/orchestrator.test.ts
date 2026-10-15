@@ -4,7 +4,7 @@ import type { AgentEvent } from "../../shared/contracts.js";
 import type { GraphHandle } from "../../src/graph/client.js";
 import { AGENTS, agentById } from "../../shared/roster.js";
 import {
-  MAX_REVIEWERS, MAX_TURNS, asksToRemember, normalisePlan, rememberRefusal, reviewersFor, runTurn, toProposal, toolsFor, arrayArgKey,
+  MAX_REVIEWERS, MAX_TURNS, asksToRemember, toolRounds, normalisePlan, rememberRefusal, reviewersFor, runTurn, toProposal, toolsFor, arrayArgKey,
   type TurnDeps, type TurnInput,
 } from "../../src/agent/orchestrator.js";
 import { FakeRuntime, type FakeScript, type RunInput } from "../../src/agent/runtime.js";
@@ -126,6 +126,11 @@ describe("reviewersFor (relevance rules)", () => {
     expect(ids("data-analyst", "Signups fell after the sitemap broke on 2026-10-05.")).toEqual([]);
     expect(ids("data-analyst", "Signups fell from 55 to 41.")).toEqual(["coe-lead", "fact-checker"]);
     expect(ids("growth-marketer", "Spend ₹5,000 on search.")).toEqual(["coe-lead", "fact-checker"]);
+  });
+  it("one numbers reviewer (CoE) when the automatic check already passed; content keeps both of its reviewers", () => {
+    expect(reviewersFor("data-analyst", "Signups fell from 55 to 41.", { checked: true }).map((a) => a.id)).toEqual(["coe-lead"]);
+    expect(reviewersFor("growth-marketer", "Spend ₹5,000 on search.", { checked: true }).map((a) => a.id)).toEqual(["coe-lead"]);
+    expect(reviewersFor("content-strategist", "3 hooks [[content:reel-1]]", { checked: true }).map((a) => a.id)).toEqual(["copy-editor", "fact-checker"]);
   });
   it("desks nobody reviews get no reviewers", () => {
     expect(ids("tech-lead", "The sitemap returns 404.")).toEqual([]);
@@ -314,7 +319,7 @@ describe("runTurn: reviews", () => {
   it("reviewers who disagree (reject + ok) earn one revision with every non-ok note, not a rejection", async () => {
     const { run, runtime } = setup({
       "chief-of-staff:plan": plan([{ agent: "data-analyst", task: "Signups" }]),
-      "data-analyst:work": { calls: [{ name: "metric_trend", args: { metric: "signups" } }], ...finding("Signups fell from 55 to 41 [[metric:signups]].") },
+      "data-analyst:work": { calls: [{ name: "metric_trend", args: { metric: "signups" } }], ...finding("Signups fell from 55 to 40 [[metric:signups]].") },
       "data-analyst:revise": finding("Signups fell from 55 to 41 in the week to 2026-10-05 [[metric:signups]] [[obs:signups:2026-10-05]]."),
       "coe-lead": { structured: { verdict: "ok", note: "Figures match." } },
       "fact-checker": { structured: { verdict: "reject", note: "Could not find the source." } },
@@ -493,8 +498,8 @@ describe("runTurn: a finding's review runs alongside the desks that build on it"
     const { events, run, runtime } = setup(scripts());
     await run();
     const startG = idx(events, is("agent_start", "growth-marketer"));
-    expect(startG).toBeLessThan(idx(events, is("agent_done", "coe-lead")));
-    expect(startG).toBeLessThan(idx(events, is("agent_done", "fact-checker")));
+    expect(startG).toBeLessThan(idx(events, is("agent_done", "coe-lead"))); // its numbers checked out: one reviewer, the CoE lead
+    expect(events.some(is("agent_start", "fact-checker"))).toBe(false);
     expect(events.find(is("handoff"))).toMatchObject({ from: "data-analyst", to: "growth-marketer", note: expect.stringContaining("(draft, review running)") });
     const g = runtime.runs.find((r) => r.agentId === "growth-marketer")!.prompt;
     expect(g).toContain("(draft: its review is still running)");
@@ -526,7 +531,7 @@ describe("runTurn: a finding's review runs alongside the desks that build on it"
     const real = a.tools.propose_action!.run.bind(a.tools.propose_action);
     a.tools.propose_action!.run = async (args, ctx) => { reviewsWhenRun = a.events.filter(is("review")).length; return real(args, ctx); };
     const okRun = await a.run();
-    expect(reviewsWhenRun).toBe(2); // it waited for both reviews of the draft
+    expect(reviewsWhenRun).toBe(1); // it waited for the draft's review
     expect(okRun.proposals).toHaveLength(1);
 
     const b = setup(scripts({ "growth-marketer:work": propose, "coe-lead:review": fix("Name the comparison week.", 40) }));
@@ -561,10 +566,10 @@ describe("runTurn: the Chief drafts the answer while the last reviews finish", (
     const { events, runtime } = s;
     const start = idx(events, is("agent_start", "chief-of-staff", (e) => e.task === "Writing the answer"));
     expect(start).toBeLessThan(idx(events, is("review")));
-    expect(events[start + 1]).toMatchObject({ type: "agent_status", agent: "chief-of-staff", text: "Drafting the answer while Isha and Nisha finish reviewing" });
+    expect(events[start + 1]).toMatchObject({ type: "agent_status", agent: "chief-of-staff", text: "Drafting the answer while Isha finishes reviewing" });
     expect(idx(events, is("text", "chief-of-staff"))).toBeGreaterThan(lastReview(events));
     expect(idx(events, is("path"))).toBeGreaterThan(lastReview(events));
-    expect(reviewsWhenProposed).toBe(2); // a write waits for the release
+    expect(reviewsWhenProposed).toBe(1); // a write waits for the release
     expect(runtime.runs.filter((r) => r.phase === "synthesis")).toHaveLength(1);
     expect(runtime.runs.find((r) => r.phase === "synthesis")!.prompt).not.toContain("(draft");
     expect(out).toMatchObject({ ok: true, answer: ANSWER });
@@ -641,8 +646,9 @@ describe("runTurn: budgets, timeouts and stopping", () => {
     await run();
     expect(new Set(runtime.runs.map((r) => r.phase))).toEqual(new Set(["plan", "work", "review", "revise", "synthesis"]));
     for (const r of runtime.runs) expect(r.maxTurns).toBe(MAX_TURNS[r.phase!]);
-    expect(runtime.runs.find((r) => r.phase === "work")!.prompt).toContain(`at most ${MAX_TURNS.work - 2} rounds of tool calls`);
-    expect(runtime.runs.find((r) => r.phase === "review")!.prompt).toContain(`at most ${MAX_TURNS.review - 2} rounds of lookups`);
+    expect(runtime.runs.find((r) => r.phase === "work")!.prompt).toContain(`at most ${toolRounds("work")} rounds of tool calls`);
+    expect(runtime.runs.find((r) => r.phase === "review")!.prompt).toContain(`at most ${toolRounds("review")} round of lookups`);
+    expect(toolRounds("review")).toBe(MAX_TURNS.review - 1); // a review: one lookup at most, then its verdict
     expect(runtime.runs.find((r) => r.phase === "synthesis")!.tools.map((t) => t.name)).toEqual(["show_path", "propose_action"]);
   });
 
@@ -807,5 +813,89 @@ describe("remember is gated in code", () => {
     expect(s.tools.remember!.calls.map((c) => c.args.text)).toEqual(["Owner prefers weekly summaries on Mondays"]);
     const refused = s.events.filter(is("tool_result", "chief-of-staff", (e) => e.name === "remember")).at(-1);
     expect(refused).toMatchObject({ summary: expect.stringContaining("Not saved: that isn't what the owner asked you to remember") });
+  });
+});
+
+// ---------- usage: fewer and shorter model runs ----------
+
+describe("runTurn: usage", () => {
+  it("a finding whose numbers already check out gets one numbers reviewer, who is handed the cited tool values", async () => {
+    const { run, runtime } = setup({
+      "chief-of-staff:plan": plan([{ agent: "data-analyst", task: "Signups" }]),
+      "data-analyst:work": { calls: [trend], ...finding(CHECKED, { citations: ["metric:signups"] }) },
+      "coe-lead:review": ok("Figures match."),
+      "chief-of-staff:synthesis": { text: ANSWER },
+    });
+    const out = await run();
+    expect(runtime.runs.filter((r) => r.phase === "review").map((r) => r.agentId)).toEqual(["coe-lead"]);
+    const review = runtime.runs.find((r) => r.phase === "review")!;
+    expect(review.maxTurns).toBe(2);
+    expect(review.prompt).toContain("The tool data behind the cited ids");
+    expect(review.prompt).toContain('- metric_trend (Kabir): {"metric":"signups","points":[{"week":"2026-10-05","value":41},{"week":"2026-09-28","value":55}]}');
+    expect(review.prompt).toContain("You have at most 1 round of lookups");
+    expect(out.agents).toEqual(["chief-of-staff", "data-analyst", "coe-lead"]);
+  });
+
+  it("the Chief doesn't draft while a content finding is under review (its reviewers usually send it back)", async () => {
+    const { events, run, runtime } = setup({
+      "chief-of-staff:plan": plan([{ agent: "content-strategist", task: "Three reel ideas" }]),
+      "content-strategist:work": { calls: [{ name: "content_performance" }], ...finding("Question hooks win [[content:reel-1]].") },
+      "copy-editor:review": ok("Fine.", 30),
+      "fact-checker:review": ok("Supported.", 30),
+      "chief-of-staff:synthesis": { text: "Lead with a question hook [[content:reel-1]]." },
+    });
+    await run();
+    const lastReview = events.findLastIndex(is("review"));
+    expect(idx(events, is("agent_start", "chief-of-staff", (e) => e.task === "Writing the answer"))).toBeGreaterThan(lastReview);
+    expect(runtime.runs.filter((r) => r.phase === "synthesis")).toHaveLength(1);
+  });
+
+  it("a desk that runs out of turns hands over what it wrote, marked partial, instead of failing", async () => {
+    const { events, run, runtime } = setup({
+      "chief-of-staff:plan": plan([{ agent: "data-analyst", task: "Signups" }, { agent: "growth-marketer", task: "Move", after: ["data-analyst"] }]),
+      "data-analyst:work": { calls: [trend], text: "Signups fell from 55 to 41 [[metric:signups]]; spend not checked yet.", partial: true },
+      "coe-lead:review": ok("Figures match, but incomplete."),
+      "growth-marketer:work": finding("Hold paid search [[metric:signups]]."),
+      "chief-of-staff:synthesis": { text: ANSWER },
+    });
+    const out = await run();
+    expect(out.failed).toEqual([]);
+    expect(out.findings[0]).toMatchObject({ partial: true, text: "Signups fell from 55 to 41 [[metric:signups]]; spend not checked yet." });
+    expect(events.find(is("agent_status", "data-analyst", (e) => /ran out of turns/i.test(e.text)))).toBeDefined();
+    expect(events.find(is("handoff"))).toMatchObject({ note: expect.not.stringContaining("draft") }); // partial: not handed on early
+    expect(runtime.runs.find((r) => r.agentId === "growth-marketer")!.prompt).toContain("PARTIAL: it ran out of turns");
+    expect(runtime.runs.find((r) => r.phase === "synthesis")!.prompt).toContain("PARTIAL: it ran out of turns");
+  });
+
+  it("a partial review, revision or plan counts as not finished (never as an 'ok')", async () => {
+    const { run, runtime } = setup({
+      "chief-of-staff:plan": plan([{ agent: "data-analyst", task: "Signups" }]),
+      "data-analyst:work": finding("Signups were 99 [[metric:signups]]."),
+      "coe-lead:review": { text: "Still looking", partial: true },
+      "fact-checker:review": { structured: { verdict: "fix", note: "99 is not in the data." } },
+      "data-analyst:revise": { text: "half a revision", partial: true },
+      "chief-of-staff:synthesis": { text: ANSWER },
+    });
+    const out = await run();
+    expect(out.reviews.map((r) => [r.reviewer, r.verdict])).toEqual([["fact-checker", "fix"]]);
+    expect(out.findings[0]).toMatchObject({ text: "Signups were 99 [[metric:signups]].", revised: false });
+    expect(runtime.runs.filter((r) => r.phase === "revise")).toHaveLength(1);
+
+    const p = setup({ "chief-of-staff:plan": { text: '{"steps":[{"agent":"librarian","task":"x"}]}', partial: true }, "chief-of-staff:direct": { text: "Not recorded." } });
+    expect((await p.run()).fastPath).toBe(true);
+  });
+
+  it("the planner runs on haiku; the desks on their roster models; a model override still applies to all", async () => {
+    const scripts: Record<string, FakeScript> = {
+      "chief-of-staff:plan": plan([{ agent: "tech-lead", task: "Site" }]),
+      "tech-lead": finding("The sitemap is broken [[system:sitemap]]."),
+      "chief-of-staff:synthesis": { text: "Fix the sitemap." },
+    };
+    const a = setup(scripts);
+    await a.run();
+    expect(a.runtime.runs.map((r) => [r.phase, r.model])).toEqual([["plan", "haiku"], ["work", "sonnet"], ["synthesis", "sonnet"]]);
+    const b = setup(scripts, { model: "sonnet" });
+    await b.run();
+    expect(b.runtime.runs.every((r) => r.model === "sonnet")).toBe(true);
   });
 });

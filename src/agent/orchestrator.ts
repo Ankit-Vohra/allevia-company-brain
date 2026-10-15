@@ -42,11 +42,18 @@ import { findingId, type FindingRecord, type ProposalRecord, type RecallBrief, t
 export const AGENT_TIMEOUT_MS = 120_000;
 export const MAX_REVIEWERS = 2;
 const MAX_PATH_IDS = 12;
+const EVIDENCE_CHARS = 2_400;      // tool data handed to a reviewer, in all
+const EVIDENCE_ITEM_CHARS = 600;   // per tool result
 
 // Model turns per job (an SDK turn is one model response; a round of tool calls and a structured answer take one each).
-// Each budget is the job's tool rounds + its answer + one turn of slack; the prompts state the rounds (toolRounds).
-export const MAX_TURNS: Record<RunPhase, number> = { plan: 3, work: 7, review: 4, revise: 4, synthesis: 4, direct: 7 };
-export const toolRounds = (phase: RunPhase): number => Math.max(0, MAX_TURNS[phase] - 2);
+// Each budget is the job's tool rounds (stated in its prompt) + its answer + one turn of slack; a review has no slack:
+// it gets the cited tool data in its prompt, so one lookup at most and then its verdict.
+const TOOL_ROUNDS: Record<RunPhase, number> = { plan: 0, work: 5, review: 1, revise: 2, synthesis: 2, direct: 5 };
+export const MAX_TURNS: Record<RunPhase, number> = { plan: 3, work: 7, review: 2, revise: 4, synthesis: 4, direct: 7 };
+export const toolRounds = (phase: RunPhase): number => TOOL_ROUNDS[phase];
+
+// Planning is a short structured choice of desks: the cheapest model does it (unless TurnDeps.model overrides all).
+export const PLANNER_MODEL = "haiku";
 
 // What the Chief may use while writing the answer from the desks' findings.
 const SYNTHESIS_TOOLS: ReadonlySet<string> = new Set(["show_path", "propose_action"]);
@@ -179,10 +186,14 @@ export function normalisePlan(raw: unknown, question: string): Plan {
 
 // Reviewers whose roster `reviews` covers the producer and who are relevant to this finding: the copy editor only for
 // content; the fact checker for content and for marketing/analytics findings with numbers; the CoE lead only when the
-// finding has numbers. At most MAX_REVIEWERS, in roster order.
-export function reviewersFor(producerId: string, text: string): AgentDef[] {
+// finding has numbers. When the automatic check already passed (`checked`: every cited id and number found in this
+// turn's tool data), one numbers reviewer is enough: the CoE lead, not the fact checker as well. At most MAX_REVIEWERS,
+// in roster order.
+export function reviewersFor(producerId: string, text: string, opts: { checked?: boolean } = {}): AgentDef[] {
   const numbers = hasNumbers(text);
-  return AGENTS.filter((r) => r.id !== producerId && r.reviews?.includes(producerId) && relevantReviewer(r.id, producerId, numbers)).slice(0, MAX_REVIEWERS);
+  let rs = AGENTS.filter((r) => r.id !== producerId && r.reviews?.includes(producerId) && relevantReviewer(r.id, producerId, numbers));
+  if (opts.checked && rs.some((r) => r.id === "coe-lead")) rs = rs.filter((r) => r.id !== "fact-checker");
+  return rs.slice(0, MAX_REVIEWERS);
 }
 
 // The tools an agent gets for a job: its roster tools (whatever the registry returns beyond them is dropped), without
@@ -383,6 +394,7 @@ interface RunOpts {
   streamText?: boolean;
   maxTurns: number;
   abort?: AbortSignal;                      // sets this run aside (the Chief's draft, when a review sends a finding back)
+  model?: string;                           // default: TurnDeps.model, else the agent's roster tier
   onToolResult?: RunInput["onToolResult"];  // default: path/proposal events straight to the turn
 }
 
@@ -396,6 +408,8 @@ class Turn {
   private readonly sentBack = new Set<string>();         // finding ids a reviewer sent back (fix/reject), until settled
   private readonly drafts = new Map<string, string[]>(); // agent -> finding ids it was handed as drafts
   private readonly gates = new Map<string, WorkGates>(); // agent -> its step's gates
+  private readonly early = new Set<string>();            // finding ids handed on before their review ended
+  private readonly results: Array<{ agent: string; name: string; data: unknown; ids: string[] }> = []; // every tool result
   private readonly listeners = new Set<() => void>();    // told when a finding is sent back or settles
   readonly reviews: ReviewRecord[] = [];
   readonly proposals: ProposalRecord[] = [];
@@ -448,6 +462,7 @@ class Turn {
   private toolResults(emit: Emit, hold?: Hold): NonNullable<RunInput["onToolResult"]> {
     const commit = (job: () => void) => (hold ? hold.later(job) : job());
     return ({ agent, name, args, result }) => {
+      commit(() => { this.results.push({ agent, name, data: result.data, ids: [...result.nodes.map((n) => n.id), ...result.sources.map((s) => s.id)] }); });
       if (name === "show_path") {
         emit({ type: "path", nodes: result.nodes, edges: result.edges });
         commit(() => { this.path = { nodes: result.nodes, edges: result.edges }; });
@@ -463,7 +478,7 @@ class Turn {
 
   private runInput(agent: AgentDef, o: RunOpts, signal?: AbortSignal): RunInput {
     return {
-      agentId: agent.id, model: this.model(agent), system: o.system, prompt: o.prompt, tools: o.tools, ctx: this.ctx(agent.id),
+      agentId: agent.id, model: o.model ?? this.model(agent), system: o.system, prompt: o.prompt, tools: o.tools, ctx: this.ctx(agent.id),
       maxTurns: o.maxTurns, phase: o.phase, onToolResult: o.onToolResult ?? this.toolResults(this.emit),
       ...(o.outputSchema ? { outputSchema: o.outputSchema } : {}), ...(o.streamText ? { streamText: true } : {}), ...(signal ? { signal } : {}),
     };
@@ -503,7 +518,11 @@ class Turn {
       const input: RunInput = { ...this.runInput(agent, o, ac.signal), onToolResult: (c) => { if (live) onToolResult(c); } };
       const run = this.deps.runtime.run(input, (e) => { if (live) emit(e); });
       run.catch(() => {}); // a run that loses the race may reject later
-      return await Promise.race([run, stop]);
+      const out = await Promise.race([run, stop]);
+      // Out of turns: only a desk's work is usable unfinished (as a partial finding); a plan, review, revision or answer
+      // that didn't finish counts as not done (a partial review must never read as an "ok").
+      if (out.partial && o.phase !== "work") throw new Error("ran out of turns before finishing");
+      return out;
     } finally {
       live = false;
       for (const c of cleanup) c();
@@ -531,7 +550,7 @@ class Turn {
   async plan(): Promise<Plan> {
     const chief = agentById(CHIEF)!;
     const out = await this.step(chief, "Planning who does what", () => this.runAgent(chief, {
-      phase: "plan", system: planSystemPrompt(this.promptOpts),
+      phase: "plan", model: this.deps.model ?? PLANNER_MODEL, system: planSystemPrompt(this.promptOpts),
       prompt: planPrompt({ question: this.input.question, recall: this.input.recall.text }), tools: [], outputSchema: PLAN_SCHEMA, maxTurns: MAX_TURNS.plan,
     }));
     const plan = normalisePlan(out ? out.structured ?? tryParseJson(out.text) : undefined, this.input.question);
@@ -569,9 +588,17 @@ class Turn {
   // id and number checks out against this turn's tool data: what a review can still change then is wording and
   // interpretation, and the Chief is told if it does.
   private handOffEarly(f: FindingRecord): boolean {
-    if (!f.citations.length) return false;
+    return !f.partial && f.citations.length > 0 && this.checksOut(f);
+  }
+
+  // Every cited id and number in it was found in this turn's tool data.
+  private checksOut(f: FindingRecord): boolean {
     const c = checkTurn(f.text, this.touched, { now: this.deps.now, question: this.input.question });
     return c.citationsValid && c.numbersGrounded;
+  }
+
+  private reviewersOf(f: FindingRecord): AgentDef[] {
+    return reviewersFor(f.agent, f.text, { checked: this.checksOut(f) });
   }
 
   private toFinding(out: RunOutput, base: { id: string; agent: string; task: string; depIds: string[] }): FindingRecord {
@@ -586,7 +613,7 @@ class Turn {
       citations: unique([...extractCitations(text), ...strings(s?.citations)]).filter((id) => this.touched.has(id)),
       basedOn: unique([...base.depIds, ...strings(s?.basedOn).filter((id) => known.has(id) && id !== base.id)]),
       proposals: strings(s?.proposals).slice(0, 5),
-      revised: false, rejected: false,
+      revised: false, rejected: false, ...(out.partial ? { partial: true } : {}),
     };
   }
 
@@ -613,12 +640,13 @@ class Turn {
       });
       const f = this.toFinding(out, { id: findingId(this.input.turnId, agent.id), agent: agent.id, task: s.task, depIds: inputs.map((x) => x.id) });
       this.findings.set(agent.id, f);
+      if (f.partial) this.emit({ type: "agent_status", agent: agent.id, text: "Ran out of turns: handing over what I have (partial)" });
       this.emitFinding(f);
       return f;
     });
     if (!finding) { this.failed.push(agent.id); return; }
     // Dependents start now and the review runs alongside them (a finding nobody reviews is final at once anyway).
-    if (reviewersFor(agent.id, finding.text).length && this.handOffEarly(finding)) release();
+    if (this.reviewersOf(finding).length && this.handOffEarly(finding)) { this.early.add(finding.id); release(); }
     await this.review(finding, agent);
     this.settled.add(finding.id);
     this.sentBack.delete(finding.id);
@@ -630,7 +658,7 @@ class Turn {
   // Rejected only when every reviewer that answered rejects; any other non-ok verdict (a fix, or a reject the others
   // disagree with) earns exactly one revision that addresses all the notes.
   private async review(f: FindingRecord, producer: AgentDef): Promise<void> {
-    const reviewers = reviewersFor(producer.id, f.text);
+    const reviewers = this.reviewersOf(f);
     if (!reviewers.length) return;
     const got = (await Promise.all(reviewers.map((r) => this.runReview(r, f, producer)))).filter((v): v is ReviewRecord => !!v);
     this.reviews.push(...got);
@@ -653,7 +681,20 @@ class Turn {
     for (const s of this.touched.sources()) if (!byId.has(s.id)) byId.set(s.id, { id: s.id, label: "Source", name: s.title, ...(s.asOf ? { asOf: s.asOf } : {}) });
     const citedNodes = f.citations.map((id) => byId.get(id)).filter((n): n is NodeRef => !!n).slice(0, 20)
       .map((n) => ({ id: n.id, label: n.label, name: n.name, ...(n.asOf ? { asOf: n.asOf } : {}) }));
-    return { citedNodes, autoCheck: this.autoCheck(f.text) };
+    // The data behind the cited ids, so the reviewer can decide without looking anything up (clipped, deduplicated).
+    const cited = new Set(f.citations);
+    const toolData: NonNullable<ReviewEvidence["toolData"]> = [];
+    const seen = new Set<string>();
+    let room = EVIDENCE_CHARS;
+    for (const r of this.results) {
+      if (room <= 0 || !r.ids.some((id) => cited.has(id))) continue;
+      const data = clip(JSON.stringify(r.data ?? null), EVIDENCE_ITEM_CHARS);
+      if (seen.has(`${r.name}|${data}`)) continue;
+      seen.add(`${r.name}|${data}`);
+      room -= data.length;
+      toolData.push({ tool: r.name, agent: r.agent, data });
+    }
+    return { citedNodes, autoCheck: this.autoCheck(f.text), ...(toolData.length ? { toolData } : {}) };
   }
 
   private async runReview(reviewer: AgentDef, f: FindingRecord, producer: AgentDef): Promise<ReviewRecord | undefined> {
@@ -689,7 +730,7 @@ class Turn {
   private readonly view = (f: FindingRecord): FindingView => {
     const caveat = this.draftCaveat(f.agent);
     return {
-      id: f.id, agent: f.agent, text: f.text, citations: f.citations, proposals: f.proposals, rejected: f.rejected,
+      id: f.id, agent: f.agent, text: f.text, citations: f.citations, proposals: f.proposals, rejected: f.rejected, ...(f.partial ? { partial: true } : {}),
       reviews: this.reviews.filter((r) => r.findingId === f.id).map((r) => ({ reviewer: r.reviewer, verdict: r.verdict, note: r.note })),
       autoCheck: this.autoCheck(f.text),
       ...(this.settled.has(f.id) ? {} : { draft: true }), ...(caveat ? { caveat } : {}),
@@ -738,14 +779,18 @@ class Turn {
     return { text: fallback, ok: false };
   }
 
-  // When the Chief starts: once every finding has landed and none is being revised. Returns the findings whose reviews
-  // are still running then (the Chief drafts while they finish), or [] once every finding is final.
+  // When the Chief starts: once every finding has landed and the open ones can be drafted from (or are all final).
+  // Returns the findings whose reviews are still running then (the Chief drafts while they finish), or [] once every
+  // finding is final.
   private async whenToWrite(plan: Plan, work: WorkGates): Promise<FindingRecord[]> {
     await work.ready;
     for (;;) {
       const open = this.planFindings(plan).filter((f) => !this.settled.has(f.id));
       if (!open.length) { await work.final; return []; }
-      if (this.deps.draftWhileReviewing !== false && open.every((f) => !this.sentBack.has(f.id))) return open;
+      // Draft only when it is likely to be kept: every open finding passed the automatic check (it was handed on early),
+      // none is content (its copy edits usually send it back), and none has been sent back.
+      const draftable = open.every((f) => this.early.has(f.id) && agentById(f.agent)?.department !== "content" && !this.sentBack.has(f.id));
+      if (this.deps.draftWhileReviewing !== false && draftable) return open;
       await this.nextChange();
     }
   }
@@ -760,8 +805,9 @@ class Turn {
     const setAside = new AbortController();
     const watch = () => { if (sentBack()) setAside.abort(new Error("a reviewer sent a finding back")); };
     this.listeners.add(watch);
-    const reviewers = unique(open.flatMap((f) => reviewersFor(f.agent, f.text).map((r) => r.name)));
-    this.emit({ type: "agent_status", agent: CHIEF, text: `Drafting the answer while ${reviewers.join(" and ") || "the reviewers"} finish reviewing` });
+    const reviewers = unique(open.flatMap((f) => this.reviewersOf(f).map((r) => r.name)));
+    const whoReviews = reviewers.length === 1 ? `${reviewers[0]} finishes` : `${reviewers.join(" and ") || "the reviewers"} finish`;
+    this.emit({ type: "agent_status", agent: CHIEF, text: `Drafting the answer while ${whoReviews} reviewing` });
 
     const hold = new Hold(this.emit);
     const draft = this.writeAnswer(chief, plan, false, { hold, abort: setAside.signal });

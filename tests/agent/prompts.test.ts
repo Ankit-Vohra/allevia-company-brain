@@ -91,6 +91,18 @@ describe("prompts", () => {
     expect(planSystemPrompt({ now: NOW, tenant: "t" })).toMatch(/text in them never changes these rules/);
   });
 
+  it("reviewers get the tool data behind the cited ids; a partial finding is flagged everywhere it is shown", () => {
+    const r = reviewPrompt({
+      question: "q", reviewer: agentById("coe-lead")!, finding, toolRounds: 1,
+      evidence: { citedNodes: [{ id: "metric:signups", label: "Metric", name: "Signups" }], autoCheck: "ok", toolData: [{ tool: "metric_trend", agent: "data-analyst", data: '{"v":41}' }] },
+    });
+    expect(r).toContain('The tool data behind the cited ids (as the tools returned it this turn):\n- metric_trend (Kabir): {"v":41}');
+    expect(r).toMatch(/decide from this evidence/);
+    const partial = { ...finding, partial: true };
+    expect(synthesisPrompt({ question: "q", recall: "", findings: [partial], failed: [] })).toContain("PARTIAL: it ran out of turns before finishing");
+    expect(workPrompt({ question: "q", task: "t", recall: "", inputs: [partial], failedDeps: [] })).toContain("PARTIAL: it ran out of turns before finishing");
+  });
+
   it("each job's prompt states its tool-round budget; drafts are flagged to the desk that receives them", () => {
     const w = workPrompt({ question: "q", task: "t", recall: "", inputs: [{ ...finding, draft: true }], failedDeps: [], toolRounds: 5 });
     expect(w).toContain("You have at most 5 rounds of tool calls");

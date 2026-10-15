@@ -43,7 +43,9 @@ export interface RunInput {
   onToolResult?: (call: { agent: string; id: string; name: string; args: unknown; result: ToolResult }) => void;
 }
 
-export interface RunOutput { text: string; structured?: unknown }
+// partial: the run ran out of turns after writing something; `text` is what it wrote (the orchestrator decides whether a
+// partial result is usable: a desk's finding is, marked partial; a review, revision, plan or answer is not).
+export interface RunOutput { text: string; structured?: unknown; partial?: true }
 
 export interface AgentRuntime {
   run(input: RunInput, emit: Emit): Promise<RunOutput>;
@@ -214,7 +216,7 @@ const stopped = (agentId: string, signal: AbortSignal): Error => {
 export class SdkMessageFolder {
   private texts: string[] = [];
   private streamed = false;
-  result?: { ok: boolean; text?: string; structured?: unknown; error?: string };
+  result?: { ok: boolean; text?: string; structured?: unknown; error?: string; outOfTurns?: boolean };
 
   constructor(private agentId: string, private streamText: boolean, private emit: Emit) {}
 
@@ -240,7 +242,10 @@ export class SdkMessageFolder {
         this.result = { ok: true, text: typeof msg.result === "string" ? msg.result : undefined, structured: msg.structured_output };
       } else {
         const errs = Array.isArray(msg.errors) ? (msg.errors as string[]).join("; ") : "";
-        this.result = { ok: false, error: `${msg.subtype ?? "error"}${errs ? `: ${errs}` : typeof msg.result === "string" ? `: ${msg.result}` : ""}` };
+        this.result = {
+          ok: false, outOfTurns: msg.subtype === "error_max_turns",
+          error: `${msg.subtype ?? "error"}${errs ? `: ${errs}` : typeof msg.result === "string" ? `: ${msg.result}` : ""}`,
+        };
       }
     }
   }
@@ -249,6 +254,7 @@ export class SdkMessageFolder {
   // though the SDK's `result` only carries the last message.
   output(): RunOutput {
     if (!this.result) throw new Error("agent run ended without a result");
+    if (!this.result.ok && this.result.outOfTurns && this.texts.length) return { text: this.texts.join("\n\n"), partial: true };
     if (!this.result.ok) throw new Error(this.result.error ?? "agent run failed");
     const text = this.texts.length ? this.texts.join("\n\n") : this.result.text ?? "";
     return this.result.structured === undefined ? { text } : { text, structured: this.result.structured };
@@ -321,6 +327,7 @@ export interface FakeStep {
   structured?: unknown;
   delayMs?: number;                                // wait before answering (respects the abort signal)
   fail?: string;                                   // throw this error instead of answering
+  partial?: boolean;                               // end like a run that ran out of turns (text only, marked partial)
 }
 export type FakeScript = FakeStep | FakeStep[] | ((input: RunInput, n: number) => FakeStep);
 
@@ -371,6 +378,7 @@ export class FakeRuntime implements AgentRuntime {
     if (st.preText && st.text) stream("\n\n");
     stream(st.text ?? "");
     const text = [st.preText, st.text].filter(Boolean).join("\n\n"); // like the SDK: every text block, in order
+    if (st.partial) return { text, partial: true };
     return st.structured === undefined ? { text } : { text, structured: st.structured };
   }
 }

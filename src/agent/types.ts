@@ -16,6 +16,7 @@ export interface FindingRecord {
   proposals: string[];   // suggested actions, free text (proposals that became approvals arrive as ProposalRecord)
   revised: boolean;
   rejected: boolean;
+  partial?: boolean;     // its desk ran out of turns: this is what it had written by then
 }
 
 export interface ReviewRecord { reviewer: AgentId; findingId: string; verdict: "ok" | "fix" | "reject"; note: string }

@@ -124,6 +124,11 @@ describe("statusLine, summarise, forModel", () => {
 });
 
 describe("FakeRuntime", () => {
+  it("a scripted step can end partial, like a run that ran out of turns", async () => {
+    const rt = new FakeRuntime({ "data-analyst": { text: "so far: 41", partial: true } });
+    expect(await rt.run(input(), () => {})).toEqual({ text: "so far: 41", partial: true });
+  });
+
   it("drives scripted tool calls through invokeTool and streams the final text", async () => {
     const tool = fakeTool("metric_trend", signups);
     const rt = new FakeRuntime({ "data-analyst": { calls: [{ name: "metric_trend", args: { metric: "signups" } }], text: "Signups were 55 [[metric:signups]] in the week of 2026-10-05, up from 41." } });
@@ -196,6 +201,17 @@ describe("SdkMessageFolder (SDK messages -> events and output)", () => {
     expect(() => f.output()).toThrow(/without a result/);
     f.push({ type: "result", subtype: "error_max_turns", is_error: true, errors: ["too many turns"] });
     expect(() => f.output()).toThrow("error_max_turns: too many turns");
+  });
+
+  it("a run that hit max turns after writing something returns that text, marked partial", () => {
+    const f = new SdkMessageFolder("a", false, () => {});
+    f.push({ type: "assistant", message: { content: [{ type: "text", text: "Signups fell to 41 [[metric:signups]]; still checking spend." }] } });
+    f.push({ type: "result", subtype: "error_max_turns", is_error: true, errors: ["max turns"] });
+    expect(f.output()).toEqual({ text: "Signups fell to 41 [[metric:signups]]; still checking spend.", partial: true });
+    const other = new SdkMessageFolder("a", false, () => {});
+    other.push({ type: "assistant", message: { content: [{ type: "text", text: "half" }] } });
+    other.push({ type: "result", subtype: "error_during_execution", is_error: true, errors: ["boom"] });
+    expect(() => other.output()).toThrow("error_during_execution: boom"); // only running out of turns is partial
   });
 });
 
