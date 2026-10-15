@@ -112,6 +112,11 @@ export async function detectMode(): Promise<Startup> {
   }
 }
 
+export interface BrandAssetDto {
+  id: string; kind: string; name: string; origin: string; mime: string | null; w: number | null; h: number | null; status: string;
+  description: string | null; family: string | null; value: string | null; colours: string[]; needsBetter: boolean; containsPerson: boolean; url?: string;
+}
+
 export const api = {
   async tenants(): Promise<Tenant[]> {
     return mode === "mock" ? (await mock()).tenants() : getJson("/api/tenants");
@@ -349,6 +354,17 @@ export const api = {
   async disconnectSearchConsole(t: string): Promise<ConnectorStatus> {
     if (mode === "mock") throw new ApiError(CONNECT_LIVE_ONLY, 501);
     return sendJson(`/api/${enc(t)}/connectors/search-console/disconnect`, "POST", {});
+  /** The brand library: what the team puts on posters. */
+  async brand(t: string): Promise<{ assets: BrandAssetDto[]; logo: BrandAssetDto | null }> {
+    if (mode === "mock") return { assets: [], logo: null };
+    return getJson(`/api/${enc(t)}/brand`);
+  },
+  async brandUpload(t: string, file: File, note = ""): Promise<{ route: string; kind: string; message: string; needsBetter: boolean }> {
+    if (mode === "mock") throw new ApiError(STUDIO_LIVE_ONLY, 501);
+    const form = new FormData();
+    form.append("file", file, file.name);
+    if (note.trim()) form.append("note", note.trim());
+    return getJson(`/api/${enc(t)}/studio/brand`, { method: "POST", headers: { accept: "application/json" }, body: form });
   },
 
   /** POST /api/onboard, an SSE stream of OnboardEvent. */
