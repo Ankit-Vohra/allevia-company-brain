@@ -128,7 +128,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
   if (g) {
     try {
       const saved = await saveTurn(g, {
-        turnId, sessionId, question, answer, asker, at: now, ms, status: failure ? "failed" : "ok", ...(failure ? { error: failure } : {}),
+        turnId, sessionId, question, answer, asker, source: input.channel, at: now, ms, status: failure ? "failed" : "ok", ...(failure ? { error: failure } : {}),
         checks, agents, events: log, touched: outcome?.touched ?? [], citations,
         findings: outcome?.findings ?? [], reviews: outcome?.reviews ?? [], guidedBy: outcome?.guidedBy ?? [],
       });

@@ -34,6 +34,8 @@ export interface TurnRecord {
   answer: string;
   at: string;
   ms: number;
+  /** The door it came through. A thread can be continued from the web or from Discord. */
+  source?: "web" | "discord" | "cli";
   agents: AgentId[];
   citations: string[];
   checks: TurnChecks;

@@ -302,6 +302,17 @@ describe("approvals and slash commands stay inside the business", () => {
     expect(asked).toEqual([]);
   });
 
+  it("/continue offers only this business's web conversations, and not to another business's people", async () => {
+    const own = command({ command: "continue", roles: [A.roleId!] });
+    await bot.onCommand(own);
+    expect(own.responses).toHaveLength(1);
+    expect(own.responses[0]!.ephemeral).toBe(false);
+    const other = command({ command: "continue", roles: [B.roleId!] });
+    await bot.onCommand(other);
+    expect(other.responses[0]).toMatchObject({ ephemeral: true });
+    expect(text(other.responses[0]!.m)).toMatch(/only people on Aamdani/i);
+  });
+
   it("/ask in #your-team opens a thread and asks for that business", async () => {
     const c = command({ command: "ask", question: "What should we post?" });
     await bot.onCommand(c);

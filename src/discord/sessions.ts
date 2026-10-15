@@ -13,6 +13,25 @@ export async function findThreadSession(g: GraphHandle, threadId: string): Promi
   return rows[0]?.id ?? null;
 }
 
+// The newest conversations that were started in the web app and have no Discord thread yet: what /continue offers.
+export async function recentUnlinkedSessions(g: GraphHandle, limit = 5): Promise<Array<{ id: string; title: string }>> {
+  const rows = await g.roQuery<{ id: string; name: string | null }>(
+    `MATCH (s:Entity:Session) WHERE s.discordThreadId IS NULL AND coalesce(s.channel, 'web') = 'web'
+     RETURN s.id AS id, s.name AS name ORDER BY coalesce(s.lastAt, s.startedAt, 0) DESC, s.id LIMIT $limit`, { limit: Math.max(1, Math.min(10, limit)) });
+  return rows.map((r) => ({ id: r.id, title: r.name || "Conversation" }));
+}
+
+// Ties a conversation to a Discord thread, so replies there continue it. The conversation keeps being one Session: the
+// web app and Discord are two doors into it. Returns the thread it is already tied to when there is one (nothing changes).
+export async function linkSessionThread(g: GraphHandle, sessionId: string, threadId: string, now: number): Promise<{ linked: true } | { linked: false; threadId: string } | null> {
+  const [s] = await g.roQuery<{ name: string | null; tid: string | null }>(
+    "MATCH (s:Entity:Session {id:$id}) RETURN s.name AS name, s.discordThreadId AS tid LIMIT 1", { id: sessionId });
+  if (!s) return null;
+  if (s.tid) return { linked: false, threadId: s.tid };
+  await upsertNode(g, { type: "Session", id: sessionId, name: s.name || "Conversation", props: { discordThreadId: threadId } }, now);
+  return { linked: true };
+}
+
 // Starts a session for a new thread and records the link, before the first turn runs, so a reply that arrives while
 // the first answer is still being written finds it.
 export async function openThreadSession(

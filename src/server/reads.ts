@@ -142,7 +142,7 @@ export async function sessionDetail(g: GraphHandle, id: string, o: { showcaseOnl
     `MATCH (s:Entity:Session {id:$id}) WITH s
      MATCH (t:Turn)-[r:IN_SESSION]->(s) WHERE r.until IS NULL ${o.showcaseOnly ? "AND t.showcase = true" : ""}
      RETURN t.id AS id, t.question AS question, t.answer AS answer, t.at AS at, t.ms AS ms, t.agents AS agents, t.citations AS citations,
-       t.checks AS checks, t.status AS status, t.error AS error ORDER BY t.at, t.id LIMIT $limit`, { id, limit: LIMITS.turns });
+       t.checks AS checks, t.status AS status, t.error AS error, t.source AS source ORDER BY t.at, t.id LIMIT $limit`, { id, limit: LIMITS.turns });
   if (o.showcaseOnly && !rows.length) return null;
   return { id, title: s.name || "Thread", turns: rows.map(turnRecord) };
 }
@@ -152,6 +152,7 @@ function turnRecord(r: Record<string, unknown>): TurnRecordDto {
   const error = typeof r.error === "string" && r.error ? r.error : undefined;
   return {
     id: str(r.id), question: str(r.question), answer: str(r.answer), at: iso(r.at) ?? new Date(0).toISOString(), ms: numOr(r.ms, 0),
+    ...(r.source === "web" || r.source === "discord" || r.source === "cli" ? { source: r.source } : {}),
     agents: strList(r.agents), citations: strList(r.citations), checks: { ...DEFAULT_CHECKS, ...(isObj(checks) ? (checks as Partial<TurnChecks>) : {}) },
     ...(r.status === "failed" ? { ended: error === STOPPED_MESSAGE ? "stopped" as const : "failed" as const, ...(error ? { error } : {}) } : {}),
   };

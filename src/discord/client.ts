@@ -29,6 +29,12 @@ export const SLASH_COMMANDS = [
   new SlashCommandBuilder().setName("approvals").setDescription("Proposals waiting for the owner's approval"),
 ].map((c) => c.toJSON());
 
+// The hub adds /continue: carry a conversation from the web app on here.
+export const HUB_SLASH_COMMANDS = [
+  ...SLASH_COMMANDS,
+  new SlashCommandBuilder().setName("continue").setDescription("Carry on a conversation from the web app here").toJSON(),
+];
+
 export function redactor(token: string | undefined): (s: string) => string {
   return (s) => (token ? s.split(token).join("[token]") : s);
 }
@@ -127,6 +133,12 @@ export function buttonPort(i: ButtonInteraction): ButtonPort {
     isOwner: !!i.guild && i.guild.ownerId === i.user.id,
     memberRoleIds: roleIdsOf(i.member),
     defer: async () => { if (!i.deferred && !i.replied) await i.deferUpdate(); },
+    createThread: async (name) => {
+      const ch = i.channel;
+      const parent = ch?.isThread() ? (ch as ThreadChannel).parent : ch;
+      if (!parent || parent.type !== ChannelType.GuildText) throw new Error("I can't open threads in this channel.");
+      return threadPort(await parent.threads.create({ name, autoArchiveDuration: ThreadAutoArchiveDuration.OneDay, type: ChannelType.PublicThread }));
+    },
     reply: async (text, opts) => {
       const p = { content: text, allowedMentions: NO_PINGS, ...(opts?.ephemeral ? { flags: MessageFlags.Ephemeral as const } : {}) };
       if (i.deferred || i.replied) await i.followUp(p);
@@ -150,8 +162,8 @@ export async function botGuilds(rest: REST): Promise<string[]> {
   return guilds.map((g) => g.id);
 }
 
-export async function registerCommands(rest: REST, s: DiscordSettings): Promise<void> {
-  await rest.put(Routes.applicationGuildCommands(s.appId, s.guildId), { body: SLASH_COMMANDS });
+export async function registerCommands(rest: REST, s: DiscordSettings, commands: typeof SLASH_COMMANDS = SLASH_COMMANDS): Promise<void> {
+  await rest.put(Routes.applicationGuildCommands(s.appId, s.guildId), { body: commands });
 }
 
 const DISALLOWED_INTENTS = /disallowed intents|4014/i;

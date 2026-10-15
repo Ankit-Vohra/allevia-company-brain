@@ -2,7 +2,7 @@
 // how the bot hears that someone joined. Without it nobody could be given their role, so unlike Message Content this
 // intent is required: if Discord refuses it the bot stops and says exactly what to switch on. Never logs the token.
 import { Client, Events, GatewayIntentBits, REST, type GuildMember, type Interaction } from "discord.js";
-import { botGuilds, buttonPort, commandPort, messagePort, redactor, registerCommands } from "./client.js";
+import { botGuilds, buttonPort, commandPort, HUB_SLASH_COMMANDS, messagePort, redactor, registerCommands } from "./client.js";
 import type { HubBot } from "./hub-bot.js";
 import { hubInviteUrl } from "./hub-service.js";
 
@@ -25,8 +25,8 @@ export async function startHubClient(bot: HubBot, s: HubClientSettings, log: (li
     throw new Error(`Discord refused the bot token or could not be reached: ${err(e)}`);
   }
   if (!inGuild) throw new Error(`The bot is not in the hub server yet. The server owner can add it with: ${hubInviteUrl(s.appId)}`);
-  await registerCommands(rest, { token: s.token, appId: s.appId, guildId: s.guildId, channelId: "" })
-    .then(() => say("Slash commands /ask, /brief, /approvals registered on the hub."), (e) => say(`Could not register slash commands: ${err(e)}`));
+  await registerCommands(rest, { token: s.token, appId: s.appId, guildId: s.guildId, channelId: "" }, HUB_SLASH_COMMANDS)
+    .then(() => say("Slash commands /ask, /brief, /approvals, /continue registered on the hub."), (e) => say(`Could not register slash commands: ${err(e)}`));
 
   const login = async (messageContent: boolean): Promise<Client> => {
     const client = new Client({
