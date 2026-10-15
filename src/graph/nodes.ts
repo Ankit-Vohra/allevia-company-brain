@@ -10,7 +10,7 @@
 // earlier same-date reading from another source, whose values that Version already records, changes nothing.
 import { randomBytes } from "node:crypto";
 import type { GraphHandle } from "./client.js";
-import { SEARCHABLE, SEARCHABLE_LABEL, TRACKED_PROPS, typeOfLabels } from "./schema.js";
+import { SEARCH_INDEXED_TYPES, SEARCHABLE_LABEL, TRACKED_PROPS, metricKeyOf, typeOfLabels } from "./schema.js";
 import { CHUNK_VECTOR_PROP, ENTITY_VECTOR_PROP, vectorPropFor } from "./indexes.js";
 import { InvalidWrite } from "./errors.js";
 import { defined, num, sameValue, validateNode, type NodeInput, type Prim } from "./validate.js";
@@ -20,7 +20,7 @@ import { sha256 } from "../util/ids.js";
 export interface NodeResult { created: boolean; versioned: boolean; updated: boolean }
 
 const VECTOR_PROPS = [ENTITY_VECTOR_PROP, CHUNK_VECTOR_PROP];
-const SEARCHABLE_TYPES = new Set<string>(SEARCHABLE);
+const SEARCHABLE_TYPES = new Set<string>(SEARCH_INDEXED_TYPES);
 // FalkorDB's UNIQUE constraint on Entity.id refuses the second node with an id (a concurrent create, or the same id
 // under another type): the caller re-reads, finds the winner, and goes on as an update (or reports the type clash).
 const uniqueViolation = (e: unknown): boolean => /unique constraint/i.test(String((e as Error).message));
@@ -105,7 +105,10 @@ async function writeBackdated(
 // the type clash could still make two nodes (the id-prefix check makes that a caller bug).
 export async function upsertNode(g: GraphHandle, n: NodeInput, now: number = Date.now()): Promise<NodeResult> {
   validateNode(n);
-  const content = defined({ ...n.props, name: n.name, summary: n.summary });
+  // An Observation always carries metricKey, whoever writes it: reads compare it (and index it) instead of toLower(metric).
+  const metric = n.type === "Observation" ? n.props?.metric : undefined;
+  const props = typeof metric === "string" && n.props?.metricKey === undefined ? { ...n.props, metricKey: metricKeyOf(metric) } : n.props;
+  const content = defined({ ...props, name: n.name, summary: n.summary });
   const prov = defined({ src: n.src, asOf: n.asOf, simulated: n.simulated });
   const vecProp = vectorPropFor(n.type);
   const inAsOf = dateMs(n.asOf);

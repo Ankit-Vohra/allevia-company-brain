@@ -147,6 +147,9 @@ describe("migrating a graph written before the current schema (integration)", ()
     await upsertNode(g, { type: "Business", id: "business:b", name: "B" });
     const id = await addObservation(g, { subject: "business:b", metric: "Reach_Total", value: 12, asOf: "2026-10-01", src: "document:snap" });
     expect(await one(g, "MATCH (o:Observation {metricKey:'reach_total'}) RETURN o.id AS id")).toEqual({ id });
+    // an Observation written by upsertNode directly (the Day-0 baselines are) gets its key too
+    await upsertNode(g, { type: "Observation", id: "obs:Baseline_Signups:goal:g:2026-10-01", name: "baseline", props: { metric: "Baseline_Signups", subject: "business:b", baseline: true } });
+    expect(await one(g, "MATCH (o:Entity:Observation {id:'obs:Baseline_Signups:goal:g:2026-10-01'}) RETURN o.metricKey AS k")).toEqual({ k: "baseline_signups" });
     const plan = (await g.explain("MATCH (o:Observation) WHERE o.metricKey = $m RETURN o.id")).join("\n");
     expect(plan).toMatch(/Node By Index Scan \| \(o:Observation\)/);
     const bySubject = (await g.explain("MATCH (o:Observation {subject:$s}) WHERE o.asOf >= $d RETURN o.id")).join("\n");

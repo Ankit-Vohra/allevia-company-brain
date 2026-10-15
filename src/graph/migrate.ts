@@ -1,13 +1,13 @@
 // Schema evolution for a tenant graph. Every step is idempotent and cheap once done, so ensureIndexes runs them all on
 // every call (tenant creation, every ingest) and a graph written by older code converges without a separate migration
 // command:
-//   1. backfillSearchable  - nodes of a SEARCHABLE type get the `Searchable` label (the full-text and vector indexes live on it)
+//   1. backfillSearchable  - nodes of a type search can be asked for (SEARCH_INDEXED_TYPES) get the `Searchable` label (the full-text and vector indexes live on it)
 //   2. backfillMetricKey   - Observations get `metricKey`, the lowercase metric every metric read compares (and indexes)
 //   3. ensureConstraints   - UNIQUE and MANDATORY on Entity.id, after merging any duplicate ids already in the graph
 // The order matters: labels and properties are in place before the indexes that cover them are built, and duplicates
 // are gone before the UNIQUE constraint is asked to hold (it would otherwise end FAILED and the graph go unprotected).
 import { MAX_PAGE, type ConstraintInfo, type GraphHandle } from "./client.js";
-import { SEARCHABLE, SEARCHABLE_LABEL, metricKeyOf } from "./schema.js";
+import { SEARCH_INDEXED_TYPES, SEARCHABLE_LABEL, metricKeyOf } from "./schema.js";
 import { noteGraphWrite } from "./projection.js";
 
 const log = (msg: string) => console.error(`[graph] ${msg}`);
@@ -27,7 +27,7 @@ async function hasEntities(g: GraphHandle): Promise<boolean> {
 export async function backfillSearchable(g: GraphHandle): Promise<number> {
   if (!(await hasEntities(g))) return 0;
   let labelled = 0;
-  for (const type of SEARCHABLE) {
+  for (const type of SEARCH_INDEXED_TYPES) {
     const rows = await g.query<{ c: number }>(
       `MATCH (n:${type}) WHERE NOT n:${SEARCHABLE_LABEL} SET n:${SEARCHABLE_LABEL} RETURN count(n) AS c`);
     labelled += rows[0]?.c ?? 0;

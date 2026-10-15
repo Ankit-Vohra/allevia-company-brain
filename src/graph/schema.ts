@@ -222,12 +222,15 @@ export const SEARCHABLE: EntityType[] = [
   "Recommendation", "Memory", "Finding", "Goal",
 ];
 
-// Searchable nodes also carry this label (upsertNode adds it on create, ensureIndexes backfills older graphs), so the
-// full-text and vector indexes sit on `Searchable` and hold only what search returns: observation names (one per
-// reading, 160k a year), Versions, Turns and the rest of the plumbing are not in them. It is not an entity type:
-// typeOfLabels skips it, but labels(n) lists it (by label id, so before or after the type label): never take "the
-// first label that is not Entity" as the type.
+// Nodes of a type search can be asked for by name carry this label (upsertNode adds it on create, ensureIndexes backfills
+// older graphs), so the full-text and vector indexes sit on `Searchable` and hold what search can return. Left out: the
+// readings (an Observation has a display name per reading, 160k a year, that crowded real entities out of the ranking),
+// Version stubs (no name) and Chunks (their own indexes). It is not an entity type: typeOfLabels skips it, but labels(n)
+// lists it (by label id, so before or after the type label): never take "the first label that is not Entity" as the type.
 export const SEARCHABLE_LABEL = "Searchable";
+// Every type but those three, not just SEARCHABLE: search takes `types` and can be asked for a Turn or an Approval by
+// name (SEARCHABLE is the default set); the types in between are few and do not grow with the readings.
+export const SEARCH_INDEXED_TYPES: EntityType[] = ENTITY_TYPES.filter((t) => t !== "Observation" && t !== "Version" && t !== "Chunk");
 
 // The lowercase key an Observation's metric is queried by (`o.metricKey = $key`), so a read never wraps the property
 // in toLower() (a function of the property is a label scan; the property itself is a range index).

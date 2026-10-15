@@ -22,6 +22,16 @@ export function senderFile(stack: string | undefined): string | undefined {
   return undefined;
 }
 
+// For a report: the statement helper `ro` in src/agent/tools/common.ts sends every agent read, so name its caller instead.
+export function callerFile(stack: string | undefined): string | undefined {
+  const frames: string[] = [];
+  for (const line of (stack ?? "").split("\n").slice(1)) {
+    const m = /\(?((?:file:\/\/)?\/[^():]+\.[cm]?[jt]sx?)(?::\d+:\d+)?\)?\s*$/.exec(line);
+    if (m && !/\/src\/graph\/client\.ts$|\/tests\/helpers\/query-shapes\.ts$|\/node_modules\//.test(m[1]!)) frames.push(m[1]!);
+  }
+  return frames.find((f) => isProductFile(f) && !f.endsWith("/src/agent/tools/common.ts")) ?? frames[0];
+}
+
 export const isProductFile = (file: string | undefined): boolean => !!file && /\/src\/[^/]/.test(file) && !/\/tests\//.test(file);
 
 export function shapeRecorder(dir: string): (cypher: string) => void {
@@ -31,9 +41,15 @@ export function shapeRecorder(dir: string): (cypher: string) => void {
   return (cypher) => {
     const q = normalizeCypher(cypher);
     if (seen.has(q)) return;
+    // not marked seen until it came from src/: the same text may be sent by a test first and by the product later
+    const limit = Error.stackTraceLimit;
+    Error.stackTraceLimit = 30; // the sender can be several helpers up
+    const stack = new Error().stack;
+    Error.stackTraceLimit = limit;
+    const file = senderFile(stack);
+    if (!isProductFile(file)) return;
     seen.add(q);
-    const file = senderFile(new Error().stack);
-    if (isProductFile(file)) appendFileSync(out, `${JSON.stringify({ q, file: file!.replace(/^.*\/(src\/)/, "$1") })}\n`);
+    appendFileSync(out, `${JSON.stringify({ q, file: callerFile(stack)!.replace(/^.*\/(src\/)/, "$1") })}\n`);
   };
 }
 

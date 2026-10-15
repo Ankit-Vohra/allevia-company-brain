@@ -7,7 +7,6 @@ import type { GraphHandle } from "./client.js";
 import { InvalidWrite, MissingEndpoint } from "./errors.js";
 import { upsertNode, type NodeResult } from "./nodes.js";
 import { upsertEdge } from "./edges.js";
-import { metricKeyOf } from "./schema.js";
 import { defined, nonEmpty, type ObservationInput } from "./validate.js";
 
 export function observationId(o: Pick<ObservationInput, "metric" | "subject" | "windowEnd" | "asOf">): string {
@@ -38,7 +37,7 @@ export async function writeObservation(g: GraphHandle, o: ObservationInput, now:
     type: "Observation", id,
     name: `${o.metric} of ${pre.name ?? o.subject} (${o.windowEnd ?? o.asOf})`,
     props: defined({
-      metric: o.metric, metricKey: metricKeyOf(o.metric), value: o.value, unit: o.unit, windowStart: o.windowStart, windowEnd: o.windowEnd,
+      metric: o.metric, value: o.value, unit: o.unit, windowStart: o.windowStart, windowEnd: o.windowEnd,
       subject: o.subject, evidence: o.evidence ?? null, conf: o.conf ?? null,
     }),
     src: o.src, asOf: o.asOf, simulated: o.simulated,
