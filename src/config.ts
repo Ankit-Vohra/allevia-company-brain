@@ -28,6 +28,8 @@ export interface AlleviaConfig {
   // what is registered in the Google Cloud console; connectorKey seals the stored tokens (>= 32 characters).
   // enabled: ALLEVIA_SEARCH_CONSOLE=1; off by default (the connector is built against a fake and parked for now).
   google: { enabled: boolean; clientId?: string; clientSecret?: string; redirectUri: string; connectorKey?: string };
+  // The optional paid keyword layer (src/checkup/dataforseo.ts): off unless both are set; a per-business monthly budget.
+  dataforseo: { credentials: { login: string; password: string } | null; monthlyBudgetUsd: number };
 }
 
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -101,5 +103,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
       redirectUri: get("ALLEVIA_GOOGLE_REDIRECT_URI") ?? `${webBaseUrl}/api/connectors/google/callback`,
       connectorKey: get("ALLEVIA_CONNECTOR_KEY"),
     },
+    dataforseo: {
+      credentials: get("DATAFORSEO_LOGIN") && get("DATAFORSEO_PASSWORD") ? { login: get("DATAFORSEO_LOGIN")!, password: get("DATAFORSEO_PASSWORD")! } : null,
+      monthlyBudgetUsd: budget(get("DATAFORSEO_MONTHLY_BUDGET_USD")),
+    },
   };
+}
+
+// A dollar budget from the env file: a non-negative number, else the default of $1.
+function budget(raw: string | undefined): number {
+  const n = Number(raw);
+  return raw !== undefined && Number.isFinite(n) && n >= 0 ? n : 1;
 }

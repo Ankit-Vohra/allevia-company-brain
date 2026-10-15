@@ -12,6 +12,7 @@ Read at commit `d7ea7852480601af9bc8870942af8311a410e567`.
 |---|---|---|
 | `src/checkup/lighthouse.ts` | `lhSeverity` (severity from time/byte saving, then score) and `sortLhIssues` (biggest saving first, then lowest score), adapted; the list of Lighthouse diagnostic audits that are not issues; the rule that numeric, informative, manual and not-applicable audits and scores of 90+ are not issues | `src/server/lib/lighthouseStoredPayload.ts`, `src/server/lib/lighthousePayload.ts` |
 | `src/checkup/ai-visibility.ts` | Brand-mention matching: URLs and e-mails blanked first, NFD-normalised case-insensitive match on Unicode word boundaries, flexible whitespace, the brand name, its domain and the domain's stem; "cited" when an answer links to the brand's own domain or a subdomain (`ownedAiDomain`); position by first mention; a failed question is not counted as "not mentioned" | `src/server/features/ai-visibility/services/aiVisibilityMatching.ts`, `src/shared/ai-visibility-results.ts` |
+| `src/checkup/dataforseo.ts` | Which DataForSEO endpoints answer which question, their request bodies and the response fields read, and the per-call price model used for estimates (Labs $0.012 per task + $0.00012 per row; Backlinks $0.024 per task + $0.000036 per row) | `src/server/lib/dataforseo/labs.ts`, `backlinks.ts`, `pricing.ts` |
 
 ## claude-seo (AgriciDaniel/claude-seo), MIT, Copyright (c) 2026 agricidaniel
 

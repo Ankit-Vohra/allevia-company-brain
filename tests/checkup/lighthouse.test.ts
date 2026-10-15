@@ -79,7 +79,7 @@ describe("runLighthouse", () => {
   });
   it("runs each page and keeps going after a failure", async () => {
     const out = await runLighthouse([{ url: "https://a.example/", strategy: "mobile" }, { url: "https://b.example/", strategy: "desktop" }], {
-      resolve: async () => ["93.184.216.34"],
+      resolve: async () => ["8.8.8.8"],
       runner: async (url) => { if (url.includes("a.")) throw new Error("timed out"); return fixture("lhr-desktop-poor.json"); },
     });
     expect(out[0]!.error).toBe("timed out");
