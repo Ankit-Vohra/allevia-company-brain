@@ -10,6 +10,7 @@ import { AgentAvatar, agentDef, fmtMs } from "../components/bits";
 import { Icon } from "../components/Icon";
 import { WorkFeed } from "../components/WorkFeed";
 import { OfficeCanvas } from "../office/OfficeCanvas";
+import { useMedia } from "../lib/useMedia";
 import { useApp, useAsync } from "../state/app";
 import { laneOf } from "../state/derive";
 import { runStore, useRun, useRunStore, useRunView } from "../state/runs";
@@ -23,17 +24,6 @@ export const SUGGESTIONS: Record<string, string[]> = {
   ],
   "avs-atelier": ["Why don't we show up when people search 'architect in Raipur'?"],
 };
-
-function useMedia(q: string) {
-  const [m, setM] = useState(() => matchMedia(q).matches);
-  useEffect(() => {
-    const mm = matchMedia(q);
-    const on = () => setM(mm.matches);
-    mm.addEventListener("change", on);
-    return () => mm.removeEventListener("change", on);
-  }, [q]);
-  return m;
-}
 
 export function OfficePage() {
   const { tenant, mode, effectiveTheme, reducedMotion, speed, setSpeed } = useApp();

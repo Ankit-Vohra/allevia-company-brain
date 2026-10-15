@@ -63,7 +63,12 @@ export interface RunView {
   activeAgents: AgentId[];
   speaker?: AgentId;
   count: number;
+  /** A work clock per event index: streamed answer text barely moves it, tool calls move it most. Timelines use it as
+   *  their x axis so a long answer does not squash the desk work. clock[count] is the end. */
+  clock: number[];
 }
+
+const WEIGHT: Partial<Record<AgentEvent["type"], number>> = { text: 0.06, tool_result: 1.4, tool_call: 0.6, agent_status: 0.5, session: 0, recall: 0.4 };
 
 export const edgeKey = (e: EdgeRef) => `${e.from}|${e.type}|${e.to}`;
 
@@ -74,8 +79,9 @@ function emptyLane(key: string, agent: AgentId): LaneView {
 export function deriveRun(events: AgentEvent[]): RunView {
   const v: RunView = {
     lanes: {}, laneOrder: [], handoffs: [], findings: {}, proposals: [], answer: "", answerStarted: false,
-    nodes: {}, edges: [], sources: {}, nodeOrder: [], activeAgents: [], count: events.length,
+    nodes: {}, edges: [], sources: {}, nodeOrder: [], activeAgents: [], count: events.length, clock: [0],
   };
+  for (const e of events) v.clock.push(v.clock[v.clock.length - 1]! + (WEIGHT[e.type] ?? 1));
   const edgeSeen = new Set<string>();
   const answerKey = (a: AgentId) => `${a}#answer`;
   const lane = (a: AgentId) => {

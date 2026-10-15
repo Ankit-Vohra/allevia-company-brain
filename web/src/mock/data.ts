@@ -6,8 +6,8 @@ import { avsGraph } from "./avs-graph";
 import { type MockGraph, edgesAmong, refs } from "./graph-kit";
 
 export const TENANTS: Tenant[] = [
-  { id: "aamdani", name: "Aamdani", domain: "aamdani.ai", industry: "Blue-collar jobs platform", city: "Raipur" },
-  { id: "avs-atelier", name: "AVS Atelier", domain: "avsatelier.in", industry: "Architecture studio", city: "Raipur" },
+  { id: "aamdani", name: "Aamdani", domain: "aamdani.ai", industry: "Blue-collar jobs platform", city: "Raipur", country: "India", currency: "INR", locale: "en-GB" },
+  { id: "avs-atelier", name: "AVS Atelier", domain: "avsatelier.in", industry: "Architecture studio", city: "Raipur", country: "India", currency: "INR", locale: "en-GB" },
 ];
 
 export const GRAPHS: Record<string, MockGraph> = { aamdani: aamdaniGraph, "avs-atelier": avsGraph };
@@ -71,7 +71,7 @@ export function seedRecommendations(): Record<string, Recommendation[]> {
         id: "rec:pause-seekers-broad", area: "ads", by: "growth-marketer", status: "proposed", score: 0.64, confidence: 0.6, simulated: true,
         title: "Pause 'Meta · Seekers broad' (simulated)",
         why: "CPA ₹96 against an account median of ₹38 [[observation:meta-cpa-seekers-broad]]. Ad data is simulated in v1.",
-        impact: "Save ≈ ₹4,100 a week (simulated)", approvalId: "appr:pause-seekers-broad", createdAt: "2026-10-12T10:00:00+05:30",
+        impact: "Save about ₹4,100 a week (simulated)", value: { amount: 4100, currency: "INR", per: "week" }, approvalId: "appr:pause-seekers-broad", createdAt: "2026-10-12T10:00:00+05:30",
         chain: ["observation:meta-cpa-seekers-broad", "campaign:meta-seekers-broad", "channel:meta-ads"],
       }),
       rec(a, {

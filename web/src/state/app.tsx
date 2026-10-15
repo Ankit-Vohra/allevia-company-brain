@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { type ApiMode, api, setSpeed as setApiSpeed } from "../api";
+import { setFormatTenant } from "../lib/format";
 import type { Tenant } from "../types-ext";
 
 export type ThemeChoice = "system" | "light" | "dark";
@@ -70,6 +71,9 @@ export function AppProvider({ mode, initialTenants, children }: { mode: ApiMode;
   const refreshTenants = useCallback(async () => { setTenants(await api.tenants()); }, []);
 
   const tenant = tenants.find((t) => t.id === tenantId) ?? tenants[0]!;
+  // set synchronously so this render already formats money and dates for the new business
+  setFormatTenant(tenant);
+  useEffect(() => { document.documentElement.lang = tenant.locale ?? "en"; }, [tenant.locale]);
   const value = useMemo<AppState>(
     () => ({ mode, tenants, tenant, setTenant, refreshTenants, theme, effectiveTheme, setTheme, speed, setSpeed, reducedMotion }),
     [mode, tenants, tenant, setTenant, refreshTenants, theme, effectiveTheme, setTheme, speed, setSpeed, reducedMotion],

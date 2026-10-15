@@ -8,6 +8,9 @@ export interface Tenant {
   domain: string;        // "aamdani.ai"
   industry: string;      // "Blue-collar jobs platform"
   city?: string;
+  country?: string;      // "United Kingdom"
+  currency?: string;     // ISO 4217, the currency the business reports in: "GBP", "AUD", "AED", "USD", "INR"
+  locale?: string;       // BCP 47, how the owner reads dates and numbers: "en-GB", "en-US", "en-AU"
 }
 
 export interface Freshness { source: string; asOf: string; status: "ok" | "stale" | "error"; note?: string }
@@ -90,6 +93,8 @@ export interface Recommendation {
   title: string;
   why: string;              // markdown with [[node-id]] citations
   impact: string;
+  /** Money at stake, when there is a figure: shown in the business's currency. */
+  value?: { amount: number; currency?: string; per?: "week" | "month" | "year" };
   confidence: number;       // 0–1
   score: number;
   status: "open" | "proposed" | "approved" | "dismissed";

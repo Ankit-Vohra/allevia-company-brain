@@ -52,24 +52,4 @@ export function ChecksBadges({ checks, compact }: { checks: TurnChecks; compact?
   );
 }
 
-export function fmtMs(ms: number) {
-  if (ms < 1000) return `${ms} ms`;
-  return `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} s`;
-}
-
-export function fmtDate(iso?: string, withTime = false) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", ...(withTime ? { hour: "numeric", minute: "2-digit" } : {}) });
-}
-
-export function fmtAgo(iso?: string) {
-  if (!iso) return "";
-  const d = new Date(iso).getTime();
-  const s = Math.round((Date.now() - d) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
-  return fmtDate(iso);
-}
+export { fmtAgo, fmtDate, fmtMs } from "../lib/format";
