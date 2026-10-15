@@ -211,7 +211,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
      RETURN a.id AS id, a.title AS title, a.name AS name, a.kind AS kind, a.createdAt AS createdAt, max(r.score) AS score
      ORDER BY coalesce(score, 0) DESC, coalesce(a.createdAt, 0), id LIMIT 500`);
   const age = (ms: number | null) => (ms ? Math.max(0, Math.floor((now - ms) / DAY_MS)) : 0);
-  const cards = pendingRows.map((r) => ({ id: r.id, title: r.title ?? r.name, kind: r.kind, ageDays: age(r.createdAt) }));
+  const cards = pendingRows.map((r) => ({ id: r.id, title: r.title ?? r.name.replace(/^[a-z_]+:\s*/, ""), kind: r.kind, ageDays: age(r.createdAt) }));
   const pending = {
     count: cards.length,
     overdue: pendingRows.filter((r) => r.createdAt && now - r.createdAt > 2 * DAY_MS).length,

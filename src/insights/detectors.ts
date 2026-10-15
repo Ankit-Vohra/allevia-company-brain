@@ -146,7 +146,10 @@ const seoHighSeverityFails: Detector = {
         evidence: uniq([r.page, ...r.rules.map((x) => x.id), ...(impr ? [impr.obsId] : []), ...(clicks ? [clicks.obsId] : [])]),
         numbers, metrics: impr ? [impr.metric] : [],
         score: round(0.5 + cap((impr?.value ?? 0) / 20000, 0.4)), confidence: 0.85,
-        suggestedAction: { kind: "github_issue", payload: { title: `SEO: fix ${list(names, 2)} on ${label}`, body, target: r.url ?? label, targetId: r.page } },
+        suggestedAction: {
+          kind: "github_issue",
+          payload: { title: n === 1 ? `SEO: ${label} fails "${names[0]}"` : `SEO: ${label} fails ${n} high-severity checks`, body, target: r.url ?? label, targetId: r.page },
+        },
       };
     });
     return out.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key)).slice(0, 5);

@@ -15,7 +15,7 @@ import { seededGraph } from "../helpers/tools.js";
 describe("word diff and rule extraction (deterministic)", () => {
   it("diffs words, ignoring case, punctuation and emoji", () => {
     expect(words("A stunning Villa, in Raipur! 🎉")).toEqual(["a", "stunning", "villa", "in", "raipur"]);
-    expect(wordDiff(words("A stunning villa in Raipur"), words("A home in Raipur"))).toEqual([{ del: ["stunning", "villa"], ins: ["home"] }]);
+    expect(wordDiff(words("A stunning villa in Raipur"), words("A home in Raipur"))).toEqual([{ del: ["stunning", "villa"], ins: ["home"], delAt: [1, 2], insAt: [1] }]);
   });
 
   it("learns a substitution, and a hype word cut next to it", () => {
@@ -26,6 +26,12 @@ describe("word diff and rule extraction (deterministic)", () => {
       ["rule:learned-avoid-stunning", "avoid_words", 'Avoid hype words: "stunning".'],
     ]);
     expect(rules[0]).toMatchObject({ find: "villa", replace: "home", confidence: 0.6 });
+  });
+
+  it("keeps the replacement as the owner wrote it (proper nouns stay capitalised)", () => {
+    const { rules } = extractRules("Draft one reel this week.", "Draft one reel by Friday.");
+    expect(rules).toEqual([expect.objectContaining({ find: "this week", replace: "by Friday", text: 'Say "by Friday", not "this week".' })]);
+    expect(applyRule("Post it this week. This week works.", rules[0]!)).toBe("Post it by Friday. By Friday works.");
   });
 
   it("a substitution made twice in one edit is more confident", () => {

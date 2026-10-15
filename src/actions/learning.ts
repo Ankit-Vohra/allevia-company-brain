@@ -56,12 +56,21 @@ export const TONE_WORDS = new Set([
 ]);
 const STOP = new Set(["a", "an", "the", "and", "or", "of", "to", "in", "on", "for", "with", "at", "by", "is", "are", "be", "it", "this", "that"]);
 
-// Lowercased words with surrounding punctuation and emoji stripped; empty tokens dropped.
-export function words(text: string): string[] {
-  return text.split(/\s+/).map((w) => w.toLowerCase().replace(EMOJI_ALL, "").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")).filter(Boolean);
+// Words with surrounding punctuation and emoji stripped (`raw`, as written) and lowercased (`w`, for comparing).
+function tokens(text: string): Array<{ w: string; raw: string }> {
+  return text.split(/\s+/)
+    .map((t) => t.replace(EMOJI_ALL, "").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))
+    .map((raw) => ({ w: raw.toLowerCase(), raw }))
+    .filter((t) => t.w);
 }
 
-export interface Hunk { del: string[]; ins: string[] }
+// Lowercased words with surrounding punctuation and emoji stripped; empty tokens dropped.
+export function words(text: string): string[] {
+  return tokens(text).map((t) => t.w);
+}
+
+// delAt / insAt: where each deleted / inserted word sits in its text (to recover how it was written).
+export interface Hunk { del: string[]; ins: string[]; delAt: number[]; insAt: number[] }
 
 const MAX_CELLS = 4_000_000; // LCS table bound; beyond it the edit counts as a rewrite
 
@@ -77,9 +86,9 @@ export function wordDiff(a: string[], b: string[]): Hunk[] | null {
   let i = 0, j = 0;
   while (i < n || j < m) {
     if (i < n && j < m && a[i] === b[j]) { flush(); i++; j++; continue; }
-    cur ??= { del: [], ins: [] };
-    if (j < m && (i >= n || L[i]![j + 1]! >= L[i + 1]![j]!)) cur.ins.push(b[j++]!);
-    else cur.del.push(a[i++]!);
+    cur ??= { del: [], ins: [], delAt: [], insAt: [] };
+    if (j < m && (i >= n || L[i]![j + 1]! >= L[i + 1]![j]!)) { cur.insAt.push(j); cur.ins.push(b[j++]!); }
+    else { cur.delAt.push(i); cur.del.push(a[i++]!); }
   }
   flush();
   return hunks;
@@ -119,7 +128,8 @@ export interface Extraction { rules: RuleSpec[]; complex: boolean; distance: num
 // The lessons in one edit. `complex` marks a substantial rewrite with no deterministic lesson (a Haiku candidate).
 export function extractRules(original: string, edited: string): Extraction {
   const distance = editDistance(original, edited);
-  const a = words(original), b = words(edited);
+  const at = tokens(original), a = at.map((t) => t.w), bt = tokens(edited), b = bt.map((t) => t.w);
+  const upper = (x: string | undefined) => !!x && /^\p{Lu}/u.test(x);
   const rules: RuleSpec[] = [];
   const hunks = wordDiff(a, b);
   const pairs = new Map<string, { find: string; replace: string; n: number }>();
@@ -128,14 +138,20 @@ export function extractRules(original: string, edited: string): Extraction {
     const tone = h.del.filter((w) => TONE_WORDS.has(w) && !h.ins.includes(w));
     for (const w of tone) cut.add(w);
     const del = h.del.filter((w) => !TONE_WORDS.has(w));
-    const ins = h.ins.filter((w) => !TONE_WORDS.has(w));
+    const keep = h.ins.map((w, k) => ({ w, raw: bt[h.insAt[k]!]!.raw })).filter((x) => !TONE_WORDS.has(x.w));
+    const ins = keep.map((x) => x.w);
     if (!del.length || !ins.length || del.length > 3 || ins.length > 3) continue;
     if ([...del, ...ins].some(numeric)) continue;                       // a corrected number is a fact, not a style
     if ([...del, ...ins].every((w) => STOP.has(w))) continue;           // "a" -> "the" teaches nothing
-    const find = del.join(" "), replace = ins.join(" ");
-    if (find === replace) continue;
-    const k = `${find}\u0000${replace}`;
-    pairs.set(k, { find, replace, n: (pairs.get(k)?.n ?? 0) + 1 });
+    // The replacement as the owner wrote it ("by Friday"), except a capital that only marks a sentence start: "Villa"
+    // -> "Home" at the start of a title teaches "home".
+    let replace = keep.map((x) => x.raw).join(" ");
+    const firstDel = at[h.delAt[h.del.indexOf(del[0]!)]!]?.raw;
+    if (upper(firstDel) && upper(replace) && /^\p{Lu}\p{Ll}*(\s|$)/u.test(replace)) replace = replace[0]!.toLowerCase() + replace.slice(1);
+    const find = del.join(" ");
+    if (find === replace.toLowerCase()) continue;
+    const k = `${find}\u0000${replace.toLowerCase()}`;
+    pairs.set(k, { find, replace: pairs.get(k)?.replace ?? replace, n: (pairs.get(k)?.n ?? 0) + 1 });
   }
   // Many scattered substitutions are a rewrite, not a pattern: keep only the ones the owner made more than once.
   const rewrite = (hunks?.length ?? Infinity) > 6;
@@ -322,7 +338,8 @@ export async function learnFromEdit(g: GraphHandle, input: LearnInput, deps: Lea
     const retired: string[] = [];
     if (s.op === "replace") {
       const rev = await g.roQuery<{ id: string; name: string }>(
-        "MATCH (r:Rule) WHERE r.kind = 'learned' AND r.op = 'replace' AND r.status = 'active' AND r.find = $find AND r.replace = $replace AND r.id <> $id RETURN r.id AS id, r.name AS name",
+        `MATCH (r:Rule) WHERE r.kind = 'learned' AND r.op = 'replace' AND r.status = 'active' AND toLower(r.find) = toLower($find)
+           AND toLower(r.replace) = toLower($replace) AND r.id <> $id RETURN r.id AS id, r.name AS name`,
         { find: s.replace, replace: s.find, id: s.id });
       for (const r of rev) {
         await upsertNode(g, { type: "Rule", id: r.id, name: r.name, props: { status: "retired", retiredAt: now, retiredBy: s.id } }, now);
