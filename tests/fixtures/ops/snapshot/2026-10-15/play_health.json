@@ -20,6 +20,10 @@
    "last7dPct": 0.984,
    "daily": []
   },
-  "note": "synthetic"
+  "note": "synthetic",
+  "badBehaviourThresholdsPct": {
+   "userPerceivedCrash": 1.09,
+   "userPerceivedAnr": 0.47
+  }
  }
 }

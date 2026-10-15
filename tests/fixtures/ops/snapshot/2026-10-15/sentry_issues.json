@@ -15,13 +15,132 @@
    "crashFreeUsersPct": 96.09,
    "sessions": 87563,
    "users": 1462,
-   "series": []
+   "series": [
+    {
+     "at": "2026-10-02T00:00:00Z",
+     "sessions": 6100,
+     "crashFreePct": 99.6
+    },
+    {
+     "at": "2026-10-03T00:00:00Z",
+     "sessions": 6400,
+     "crashFreePct": 99.7
+    },
+    {
+     "at": "2026-10-04T00:00:00Z",
+     "sessions": 5900,
+     "crashFreePct": 99.6
+    },
+    {
+     "at": "2026-10-05T00:00:00Z",
+     "sessions": 6200,
+     "crashFreePct": 99.7
+    },
+    {
+     "at": "2026-10-06T00:00:00Z",
+     "sessions": 6000,
+     "crashFreePct": 99.6
+    },
+    {
+     "at": "2026-10-07T00:00:00Z",
+     "sessions": 6300,
+     "crashFreePct": 99.7
+    },
+    {
+     "at": "2026-10-08T00:00:00Z",
+     "sessions": 6100,
+     "crashFreePct": 99.6
+    },
+    {
+     "at": "2026-10-09T00:00:00Z",
+     "sessions": 6500,
+     "crashFreePct": 99.6
+    },
+    {
+     "at": "2026-10-10T00:00:00Z",
+     "sessions": 6300,
+     "crashFreePct": 98.9
+    },
+    {
+     "at": "2026-10-11T00:00:00Z",
+     "sessions": 6200,
+     "crashFreePct": 98.4
+    },
+    {
+     "at": "2026-10-12T00:00:00Z",
+     "sessions": 6600,
+     "crashFreePct": 98.1
+    },
+    {
+     "at": "2026-10-13T00:00:00Z",
+     "sessions": 6400,
+     "crashFreePct": 98.2
+    },
+    {
+     "at": "2026-10-14T00:00:00Z",
+     "sessions": 6250,
+     "crashFreePct": 98.0
+    }
+   ]
   },
   "newIssues": {
    "count": 95,
-   "items": []
+   "items": [
+    {
+     "id": "APP-7",
+     "title": "SyntheticCheckoutError: cart is undefined",
+     "where": "app/checkout.tsx",
+     "level": "fatal",
+     "priority": "high",
+     "unhandled": true,
+     "eventsInPeriod": 310,
+     "users": 120,
+     "firstSeen": "2026-10-10T07:27:25Z",
+     "lastSeen": "2026-10-14T09:00:00Z",
+     "link": "https://example.test/issues/APP-7"
+    },
+    {
+     "id": "APP-8",
+     "title": "SyntheticTimeout fetching feed",
+     "where": "app/feed.ts",
+     "level": "error",
+     "priority": null,
+     "unhandled": false,
+     "eventsInPeriod": 40,
+     "users": 22,
+     "firstSeen": "2026-10-11T07:27:25Z",
+     "lastSeen": "2026-10-14T09:00:00Z",
+     "link": "https://example.test/issues/APP-8"
+    },
+    {
+     "id": "APP-9",
+     "title": "SyntheticRenderWarning",
+     "where": "app/home.tsx",
+     "level": "error",
+     "priority": null,
+     "unhandled": false,
+     "eventsInPeriod": 7,
+     "users": 4,
+     "firstSeen": "2026-10-13T07:27:25Z",
+     "lastSeen": "2026-10-14T09:00:00Z",
+     "link": "https://example.test/issues/APP-9"
+    }
+   ]
   },
   "topUnresolved": [
+   {
+    "id": "APP-7",
+    "title": "SyntheticCheckoutError: cart is undefined",
+    "where": "app/checkout.tsx",
+    "level": "fatal",
+    "priority": "high",
+    "unhandled": true,
+    "eventsInPeriod": 310,
+    "users": 120,
+    "firstSeen": "2026-10-10T07:27:25Z",
+    "lastSeen": "2026-10-14T09:00:00Z",
+    "link": "https://example.test/issues/APP-7"
+   },
    {
     "id": "APP-1",
     "title": "SyntheticError",
@@ -31,15 +150,28 @@
     "unhandled": true,
     "eventsInPeriod": 94,
     "users": 48,
-    "firstSeen": "2026-10-01",
-    "lastSeen": "2026-10-14",
-    "link": "https://example.test/issues/1"
+    "firstSeen": "2026-10-01T07:27:25Z",
+    "lastSeen": "2026-10-14T09:00:00Z",
+    "link": "https://example.test/issues/APP-1"
+   },
+   {
+    "id": "APP-2",
+    "title": "SyntheticQuietError",
+    "where": "app/misc.ts",
+    "level": "error",
+    "priority": null,
+    "unhandled": false,
+    "eventsInPeriod": 5,
+    "users": 1,
+    "firstSeen": "2026-10-01T07:27:25Z",
+    "lastSeen": "2026-10-09T09:00:00Z",
+    "link": "https://example.test/issues/APP-2"
    }
   ],
   "latestRelease": [
    {
     "project": "app",
-    "release": "1.2.3"
+    "release": "app@1.2.3+45"
    }
   ],
   "note": "synthetic"

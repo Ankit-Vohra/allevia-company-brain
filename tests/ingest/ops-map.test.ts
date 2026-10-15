@@ -331,6 +331,71 @@ describe("mapSnapshot: content and social channels", () => {
   });
 });
 
+describe("mapSnapshot: on-call and release signals (Sentry, Play, the App Store)", () => {
+  const issueId = (id: string) => `event:sentry-issue-${id.toLowerCase()}`;
+  const APP = "channel:app";
+
+  it("every Sentry issue is an Event that AFFECTS the app, with its events and people as dated Observations", () => {
+    const se = fx("sentry_issues");
+    const hot = node(issueId("APP-7"));
+    expect(hot).toMatchObject({ type: "Event", name: "SyntheticCheckoutError: cart is undefined", props: {
+      kind: "sentry_issue", level: "fatal", unhandled: true, isNew: true, unresolved: true, firstSeen: "2026-10-10", lastSeen: "2026-10-14",
+    } });
+    expect(edges).toContainEqual(expect.objectContaining({ from: issueId("APP-7"), type: "AFFECTS", to: APP }));
+    expect(obs(issueId("APP-7"), "sentry_issue_events")).toMatchObject({ value: se.topUnresolved[0].eventsInPeriod, windowStart: "2026-10-02", windowEnd: "2026-10-15" });
+    expect(val(issueId("APP-7"), "sentry_issue_users")).toBe(se.topUnresolved[0].users);
+    // new only, unresolved only, and both
+    expect(node(issueId("APP-9"))?.props).toMatchObject({ isNew: true });
+    expect(node(issueId("APP-9"))?.props).not.toHaveProperty("unresolved");
+    expect(node(issueId("APP-1"))?.props).toMatchObject({ unresolved: true, unhandled: true });
+    expect(node(issueId("APP-1"))?.props).not.toHaveProperty("isNew");
+    // the issue link names the Sentry org: never kept
+    expect(JSON.stringify(nodes.filter((n) => n.id.startsWith("event:sentry-issue")))).not.toMatch(/example\.test|link/);
+  });
+
+  it("people who used the app, the daily crash-free series and the latest release", () => {
+    const se = fx("sentry_issues");
+    expect(obs(APP, "app_users")).toMatchObject({ value: se.stability.users, unit: "count", windowStart: "2026-10-02", windowEnd: "2026-10-15" });
+    expect(obs(APP, "crash_free_sessions_daily_pct", "2026-10-12")).toMatchObject({ value: 98.1, windowStart: "2026-10-12", windowEnd: "2026-10-12" });
+    expect(val(APP, "app_sessions_daily", "2026-10-12")).toBe(6600);
+    expect(observations.filter((o) => o.metric === "crash_free_sessions_daily_pct")).toHaveLength(se.stability.series.length);
+    expect(node("event:release-app-1-2-3-45")).toMatchObject({ type: "Event", props: { kind: "release", release: "app@1.2.3+45", project: "app" } });
+    expect(edges).toContainEqual(expect.objectContaining({ from: "event:release-app-1-2-3-45", type: "AFFECTS", to: APP }));
+  });
+
+  it("Play's bad-behaviour thresholds sit next to the rates they judge", () => {
+    expect(val("channel:app-android", "user_perceived_crash_rate_threshold_pct")).toBe(1.09);
+    expect(val("channel:app-android", "user_perceived_anr_rate_threshold_pct")).toBe(0.47);
+    expect(val("channel:app-android", "user_perceived_anr_rate_pct")).toBe(fx("play_health").anr.last7dUserPerceivedPct);
+  });
+
+  const store = (over: Record<string, unknown> = {}) => snap({ "app_store_status.json": env("app_store_status", {
+    appId: "123", onSale: "2.4.0", headline: "x",
+    versions: [{ version: "2.5.0", state: "WAITING_FOR_REVIEW", platform: "IOS", created: "2026-10-05T10:00:00Z" }, { version: "2.4.0", state: "READY_FOR_SALE", platform: "IOS", created: "2026-09-20T10:00:00Z" }],
+    submissions: [{ state: "WAITING_FOR_REVIEW", submitted: "2026-10-09T08:00:00Z", daysSinceSubmitted: 6.2 }],
+    latestBuilds: [{ build: "88", processing: "VALID", uploaded: "2026-10-08T12:00:00Z", expired: false }, { build: "87", processing: "VALID", uploaded: "2026-09-20T12:00:00Z", expired: false }],
+    ...over,
+  }) });
+
+  it("App Store: versions and builds become release Events, and a waiting review is days on the iOS app", () => {
+    const m = mapSnapshot(store(), ctx).write;
+    const n = (id: string) => m.nodes.find((x) => x.id === id);
+    expect(n("event:ios-version-2-5-0")).toMatchObject({ type: "Event", props: { kind: "release", platform: "ios", version: "2.5.0", state: "WAITING_FOR_REVIEW", versionCreated: "2026-10-05" } });
+    expect(n("event:ios-version-2-4-0")?.props).toMatchObject({ state: "READY_FOR_SALE", live: true });
+    expect(n("event:ios-build-88")).toMatchObject({ type: "Event", props: { kind: "build", platform: "ios", build: "88", processing: "VALID", uploadedAt: "2026-10-08" } });
+    expect(m.edges).toContainEqual(expect.objectContaining({ from: "event:ios-build-88", type: "AFFECTS", to: "channel:app-ios" }));
+    expect(m.nodes.find((x) => x.id === "channel:app-ios")?.props).toMatchObject({ latestVersion: "2.5.0", latestVersionState: "WAITING_FOR_REVIEW", reviewSubmittedAt: "2026-10-09" });
+    expect(m.observations.find((o) => o.subject === "channel:app-ios" && o.metric === "app_review_days_waiting")?.value).toBe(6.2);
+  });
+
+  it("App Store: nothing waiting means no days-waiting number, and an unreadable build or version is skipped, not fatal", () => {
+    const m = mapSnapshot(store({ submissions: [], versions: [{ version: "2.4.0", state: "READY_FOR_SALE", platform: "IOS", created: "not a date" }, {}], latestBuilds: [{ processing: "VALID" }] }), ctx);
+    expect(m.write.observations.some((o) => o.metric === "app_review_days_waiting")).toBe(false);
+    expect(m.write.nodes.filter((x) => x.type === "Event").map((x) => x.id)).toEqual(["event:ios-version-2-4-0"]);
+    expect(m.skipped).toEqual([]);
+  });
+});
+
 describe("mapSnapshot: the business and app health", () => {
   it("marketplace, AI features, review queue and app health", () => {
     const m = fx("marketplace"), ai = fx("ai_features"), rc = fx("review_cards"), se = fx("sentry_issues"), ph = fx("posthog_funnels"), pl = fx("play_health");

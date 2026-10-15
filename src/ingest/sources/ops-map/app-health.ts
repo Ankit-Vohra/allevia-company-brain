@@ -1,6 +1,17 @@
 // How the app is used and how healthy it is: AI screening / voice onboarding / helpline, PostHog activity and funnels,
-// Sentry stability, Play vitals, App Store review state. For the Tech and Analytics desks.
-import { appWindow, arr, isDate, lastDays, numOf, obj, snake, str, type Mapper } from "./builder.js";
+// Sentry stability and issues, Play vitals and their thresholds, App Store review state, versions and builds. For the
+// Tech desks (Arjun, Zoya on call, Imran for releases) and Analytics.
+//
+// Sentry issues, releases and builds are Event nodes that AFFECT the app's Channel, so a Recommendation can cite them
+// as evidence; the numbers on them (events, people, a day's sessions) are dated Observations. The issue's link names the
+// Sentry organisation and is never kept; its title is redacted free text.
+import { entityId } from "../../../util/ids.js";
+import { appWindow, arr, isDate, lastDays, numOf, obj, snake, str, type Builder, type Json, type Mapper } from "./builder.js";
+
+const day = (v: unknown): string | undefined => {
+  const d = typeof v === "string" ? v.slice(0, 10) : undefined;
+  return isDate(d) ? d : undefined;
+};
 
 const aiFeatures: Mapper = (b, { data: d }) => {
   const w = appWindow(d);
@@ -43,6 +54,21 @@ const posthogFunnels: Mapper = (b, c) => {
 
 const SENTRY_PERIOD_DAYS: Record<string, number> = { "24h": 1, "7d": 7, "14d": 14 };
 
+// One Sentry issue as an Event on the app: new ones first (the first value of a prop wins), then the unresolved ones add
+// their own flag. Events and people in the period are Observations on the Event.
+function sentryIssue(b: Builder, app: string, x: Json, flag: "isNew" | "unresolved", w: { windowStart?: string; windowEnd?: string }): void {
+  const key = str(x.id);
+  const title = b.text(x.title, 120);
+  if (!key || !title) return;
+  const id = b.node("Event", entityId("Event", `sentry issue ${key}`), title, {
+    kind: "sentry_issue", level: str(x.level), priority: str(x.priority), unhandled: typeof x.unhandled === "boolean" ? x.unhandled : undefined,
+    where: b.text(x.where, 80), firstSeen: day(x.firstSeen), lastSeen: day(x.lastSeen), [flag]: true,
+  });
+  b.edge(id, "AFFECTS", app);
+  b.obs(id, "sentry_issue_events", x.eventsInPeriod, { ...w, unit: "count" });
+  b.obs(id, "sentry_issue_users", x.users, { ...w, unit: "count" });
+}
+
 const sentryIssues: Mapper = (b, { data: d }) => {
   const app = b.channel("app");
   const days = SENTRY_PERIOD_DAYS[str(d.period) ?? ""];
@@ -51,8 +77,24 @@ const sentryIssues: Mapper = (b, { data: d }) => {
   b.obs(app, "crash_free_sessions_pct", st.crashFreeSessionsPct, w);
   b.obs(app, "crash_free_users_pct", st.crashFreeUsersPct, w);
   b.obs(app, "app_sessions", st.sessions, { ...w, unit: "count" });
+  b.obs(app, "app_users", st.users, { ...w, unit: "count" });
   b.obs(app, "sentry_new_issues", obj(d.newIssues).count, { ...w, unit: "count" });
   b.obs(app, "sentry_top_unresolved", arr(d.topUnresolved).length, { ...w, unit: "count" });
+  // The day-by-day series, so a change after a release can be read: one reading per day (a day's window is that day).
+  for (const p of arr(st.series)) {
+    const at = day(p.at);
+    if (!at) continue;
+    b.obs(app, "crash_free_sessions_daily_pct", p.crashFreePct, { windowStart: at, windowEnd: at });
+    b.obs(app, "app_sessions_daily", p.sessions, { windowStart: at, windowEnd: at, unit: "count" });
+  }
+  for (const x of arr(obj(d.newIssues).items)) sentryIssue(b, app, x, "isNew", w);
+  for (const x of arr(d.topUnresolved)) sentryIssue(b, app, x, "unresolved", w);
+  for (const r of arr(d.latestRelease)) {
+    const release = b.text(r.release, 80);
+    if (!release) continue;
+    const id = b.node("Event", entityId("Event", `release ${release}`), `Release ${release}`, { kind: "release", release, project: b.text(r.project, 60), platform: "app" });
+    b.edge(id, "AFFECTS", app);
+  }
 };
 
 const playHealth: Mapper = (b, { data: d }) => {
@@ -66,15 +108,40 @@ const playHealth: Mapper = (b, { data: d }) => {
     b.obs(android, `user_perceived_${prefix}_rate_pct`, x.last7dUserPerceivedPct, w);
     b.obs(android, `${prefix}_rate_pct`, x.last7dPct, w);
   }
+  // Play's own "bad behaviour" lines (a user-perceived crash or ANR rate above these hurts the app's visibility).
+  const th = obj(d.badBehaviourThresholdsPct);
+  b.obs(android, "user_perceived_crash_rate_threshold_pct", th.userPerceivedCrash);
+  b.obs(android, "user_perceived_anr_rate_threshold_pct", th.userPerceivedAnr);
 };
+
+const LIVE_STATES = /^(?:READY_FOR_SALE|READY_FOR_DISTRIBUTION|PROCESSING_FOR_DISTRIBUTION)$/;
 
 const appStoreStatus: Mapper = (b, { data: d }) => {
   const versions = arr(d.versions);
-  const ios = b.channel("app-ios", {
-    onSaleVersion: str(d.onSale), latestVersionState: str(versions[0]?.state) ?? str(versions[0]?.appStoreState),
-  });
   const pending = arr(d.submissions).find((s) => /WAITING|IN_REVIEW|UNRESOLVED/.test(str(s.state) ?? ""));
+  const ios = b.channel("app-ios", {
+    onSaleVersion: str(d.onSale), latestVersion: str(versions[0]?.version),
+    latestVersionState: str(versions[0]?.state) ?? str(versions[0]?.appStoreState),
+    reviewSubmittedAt: pending ? day(pending.submitted) : undefined,
+  });
   if (pending) b.obs(ios, "app_review_days_waiting", pending.daysSinceSubmitted, { unit: "days" });
+  for (const v of versions) {
+    const version = b.text(v.version, 40);
+    if (!version) continue;
+    const state = str(v.state) ?? str(v.appStoreState);
+    const id = b.node("Event", entityId("Event", `ios version ${version}`), `iPhone app ${version}`, {
+      kind: "release", platform: "ios", version, state, versionCreated: day(v.created), ...(state && LIVE_STATES.test(state) ? { live: true } : {}),
+    });
+    b.edge(id, "AFFECTS", ios);
+  }
+  for (const x of arr(d.latestBuilds)) {
+    const build = b.text(x.build, 40);
+    if (!build) continue;
+    const id = b.node("Event", entityId("Event", `ios build ${build}`), `iPhone app build ${build}`, {
+      kind: "build", platform: "ios", build, processing: str(x.processing), uploadedAt: day(x.uploaded), expired: typeof x.expired === "boolean" ? x.expired : undefined,
+    });
+    b.edge(id, "AFFECTS", ios);
+  }
 };
 
 export const APP_HEALTH_MAPPERS: Record<string, Mapper> = {
