@@ -4,11 +4,14 @@
 // - saveTurn links the Turn to its session, asker, agents (HANDLED_BY), every touched node (TOUCHED) and its citations
 //   (CITED); writes each agent's Finding (PART_OF the Turn, PRODUCED by the agent, CITED, BASED_ON other Findings) and
 //   each review (REVIEWED, with verdict and note); and grows each agent's KNOWS_ABOUT weight for what its Findings cited.
+//   The two raw-Cypher writes here (Session.lastAt, the KNOWS_ABOUT merge) bypass upsert, so they go through rawWrite,
+//   which tells the projection cache (noteGraphWrite) that the graph changed.
 // - recallBrief: "what we already know" before a turn, with ids the agents may cite.
 import { randomBytes } from "node:crypto";
 import { AGENTS, DEPARTMENTS, agentById } from "../../shared/roster.js";
 import type { AgentEvent, NodeRef, TurnChecks } from "../../shared/contracts.js";
 import type { GraphHandle } from "../graph/client.js";
+import { noteGraphWrite } from "../graph/projection.js";
 import { writeBatch, type EdgeInput, type NodeInput, type Prim } from "../graph/upsert.js";
 import { istDate } from "../util/time.js";
 import { TouchedSet } from "./tool.js";
@@ -59,6 +62,16 @@ async function rosterOnce(g: GraphHandle, now: number): Promise<void> {
 }
 
 // ---------- helpers ----------
+
+// Every write that bypasses upsert/writeBatch: run it, then invalidate the graph's cached projection (even if the query
+// failed part-way, a stale projection is worse than a rebuild).
+async function rawWrite(g: GraphHandle, cypher: string, params: Record<string, unknown>): Promise<void> {
+  try {
+    await g.query(cypher, params);
+  } finally {
+    noteGraphWrite(g.name);
+  }
+}
 
 async function existing(g: GraphHandle, ids: string[]): Promise<Set<string>> {
   const want = unique(ids.filter(Boolean));
@@ -214,7 +227,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   }
 
   const s = await writeBatch(g, { nodes, edges }, now);
-  await g.query("MATCH (s:Session {id:$id}) SET s.lastAt = CASE WHEN coalesce(s.lastAt, 0) > $at THEN s.lastAt ELSE $at END", { id: t.sessionId, at: t.at });
+  await rawWrite(g, "MATCH (s:Session {id:$id}) SET s.lastAt = CASE WHEN coalesce(s.lastAt, 0) > $at THEN s.lastAt ELSE $at END", { id: t.sessionId, at: t.at });
   await growKnowsAbout(g, t, exists, now);
   return {
     nodesCreated: s.nodesCreated, edgesCreated: s.edgesCreated,
@@ -233,7 +246,7 @@ async function growKnowsAbout(g: GraphHandle, t: SaveTurnInput, exists: (id: str
   for (const f of t.findings) if (!f.rejected) add(f.agent, f.citations);
   if (!t.findings.length && (t.status ?? "ok") === "ok") add("chief-of-staff", t.citations);
   if (!pairs.size) return;
-  await g.query(
+  await rawWrite(g,
     `UNWIND $pairs AS p
      MATCH (a:Entity {id:p.a}), (x:Entity {id:p.x})
      MERGE (a)-[r:KNOWS_ABOUT]->(x)

@@ -1,15 +1,22 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { AGENTS, DEPARTMENTS } from "../../shared/roster.js";
 import type { AgentEvent, TurnChecks } from "../../shared/contracts.js";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
 import { ensureIndexes } from "../../src/graph/indexes.js";
 import { writeBatch } from "../../src/graph/upsert.js";
+import { noteGraphWrite } from "../../src/graph/projection.js";
 import {
   agentNodeId, compactEvents, ensureRoster, getSession, getTurnEvents, listSessions, recallBrief, saveTurn, startSession,
   type SaveTurnInput,
 } from "../../src/agent/memory.js";
 import { testGraph } from "../helpers/graph.js";
 import { NOW } from "../helpers/agent.js";
+
+// Spy on the projection cache's write counter (the real one still runs).
+vi.mock("../../src/graph/projection.js", async (importOriginal) => {
+  const m = await importOriginal<typeof import("../../src/graph/projection.js")>();
+  return { ...m, noteGraphWrite: vi.fn(m.noteGraphWrite) };
+});
 
 const CHECKS: TurnChecks = { citationsValid: true, invalidCitations: [], numbersGrounded: true, ungroundedNumbers: [], simulatedDisclosed: true, freshnessDisclosed: true };
 
@@ -123,6 +130,31 @@ describe("memory (integration)", () => {
     const w = await count("MATCH (:Agent {id:$a})-[r:KNOWS_ABOUT]->(:Entity {id:'metric:signups'}) RETURN r.weight AS c", { a: agentNodeId("data-analyst") });
     expect(w).toBe(2);
     expect(await count("MATCH (:Agent {id:$a})-[r:KNOWS_ABOUT]->(:Entity {id:'metric:signups'}) RETURN count(r) AS c", { a: agentNodeId("data-analyst") })).toBe(1);
+  });
+
+  it("the raw-Cypher writes (KNOWS_ABOUT growth, Session.lastAt) each tell the projection cache the graph changed", async () => {
+    const own = await testGraph(); // its own graph, so the extra turn doesn't disturb the threads tested below
+    const note = vi.mocked(noteGraphWrite);
+    const query = vi.spyOn(own.g, "query");
+    try {
+      await writeBatch(own.g, { nodes: [{ type: "Metric", id: "metric:signups", name: "Signups" }] }, NOW);
+      note.mockClear();
+      await saveTurn(own.g, { ...firstTurn, sessionId: "session:raw-writes", reviews: [],
+        findings: [{ id: "finding:a1-data-analyst", agent: "data-analyst", task: "x", text: "Down [[metric:signups]].", citations: ["metric:signups"], basedOn: [], proposals: [], revised: false, rejected: false }] });
+      const raw = query.mock.calls.map((c, i) => ({ cypher: String(c[0]), order: query.mock.invocationCallOrder[i]! }));
+      const knows = raw.find((r) => r.cypher.includes("KNOWS_ABOUT"));
+      const lastAt = raw.find((r) => r.cypher.includes("s.lastAt"));
+      expect(knows && lastAt).toBeTruthy();
+      const noted = note.mock.calls.map((c, i) => ({ graph: c[0], order: note.mock.invocationCallOrder[i]! }));
+      for (const w of [knows!, lastAt!]) {
+        // a noteGraphWrite for this graph follows this raw write, before the next one
+        const next = raw.find((r) => r.order > w.order)?.order ?? Infinity;
+        expect(noted.some((n) => n.graph === own.g.name && n.order > w.order && n.order < next)).toBe(true);
+      }
+    } finally {
+      query.mockRestore();
+      await own.cleanup();
+    }
   });
 
   it("a fast-path turn (no findings) grows the Chief's KNOWS_ABOUT from the answer's citations", async () => {
