@@ -88,17 +88,18 @@ export const CAPTURE_SCRIPT = String.raw`(() => {
     }
   }
   const icon = [...document.querySelectorAll("link[rel]")].find((l) => /(^|\s)(icon|shortcut icon|apple-touch-icon)(\s|$)/i.test(l.getAttribute("rel") || ""));
-  // logo: an image or svg in the site header, or anything named "logo", in document order
+  // logo: an image or svg named "logo"/"brand", or one inside the header's link to the home page; never an icon (small,
+  // inside a button, or in some other link such as a call to action)
   const header = document.querySelector("header, [role='banner'], #header, .header, .site-header");
-  const visible = (e) => { const r = e.getBoundingClientRect(); return r.width >= 8 && r.height >= 8; };
+  const visible = (e) => { const r = e.getBoundingClientRect(); return r.width >= 20 && r.height >= 12 && !e.closest("button"); };
   const logoCands = [...document.querySelectorAll("img, svg")].slice(0, 400).filter((e) => !e.closest("svg") || e.tagName.toLowerCase() === "svg").map((e) => {
     const tag = e.tagName.toLowerCase();
     const hay = [e.getAttribute("class"), e.getAttribute("id"), e.getAttribute("alt"), e.getAttribute("src"), e.getAttribute("aria-label"),
       e.parentElement && e.parentElement.getAttribute("class"), e.closest("a") && e.closest("a").getAttribute("class")].join(" ");
     const home = e.closest("a") && /^(\/|\.\/|index\.html?|#?)$/.test((e.closest("a").getAttribute("href") || "").replace(location.origin, ""));
-    return { e, tag, keyword: /logo|brand/i.test(hay), inHeader: !!(header && header.contains(e)) || !!e.closest("nav") || !!home };
-  }).filter((c) => (c.keyword || c.inHeader) && visible(c.e));
-  const best = logoCands.find((c) => c.keyword && c.inHeader) || logoCands.find((c) => c.keyword) || logoCands.find((c) => c.inHeader);
+    return { e, tag, home: !!home, keyword: /logo|brand/i.test(hay), inHeader: !!(header && header.contains(e)) || !!e.closest("nav") || !!home };
+  }).filter((c) => (c.keyword || c.home) && visible(c.e));
+  const best = logoCands.find((c) => c.keyword && c.inHeader) || logoCands.find((c) => c.home && c.inHeader) || logoCands.find((c) => c.keyword) || logoCands.find((c) => c.home);
   let logo = null;
   if (best) {
     const r = best.e.getBoundingClientRect();

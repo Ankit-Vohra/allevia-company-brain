@@ -160,4 +160,22 @@ describe("crawlSite (fixture site)", () => {
       await app.close();
     }
   }, 60_000);
+
+  it("does not take a header icon for the logo when the wordmark is text", async () => {
+    const arrow = `<svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 11L11 3M5 3h6v6" stroke="#000"/></svg>`;
+    const textMark = await startSite({
+      "/": (send) => send(200, { "content-type": "text/html" }, `<!doctype html><html lang="en"><head><title>Wordmark</title>
+        <meta property="og:image" content="/og.png"></head><body>
+        <header><a href="/" style="font-size:28px">Kestrel &amp; Oak</a><nav><a href="/work">Work</a>
+        <a href="/contact" class="cta">Get in touch ${arrow}</a><button aria-label="menu"><svg width="24" height="24"><path d="M0 0h24"/></svg></button></nav></header>
+        <main><h1>Studio</h1><p>${"Plenty of words here. ".repeat(30)}</p></main></body></html>`),
+    });
+    try {
+      const r = await crawlSite(`${textMark.origin}/`, { allowHosts: [`127.0.0.1:${textMark.port}`], minDelayMs: 0, maxPages: 1, maxLinkChecks: 0 });
+      expect(r.pages[0]!.logo).toBeUndefined();
+      expect(r.pages[0]!.og["og:image"]).toBe("/og.png");
+    } finally {
+      await textMark.close();
+    }
+  }, 60_000);
 });

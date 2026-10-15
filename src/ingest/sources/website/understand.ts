@@ -46,6 +46,7 @@ export interface UnderstandOpts {
   model: string;
   cacheDir: string;
   existing: Map<string, KnownEntity>;        // known entities (the Business at least); updated as documents resolve
+  websiteHost?: string;                      // the site's host: a Channel named after it is channel:website
   maxPages?: number;
   onDoc?: (d: UnderstandDoc) => Promise<void>; // called in page order, as each document resolves
   onError?: (page: PageData, message: string) => void;
@@ -72,8 +73,9 @@ export async function extractPages(pages: PageData[], o: UnderstandOpts): Promis
       const { write, dropped } = await resolveExtraction({ ...extraction, observations: [] }, {
         docId: doc.id, text: doc.text, asOf: doc.asOf, existing: o.existing,
       });
-      rememberWrite(o.existing, write);
-      const d = { page, write, dropped, cached, droppedObservations };
+      const own = remapOwnWebsite(write, { business: o.business.name, host: o.websiteHost ?? new URL(page.finalUrl).hostname });
+      rememberWrite(o.existing, own);
+      const d = { page, write: own, dropped, cached, droppedObservations };
       out.push(d);
       if (o.onDoc) await o.onDoc(d);
     } catch (e) {
@@ -81,6 +83,41 @@ export async function extractPages(pages: PageData[], o: UnderstandOpts): Promis
     }
   }
   return out;
+}
+
+// A Channel the model named after the business's own site ("AVS Atelier website", "example.com website", "our
+// website") is the website channel the crawl already wrote, not a new one.
+const plainName = (s: string) => s.normalize("NFKC").toLowerCase().replace(/&/g, " and ").replace(/['’]s\b/g, "s").replace(/[^\p{L}\p{N}.]+/gu, " ").replace(/\s+/g, " ").trim();
+export function isOwnWebsite(name: string, business: string, host: string): boolean {
+  const n = plainName(name);
+  const h = host.toLowerCase();
+  const bare = h.replace(/^www\./, "");
+  const site = n.replace(/ (web ?site|site|homepage)$/, "");
+  if ([h, bare].includes(n) || [h, bare].includes(site)) return true;
+  if (/^(our |the )?(web ?site|homepage|site)$/.test(n)) return true;
+  const biz = plainName(business).replace(/\./g, " ").trim();
+  return /\b(web ?site|homepage)\b/.test(n) && !!biz && n.replace(/\./g, " ").startsWith(biz);
+}
+
+export function remapOwnWebsite(w: GraphWrite, ctx: { business: string; host: string }): GraphWrite {
+  const website = channelId("website");
+  const own = new Set(w.nodes.filter((n) => n.type === "Channel" && n.id !== website && isOwnWebsite(n.name, ctx.business, ctx.host)).map((n) => n.id));
+  // an existing node the resolver only pointed edges at: recognise it by its id
+  for (const e of w.edges) {
+    for (const id of [e.from, e.to]) {
+      if (id.startsWith("channel:") && id !== website && isOwnWebsite(id.slice(8).replace(/-/g, " "), ctx.business, ctx.host)) own.add(id);
+    }
+  }
+  if (!own.size) return w;
+  const to = (id: string) => (own.has(id) ? website : id);
+  const edges = new Map<string, EdgeInput>();
+  for (const e of w.edges) {
+    const x = { ...e, from: to(e.from), to: to(e.to) };
+    if (x.from === x.to) continue;
+    const k = `${x.from}|${x.type}|${x.to}`;
+    if ((edges.get(k)?.conf ?? -1) < (x.conf ?? 1)) edges.set(k, x);
+  }
+  return { nodes: w.nodes.filter((n) => !own.has(n.id)), edges: [...edges.values()], observations: w.observations };
 }
 
 // After the extraction is written: what the business's own site says it offers, whom it serves and what it built.

@@ -265,7 +265,7 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
       const existing = await retrying(() => knownEntities(g));
       const business = { id: businessId, name, ...(input.industry ? { industry: input.industry } : {}) };
       await extractPages(pages, {
-        business, runner: deps.runner, model, cacheDir: join(dataDir, "cache", "extract"), existing,
+        business, runner: deps.runner, model, cacheDir: join(dataDir, "cache", "extract"), existing, websiteHost: domain,
         maxPages: deps.maxUnderstandPages,
         onDoc: (d) => write("understand", d.write),
         onError: (p, m) => fail("understand", `${new URL(p.finalUrl).pathname}: ${m}`),

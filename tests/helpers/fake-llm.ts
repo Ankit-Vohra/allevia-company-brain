@@ -37,8 +37,11 @@ export const FIXTURE_EXTRACTIONS: Record<string, Extraction> = {
     entities: [
       { type: "Content", name: "Harbour House", summary: "A Victorian terrace opened to the garden.", format: "project" },
       { type: "Content", name: "Clifton Loft", summary: "A loft conversion with a reading nook.", format: "project" },
+      { type: "Channel", name: "Kestrel & Oak Studio website", summary: "The studio's own website, where projects are shown." },
     ],
-    relations: [],
+    relations: [
+      { from: "Harbour House", fromType: "Content", type: "PUBLISHED_ON", to: "Kestrel & Oak Studio website", toType: "Channel", evidence: "A Victorian terrace opened to the garden.", conf: 0.8 },
+    ],
     observations: [],
   },
   "/about": {
