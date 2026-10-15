@@ -13,6 +13,7 @@ import { ask } from "../../src/agent/ask.js";
 import { createAskDeps } from "../../src/agent/wiring.js";
 import { fetchWebsiteBrandFiles } from "../../src/brand/website.js";
 import { ClaudeResearch } from "../../src/creative/research.js";
+import { realReelVideo } from "../../src/creative/reel/render.js";
 import { loadAssetFile } from "../../src/creative/files.js";
 import { closeAll, openGraphByName } from "../../src/graph/client.js";
 import { businessId } from "../../src/graph/tenants.js";
@@ -60,7 +61,7 @@ console.log("brand files:", JSON.stringify(brand, null, 1));
 // 2. each sentence through the real company
 const deps = await createAskDeps({ tenant }, {
   graph: g, embedQuery: null,
-  creative: { store, vision, engine, maxCreditsPerRequest: 6, research: new ClaudeResearch(), fonts: { fetchMissing: true } },
+  creative: { store, vision, engine, maxCreditsPerRequest: 6, research: new ClaudeResearch(), fonts: { fetchMissing: true }, video: realReelVideo() },
 });
 const report: Array<Record<string, unknown>> = [];
 let session: string | undefined;
@@ -78,8 +79,9 @@ for (const [i, question] of a.ask.entries()) {
   for (const d of made) for (const o of d.options) {
     const f = await loadAssetFile(g, store, tenant, o.assetId);
     if (!f) continue;
-    const name = `${i + 1}-${d.kind}-${o.label.toLowerCase()}${o.assetId === d.recommended ? "-pick" : ""}.jpg`;
-    writeFileSync(join(out, name), await sharp(f.data).jpeg({ quality: 86 }).toBuffer());
+    const video = f.mime.startsWith("video/");
+    const name = `${i + 1}-${d.kind}-${o.label.toLowerCase()}${o.assetId === d.recommended ? "-pick" : ""}.${video ? "mp4" : "jpg"}`;
+    writeFileSync(join(out, name), video ? f.data : await sharp(f.data).jpeg({ quality: 86 }).toBuffer());
     files.push(name);
   }
   report.push({ question, seconds: Math.round(secs), ok: res.ok, answer: res.answer, plan: events.find((e) => e.type === "plan"), made: made.map((d) => ({ kind: d.kind, title: d.title, notes: d.notes, options: d.options.map((o) => ({ label: o.label, badge: o.badge, note: o.note, layout: o.layout, aiEdited: o.aiEdited })) })), files, checks: res.checks, questions: events.filter((e) => e.type === "quick_replies") });

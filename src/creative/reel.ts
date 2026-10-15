@@ -100,7 +100,9 @@ export async function makeReel(g: GraphHandle, job: ReelJob, deps: CreativeDeps)
   const title = typeof raw?.title === "string" && raw.title.trim() ? raw.title.trim().slice(0, 80) : "Reel";
   const caption = cleanVoice(typeof raw?.caption === "string" ? raw.caption : "").text;
   const text = beats.map(line).join("\n");
-  const bad = groundClaims([{ role: "script", text: `${text}\n${caption}` }], { request: `${job.question}\n${job.idea}`, facts });
+  // the words that will be seen or said (a beat's timing is not a claim about the business)
+  const said = beats.map((b) => [b.onScreen, b.voiceOver].filter((x) => typeof x === "string").join(" ")).join("\n");
+  const bad = groundClaims([{ role: "script", text: `${said}\n${caption}` }], { request: `${job.question}\n${job.idea}`, facts });
   const warnings = bad.map((b) => `"${b.claim}" is not in what you told us or in our record: check it before filming`);
   const body = `${title}\n\n${text}\n\nCaption: ${caption}`;
   const card = await saveTextDraft(g, { agentId: job.agentId, turnId: job.turnId, now: job.now, title: `Reel script: ${title}`, body, target: "instagram reel", why: `Made on request: ${JSON.stringify(job.idea.slice(0, 200))}.${warnings.length ? ` Check: ${warnings.join("; ")}.` : ""}` });
