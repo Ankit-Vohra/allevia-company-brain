@@ -120,6 +120,33 @@ describe("studio image utilities", () => {
     expect(s.structure).toBeGreaterThan(0.8);
   });
 
+  // Content trial 2026-10-15: the local variant of a dark, cool, noisy phone photo came out grey and grainy (variant A is the
+  // one that must still look good when the generative edit is unavailable).
+  it("variant A removes sensor noise and corrects a strong cool cast on a dark phone photo", async () => {
+    const w = 864, h = 1080;
+    const noise = randomBytes(w * h * 3);
+    const px = Buffer.alloc(w * h * 3);
+    for (let i = 0; i < px.length; i += 3) {
+      const x = ((i / 3) % w) / w;
+      const band = x > 0.45 && x < 0.6 ? 25 : 0; // one soft vertical feature so the frame is not flat
+      px[i] = Math.max(0, Math.min(255, 60 + band + (noise[i]! - 128) * 0.22));
+      px[i + 1] = Math.max(0, Math.min(255, 70 + band + (noise[i + 1]! - 128) * 0.22));
+      px[i + 2] = Math.max(0, Math.min(255, 95 + band + (noise[i + 2]! - 128) * 0.22));
+    }
+    const base = await sharp(px, { raw: { width: w, height: h, channels: 3 } }).jpeg({ quality: 95 }).toBuffer();
+    const grain = async (buf: Buffer) => { // the share of each pixel's value that does not survive a blur
+      const g = await sharp(buf).resize(432, 540).greyscale().raw().toBuffer();
+      const s = await sharp(buf).resize(432, 540).greyscale().blur(2).raw().toBuffer();
+      const mean = g.reduce((a, v) => a + v, 0) / g.length;
+      return Math.sqrt(g.reduce((a, v, i) => a + (v - s[i]!) ** 2, 0) / g.length) / mean;
+    };
+    const a = await renderVariantA(base, { paper: "#f4f1ea" });
+    expect(await grain(a.buffer)).toBeLessThan((await grain(base)) * 0.6);
+    const after = (await sharp(a.buffer).stats()).channels;
+    expect(after[0]!.mean - after[2]!.mean).toBeGreaterThan(-8); // no longer clearly blue (it began 35 below)
+    expect(a.treatment).toMatch(/denoise/);
+  });
+
   it("registerToFrame finds the frame inside a reframed, relit edit; a featureless edit does not match", async () => {
     const frame = await sharp(await facade()).extract({ left: 300, top: 60, width: 320, height: 400 }).jpeg().toBuffer();
     // the "edit": the whole facade relit, on a square canvas (more sky), scaled up 1.5x; the frame holds the facade's end, so
