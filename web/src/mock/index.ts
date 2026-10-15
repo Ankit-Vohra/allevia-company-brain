@@ -1,5 +1,5 @@
 // The mock backend: same functions and shapes as the real API (web/src/api.ts), backed by in-memory data and scripted
-// runs. Used with ?mock=1, or automatically when /api/tenants does not answer.
+// runs. Used with ?mock=1, or automatically when GET /api/health fails.
 import type { AgentEvent, AgentId, OnboardEvent } from "@shared/contracts";
 import { AGENTS } from "@shared/roster";
 import type {

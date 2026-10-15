@@ -1,7 +1,8 @@
-// Typed client for the Allevia API (spec Milestone 4.1). Every function has a mock twin in ./mock; the app runs in mock
-// mode with ?mock=1, or automatically when GET /api/tenants does not answer.
+// Typed client for the Allevia API (src/server, spec Milestone 4.1). The app talks to the live API by default. Every
+// function has a mock twin in ./mock, used with ?mock=1, or when GET /api/health fails (no server, or no database), so the
+// demo still runs offline.
 import type { AgentEvent, AgentId, OnboardEvent } from "@shared/contracts";
-import { postSse } from "./lib/sse";
+import { ApiError, errorFrom, postSse } from "./lib/sse";
 import type {
   AgentDetail, AgentSummary, Approval, ApprovalDecision, GraphData, NodeDetail, OnboardRequest, Overview, Recommendation,
   SearchHit, SessionDetail, SessionSummary, Tenant,
@@ -10,8 +11,11 @@ import type {
 export type ApiMode = "live" | "mock";
 
 let mode: ApiMode = "live";
+let publicMode = false;
 let speed = 1;
 export const getMode = () => mode;
+/** The server is the public read-only demo: approvals and onboarding are refused, Ask replays recorded threads. */
+export const getPublicMode = () => publicMode;
 export const getSpeed = () => speed;
 export const setSpeed = (s: number) => { speed = s; };
 
@@ -21,32 +25,43 @@ const mock = () => (mockPromise ??= import("./mock").then((m) => m.mockApi));
 
 async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { headers: { accept: "application/json" }, ...init });
-  if (!res.ok) throw new Error(`${path} answered ${res.status}`);
+  if (!res.ok) throw await errorFrom(res, path);
   const type = res.headers.get("content-type") ?? "";
-  if (!type.includes("json")) throw new Error(`${path} did not return JSON`);
+  if (!type.includes("json")) throw new ApiError(`${path} did not return JSON`, res.status);
   return (await res.json()) as T;
 }
 
 const enc = encodeURIComponent;
 
-/** Decide live vs mock once, at startup. */
+async function withTimeout<T>(ms: number, fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fn(ctrl.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Decide live vs mock once, at startup: live unless ?mock=1, or the API's health check fails. */
 export async function detectMode(): Promise<{ mode: ApiMode; tenants: Tenant[] }> {
   const params = new URLSearchParams(location.search);
-  if (params.get("mock") === "1") {
+  const useMock = async () => {
     mode = "mock";
     return { mode, tenants: await (await mock()).tenants() };
-  }
+  };
+  if (params.get("mock") === "1") return useMock();
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 2500);
-    const tenants = await getJson<Tenant[]>("/api/tenants", { signal: ctrl.signal });
-    clearTimeout(timer);
-    if (!Array.isArray(tenants) || tenants.length === 0) throw new Error("no tenants");
+    const health = await withTimeout(2500, (signal) => getJson<{ ok: boolean; publicMode?: boolean }>("/api/health", { signal }));
+    if (!health.ok) throw new Error("unhealthy");
+    publicMode = health.publicMode === true;
+    const tenants = await withTimeout(8000, (signal) => getJson<Tenant[]>("/api/tenants", { signal }));
+    // A live server with no business yet still needs one to show: the demo data stands in until onboarding adds one.
+    if (!Array.isArray(tenants) || tenants.length === 0) return useMock();
     mode = "live";
     return { mode, tenants };
   } catch {
-    mode = "mock";
-    return { mode, tenants: await (await mock()).tenants() };
+    return useMock();
   }
 }
 
@@ -70,7 +85,13 @@ export const api = {
     return mode === "mock" ? (await mock()).search(t, q) : getJson(`/api/${enc(t)}/search?q=${enc(q)}`);
   },
   async node(t: string, id: string): Promise<NodeDetail | null> {
-    return mode === "mock" ? (await mock()).node(t, id) : getJson(`/api/${enc(t)}/node/${enc(id)}`);
+    if (mode === "mock") return (await mock()).node(t, id);
+    try {
+      return await getJson<NodeDetail>(`/api/${enc(t)}/node/${enc(id)}`);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return null; // a cited id that is not in the graph
+      throw e;
+    }
   },
   async graph(t: string, focus: string, depth = 1): Promise<GraphData> {
     return mode === "mock" ? (await mock()).graph(t, focus, depth) : getJson(`/api/${enc(t)}/graph?focus=${enc(focus)}&depth=${depth}`);
