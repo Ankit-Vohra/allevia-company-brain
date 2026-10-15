@@ -25,3 +25,4 @@ coverage/
 # subagent worktrees (Claude Code)
 .claude/worktrees/
 docs/research/kylon/
+site/scripts/.footage/
