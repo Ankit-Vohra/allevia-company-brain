@@ -14,7 +14,7 @@ export const TENANT_SLUG = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
 export const RESERVED_SLUGS: readonly string[] = [
   "meta",      // allevia_meta is the tenant registry
   "operator",  // the scope of an operator token (src/auth/tokens.ts)
-  "health", "tenants", "plans", "onboard", "auth", "admin", "api", // first path segments under /api
+  "health", "tenants", "plans", "onboard", "auth", "admin", "api", "connectors", // first path segments under /api (connectors: Google's redirect back)
 ];
 
 export function isTenantSlug(s: unknown): boolean {

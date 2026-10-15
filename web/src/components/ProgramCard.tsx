@@ -9,6 +9,7 @@ import { fmtDate, fmtNum, fmtPct } from "../lib/format";
 import { monthWeek } from "../lib/plainwords";
 import { AgentAvatar } from "./bits";
 import { CapabilityLadder } from "./Capabilities";
+import { ConnectSearchConsole } from "./ConnectSearchConsole";
 import { FirstPassCurve } from "./FirstPassCurve";
 import { NumbersUpload } from "./NumbersUpload";
 import { Reveal } from "./Reveal";
@@ -117,6 +118,7 @@ export function ProgramCard({ program, caps, loading, error, tenantId, onNumbers
             <h3 className="plan-h">What your team can see</h3>
             <CapabilityLadder caps={ladder} />
           </div>
+          {tenantId && <ConnectSearchConsole tenantId={tenantId} onChanged={() => onNumbersAdded?.()} />}
         </div>
       </Reveal>
     </section>

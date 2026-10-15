@@ -44,6 +44,14 @@ describe("loadConfig", () => {
     expect(c.discord.token).toBeUndefined();
     expect(c.discord.hubGuildId).toBeUndefined();
     expect(c.avsIg).toEqual({ token: undefined, userId: undefined });
+    // Google sign-in is off until the founder sets it up; the redirect address is derived from the web address
+    expect(c.google).toEqual({ clientId: undefined, clientSecret: undefined, connectorKey: undefined, redirectUri: "http://127.0.0.1:8787/api/connectors/google/callback" });
+  });
+
+  it("reads the Google connector settings from the environment, and the redirect address follows the web address unless set", () => {
+    const env = { ALLEVIA_ENV_FILE: join(dir, "missing.env"), ALLEVIA_GOOGLE_CLIENT_ID: "id-1", ALLEVIA_GOOGLE_CLIENT_SECRET: "test-secret-xxxxxxxx", ALLEVIA_CONNECTOR_KEY: "test-key-xxxxxxxxxxxx", ALLEVIA_WEB_URL: "https://app.allevia.example/" };
+    expect(loadConfig(env).google).toEqual({ clientId: "id-1", clientSecret: "test-secret-xxxxxxxx", connectorKey: "test-key-xxxxxxxxxxxx", redirectUri: "https://app.allevia.example/api/connectors/google/callback" });
+    expect(loadConfig({ ...env, ALLEVIA_GOOGLE_REDIRECT_URI: "https://other.example/cb" }).google.redirectUri).toBe("https://other.example/cb");
   });
 
   it("reads the env file: comments, blank lines, quotes, export prefix, ~ expansion", () => {

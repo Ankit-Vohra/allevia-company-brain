@@ -254,6 +254,17 @@ export interface NumbersPreview {
   plan: NumbersPlan;
   feedsGoals?: Array<{ id: string; name: string }>;
 }
+/** GET /api/:t/connectors/search-console: the connection in plain words (src/connectors/google/searchconsole.ts ConnectorStatus). */
+export interface ConnectorStatus {
+  state: "not_configured" | "not_connected" | "choose_property" | "connected" | "needs_reconnect";
+  message: string;
+  property?: string;
+  sites?: string[];
+  lastPullAt?: string;
+  dataThrough?: string;
+  capabilityMode?: string;
+}
+
 export interface NumbersGoalOutcome {
   id: string;
   name: string;

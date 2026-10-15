@@ -5,6 +5,7 @@ import type { AgentEvent, AgentId, OnboardEvent } from "@shared/contracts";
 import { ApiError, errorFrom, postSse, postSseForm } from "./lib/sse";
 import { consumeLinkInAddressBar } from "./lib/link";
 
+const CONNECT_LIVE_ONLY = "Connecting Search Console needs the live server.";
 const NUMBERS_LIVE_ONLY = "Adding your numbers needs the live server: your file is read and kept there.";
 const STUDIO_LIVE_ONLY = "The Studio needs the live server: the photos, Tara's and Nisha's checks and the edits all run there.";
 
@@ -21,7 +22,7 @@ export interface StudioLatest {
 import type { AgentMode, CapabilityState, DirectivePreview, DiscordHome, LearnedRuleDto, ProgramScorecard } from "@shared/contracts";
 import type {
   AgentDetail, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, GoalSetup, GraphData, LearningFeed, LiveTurn, NodeDetail,
-  NumbersImportResult, NumbersPlan, NumbersPreview, OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Tenant, TurnEventsPage, Usage,
+  ConnectorStatus, NumbersImportResult, NumbersPlan, NumbersPreview, OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Tenant, TurnEventsPage, Usage,
 } from "./types-ext";
 
 /** PATCH /api/:t/agents/:id */
@@ -327,6 +328,27 @@ export const api = {
     form.append("file", file, file.name);
     form.append("plan", JSON.stringify(plan));
     return getJson(`/api/${enc(t)}/numbers/import`, { method: "POST", body: form });
+  },
+
+  // ---- Connect Search Console (live server only) ----
+
+  /** GET /api/:t/connectors/search-console: not switched on yet, not connected, pick the website, connected, or connect again. */
+  async searchConsole(t: string): Promise<ConnectorStatus> {
+    if (mode === "mock") throw new ApiError(CONNECT_LIVE_ONLY, 501);
+    return getJson(`/api/${enc(t)}/connectors/search-console`);
+  },
+  /** POST .../connect: Google's consent page; the app sends the owner there. */
+  async connectSearchConsole(t: string): Promise<{ url: string }> {
+    if (mode === "mock") throw new ApiError(CONNECT_LIVE_ONLY, 501);
+    return sendJson(`/api/${enc(t)}/connectors/search-console/connect`, "POST", {});
+  },
+  async chooseSearchConsoleSite(t: string, siteUrl: string): Promise<ConnectorStatus> {
+    if (mode === "mock") throw new ApiError(CONNECT_LIVE_ONLY, 501);
+    return sendJson(`/api/${enc(t)}/connectors/search-console/property`, "POST", { siteUrl });
+  },
+  async disconnectSearchConsole(t: string): Promise<ConnectorStatus> {
+    if (mode === "mock") throw new ApiError(CONNECT_LIVE_ONLY, 501);
+    return sendJson(`/api/${enc(t)}/connectors/search-console/disconnect`, "POST", {});
   },
 
   /** POST /api/onboard, an SSE stream of OnboardEvent. */
