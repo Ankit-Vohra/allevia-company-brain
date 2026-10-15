@@ -17,6 +17,21 @@ export interface FindingRecord {
   revised: boolean;
   rejected: boolean;
   partial?: boolean;     // its desk ran out of turns: this is what it had written by then
+  guidedBy?: string[];   // the owner's instruction Memories its desk worked under (saved as GUIDED_BY)
+}
+
+// The owner's settings for the team, loaded from the graph before a turn (src/settings/directives.ts loadTeamSettings):
+// which desks are switched off or light, and the standing instructions (Memory{kind:'instruction'} ABOUT an Agent).
+export interface InstructionNote {
+  id: string;                                   // memory:…
+  text: string;
+  agents: AgentId[];                            // roster ids it is about
+  channel?: { id: string; name: string };       // a channel it is scoped to ("no emojis on LinkedIn")
+}
+export interface TeamSettings {
+  disabled: AgentId[];                          // never planned, never review (the Chief of Staff can't be off)
+  light?: AgentId[];                            // run on the cheapest model
+  instructions: InstructionNote[];
 }
 
 export interface ReviewRecord { reviewer: AgentId; findingId: string; verdict: "ok" | "fix" | "reject"; note: string }

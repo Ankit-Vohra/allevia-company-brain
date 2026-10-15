@@ -267,4 +267,19 @@ describe("memory (integration)", () => {
     expect(r.errors).toEqual([]);
     expect(await count("MATCH (:Person {id:'person:guest'})-[:ASKED]->(:Turn {id:'turn:c1'})-[:IN_SESSION]->(:Session {id:'session:discord-123'}) RETURN count(*) AS c")).toBe(1);
   });
+
+  it("saveTurn writes GUIDED_BY from the Turn and a guided Finding to instructions in the graph, skipping missing or wrong-typed ids", async () => {
+    const turnId = "turn:g1";
+    const f = { ...firstTurn.findings[0]!, id: "finding:g1-data-analyst", guidedBy: ["memory:signups-note", "memory:gone"] };
+    const r = await saveTurn(g, {
+      ...firstTurn, turnId, at: NOW + 500_000, findings: [f], reviews: [],
+      guidedBy: ["memory:signups-note", "memory:gone", "metric:signups"],
+    });
+    expect(r.errors).toEqual([]);
+    expect(await count("MATCH (:Turn {id:$t})-[:GUIDED_BY]->(x) RETURN count(x) AS c", { t: turnId })).toBe(1);
+    expect(await count("MATCH (:Turn {id:$t})-[:GUIDED_BY]->(:Memory {id:'memory:signups-note'}) RETURN count(*) AS c", { t: turnId })).toBe(1);
+    expect(await count("MATCH (:Finding {id:$f})-[:GUIDED_BY]->(:Memory {id:'memory:signups-note'}) RETURN count(*) AS c", { f: f.id })).toBe(1);
+    await saveTurn(g, { ...firstTurn, turnId, at: NOW + 500_000, findings: [f], reviews: [], guidedBy: ["memory:signups-note"] });
+    expect(await count("MATCH (:Turn {id:$t})-[r:GUIDED_BY]->() RETURN count(r) AS c", { t: turnId })).toBe(1); // re-saving adds nothing
+  });
 });
