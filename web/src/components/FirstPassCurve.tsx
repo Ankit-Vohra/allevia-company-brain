@@ -52,8 +52,8 @@ export function FirstPassCurve({ series, startDate, day, length = 90 }: { series
   const pctY = (r: number) => `${(y(r) / H) * 100}%`;
 
   const summary = last
-    ? `First-pass approvals: ${fmtPct(last.rate!)} on day ${last.d}, against a target of 30% by day 30 and 60% by day 90.`
-    : "First-pass approvals: no drafts decided yet.";
+    ? `Drafts you approved as they were: ${fmtPct(last.rate!)} so far, heading for about 60% by the end of month 3.`
+    : "No drafts decided yet.";
 
   return (
     <figure className="fp-curve">
@@ -86,14 +86,14 @@ export function FirstPassCurve({ series, startDate, day, length = 90 }: { series
         {!known.length && <span className="fp-empty">No drafts decided yet. The curve starts with your first approval.</span>}
         {hover !== null && (
           <span className={`fp-tip${hover > length * 0.6 ? " is-left" : ""}`} style={{ left: pctX(hover) }} role="status">
-            <b>Day {hover}</b> · {fmtDate(hp?.date ?? new Date(Date.parse(`${startDate}T00:00:00Z`) + hover * DAY).toISOString().slice(0, 10))}
+            <b>{fmtDate(hp?.date ?? new Date(Date.parse(`${startDate}T00:00:00Z`) + hover * DAY).toISOString().slice(0, 10))}</b>
             <br />
-            {hp?.rate != null ? <>{fmtPct(hp.rate)} first pass · {hp.firstPass} of {hp.decided}</> : "No decisions yet"}
+            {hp?.rate != null ? <>{fmtPct(hp.rate)} approved as they were · {hp.firstPass} of {hp.decided}</> : "No decisions yet"}
           </span>
         )}
       </div>
       <figcaption className="fp-axis">
-        <span>Day 0</span><span>30</span><span>60</span><span>90</span>
+        <span>Start</span><span>Month 1</span><span>Month 2</span><span>Month 3</span>
       </figcaption>
     </figure>
   );
