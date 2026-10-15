@@ -212,13 +212,23 @@ Web pages
 Mixed Hindi and English (Hinglish, Devanagari or Latin script) is normal: read it as written, quote evidence in the original words, and write summaries in English.`;
 }
 
+// Cut to at most n UTF-16 units without leaving half of a surrogate pair (an emoji, a rare CJK character) at the end.
+export function cutText(s: string, n: number): string {
+  const t = s.slice(0, n);
+  return /[\uD800-\uDBFF]$/.test(t) ? t.slice(0, -1) : t;
+}
+
+// Appended when the document is longer than LIMITS.docChars; part of the extraction cache key.
+export const TRUNCATION_MARKER = "[… truncated: the document continues for {n} more characters]";
+
 // The document text as the prompt carries it: NFKC-normalised, cut to LIMITS.docChars, tags stripped. Cutting before
-// stripping bounds the strip loop's work (each pass undoes one level of nesting) on a hostile page.
+// stripping bounds the strip loop's work on a hostile page.
 function documentBody(text: string): string {
   const norm = text.normalize("NFKC");
-  const body = stripDocTags(norm.slice(0, LIMITS.docChars));
-  if (norm.length <= LIMITS.docChars) return body;
-  return `${body}\n[… truncated: the document continues for ${norm.length - LIMITS.docChars} more characters]`;
+  const cut = cutText(norm, LIMITS.docChars);
+  const body = stripDocTags(cut);
+  if (cut.length === norm.length) return body;
+  return `${body}\n${TRUNCATION_MARKER.replace("{n}", String(norm.length - cut.length))}`;
 }
 
 // Any <document…> or </document…> tag inside untrusted text is removed, so the text cannot close the block early (the
@@ -227,18 +237,27 @@ function documentBody(text: string): string {
 // nothing changes, so the pieces around a removed tag cannot form a new one ("</docu<document>ment-x>"). A tag is at most
 // 80 characters on one line: a stray "<document" never swallows the text up to some later ">". Evidence checks
 // normalise quotes and document with NFKC as well, so quotes of the normalised text still match the stored text.
-const DOC_TAG = /<[^\S\n]*\/?[^\S\n]*document[^<>\n]{0,80}>/gi;
+// Every quantifier is bounded ({0,16} spaces around the slash): two adjacent unbounded whitespace runs made "<" plus a
+// long run of spaces backtrack quadratically (22 KB of hostile text blocked the event loop for 81 s). Each pass undoes
+// one level of nesting; past MAX_STRIP_PASSES the text is hostile, and it fails closed: every "<" becomes "‹", so no tag
+// can survive in any form.
+const DOC_TAG = /<[^\S\n]{0,16}\/?[^\S\n]{0,16}document[^<>\n]{0,80}>/gi;
+export const MAX_STRIP_PASSES = 64;
 export function stripDocTags(s: string): string {
   let out = s.normalize("NFKC");
-  for (let prev = ""; prev !== out;) {
-    prev = out;
-    out = out.replace(DOC_TAG, "");
+  for (let pass = 0; pass < MAX_STRIP_PASSES; pass++) {
+    const next = out.replace(DOC_TAG, "");
+    if (next === out) return out;
+    out = next;
   }
-  return out;
+  return out.search(DOC_TAG) === -1 ? out : out.replace(/</g, "‹");
 }
 
 // Title and path: one line, at most LIMITS.lineChars characters, tags stripped.
-const headerLine = (s: string) => stripDocTags(s.normalize("NFKC").replace(/\s+/g, " ").slice(0, LIMITS.lineChars));
+const headerLine = (s: string) => stripDocTags(cutText(s.normalize("NFKC").replace(/\s+/g, " "), LIMITS.lineChars));
+
+// The document date goes into the prompt only as YYYY-MM-DD; anything else (a datetime keeps its date part) is unknown.
+const promptDate = (asOf: string | undefined) => /^\d{4}-\d{2}-\d{2}/.exec(asOf ?? "")?.[0];
 
 // `nonce` is only for tests; every real call gets a fresh random tag suffix (8 bytes). The system prompt does not
 // depend on it, so it stays cacheable.
@@ -250,9 +269,10 @@ export function extractionPrompt(doc: RawDoc, business: BusinessContext, opts: {
     "",
     documentBody(doc.text),
   ].join("\n");
+  const date = promptDate(doc.asOf);
   const prompt = [
     `Document kind: ${doc.kind}`,
-    doc.asOf ? `Document date: ${doc.asOf.slice(0, 10)} (dates without a year take this year)` : "Document date: unknown",
+    date ? `Document date: ${date} (dates without a year take this year)` : "Document date: unknown",
     "",
     `<${tag}>`,
     inside,
