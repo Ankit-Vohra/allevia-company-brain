@@ -167,12 +167,12 @@ describe("toolsFor (which tools a job gets)", () => {
   const { getTools } = registry();
   const names = (agent: string, phase: Parameters<typeof toolsFor>[1], lean = false) => toolsFor(agentById(agent)!, phase, getTools, { lean }).map((t) => t.name);
   it("a desk's work gets its roster tools, including the write tools its roster lists", () => {
-    expect(names("tech-lead", "work")).toEqual(["get_entity", "seo_report", "search", "propose_action"]);
+    expect(names("tech-lead", "work")).toEqual(["search", "get_entity", "seo_report", "propose_action"]);
     expect(names("data-analyst", "work")).not.toContain("propose_action");
   });
   it("reviews and revisions never get write tools", () => {
-    expect(names("tech-lead", "revise")).toEqual(["get_entity", "seo_report", "search"]);
-    expect(names("coe-lead", "review")).toEqual(["metric_trend", "get_entity", "search"]);
+    expect(names("tech-lead", "revise")).toEqual(["search", "get_entity", "seo_report"]);
+    expect(names("coe-lead", "review")).toEqual(["search", "get_entity", "metric_trend"]);
   });
   it("the Chief writing from findings gets only show_path and propose_action; answering alone, all its tools", () => {
     expect(names("chief-of-staff", "synthesis", true)).toEqual(["show_path", "propose_action"]);

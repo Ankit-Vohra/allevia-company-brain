@@ -31,6 +31,9 @@ import {
 import type { BaselineResult } from "../program/program.js";
 import { baselineStage, capabilitiesStage, goalsStage, profileStage, type GoalsResult, type ProfileResult, type ProgramStageCtx } from "./enroll.js";
 import type { ResolvedRegion } from "./region.js";
+import { fetchWebsiteBrandFiles, type BrandFetch } from "../brand/website.js";
+import type { AssetStore } from "../studio/store.js";
+import type { VisionRunner } from "../studio/vision.js";
 
 export interface OnboardInput {
   name: string;
@@ -55,6 +58,9 @@ export interface OnboardDeps {
   crawl?: (url: string, opts: CrawlOptions) => Promise<CrawlResult>;
   crawlOptions?: Omit<CrawlOptions, "onPage" | "screenshotDir">;
   embed?: (texts: string[]) => Promise<number[][]>;   // default local e5-small
+  // The brand library: with this, onboarding also downloads the logo file and the brand's Google fonts (src/brand/website.ts).
+  // Absent (tests, dry runs): the brand kit stays references only.
+  brand?: { store: AssetStore; vision?: VisionRunner; fetch?: BrandFetch; googleFonts?: boolean };
   tenantOpts?: TenantOpts;
   maxUnderstandPages?: number;                         // default 12
   now?: () => number;
@@ -285,6 +291,21 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
         const rules = await retrying(() => g.query<{ id: string }>(
           "MATCH (b:Entity {id:$b}) WITH b MATCH (r:BrandRule {origin:'website'})-[x:APPLIES_TO]->(b) WHERE x.until IS NULL RETURN r.id AS id", { b: businessId }));
         for (const r of rules) if (!current.has(r.id)) stats.edgesClosed += await retrying(() => closeEdge(g, r.id, "APPLIES_TO", businessId, now(), "no longer how the website reads"));
+      }
+      if (deps.brand) {
+        // files, not references: the logo and the brand fonts (a failure here is a note, never a failed onboarding)
+        try {
+          const files = await fetchWebsiteBrandFiles(g, home, kit, {
+            tenant: input.slug, businessId, docId: homeDoc, store: deps.brand.store, now: now(), log,
+            ...(deps.brand.vision ? { vision: deps.brand.vision } : {}), ...(deps.brand.fetch ? { fetch: deps.brand.fetch } : {}),
+            ...(deps.brand.googleFonts !== undefined ? { googleFonts: deps.brand.googleFonts } : {}),
+            ...(deps.crawlOptions?.allowHosts ? { allowHosts: deps.crawlOptions.allowHosts } : {}),
+          });
+          for (const n of files.notes) log(`[onboard] brand: ${n}`);
+          log(`[onboard] brand files: logo ${files.logo}${files.needsBetter ? " (needs a better file)" : ""}; fonts ${files.fonts.length ? files.fonts.map((f) => `${f.family} ${f.weight}`).join(", ") : "none"}`);
+        } catch (e) {
+          fail("brand files", e);
+        }
       }
       log(`[onboard] brand: ${kit.palette.map((c) => `${c.hex} ${c.role}`).join(", ")}; fonts ${kit.fonts.map((f) => f.family).join(", ")}; logo ${kit.logo ? kit.logo.source : "none"}`);
     } catch (e) {

@@ -10,6 +10,7 @@ import { approval as readApproval, approvals as readApprovals, latestBrief } fro
 import { AlleviaBot } from "./bot.js";
 import { HubBot } from "./hub-bot.js";
 import { sweepOfflineJoins } from "./hub-join.js";
+import { loadAssetFile } from "../creative/files.js";
 import { StudioDiscord, StudioGate } from "./studio-bot.js";
 import { syncArea, type TenantSource } from "./hub-provision.js";
 import { hubSettings, productionHub } from "./hub-service.js";
@@ -58,10 +59,12 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
         tenant: area.slug, guildId, channelId: area.channels["your-team"]!, webBase: cfg.webBaseUrl, graph, shared,
         ask: (input, emit) => ask(input, { ...deps, ...(timeZone ? { timeZone } : {}) }, emit),
         ...(onDecision ? { onDecision } : {}), ...(actions ? { actions } : {}), log,
+        // what the team makes comes back here as files with Approve and Change, read from this business's own storage
+        deliverables: { file: (assetId) => loadAssetFile(graph, studioDeps.store, area.slug, assetId) },
       });
     },
     studioFor: async (area) => new StudioDiscord({
-      tenant: area.slug, businessId: businessId(area.slug), graph: await tenantGraph(area.slug), studio: studioDeps, ffmpeg, gate,
+      tenant: area.slug, businessId: businessId(area.slug), graph: await tenantGraph(area.slug), studio: studioDeps, ffmpeg, gate, brandLibrary: true,
       ...(clip ? { clip } : {}),
       ...(onDecision ? { onDecision } : {}), ...(actions ? { actions } : {}), log,
     }),

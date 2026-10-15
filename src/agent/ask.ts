@@ -18,6 +18,7 @@ import type { AgentRuntime, Emit } from "./runtime.js";
 import { TouchedSet, type AlleviaTool, type ToolContext } from "./tool.js";
 import { loadBusinessSkills } from "./skills/business.js";
 import type { SkillCatalog } from "./skills/catalog.js";
+import type { CreativeDeps } from "../creative/ports.js";
 import type { RecallBrief, TeamSettings } from "./types.js";
 
 export type Channel = "web" | "discord" | "cli" | "mcp";
@@ -43,6 +44,7 @@ export interface AskDeps {
   timeZone?: string;                                  // the tenant's IANA zone for dates in prompts (default IST)
   signal?: AbortSignal;                               // stops the turn: every agent run is aborted, the turn saved as failed
   skills?: SkillCatalog | null;                       // the shipped skill packs; this business's own are laid over them each turn. none/null: no skills
+  creative?: CreativeDeps;                            // what the tools that make things may use; absent: they say it isn't set up
 }
 
 // What src/agent/wiring.ts (written once the graph tools land) must export, so every surface (CLI, server, Discord,
@@ -120,7 +122,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
       out({ type: "agent_done", agent: "chief-of-staff", ms: 0, ok: true });
       outcome = {
         ok: true, answer: filled.answer, plan: { steps: [{ agent: "chief-of-staff", task: "Fill in the suggestions" }], rationale: "The owner accepted the suggestions in the last draft." },
-        fastPath: true, findings: [], reviews: [], proposals: [], agents: ["chief-of-staff"], failed: [], touched, guidedBy: [], skills: [],
+        fastPath: true, findings: [], reviews: [], proposals: [], agents: ["chief-of-staff"], failed: [], touched, guidedBy: [], skills: [], deliverables: [],
       };
     }
 
@@ -136,6 +138,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
         ...(deps.embedQuery ? { embedQuery: deps.embedQuery } : {}), ...(deps.readOnly !== undefined ? { readOnly: deps.readOnly } : {}),
         ...(deps.timeZone ? { timeZone: deps.timeZone } : {}), ...(deps.signal ? { signal: deps.signal } : {}),
         ...(capabilities ? { capabilities } : {}), ...(team ? { team } : {}), ...(language ? { language } : {}), ...(skills ? { skills } : {}),
+        ...(deps.creative ? { creative: deps.creative } : {}),
       },
       out);
     if (deps.signal?.aborted) failure = STOPPED_MESSAGE;

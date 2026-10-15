@@ -171,7 +171,7 @@ interface JobSpec {
   model: string;
   prompt: string;
   params: Record<string, string>;
-  file: { flag: string; name: string; bytes: Buffer };
+  file?: { flag: string; name: string; bytes: Buffer };   // absent: a picture drawn from the prompt alone
   tenant: string;
   keyParts: string[];
   maxCredits: number;
@@ -205,7 +205,7 @@ export class HiggsfieldEngine implements GenerationEngine {
   private args(spec: JobSpec, file: string): string[] {
     const a: string[] = [spec.model, "--prompt", spec.prompt];
     for (const [k, v] of Object.entries(spec.params)) a.push(`--${k}`, v);
-    a.push(`--${spec.file.flag}`, file);
+    if (spec.file) a.push(`--${spec.file.flag}`, file);
     return a;
   }
 
@@ -262,6 +262,27 @@ export class HiggsfieldEngine implements GenerationEngine {
     return { video: run.bytes, jobId: run.jobId, credits: run.credits, model: spec.model };
   }
 
+  // A picture drawn from a description alone (a poster's artwork, a picture of a service), priced and capped like an edit, on
+  // the same login, ledger and daily cap. Used by the creating tools (src/creative/wiring.ts).
+  private drawSpec(o: { prompt: string; aspect: string; tenant: string; maxCredits?: number; model?: string }): JobSpec {
+    const prompt = this.prompt(o.prompt);
+    return {
+      kind: "image", model: o.model ?? this.o.model ?? DEFAULT_IMAGE_MODEL, prompt, params: { resolution: this.o.resolution ?? "2k", aspect_ratio: o.aspect },
+      tenant: o.tenant, keyParts: ["draw", createHash("sha256").update(prompt).digest("hex").slice(0, 16), o.aspect], maxCredits: o.maxCredits ?? this.caps.run,
+    };
+  }
+
+  async drawQuote(o: { prompt: string; aspect: string; tenant: string; maxCredits?: number }): Promise<EngineQuote> {
+    const spec = this.drawSpec(o);
+    return this.withFile(spec, async (file) => (await this.vet(spec, file)).quote);
+  }
+
+  async draw(o: { prompt: string; aspect: string; tenant: string; maxCredits?: number }): Promise<EditResult> {
+    const spec = this.drawSpec(o);
+    const run = await this.runJob(spec);
+    return { image: run.bytes, engine: this.name, model: spec.model, prompt: spec.prompt, jobId: run.jobId, credits: run.credits, recorded: false, createdAt: new Date(run.at).toISOString() };
+  }
+
   /** What a clip would cost, without making it. */
   async clipQuote(o: { image: Buffer; tenant: string; sourceSha256: string; prompt: string; seconds?: number; aspect?: "9:16" | "4:5" | "1:1"; maxCredits?: number }): Promise<EngineQuote> {
     const seconds = o.seconds ?? 5;
@@ -279,6 +300,7 @@ export class HiggsfieldEngine implements GenerationEngine {
   private async withFile<T>(spec: JobSpec, fn: (file: string) => Promise<T>): Promise<T> {
     const root = this.o.tmpRoot ?? tmpdir();
     mkdirSync(root, { recursive: true });
+    if (!spec.file) return fn("");
     const dir = mkdtempSync(join(root, "allevia-hf-"));
     try {
       const file = join(dir, spec.file.name);

@@ -10,6 +10,7 @@ import { useNavigate } from "react-router";
 import type { AgentEvent, AssessmentOverlay } from "@shared/contracts";
 import { api, getMode, getPublicMode, type StudioLatest } from "../api";
 import { AgentAvatar, agentDef } from "../components/bits";
+import { BrandLibrary } from "../components/BrandLibrary";
 import { Icon } from "../components/Icon";
 import { useApp } from "../state/app";
 import { runStore, useRun } from "../state/runs";
@@ -248,6 +249,7 @@ export default function StudioPage() {
         )}
       </header>
 
+      <BrandLibrary tenant={tenant.id} />
       <div className="studio-grid">
         <section className="studio-col" aria-label="The photo">
           {(!hasRun || file) && !running && (

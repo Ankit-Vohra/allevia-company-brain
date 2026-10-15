@@ -15,7 +15,7 @@ const CALLS: Array<[string, Record<string, unknown>]> = [
   ["important", {}], ["topics", {}], ["metric_trend", { metric: "followers", subject: "channel:instagram" }], ["metric_trend", { metric: "signups" }],
   ["content_performance", {}], ["seo_report", {}], ["ad_report", {}], ["playbook", { topic: "hooks" }], ["history", { id: "task:fix-ig-token" }],
   ["recall", { ids: ["decision:007-pause-daily-stories"] }], ["cypher", { query: "MATCH (t:Task)<-[r:OWNS]-(o) RETURN t, r, o" }],
-  ["show_path", { ids: ["decision:007-pause-daily-stories", "channel:instagram", "system:ig-connector"] }],
+  ["get_brand_asset", {}], ["show_path", { ids: ["decision:007-pause-daily-stories", "channel:instagram", "system:ig-connector"] }],
 ];
 
 describe("provenance (integration)", () => {
@@ -27,7 +27,7 @@ describe("provenance (integration)", () => {
   it("covers every read tool", () => {
     const named = new Set(CALLS.map(([n]) => n));
     // use_skill opens a skill (a way of working), not the graph: it returns no nodes, edges or sources to attribute.
-    expect(ALL_TOOLS.filter((t) => !t.writes && t.name !== "use_skill" && !named.has(t.name)).map((t) => t.name)).toEqual([]);
+    expect(ALL_TOOLS.filter((t) => !t.writes && !t.external && t.name !== "use_skill" && !named.has(t.name)).map((t) => t.name)).toEqual([]);
   });
 
   it("every returned node with a source brings one, and every edge's src document comes back", async () => {

@@ -23,6 +23,12 @@ export const PLAIN_TOOLS: Record<string, string> = {
   propose_action: "Prepare something for your OK",
   show_path: "Show how it reached the answer",
   use_skill: "Open one of its skills",
+  get_brand_asset: "Pick up your logo, colours and fonts",
+  make_poster: "Make a poster or ad for your OK",
+  generate_image: "Make a picture for your OK",
+  make_reel_script_and_clip: "Make a short reel draft for your OK",
+  write_copy: "Write captions and ad text",
+  research: "Look something up on the web",
 };
 
 /** The owner's words for a tool; an unknown tool reads as its name with spaces. */

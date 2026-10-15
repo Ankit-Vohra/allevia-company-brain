@@ -15,11 +15,12 @@ export const ALLOWED_HOSTS: readonly string[] = ["cdn.discordapp.com", "media.di
 export const MAX_ATTACHMENTS = 4;
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
+export const MAX_FILE_BYTES = 20 * 1024 * 1024; // brand files: a PDF guide, a font, an SVG (the brand library re-checks each by its bytes)
 const MAX_REDIRECTS = 3;
 const TIMEOUT_MS = 30_000;
 
 export interface AttachmentRef { url: string; name: string; size: number; contentType: string | null }
-export type MediaKind = "image" | "video";
+export type MediaKind = "image" | "video" | "file";
 
 export class AttachmentRejected extends Error {
   override name = "AttachmentRejected";
@@ -28,6 +29,20 @@ export class AttachmentRejected extends Error {
 const IMAGE_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
 const VIDEO_TYPES = new Set(["video/mp4", "video/quicktime", "video/webm"]);
 const EXT: Record<string, MediaKind> = { jpg: "image", jpeg: "image", png: "image", webp: "image", mp4: "video", mov: "video", webm: "video" };
+
+// A brand file the library takes besides photos: a PDF guide, a TrueType/OpenType font, an SVG logo. Discord's own content
+// type for these is often generic, so the name counts too; the bytes decide what it really is (brand/sniff.ts).
+const FILE_TYPES = new Set(["application/pdf", "font/ttf", "font/otf", "font/sfnt", "application/x-font-ttf", "application/x-font-otf", "application/font-sfnt", "image/svg+xml"]);
+const FILE_EXT = new Set(["pdf", "ttf", "otf", "svg"]);
+export function isBrandFile(a: Pick<AttachmentRef, "name" | "contentType">): boolean {
+  const t = baseType(a.contentType);
+  if (FILE_TYPES.has(t)) return true;
+  if (t && t !== "application/octet-stream" && !t.startsWith("font/")) return false;
+  return FILE_EXT.has((/\.([a-z0-9]+)$/i.exec(a.name)?.[1] ?? "").toLowerCase());
+}
+export function pickBrandFiles(files: AttachmentRef[] | undefined): Array<AttachmentRef & { kind: "file" }> {
+  return (files ?? []).filter((f) => mediaKind(f) === null && isBrandFile(f)).map((f) => ({ ...f, kind: "file" as const }));
+}
 
 const baseType = (t: string | null | undefined): string => (t ?? "").split(";")[0]!.trim().toLowerCase();
 
@@ -64,19 +79,19 @@ export function checkAttachmentUrl(raw: string): URL {
 export type FetchFn = (url: string, init: { redirect: "manual"; signal: AbortSignal; headers: Record<string, string> }) => Promise<Response>;
 
 const tooBig = (kind: MediaKind, max: number): AttachmentRejected =>
-  new AttachmentRejected(`That ${kind === "image" ? "photo" : "video"} is too large: send one under ${Math.round(max / (1024 * 1024))} MB.`);
+  new AttachmentRejected(`That ${kind === "image" ? "photo" : kind === "file" ? "file" : "video"} is too large: send one under ${Math.round(max / (1024 * 1024))} MB.`);
 
 export async function downloadAttachment(
   a: AttachmentRef & { kind: MediaKind }, o: { fetch?: FetchFn } = {},
 ): Promise<Buffer> {
-  const max = a.kind === "image" ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
+  const max = a.kind === "image" ? MAX_IMAGE_BYTES : a.kind === "file" ? MAX_FILE_BYTES : MAX_VIDEO_BYTES;
   if (a.size > max) throw tooBig(a.kind, max);
   const doFetch: FetchFn = o.fetch ?? ((url, init) => fetch(url, init));
   let url = checkAttachmentUrl(a.url);
   const signal = AbortSignal.timeout(TIMEOUT_MS);
   let res: Response | undefined;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    res = await doFetch(url.toString(), { redirect: "manual", signal, headers: { accept: a.kind === "image" ? "image/*" : "video/*" } }).catch(() => {
+    res = await doFetch(url.toString(), { redirect: "manual", signal, headers: { accept: a.kind === "image" ? "image/*" : a.kind === "file" ? "*/*" : "video/*" } }).catch(() => {
       throw new AttachmentRejected("I couldn't download that file from Discord. Try sending it again.");
     });
     if (res.status >= 300 && res.status < 400) {
@@ -90,7 +105,8 @@ export async function downloadAttachment(
   if (!res || !res.ok || !res.body) throw new AttachmentRejected("I couldn't download that file from Discord. Try sending it again.");
 
   const served = baseType(res.headers.get("content-type"));
-  const okType = a.kind === "image" ? IMAGE_TYPES.has(served) : VIDEO_TYPES.has(served);
+  // a brand file's type is whatever Discord's host says (often generic): the library reads the bytes to know what it is
+  const okType = a.kind === "image" ? IMAGE_TYPES.has(served) : a.kind === "file" ? true : VIDEO_TYPES.has(served);
   if (!okType) {
     throw new AttachmentRejected(a.kind === "image"
       ? "That file is not a photo I can use. Send a JPEG, PNG or WebP photo."

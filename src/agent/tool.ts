@@ -6,6 +6,7 @@ import type { z } from "zod";
 import type { GraphHandle } from "../graph/client.js";
 import type { EdgeRef, NodeRef, SourceRef, ToolResult } from "../../shared/contracts.js";
 import type { SkillCatalog } from "./skills/catalog.js";
+import type { CreativeDeps } from "../creative/ports.js";
 
 export interface ToolContext {
   graph: GraphHandle;
@@ -18,6 +19,8 @@ export interface ToolContext {
   embedQuery?: (text: string) => Promise<number[]>; // injected; vector search is skipped when absent
   skills?: SkillCatalog;    // this business's skills (use_skill); absent when skills are off
   readOnly?: boolean;       // MCP/public mode: write tools refuse
+  question?: string;        // the owner's own words for this turn: what a poster's claims are grounded in
+  creative?: CreativeDeps;  // what the creating tools may use (files, vision, the capped image engine); absent: creating is not set up
   signal?: AbortSignal;     // aborted when the agent's run is stopped (timeout, turn stopped): a write tool checks it
                             // right before it commits, so a run that was stopped mid-call changes nothing
 }
@@ -26,7 +29,8 @@ export interface AlleviaTool<S extends z.ZodRawShape = z.ZodRawShape> {
   name: string;
   description: string;
   input: S;
-  writes?: boolean;         // remember / propose_action
+  writes?: boolean;         // remember / propose_action / the tools that make things (poster, image, clip, copy): roster-gated
+  external?: boolean;       // needs something injected (a model, the web, the image engine), so it is not run on the seed graph in tests
   run(args: z.infer<z.ZodObject<S>>, ctx: ToolContext): Promise<ToolResult>;
 }
 

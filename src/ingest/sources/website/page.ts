@@ -53,6 +53,8 @@ export interface PageData {
   timing: PageTiming;
   mixedContent: string[];     // http:// resources on an https page
   favicon?: string;
+  // every icon the page declares (<link rel=icon|apple-touch-icon>): the brand library fetches the biggest as a logo fallback
+  iconLinks?: Array<{ href: string; sizes?: string; rel: string }>;
   logo?: LogoCandidate;
   styles?: StyleSample[];     // only on brand pages (home plus a few key pages)
   error?: string;
@@ -88,6 +90,8 @@ export const CAPTURE_SCRIPT = String.raw`(() => {
       if (/^http:\/\//i.test(u)) mixed.push(u.slice(0, 300));
     }
   }
+  const iconLinks = [...document.querySelectorAll("link[rel][href]")].filter((l) => /(^|\s)(icon|shortcut icon|apple-touch-icon|apple-touch-icon-precomposed)(\s|$)/i.test(l.getAttribute("rel") || ""))
+    .slice(0, 12).map((l) => ({ href: abs(l.getAttribute("href")), sizes: l.getAttribute("sizes") || undefined, rel: (l.getAttribute("rel") || "").toLowerCase() })).filter((l) => l.href);
   const icon = [...document.querySelectorAll("link[rel]")].find((l) => /(^|\s)(icon|shortcut icon|apple-touch-icon)(\s|$)/i.test(l.getAttribute("rel") || ""));
   // logo: an image or svg named "logo"/"brand", or one inside the header's link to the home page; never an icon (small,
   // inside a button, or in some other link such as a call to action)
@@ -125,7 +129,7 @@ export const CAPTURE_SCRIPT = String.raw`(() => {
     canonical: abs(attr("link[rel~='canonical' i]", "href")), robotsMeta: robots || null,
     h1: heads("h1"), h2: heads("h2").slice(0, 40), links, images, jsonLd, og,
     lang: document.documentElement.getAttribute("lang") || null, viewport: (metas("viewport")[0] || { getAttribute: () => null }).getAttribute("content"),
-    mixed: [...new Set(mixed)].slice(0, 50), favicon: icon ? abs(icon.getAttribute("href")) : null, logo,
+    mixed: [...new Set(mixed)].slice(0, 50), favicon: icon ? abs(icon.getAttribute("href")) : null, iconLinks, logo,
     text: text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim(),
   };
 })()`;
@@ -175,7 +179,7 @@ export interface Captured {
   title: string | null; titleCount: number; metaDescription: string | null; metaDescriptionCount: number;
   canonical: string | null; robotsMeta: string | null; h1: string[]; h2: string[]; links: Array<string | null>;
   images: ImageInfo[]; jsonLd: string[]; og: Record<string, string>; lang: string | null; viewport: string | null;
-  mixed: string[]; favicon: string | null; logo: LogoCandidate | null; text: string;
+  mixed: string[]; favicon: string | null; iconLinks?: Array<{ href: string; sizes?: string; rel: string }>; logo: LogoCandidate | null; text: string;
 }
 
 export const countWords = (s: string): number => (s.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length;
@@ -239,7 +243,7 @@ export function redactPage(p: PageData): PageData {
 export function fromCapture(c: Captured, origin: string): Pick<PageData,
   "title" | "titleCount" | "metaDescription" | "metaDescriptionCount" | "canonical" | "robotsMeta" | "h1" | "h2" | "text" |
   "wordCount" | "internalLinks" | "externalLinks" | "images" | "jsonLd" | "jsonLdTypes" | "jsonLdErrors" | "og" | "lang" |
-  "viewport" | "mixedContent" | "favicon" | "logo"> {
+  "viewport" | "mixedContent" | "favicon" | "iconLinks" | "logo"> {
   const internal = new Set<string>();
   const external = new Set<string>();
   for (const href of c.links) {
@@ -268,7 +272,7 @@ export function fromCapture(c: Captured, origin: string): Pick<PageData,
     internalLinks: [...internal].slice(0, 500), externalLinks: [...external].slice(0, 300),
     images: c.images, jsonLd, jsonLdTypes: jsonLdTypes(jsonLd), jsonLdErrors, og: Object.fromEntries(Object.entries(c.og).map(([k, v]) => [k, isUrl(v) ? v : scrub(v)])),
     lang: opt(c.lang), viewport: opt(c.viewport),
-    mixedContent: c.mixed, favicon: opt(c.favicon), logo: c.logo ?? undefined,
+    mixedContent: c.mixed, favicon: opt(c.favicon), ...(c.iconLinks?.length ? { iconLinks: c.iconLinks } : {}), logo: c.logo ?? undefined,
   };
 }
 

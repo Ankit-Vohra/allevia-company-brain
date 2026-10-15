@@ -50,10 +50,27 @@ export type AgentEvent =
   | { type: "learned"; ruleId: string; text: string; fromApprovalId: string }
   // An agent loaded one of its skills (how it does this kind of work here): "Tara is using: Instagram post craft".
   | { type: "skill_used"; agent: AgentId; skillId: string; name: string; source: "code" | "business" }
+  // Something the team made on request (a poster, an image, a clip): the options, each checked, with a card waiting for the owner's OK
+  | { type: "deliverable"; agent: AgentId; kind: DeliverableKind; title: string; approvalId: string; recommended: string; options: DeliverableOption[]; notes: string[]; credits?: number }
+  // The team needs a few answers before it can make something well: at most three short questions, each with tap-to-answer
+  // options (an empty list means a typed answer). Discord shows buttons, the web app chips; an answer is sent as the next message.
+  | { type: "quick_replies"; agent: AgentId; questions: Array<{ field: string; question: string; options: string[] }> }
   | { type: "error"; agent?: AgentId; message: string };
 
+// What the team can make from a request. Each becomes an Asset (with lineage) and waits for the owner's OK as a card.
+export type DeliverableKind = "poster" | "image" | "clip";
+export interface DeliverableOption {
+  assetId: string;
+  label: string;                         // "A", "B", "C"
+  badge: "ok" | "held" | "unchecked";    // Nisha's check: passed, held back, or could not be checked
+  note: string;
+  thumb: string;                         // the asset proxy URL of a small copy
+  layout?: string;
+  aiEdited: boolean;                     // the artwork behind it came from an image model
+}
+
 // An Asset node's role: the owner's upload, a generated or edited variant of it, or the approved final.
-export type AssetKind = "original" | "variant" | "final";
+export type AssetKind = "original" | "variant" | "final" | "poster" | "image" | "clip" | "artwork";
 // Tara's call on an uploaded photo (product design §6, step 3).
 export type AssessmentVerdict = "use" | "enhance" | "recompose" | "reshoot";
 // A box drawn over the photo, in 0..1 coordinates of its width and height (x, y is the top-left corner). `kind` is open

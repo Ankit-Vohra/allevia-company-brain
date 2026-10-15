@@ -16,7 +16,9 @@ import { TENANT_CONFIGS } from "../tenant-config.js";
 import { sha256Hex } from "./image.js";
 
 export interface VisionImage { label: string; mime: "image/jpeg" | "image/png" | "image/webp"; data: Buffer }
-export interface VisionInput { agent: string; system: string; prompt: string; images: VisionImage[]; schema: object; model: string }
+// A PDF the model reads whole (a brand guide): Claude takes it as a document block.
+export interface VisionDocument { label: string; mime: "application/pdf"; data: Buffer }
+export interface VisionInput { agent: string; system: string; prompt: string; images: VisionImage[]; documents?: VisionDocument[]; schema: object; model: string }
 
 export interface VisionRunner {
   see(input: VisionInput): Promise<unknown>;
@@ -31,8 +33,12 @@ export class VisionError extends Error {
 }
 
 // The one user message: each photo after a text line naming it, then the instructions.
-export function visionMessage(input: Pick<VisionInput, "prompt" | "images">): SDKUserMessage {
+export function visionMessage(input: Pick<VisionInput, "prompt" | "images"> & { documents?: VisionDocument[] }): SDKUserMessage {
   const content: Array<Record<string, unknown>> = [];
+  for (const d of input.documents ?? []) {
+    content.push({ type: "text", text: `Document "${d.label}":` });
+    content.push({ type: "document", source: { type: "base64", media_type: d.mime, data: d.data.toString("base64") } });
+  }
   for (const img of input.images) {
     content.push({ type: "text", text: `Image "${img.label}":` });
     content.push({ type: "image", source: { type: "base64", media_type: img.mime, data: img.data.toString("base64") } });
@@ -81,7 +87,7 @@ export class ClaudeVision implements VisionRunner {
         if (m.type === "system" && m.subtype === "init") {
           try {
             const src = assertSubscription(m);
-            this.log(`[studio] ${input.agent} looks at ${input.images.length} photo(s) on the subscription (apiKeySource ${JSON.stringify(src)})`);
+            this.log(`[studio] ${input.agent} looks at ${input.images.length + (input.documents?.length ?? 0)} file(s) on the subscription (apiKeySource ${JSON.stringify(src)})`);
           } catch (e) {
             ac.abort();
             throw new VisionError((e as Error).message);
@@ -112,6 +118,7 @@ export function visionKey(input: VisionInput): string {
   return sha256Hex(Buffer.from(JSON.stringify({
     model: input.model, system: input.system, prompt: input.prompt, schema: input.schema,
     images: input.images.map((i) => [i.label, i.mime, sha256Hex(i.data)]),
+    ...(input.documents?.length ? { documents: input.documents.map((d) => [d.label, d.mime, sha256Hex(d.data)]) } : {}),
   })));
 }
 

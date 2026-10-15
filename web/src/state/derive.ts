@@ -54,6 +54,10 @@ export interface RunView {
   handoffs: { from: AgentId; to: AgentId; note: string; at: number }[];
   findings: Record<string, FindingView>;
   proposals: ProposalView[];
+  /** What the team made this turn (posters, pictures, reel drafts), each waiting for the owner's OK. */
+  made: Extract<AgentEvent, { type: "deliverable" }>[];
+  /** The last few questions the team asked before making something (tap-to-answer). */
+  questions?: Extract<AgentEvent, { type: "quick_replies" }>;
   answer: string;
   answerStarted: boolean;
   path?: { nodes: NodeRef[]; edges: EdgeRef[] };
@@ -81,7 +85,7 @@ function emptyLane(key: string, agent: AgentId): LaneView {
 
 export function deriveRun(events: AgentEvent[]): RunView {
   const v: RunView = {
-    lanes: {}, laneOrder: [], handoffs: [], findings: {}, proposals: [], answer: "", answerStarted: false,
+    lanes: {}, laneOrder: [], handoffs: [], findings: {}, proposals: [], made: [], answer: "", answerStarted: false,
     nodes: {}, edges: [], sources: {}, nodeOrder: [], activeAgents: [], count: events.length, clock: [0],
   };
   for (const e of events) v.clock.push(v.clock[v.clock.length - 1]! + (WEIGHT[e.type] ?? 1));
@@ -184,6 +188,12 @@ export function deriveRun(events: AgentEvent[]): RunView {
         lane(e.agent).reviewsGiven.push({ ...r, findingId: e.findingId });
         break;
       }
+      case "deliverable":
+        v.made.push(e);
+        break;
+      case "quick_replies":
+        v.questions = e;
+        break;
       case "proposal":
         v.proposals.push({ agent: e.agent, recommendationId: e.recommendationId, approvalId: e.approvalId, title: e.title, kind: e.kind });
         break;

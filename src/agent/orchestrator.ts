@@ -44,6 +44,7 @@ import {
   CHIEF, CONTENT_DESK, FINDING_SCHEMA, findingMaxChars, MAX_DESKS, MAX_DESKS_BROAD, REVIEW_SCHEMA, agentSystemPrompt, directPrompt, planSchema,
   planPrompt, planSystemPrompt, reviewPrompt, revisePrompt, synthesisPrompt, workPrompt, type FindingView, type PromptOpts, type ReviewEvidence,
 } from "./prompts.js";
+import type { CreativeDeps } from "../creative/ports.js";
 import { invokeTool, isWriteTool, nextCallId, type AgentRuntime, type Emit, type RunInput, type RunOutput, type RunPhase } from "./runtime.js";
 import { TouchedSet, type AlleviaTool, type ToolContext } from "./tool.js";
 import {
@@ -51,6 +52,9 @@ import {
 } from "./types.js";
 
 export const AGENT_TIMEOUT_MS = 120_000;
+// A run that can make things (a poster takes an artwork, a check and a model turn) gets longer: the owner is told within two
+// minutes of asking, and the run's own steps are each capped by the engine and the checks.
+export const AGENT_TIMEOUT_CREATIVE_MS = 240_000;
 export const MAX_REVIEWERS = 2;
 const MAX_PATH_IDS = 12;
 const EVIDENCE_CHARS = 2_400;      // tool data handed to a reviewer, in all
@@ -99,6 +103,7 @@ export interface TurnDeps {
   language?: string;                        // the business's own language setting (language.ts); absent: follow the question
   humanize?: boolean;                       // default true: the standing last pass on the answer (src/agent/humanize.ts)
   skills?: SkillCatalog;                    // the skills agents can open (use_skill): the shipped packs plus this business's own; none = no skills
+  creative?: CreativeDeps;                  // what the creating tools may use; absent: creating is not set up (the tools say so)
 }
 
 export interface Plan { steps: PlanStep[]; rationale: string; chiefTask?: string }
@@ -117,9 +122,11 @@ export interface TurnOutcome {
   touched: TouchedSet;
   guidedBy: string[];                       // the owner's instructions the turn worked under (saved as Turn GUIDED_BY)
   skills: SkillUse[];                       // the skills agents opened this turn, once each per agent (saved on the Turn)
+  deliverables: DeliverableRecord[];        // what the team made this turn (posters, images, clips), each waiting for the owner's OK
 }
 
 export interface SkillUse { agent: string; skillId: string; name: string; source: "code" | "business" }
+export type DeliverableRecord = Extract<AgentEvent, { type: "deliverable" }>;
 
 // ---------- pure helpers (exported for tests) ----------
 
@@ -383,6 +390,46 @@ export function toProposal(agent: string, args: unknown, r: ToolResult): Proposa
   return { agent, recommendationId: rec, approvalId: appr, title, kind };
 }
 
+// The cards a creating tool raised (data.proposed), as proposal events.
+export function createdProposals(agent: string, r: ToolResult): ProposalRecord[] {
+  const d = (r.data && typeof r.data === "object" ? r.data : {}) as Record<string, unknown>;
+  if (!Array.isArray(d.proposed)) return [];
+  const out: ProposalRecord[] = [];
+  for (const x of d.proposed) {
+    const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+    if (typeof o.approvalId !== "string" || !o.approvalId) continue;
+    out.push({ agent, recommendationId: typeof o.recommendationId === "string" ? o.recommendationId : "", approvalId: o.approvalId, title: typeof o.title === "string" ? o.title : "Something we made", kind: "content_draft" });
+  }
+  return out;
+}
+
+// The questions a creating tool needs answered (data.quickReplies), as a `quick_replies` event: at most three, options clipped.
+export function toQuickReplies(agent: string, r: ToolResult): Extract<AgentEvent, { type: "quick_replies" }> | undefined {
+  const d = (r.data && typeof r.data === "object" ? r.data : {}) as Record<string, unknown>;
+  if (!Array.isArray(d.quickReplies) || !d.quickReplies.length) return undefined;
+  const questions = d.quickReplies.slice(0, 3).flatMap((x) => {
+    const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+    if (typeof o.question !== "string") return [];
+    const options = (Array.isArray(o.options) ? o.options : []).filter((v): v is string => typeof v === "string" && !!v.trim()).map((v) => v.slice(0, 70)).slice(0, 4);
+    return [{ field: typeof o.field === "string" ? o.field : "", question: o.question.slice(0, 200), options }];
+  });
+  return questions.length ? { type: "quick_replies", agent, questions } : undefined;
+}
+
+// What a creating tool made (data.deliverable), as a `deliverable` event; undefined when the shape is not right.
+export function toDeliverable(agent: string, r: ToolResult): DeliverableRecord | undefined {
+  const d = (r.data && typeof r.data === "object" ? r.data : {}) as Record<string, unknown>;
+  const x = d.deliverable as Record<string, unknown> | undefined;
+  if (!x || typeof x !== "object" || typeof x.approvalId !== "string" || !Array.isArray(x.options) || !x.options.length) return undefined;
+  const kind = x.kind === "poster" || x.kind === "image" || x.kind === "clip" ? x.kind : undefined;
+  if (!kind) return undefined;
+  return {
+    type: "deliverable", agent, kind, title: typeof x.title === "string" ? x.title : "Something we made", approvalId: x.approvalId,
+    recommended: typeof x.recommended === "string" ? x.recommended : "", options: x.options as DeliverableRecord["options"],
+    notes: Array.isArray(x.notes) ? x.notes.filter((n): n is string => typeof n === "string") : [], ...(typeof x.credits === "number" ? { credits: x.credits } : {}),
+  };
+}
+
 // The key of show_path's id list in its input shape (zod 4: unwrap optional/default/nullable to find the array).
 export function arrayArgKey(shape: Record<string, unknown>): string | undefined {
   const isArray = (s: unknown): boolean => {
@@ -526,12 +573,15 @@ class Turn {
   readonly reviews: ReviewRecord[] = [];
   readonly proposals: ProposalRecord[] = [];
   readonly skillsUsed: SkillUse[] = [];
+  readonly deliverables: DeliverableRecord[] = [];
+  private readonly creative?: CreativeDeps;               // the request's own copy: one credit count for every tool call of the turn
   path?: { nodes: NodeRef[]; edges: EdgeRef[] };
   readonly touched = new TouchedSet();
 
   constructor(readonly input: TurnInput, readonly deps: TurnDeps, readonly emit: Emit) {
     this.off = new Set((deps.team?.disabled ?? []).filter((id) => id !== CHIEF));
     this.light = new Set(deps.team?.light ?? []);
+    if (deps.creative) this.creative = { ...deps.creative, spent: { credits: 0 } };
   }
 
   private involve(agentId: string): void {
@@ -556,6 +606,7 @@ class Turn {
     return {
       graph, tenant: this.input.tenant, turnId: this.input.turnId, agentId, asker: this.input.asker, touched: this.touched, now,
       ...(embedQuery ? { embedQuery } : {}), ...(readOnly !== undefined ? { readOnly } : {}), ...(skills ? { skills } : {}),
+      question: this.input.question, ...(this.creative ? { creative: this.creative } : {}),
     };
   }
 
@@ -634,6 +685,19 @@ class Turn {
           emit({ type: "proposal", ...p });
           commit(() => { this.proposals.push(p); });
         }
+      } else {
+        // the tools that make things: each card they raised is a proposal, and what they made is a `deliverable` for the web app and Discord
+        for (const p of createdProposals(agent, result)) {
+          emit({ type: "proposal", ...p });
+          commit(() => { this.proposals.push(p); });
+        }
+        const q = toQuickReplies(agent, result);
+        if (q) emit(q);
+        const d = toDeliverable(agent, result);
+        if (d) {
+          emit(d);
+          commit(() => { this.deliverables.push(d); });
+        }
       }
     };
   }
@@ -651,7 +715,7 @@ class Turn {
   // it still emits or reports (a tool call that was in flight) is dropped.
   private async runAgent(agent: AgentDef, o: RunOpts, emit: Emit = this.emit): Promise<RunOutput> {
     this.involve(agent.id);
-    const ms = this.deps.agentTimeoutMs ?? AGENT_TIMEOUT_MS;
+    const ms = this.deps.agentTimeoutMs ?? (this.creative && (o.phase === "direct" || o.phase === "work") ? AGENT_TIMEOUT_CREATIVE_MS : AGENT_TIMEOUT_MS);
     const ac = new AbortController();
     const cleanup: Array<() => void> = [];
     const stop = new Promise<never>((_, reject) => {
@@ -1122,6 +1186,6 @@ export async function runTurn(input: TurnInput, deps: TurnDeps, emit: Emit): Pro
   }
   return {
     ok, answer: text, plan, fastPath, findings, reviews: t.reviews, proposals: t.proposals, agents: t.agents, failed: t.failed, touched: t.touched,
-    guidedBy, skills: t.skillsUsed, ...(t.path ? { path: t.path } : {}),
+    guidedBy, skills: t.skillsUsed, deliverables: t.deliverables, ...(t.path ? { path: t.path } : {}),
   };
 }

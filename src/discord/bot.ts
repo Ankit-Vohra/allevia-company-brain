@@ -24,6 +24,7 @@ import { DecisionError, decideAndNotify, type ActionOpts, type OnDecision } from
 import { approvals as listApprovals, latestBrief, sessionDetail } from "../server/reads.js";
 import type { ApprovalDto } from "../server/types.js";
 import type { AttachmentRef } from "./attachments.js";
+import { studioButtonId } from "./studio-bot.js";
 import { pathViewUrl, renderAnswer, renderCitations, splitMessage, threadName } from "./format.js";
 import { findThreadSession, linkSessionThread, openThreadSession, recentUnlinkedSessions } from "./sessions.js";
 import { ThrottledEditor, WorkLogState } from "./worklog.js";
@@ -100,6 +101,9 @@ export interface BotDeps {
   workLogIntervalMs?: number;                   // default 1,500
   maxLive?: number;                             // turns at once across threads (default 2)
   shared?: { live: number };                    // hub mode: one count of running turns across every business's bot
+  // Things the team made this turn (a poster, a picture, a clip) come back in the thread as files with Approve and Change
+  // buttons, the way Studio options do. `file` reads one made Asset's file from this business's own storage.
+  deliverables?: { file(assetId: string): Promise<{ name: string; data: Buffer } | null> };
   log?: (line: string) => void;
 }
 
@@ -341,6 +345,15 @@ export class AlleviaBot {
     }
   }
 
+  // A question with tap-to-answer buttons; a question with no options is answered by typing in the thread.
+  private async postQuestions(thread: ThreadPort, q: Extract<AgentEvent, { type: "quick_replies" }>): Promise<void> {
+    for (const item of q.questions.slice(0, 3)) {
+      // the same tap-to-answer buttons as a quick question written in the answer: a tap is the owner's next message here
+      const buttons: ButtonSpec[] = item.options.slice(0, 4).map((text) => ({ customId: quickReplyId(text), label: clip(text, 70), style: "secondary" as const }));
+      await thread.send({ content: clip(`**${item.question}**${buttons.length ? "" : "\nReply here in your own words."}`, 1900), buttons });
+    }
+  }
+
   // ----- buttons -----
 
   async onButton(b: ButtonPort): Promise<void> {
@@ -420,7 +433,11 @@ export class AlleviaBot {
         (e) => this.log(`work log edit failed: ${message(e)}`));
       const names = new Map<string, string>();
       let lastError: string | undefined;
+      const made: Array<Extract<AgentEvent, { type: "deliverable" }>> = [];
+      const asks: Array<Extract<AgentEvent, { type: "quick_replies" }>> = [];
       const emit = (e: AgentEvent) => {
+        if (e.type === "deliverable") made.push(e);
+        if (e.type === "quick_replies") asks.push(e);
         state.apply(e);
         collectNames(e, names);
         if (e.type === "error") lastError = e.message;
@@ -440,13 +457,41 @@ export class AlleviaBot {
       });
       for (const p of parts) await thread.send(p);
       // quick questions in the answer ("Quick question: What should this sell? [A] [B]") become buttons
-      for (const q of quickReplies(result?.answer ?? "")) {
+      const written = quickReplies(result?.answer ?? "");
+      for (const q of written) {
         await thread.send({ content: clip(q.question, 300), buttons: q.options.slice(0, 5).map((o) => ({ customId: quickReplyId(o), label: clip(o, 80), style: "secondary" as const })) });
       }
+      for (const d of made) await this.postMade(thread, d);
+      // a creating tool's questions, unless the answer already wrote them as quick questions
+      if (!written.length) for (const q of asks.slice(-1)) await this.postQuestions(thread, q);
       this.log(`thread ${thread.id}: ${result?.ok ? "answered" : "failed"} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     } finally {
       this.gate.live--;
     }
+  }
+
+  // What the team made: each option as a file with its check, and Approve / Change on the ones that passed (or could not be
+  // checked, with a plain warning). A held-back option has no buttons and says why. Nothing is posted anywhere.
+  private async postMade(thread: ThreadPort, d: Extract<AgentEvent, { type: "deliverable" }>): Promise<void> {
+    const load = this.d.deliverables?.file;
+    for (const o of d.options) {
+      const file = load ? await load(o.assetId).catch(() => null) : null;
+      const pick = o.assetId === d.recommended ? " · our pick" : "";
+      const verdict = o.badge === "ok" ? `Checked: ${o.note || "the words and the logo are right"}`
+        : o.badge === "unchecked" ? `Not double-checked: ${o.note || "please read it yourself before you approve"}` : `Held back: ${o.note || "it did not pass the check"}`;
+      const buttons: ButtonSpec[] = o.badge === "held" || !this.d.deliverables ? [] : [
+        { customId: studioButtonId("approve", d.approvalId, o.label), label: "Approve", style: "success" },
+        { customId: studioButtonId("change", d.approvalId, o.label), label: "Change", style: "secondary" },
+      ];
+      await thread.send({
+        content: clip([`**Option ${o.label}**${pick}${o.aiEdited ? " (artwork made with AI)" : ""}`, verdict].join("\n"), 1900),
+        buttons, ...(file ? { files: [{ name: file.name, data: file.data }] } : {}),
+      });
+    }
+    await thread.send(clip([
+      ...d.notes.slice(0, 3).map((n) => `Note: ${n}`),
+      "Tap Approve on the one you like. It is saved as a draft and nothing is posted anywhere. To change one, reply here, for example \"make the headline shorter\" or \"a different picture\".",
+    ].join("\n"), 1900));
   }
 
   // Labels for citations no tool result named (best-effort: an unknown id keeps its slug as the label).

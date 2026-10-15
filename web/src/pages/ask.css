@@ -328,3 +328,20 @@ dialog.drawer.sheet-left[open] { animation: sheet-in var(--dur-long) var(--ease-
 
 .fill-it-in { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
 .fill-it-in span { flex: 1 1 14em; }
+/* what the team made: options with their check, Approve and Change; and tap-to-answer questions */
+.made { margin-top: 16px; border: 1px solid var(--line, #e3ddd2); border-radius: 14px; padding: 14px; background: var(--card, transparent); }
+.made-title { display: flex; gap: 8px; align-items: center; font-size: 15px; margin: 0 0 12px; }
+.made-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; list-style: none; margin: 0; padding: 0; }
+.made-option { display: flex; flex-direction: column; gap: 6px; }
+.made-media { width: 100%; border-radius: 10px; display: block; background: #00000010; }
+.made-label, .made-badge, .made-done { margin: 0; font-size: 13px; }
+.made-badge.is-ok { color: var(--ok, #2f6b3f); }
+.made-badge.is-held { color: var(--warn, #9a3b1e); }
+.made-badge.is-unchecked { color: var(--muted, #6b6457); }
+.made-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.made-notes { margin: 12px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted, #6b6457); }
+.made-error { color: var(--warn, #9a3b1e); font-size: 13px; }
+.quick { margin-top: 14px; display: grid; gap: 10px; }
+.quick-text { margin: 0 0 6px; font-weight: 600; font-size: 14px; }
+.quick-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.quick-hint { margin: 0; font-size: 13px; color: var(--muted, #6b6457); }

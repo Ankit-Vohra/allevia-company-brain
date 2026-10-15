@@ -39,6 +39,10 @@ export interface StudioCard {
   privacy?: { people: boolean; redacted: boolean; note: string };
   // Plain sentences for the owner that go with the card (a child kept the photo to a simple clean-up; why there is no AI edit).
   notices?: string[];
+  // Set when the card is for something the team MADE on request (src/creative): a poster, an image, a clip. The options are
+  // then made assets rather than variants of a photo, and an option Nisha could not check ("unchecked") may be approved
+  // (the owner is told it was not double-checked); one she held back ("held") never can.
+  creative?: { kind: "poster" | "image" | "clip"; aspect: string; channel: string; by: string; allowUnchecked: boolean; format?: string };
 }
 
 export interface StudioPayload { title: string; body: string; target: string; studio: StudioCard }
@@ -130,7 +134,8 @@ export async function approveStudioDraft(g: GraphHandle, input: ApproveInput, de
   const variantId = input.variantId ?? card.payload.studio.recommended;
   const v = card.payload.studio.variants.find((x) => x.id === variantId);
   if (!v) throw new DecisionError(404, `${variantId} is not one of this card's variants.`);
-  if (v.badge !== "unchanged") throw new DecisionError(409, `Nisha held variant ${v.label} back (${v.note || v.badge}); pick a variant marked "building unchanged".`);
+  const mayApprove = v.badge === "unchanged" || (v.badge === "unchecked" && card.payload.studio.creative?.allowUnchecked === true);
+  if (!mayApprove) throw new DecisionError(409, `Nisha held variant ${v.label} back (${v.note || v.badge}); pick a variant marked "building unchanged".`);
   const current = { title: card.payload.title, body: card.payload.body, target: card.payload.target };
   const caption = input.caption?.trim();
   const edited = caption && caption !== current.body ? { ...current, body: caption.slice(0, 5000) } : undefined;
@@ -151,7 +156,11 @@ export async function finalizeStudioDraft(g: GraphHandle, approvalId: string, p:
   const [orig] = await g.roQuery<{ sha: string | null }>("MATCH (a:Entity:Asset {id:$id}) RETURN a.sha256 AS sha", { id: s.originalId });
   const short = (orig?.sha ?? s.originalId.replace(/^asset:/, "")).slice(0, 12);
   const contentId = made?.id ?? entityId("Content", `post ${short}`);
-  const studioProps = { format: "post", status: "draft", channel: "instagram", altText: s.altText, aspect: "4:5", assetId: variantId, aiEdited: v?.aiEdited ?? false, createdBy: "studio" };
+  const cr = s.creative;
+  const studioProps = {
+    format: "post", status: "draft", channel: cr?.channel ?? "instagram", altText: s.altText, aspect: cr?.aspect ?? "4:5", assetId: variantId,
+    aiEdited: v?.aiEdited ?? false, createdBy: cr ? "creative" : "studio", ...(cr ? { madeAs: cr.kind } : {}),
+  };
   if (made) {
     await upsertNode(g, { type: "Content", id: contentId, name: made.name, props: studioProps }, now);
   } else {
@@ -165,8 +174,12 @@ export async function finalizeStudioDraft(g: GraphHandle, approvalId: string, p:
     await upsertEdge(g, { from: actionId, type: "RESULTED_IN", to: contentId, src, asOf }, now);
   }
   await upsertEdge(g, { from: contentId, type: "USES_ASSET", to: variantId, src, asOf }, now);
-  await upsertEdge(g, { from: agentNodeId(TARA), type: "PRODUCED", to: contentId, src, asOf }, now);
-  await upsertEdge(g, { from: agentNodeId(DEV), type: "AUTHORED", to: contentId, props: { part: "caption" }, src, asOf }, now);
+  if (cr) {
+    await upsertEdge(g, { from: agentNodeId(cr.by), type: "PRODUCED", to: contentId, src, asOf }, now).catch(() => undefined);
+  } else {
+    await upsertEdge(g, { from: agentNodeId(TARA), type: "PRODUCED", to: contentId, src, asOf }, now);
+    await upsertEdge(g, { from: agentNodeId(DEV), type: "AUTHORED", to: contentId, props: { part: "caption" }, src, asOf }, now);
+  }
   for (const r of s.voiceRuleIds.slice(0, 8)) await upsertEdge(g, { from: contentId, type: "GUIDED_BY", to: r, src, asOf }, now).catch(() => undefined);
   if (s.projectId) await upsertEdge(g, { from: contentId, type: "PROMOTES", to: s.projectId, src, asOf }, now).catch(() => undefined);
   if (s.pageId) {

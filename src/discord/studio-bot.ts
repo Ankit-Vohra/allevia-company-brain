@@ -26,7 +26,10 @@ import { creditsWords } from "../studio/credits.js";
 import { routeRequest } from "../studio/request.js";
 import type { ClipPort } from "../studio/clip.js";
 import { assessFirstFrame, storeVideo, VideoRejected, type Ffmpeg } from "../studio/video.js";
-import { downloadAttachment, AttachmentRejected, MAX_ATTACHMENTS, pickMedia, type AttachmentRef, type FetchFn } from "./attachments.js";
+import { BrandUploadRejected, ingestBrandUpload } from "../brand/upload.js";
+import { loadStudioContext } from "../studio/context.js";
+import { VisionError } from "../studio/vision.js";
+import { downloadAttachment, AttachmentRejected, MAX_ATTACHMENTS, pickBrandFiles, pickMedia, type AttachmentRef, type FetchFn } from "./attachments.js";
 import type { ButtonPort, ButtonSpec, MessagePort, ThreadPort } from "./bot.js";
 import { threadName } from "./format.js";
 import { ThrottledEditor, WorkLogState } from "./worklog.js";
@@ -76,6 +79,9 @@ export interface StudioBotDeps {
   /** The 5 second clip option (studio/clip.ts), when the live engine is on. */
   clip?: ClipPort;
   fetch?: FetchFn;
+  // The brand library on Discord: "here's my logo" (a picture, an SVG, a font, a brand guide PDF) is filed as brand material
+  // instead of being run through the Studio as a photo. Off by default; the hub switches it on.
+  brandLibrary?: boolean;
   onDecision?: OnDecision;
   actions?: ActionOpts;
   now?: () => number;
@@ -96,30 +102,78 @@ export class StudioDiscord {
   private now(): number { return this.d.now?.() ?? Date.now(); }
   private log(line: string): void { (this.d.log ?? ((l: string) => console.error(l)))(`[studio] ${line}`); }
 
-  hasMedia(m: Pick<MessagePort, "files">): boolean { return pickMedia(m.files).picked.length > 0; }
+  hasMedia(m: Pick<MessagePort, "files">): boolean {
+    return pickMedia(m.files).picked.length > 0 || (this.d.brandLibrary === true && pickBrandFiles(m.files).length > 0);
+  }
 
   // ----- photos and videos arrive -----
 
   async onMedia(m: MessagePort, into?: ThreadPort | null): Promise<void> {
-    const { picked, extra, other } = pickMedia(m.files);
+    const media = pickMedia(m.files);
+    const brandFiles = this.d.brandLibrary ? pickBrandFiles(m.files).slice(0, Math.max(0, MAX_ATTACHMENTS - media.picked.length)) : [];
+    const picked: Array<AttachmentRef & { kind: "image" | "video" | "file" }> = [...media.picked, ...brandFiles];
+    const { extra } = media;
+    const other = (m.files?.length ?? 0) - media.picked.length - media.extra - brandFiles.length;
     if (!picked.length) return;
     const note = m.content.trim().slice(0, 500);
-    const thread = into ?? await m.startThread(threadName(note || (picked[0]!.kind === "image" ? "New photo" : "New video")));
+    const thread = into ?? await m.startThread(threadName(note || (picked[0]!.kind === "image" ? "New photo" : picked[0]!.kind === "file" ? "New brand file" : "New video")));
     if (extra) await thread.send(`I will work on the first ${MAX_ATTACHMENTS} files and leave the other ${extra}. Send them again after.`);
-    if (other) await thread.send(`${other === 1 ? "One file was" : `${other} files were`} not a photo or a video, so I left ${other === 1 ? "it" : "them"} alone.`);
+    if (other > 0) await thread.send(`${other === 1 ? "One file was" : `${other} files were`} not a photo or a video, so I left ${other === 1 ? "it" : "them"} alone.`);
     for (const file of picked) {
       try {
         const bytes = await downloadAttachment(file, this.d.fetch ? { fetch: this.d.fetch } : {});
-        if (file.kind === "image") await this.photo(thread, bytes, note);
-        else await this.video(thread, bytes, file, note);
+        if (file.kind === "file") await this.brandFile(thread, bytes, file, note);
+        else if (file.kind === "image") {
+          if (!(this.d.brandLibrary && await this.tryBrand(thread, bytes, file, note))) await this.photo(thread, bytes, note);
+        } else await this.video(thread, bytes, file, note);
       } catch (e) {
-        if (e instanceof AttachmentRejected || e instanceof ImageRejected || e instanceof VideoRejected) await thread.send(e.message);
+        if (e instanceof AttachmentRejected || e instanceof ImageRejected || e instanceof VideoRejected || e instanceof BrandUploadRejected) await thread.send(e.message);
         else {
           this.log(`${this.d.tenant}: ${message(e)}`);
           await thread.send(studioErrorMessage(e));
         }
       }
     }
+  }
+
+  // ----- brand material: a logo, a palette, a font, a guide, a past design -----
+
+  private async library(bytes: Buffer, file: AttachmentRef, note: string, intent: "any" | "library") {
+    const ctx = await loadStudioContext(this.d.graph, this.d.businessId).catch(() => null);
+    return ingestBrandUpload(this.d.graph, {
+      tenant: this.d.tenant, businessId: this.d.businessId, bytes, filename: file.name, source: "discord", intent,
+      ...(note ? { note } : {}), ...(ctx?.owner ? { ownerId: ctx.owner.id } : {}),
+    }, { store: this.d.studio.store, vision: this.d.studio.vision, now: this.now() });
+  }
+
+  private async sendBrand(thread: ThreadPort, r: Awaited<ReturnType<StudioDiscord["library"]>>): Promise<void> {
+    const preview = r.asset && /^image\//.test(r.asset.mime) && ["logo", "palette", "past-design", "font-sample"].includes(r.kind) ? this.d.studio.store.get(this.d.tenant, r.asset.storageKey) : null;
+    if (preview) {
+      const ext = r.asset!.mime === "image/png" ? "png" : "jpg";
+      await thread.send({ content: clip(r.message, 1900), files: [{ name: `${r.kind}.${ext}`, data: preview }] });
+    } else await thread.send(clip(r.message, 1900));
+  }
+
+  // A picture dropped in #studio or #your-team: when it is brand material (a logo, a palette, a past design) it is filed.
+  // A product photo or a picture the library can't tell goes on to the Studio as before. Returns true when handled here.
+  // If the librarian's look fails (the model is busy), the picture simply goes to the Studio.
+  private async tryBrand(thread: ThreadPort, bytes: Buffer, file: AttachmentRef, note: string): Promise<boolean> {
+    try {
+      const r = await this.library(bytes, file, note, "any");
+      if (r.route === "studio") return false;
+      await this.sendBrand(thread, r);
+      return true;
+    } catch (e) {
+      if (e instanceof BrandUploadRejected) throw e;
+      if (!(e instanceof VisionError)) this.log(`${this.d.tenant}: brand look failed: ${message(e)}`);
+      return false;
+    }
+  }
+
+  // A PDF, a font or an SVG: always brand material.
+  private async brandFile(thread: ThreadPort, bytes: Buffer, file: AttachmentRef, note: string): Promise<void> {
+    const r = await this.library(bytes, file, note, "library");
+    await this.sendBrand(thread, r);
   }
 
   // ----- a photo -----
@@ -288,7 +342,10 @@ export class StudioDiscord {
     }
     const [, verb, approvalId, label] = m as unknown as [string, "approve" | "change" | "retry" | "clip", string, string];
     if (verb === "change") {
-      await b.reply("Tell me what to change in this thread, for example \"make it warmer\", \"a bit darker\", \"make it festive\" or \"a different background\". I will make a new option.", { ephemeral: true });
+      const made = (await studioCard(this.d.graph, approvalId))?.payload.studio.creative;
+      await b.reply(made
+        ? "Tell me what to change in this thread, for example \"make the headline shorter\", \"a different picture\" or \"use the other layout\". I will make a new one."
+        : "Tell me what to change in this thread, for example \"make it warmer\", \"a bit darker\", \"make it festive\" or \"a different background\". I will make a new option.", { ephemeral: true });
       return true;
     }
     if (verb === "clip") {

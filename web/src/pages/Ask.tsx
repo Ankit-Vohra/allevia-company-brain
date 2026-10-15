@@ -9,6 +9,7 @@ import { AgentAvatar, ChecksBadges, agentDef, fmtAgo, fmtDate, fmtMs } from "../
 import { AnswerModes } from "../components/Capabilities";
 import { Icon, type IconName } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
+import { MadeCard, QuickReplies } from "../components/MadeCard";
 import { Reveal } from "../components/Reveal";
 import { quickReplies } from "@shared/quick-replies";
 import { RunTimeline } from "../components/RunTimeline";
@@ -276,6 +277,8 @@ export default function AskPage() {
             <ol className="turns">
               {turns.map((t, i) => (
                 <TurnBlock
+                  tenantId={tenant.id}
+                  onPrefill={(pre) => setText(pre)}
                   key={t.key}
                   turn={t}
                   view={views[i]!}
@@ -370,9 +373,10 @@ function ThreadList({ sessions, loading, activeId, onPick }: { sessions?: Sessio
   );
 }
 
-function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onReplay, onShowPath, onRetry, onFillIn, onQuickReply }: {
+function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onReplay, onShowPath, onRetry, onFillIn, onQuickReply, tenantId, onPrefill }: {
   turn: TurnItem; view: RunView; caps?: CapabilityState[]; latest: boolean; activeCite?: string;
   onCite: (id: string) => void; onNodes: (ids: string[]) => void; onReplay: () => void; onShowPath: () => void; onRetry: () => void; onFillIn: () => void; onQuickReply: (text: string) => void;
+  tenantId: string; onPrefill: (text: string) => void;
 }) {
   const live = turn.status === "running";
   const [how, setHow] = useState(false);
@@ -434,9 +438,11 @@ function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onRe
                       <button type="button" className="btn btn-sm btn-gold" onClick={onFillIn}>Fill it in</button>
                     </p>
                   )}
-                  {view.proposals.length > 0 && (
+                  {view.made.map((m) => <MadeCard key={m.approvalId} tenant={tenantId} made={m} onChange={onPrefill} />)}
+                  {latest && view.questions && <QuickReplies q={view.questions} onAnswer={onQuickReply} />}
+                  {view.proposals.filter((p) => !view.made.some((m) => m.approvalId === p.approvalId)).length > 0 && (
                     <ul className="proposals">
-                      {view.proposals.map((p) => (
+                      {view.proposals.filter((p) => !view.made.some((m) => m.approvalId === p.approvalId)).map((p) => (
                         <li key={p.approvalId} className="proposal">
                           <Icon name={p.kind === "github_issue" ? "github" : p.kind === "content_draft" ? "pen" : p.kind === "pause_ad" ? "pause" : "chat"} size={16} />
                           <span><b>Waiting for your OK:</b> {plain(p.title)}</span>

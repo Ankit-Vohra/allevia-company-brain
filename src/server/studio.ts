@@ -14,6 +14,9 @@ import { bodyLimit } from "hono/body-limit";
 import type { AgentEvent } from "../../shared/contracts.js";
 import type { GraphHandle } from "../graph/client.js";
 import { approveStudioDraft, finalizeStudioDraft, studioCard } from "../studio/approve.js";
+import { BrandUploadRejected, ingestBrandUpload } from "../brand/upload.js";
+import { activeLogo, getBrandAsset, listBrandAssets, type BrandAssetRow } from "../brand/library.js";
+import { loadStudioContext } from "../studio/context.js";
 import { ImageRejected, thumbnail } from "../studio/image.js";
 import { assetUrl } from "../studio/intake.js";
 import { CHECKS_NA, latestStudioRun, runStudio, type StudioDeps } from "../studio/pipeline.js";
@@ -33,7 +36,7 @@ import { approval as readApproval } from "./reads.js";
 import { sse } from "./sse.js";
 
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
-export const STUDIO_UPLOAD_PATH = /^\/api\/[^/]+\/studio\/intake$/;
+export const STUDIO_UPLOAD_PATH = /^\/api\/[^/]+\/studio\/(?:intake|brand)$/;
 
 export interface StudioWiring {
   deps: Omit<StudioDeps, "now" | "signal">;
@@ -194,6 +197,10 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
     const w = await wiring();
     let bytes = w.deps.store.get(reg.slug, row!.key!);
     if (!bytes) h.fail(404, "That asset's file is missing.");
+    // a clip is served as the video it is (no thumbnail of a video here)
+    if (row!.mime?.startsWith("video/")) {
+      return c.body(new Uint8Array(bytes!), 200, { "Content-Type": row!.mime, "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=86400, immutable" });
+    }
     const width = Number(c.req.query("w") ?? 0);
     if (Number.isFinite(width) && width > 0) bytes = await thumbnail(bytes!, Math.max(64, Math.min(1600, Math.round(width))));
     return c.body(new Uint8Array(bytes!), 200, {
@@ -283,6 +290,69 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
     return c.json({ ...(await loadStudioSettings(g)), language: (await loadLanguagePreference(g)) ?? "auto" });
   });
 
+  // ----- the brand library: what the owner files (logo, palette, fonts, guide, product photos, past designs) -----
+
+  const brandDto = (tenant: string, a: BrandAssetRow) => ({
+    id: a.id, kind: a.kind, name: a.name, origin: a.origin, mime: a.mime, w: a.w, h: a.h, status: a.status, description: a.description,
+    family: a.family, value: a.value, colours: a.colours, needsBetter: a.needsBetter, containsPerson: a.containsPerson,
+    ...(a.storageKey ? { url: `/api/${encodeURIComponent(tenant)}/brand/${encodeURIComponent(a.id)}/file` } : {}),
+  });
+
+  app.post("/api/:t/studio/brand",
+    bodyLimit({ maxSize: MAX_UPLOAD_BYTES + 64 * 1024, onError: (c) => c.json({ error: "That file is too large: send one under 20 MB." }, 413) }),
+    async (c) => {
+      const { reg, g } = await h.tenantOf(c);
+      h.refuseInPublicMode();
+      const w = await wiring();
+      let form: Record<string, string | File | (string | File)[]>;
+      try {
+        form = await c.req.parseBody();
+      } catch {
+        h.fail(400, "Send the file as multipart/form-data with a `file` field.");
+      }
+      const file = form!.file;
+      if (!(file instanceof File) || file.size === 0) h.fail(400, "Add a file first.");
+      const f = file as File;
+      if (f.size > MAX_UPLOAD_BYTES) h.fail(413, "That file is too large: send one under 20 MB.");
+      const note = typeof form!.note === "string" ? form!.note.trim().slice(0, 500) : "";
+      try {
+        const ctx = await loadStudioContext(g, reg.businessId).catch(() => null);
+        const r = await ingestBrandUpload(g, {
+          tenant: reg.slug, businessId: reg.businessId, bytes: Buffer.from(await f.arrayBuffer()), filename: f.name.slice(0, 200), source: "web",
+          ...(note ? { note } : {}), ...(ctx?.owner ? { ownerId: ctx.owner.id } : {}),
+        }, { store: w.deps.store, vision: w.deps.vision, now: h.now() });
+        return c.json({ route: r.route, kind: r.kind, message: r.message, needsBetter: r.needsBetter, asset: r.asset ? { id: r.asset.id, kind: r.asset.kind } : null });
+      } catch (e) {
+        if (e instanceof BrandUploadRejected) h.fail(400, e.message);
+        h.log(`[brand] ${reg.slug}: ${e instanceof Error ? e.message : String(e)}`);
+        h.fail(500, studioErrorMessage(e));
+      }
+    });
+
+  app.get("/api/:t/brand", async (c) => {
+    const { reg, g } = await h.tenantOf(c);
+    const [assets, logo] = await Promise.all([listBrandAssets(g), activeLogo(g)]);
+    return c.json({ assets: assets.map((a) => brandDto(reg.slug, a)), logo: logo ? brandDto(reg.slug, logo) : null });
+  });
+
+  app.get("/api/:t/brand/:id/file", async (c) => {
+    const { reg, g } = await h.tenantOf(c);
+    const a = await getBrandAsset(g, c.req.param("id"));
+    if (!a?.storageKey) h.fail(404, "No such brand file.");
+    const w = await wiring();
+    const bytes = w.deps.store.get(reg.slug, a!.storageKey!);
+    if (!bytes) h.fail(404, "That file is missing.");
+    const image = a!.mime === "image/png" || a!.mime === "image/jpeg";
+    // never sniffed, and only pictures are shown inline: a PDF or a font is a download
+    return c.body(new Uint8Array(bytes!), 200, {
+      "Content-Type": image ? a!.mime! : "application/octet-stream",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'",
+      ...(image ? {} : { "Content-Disposition": `attachment; filename="${(a!.family ?? a!.kind).replace(/[^A-Za-z0-9._-]/g, "_")}.${(a!.storageKey!.split(".").pop() ?? "bin")}"` }),
+      "Cache-Control": "private, max-age=86400, immutable",
+    });
+  });
+
   app.get("/api/:t/studio/sample", async (c) => {
     const { reg } = await h.tenantOf(c);
     const s = (await wiring()).sample?.(reg.slug);
@@ -310,7 +380,7 @@ export function studioDecisionHook(openGraph: (slug: string) => Promise<GraphHan
         "MATCH (:Entity:Approval {id:$id})-[r1:RESULTED_IN]->(:Action)-[r2:RESULTED_IN]->(:Content)-[u:USES_ASSET]->(:Asset) WHERE ID(r1) >= 0 AND ID(r2) >= 0 RETURN count(u) AS c", { id: approval.id }) : [];
       if (card && !done?.c) {
         const v = card.payload.studio.variants.find((x) => x.id === card.payload.studio.recommended);
-        if (v?.badge === "unchanged") {
+        if (v?.badge === "unchanged" || (v?.badge === "unchecked" && card.payload.studio.creative?.allowUnchecked)) {
           await finalizeStudioDraft(g, approval.id, card.payload, v.id, approval.editedPayload?.body ?? card.payload.body, now());
         }
       }
