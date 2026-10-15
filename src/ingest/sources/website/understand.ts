@@ -137,7 +137,14 @@ export function understandingLinks(rows: Array<{ id: string; type: EntityType; f
 
 // ---------- profile: summary, city, country ----------
 
-export interface Profile { summary: string; city?: string; country?: string }
+// What kind of business the site is the home of; picks the industry template (src/onboard/templates.ts). The owner is
+// never asked: the web form sends no industry, so the website has to say.
+export const BUSINESS_KINDS = [
+  "software_product", "online_shop", "food_and_drink", "health_and_beauty", "architecture_or_design", "jobs_or_recruitment", "local_business",
+] as const;
+export type BusinessKind = (typeof BUSINESS_KINDS)[number];
+
+export interface Profile { summary: string; city?: string; country?: string; industry?: string; kind?: BusinessKind }
 
 export const PROFILE_SCHEMA = {
   type: "object", additionalProperties: false,
@@ -145,8 +152,13 @@ export const PROFILE_SCHEMA = {
     summary: { type: "string", description: "2-3 plain sentences: what the business does, for whom, where; claims it makes are reported as its claims" },
     city: { type: "string", description: "the city the business is based in, as the site states it; empty if not stated" },
     country: { type: "string", description: "the country in English (\"India\", \"United Kingdom\"); empty if not stated or clearly implied by the address" },
+    industry: { type: "string", description: "what kind of business this is in two to four plain words (\"family dental practice\", \"coffee shop\", \"web analytics software\"); empty if unclear" },
+    kind: {
+      type: "string", enum: [...BUSINESS_KINDS],
+      description: "software_product: a software product, app or platform people sign up to; online_shop: sells goods mainly through its own website; food_and_drink: a café, restaurant, bar or bakery; health_and_beauty: a clinic, dental, salon, spa or therapy practice; architecture_or_design: an architecture, interior or design studio; jobs_or_recruitment: a jobs board or recruiter; local_business: anything else that serves local customers (a garden centre, a trade, a studio)",
+    },
   },
-  required: ["summary", "city", "country"],
+  required: ["summary", "city", "country", "industry", "kind"],
 } as const;
 
 // PostalAddress fields from the site's JSON-LD, if it has any.
@@ -185,13 +197,18 @@ State only what the pages say. Marketing claims ("200+ projects", "award-winning
   const line = (s: unknown, n: number) => (typeof s === "string" ? s.replace(/\s+/g, " ").trim().slice(0, n) : "");
   const country = line(raw?.country, 80) || (addr.country ? COUNTRY_CODES[addr.country.toLowerCase()] ?? addr.country : "");
   const city = line(raw?.city, 80) || addr.city || "";
-  return { summary: line(raw?.summary, 800), ...(city ? { city } : {}), ...(country ? { country } : {}) };
+  const industry = line(raw?.industry, 60);
+  const kind = (BUSINESS_KINDS as readonly string[]).includes(raw?.kind as string) ? (raw!.kind as BusinessKind) : undefined;
+  return { summary: line(raw?.summary, 800), ...(city ? { city } : {}), ...(country ? { country } : {}), ...(industry ? { industry } : {}), ...(kind ? { kind } : {}) };
 }
 
 export function profileWrite(profile: Profile, ctx: { businessId: string; name: string; domain: string; docs: string[]; asOf: string }): GraphWrite {
   const nodes: NodeInput[] = [{
     type: "Business", id: ctx.businessId, name: ctx.name, ...(profile.summary ? { summary: profile.summary } : {}),
-    props: { domain: ctx.domain, ...(profile.city ? { city: profile.city } : {}), ...(profile.country ? { country: profile.country } : {}) },
+    props: {
+      domain: ctx.domain, ...(profile.city ? { city: profile.city } : {}), ...(profile.country ? { country: profile.country } : {}),
+      ...(profile.industry ? { industry: profile.industry } : {}), ...(profile.kind ? { businessKind: profile.kind } : {}),
+    },
   }];
   const edges: EdgeInput[] = ctx.docs.map((d) => ({ from: ctx.businessId, type: "SOURCED_FROM", to: d, src: d, asOf: ctx.asOf }));
   return { nodes, edges, observations: [] };

@@ -25,7 +25,7 @@ import type { GraphWrite } from "../ingest/types.js";
 import {
   BlockedUrlError, brandWrite, buildBrandKit, channelsWrite, checkUrl, crawlSite, describeBrand, evaluateSeo,
   extractPages, findSocials, linksWrite, makeAsk, normalizeUrl, pageDocId, pageId, pageWrite, profileBusiness, profileWrite, redactPage,
-  seoRulesWrite, seoWrite, understandingLinks, websiteChannelWrite, type BrandVoice, type CrawlOptions, type CrawlResult, type PageData,
+  seoRulesWrite, seoWrite, understandingLinks, websiteChannelWrite, type BrandVoice, type Profile, type CrawlOptions, type CrawlResult, type PageData,
 } from "../ingest/sources/website/index.js";
 import type { BaselineResult } from "../program/program.js";
 import { baselineStage, capabilitiesStage, goalsStage, profileStage, type GoalsResult, type ProfileResult, type ProgramStageCtx } from "./enroll.js";
@@ -199,6 +199,7 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
   const formDoc = entityId("Document", `onboarding form ${input.slug}`);
 
   let crawl: CrawlResult | undefined;
+  let siteProfile: Profile | undefined;   // what the website says the business is: its kind and industry pick the template
   let pages: PageData[] = [];
   if (website) {
   // ---------- crawl ----------
@@ -312,9 +313,13 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
     }
     try {
       const profile = await profileBusiness(ask, { name, ...(input.industry ? { industry: input.industry } : {}) }, pages);
+      siteProfile = profile;
       const docs = pages.filter((p) => p === home || /about|contact|story|studio/i.test(new URL(p.finalUrl).pathname)).slice(0, 3).map((p) => pageDocId(p.finalUrl));
       await write("understand", profileWrite(profile, { businessId, name, domain: domain!, docs, asOf }));
-      if (profile.city) await ensureTenant({ slug: input.slug, name, domain: domain!, city: profile.city, ...(input.industry ? { industry: input.industry } : {}) }, deps.tenantOpts);
+      const industry = input.industry ?? profile.industry;
+      if (profile.city || (industry && !input.industry)) {
+        await ensureTenant({ slug: input.slug, name, domain: domain!, ...(profile.city ? { city: profile.city } : {}), ...(industry ? { industry } : {}) }, deps.tenantOpts);
+      }
     } catch (e) {
       fail("understand", e);
     }
@@ -344,6 +349,8 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
       profile = await profileStage(ctx, {
         ...Object.fromEntries((["industry", "vertical", "country", "currency", "locale", "timeZone"] as const).filter((k) => input[k]).map((k) => [k, input[k]])),
         ...(domain ? { domain } : {}),
+        ...(siteProfile?.kind ? { kind: siteProfile.kind } : {}),
+        ...(siteProfile?.industry ? { siteIndustry: siteProfile.industry } : {}),
       });
       result.region = profile.region;
       result.templateKey = profile.template.key;
@@ -356,7 +363,8 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
   if (website && !stopped()) {
     stage("playbooks", "Loading SEO, Instagram, ads and writing playbooks for your industry");
     try {
-      const pb = loadPlaybooks({ tenantSlug: input.slug, ...(input.industry ? { industry: input.industry } : {}) });
+      const industry = input.industry ?? siteProfile?.industry; // the owner's word, else what the website says
+      const pb = loadPlaybooks({ tenantSlug: input.slug, ...(industry ? { industry } : {}) });
       await write("playbooks", pb.write);
       for (const s of pb.skipped.slice(0, 5)) log(`[onboard] playbooks skipped ${s.ref}: ${s.reason}`);
     } catch (e) {

@@ -14,7 +14,7 @@ import {
   baselinesWrite, checkpointWrite, goalOwners, programAndGoalsWrite, programGoals, type BaselineResult,
 } from "../program/program.js";
 import { localDate, resolveRegion, type ResolvedRegion } from "./region.js";
-import { templateByKey, templateFor, type IndustryTemplate } from "./templates.js";
+import { templateByKey, templateByKind, templateFor, templateMatching, type IndustryTemplate } from "./templates.js";
 
 export interface ProgramStageCtx {
   g: GraphHandle;
@@ -29,7 +29,12 @@ export interface ProgramStageCtx {
   retry: <T>(fn: () => Promise<T>) => Promise<T>;
 }
 
-export interface ProfileInput { industry?: string; vertical?: string; country?: string; currency?: string; locale?: string; timeZone?: string; domain?: string }
+// `kind` and `siteIndustry` are what the website said the business is (understand.ts profileBusiness); the owner's own
+// industry or vertical, when it names a kind of business we have a template for, comes first.
+export interface ProfileInput {
+  industry?: string; vertical?: string; country?: string; currency?: string; locale?: string; timeZone?: string; domain?: string;
+  kind?: string; siteIndustry?: string;
+}
 
 export interface ProfileResult { region: ResolvedRegion; template: IndustryTemplate; today: string }
 
@@ -47,9 +52,10 @@ export async function profileStage(c: ProgramStageCtx, input: ProfileInput): Pro
        b.industry AS industry, b.templateKey AS templateKey, b.vertical AS vertical, b.domain AS domain, b.city AS city`, { id: c.businessId }));
   const stored: Partial<StoredBusiness> = b ?? {};
   const region = resolveRegion({ ...input, domain: input.domain ?? stored.domain ?? undefined }, stored);
+  // the owner's words, then what the website says the business is, then what an earlier run stored
   const told = input.vertical ?? input.industry;
-  const template = (!told && templateByKey(stored.templateKey)) || templateFor(told ?? stored.industry);
-  const props: Record<string, string> = { templateKey: template.key, vertical: input.vertical ?? stored.vertical ?? template.name };
+  const template = templateMatching(told) ?? templateByKind(input.kind) ?? templateByKey(stored.templateKey) ?? templateFor(told ?? stored.industry);
+  const props: Record<string, string> = { templateKey: template.key, vertical: input.vertical ?? input.siteIndustry ?? stored.vertical ?? template.name };
   for (const k of ["country", "countryCode", "currency", "locale", "timeZone", "privacyRegime", "weekStart"] as const) {
     const v = region[k];
     if (v) props[k] = v;
