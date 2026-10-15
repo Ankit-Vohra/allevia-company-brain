@@ -31,6 +31,7 @@ import { ask, STOPPED_MESSAGE, type AskDeps } from "../agent/ask.js";
 import type { ToolContext } from "../agent/tool.js";
 import { loadConfig } from "../config.js";
 import type { GraphHandle } from "../graph/client.js";
+import { isTenantSlug } from "../graph/slug.js";
 import type { LlmRunner } from "../ingest/llm.js";
 import { DecisionError, decide, type ActionOpts, type OnDecision } from "./approvals.js";
 import { HttpError, readBody, type RouteCtx } from "./http.js";
@@ -118,8 +119,6 @@ const LIVE_CHAT_OFF =
 
 export { HttpError };
 
-const TENANT_SLUG = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
-
 // ---------- request bodies ----------
 
 const AskBody = z.object({
@@ -134,7 +133,7 @@ const DecisionBody = z.object({ decision: z.enum(["approve", "reject"]), editedP
 const OnboardBody = z.object({
   name: z.string().trim().min(1).max(120),
   url: z.string().trim().min(3).max(500),
-  slug: z.string().regex(TENANT_SLUG).max(40).optional(),
+  slug: z.string().refine(isTenantSlug, { message: "is not a valid business id" }).optional(),
   instagram: z.string().trim().max(100).optional(),
   country: z.string().trim().max(80).optional(),
   currency: z.string().trim().regex(/^[A-Za-z]{3}$/).optional(),
@@ -209,7 +208,7 @@ export function createApp(deps: ServerDeps): Hono {
   // A registered tenant's graph, or a 404.
   async function tenantOf(c: Context): Promise<{ reg: RegistryTenant; g: GraphHandle }> {
     const slug = c.req.param("t") ?? "";
-    const reg = TENANT_SLUG.test(slug) ? (await registry()).find((t) => t.slug === slug) : undefined;
+    const reg = isTenantSlug(slug) ? (await registry()).find((t) => t.slug === slug) : undefined;
     if (!reg) throw new HttpError(404, "No such business.");
     return { reg, g: await deps.openGraph(slug) };
   }

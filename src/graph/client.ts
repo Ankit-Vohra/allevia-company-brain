@@ -32,6 +32,7 @@
 import { FalkorDB, type Graph } from "falkordb";
 import { loadConfig } from "../config.js";
 import { assertSafeQuery } from "./safety.js";
+import { assertTenantSlug } from "./slug.js";
 
 export const DEFAULT_READ_TIMEOUT_MS = 15_000;
 // Rows per page for reads that page: well under RESULTSET_SIZE (10,000), so a page is never truncated.
@@ -48,13 +49,10 @@ const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const MIN_NORMAL = 2.2250738585072014e-308; // the smallest double the server's parser accepts
 const GRAPH_NAME = /^[A-Za-z0-9_]+$/;
 
-// Tenant slugs are lowercase words joined by single underscores. "__" is reserved: projection graphs are named
-// `<graph>__<kind>_…`, and listGraphs/sweeps rely on no real graph containing it.
-const TENANT_SLUG = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
-
+// The only way a tenant becomes a graph name. The slug rules (lowercase words joined by single underscores, "__" never,
+// reserved names such as `meta` refused, at most 40 characters) live in slug.ts.
 export function graphName(tenant: string): string {
-  if (!TENANT_SLUG.test(tenant)) throw new Error(`tenant slug must be lowercase words joined by single "_", got ${JSON.stringify(tenant)}`);
-  return `allevia_${tenant}`;
+  return `allevia_${assertTenantSlug(tenant)}`;
 }
 
 function cleanParam(v: unknown, path: string): Param | undefined {
