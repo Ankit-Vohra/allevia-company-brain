@@ -37,7 +37,8 @@ marked as a public demo opens without one, and then read-only.
 | Model calls (Claude on the subscription) | Each call is built from one business's graph through tools bound to it. The agents have no built-in tools (no shell, no files, no web), an empty working folder, and an allow-listed environment with no keys or tokens. | `src/agent/runtime.ts`, `src/agent/sdk-env.ts`, `src/ingest/llm.ts` | `graph-binding`, `tests/agent/sdk-env.test.ts` |
 | Who may open a business | Owner tokens (below), when `ALLEVIA_AUTH=1`. | `src/auth/tokens.ts`, `src/server/auth.ts` | `auth`, `mcp-auth`, `cli-auth` |
 | What a business's team does by default | Code: the roster, the industry template, the vendored public playbooks. Not a copy of any graph. | `shared/roster.ts`, `src/onboard/templates.ts` | `config-per-tenant` |
-| The Discord bot | One business, one server and one channel, fixed when it starts. Nothing in a message, command or button chooses another. | `src/discord/` | `discord-isolation` |
+| Discord (the shared hub: one server, one bot, every customer) | Which business a Discord event belongs to is decided only by the channel id, looked up in a saved mapping (`allevia_meta`); channel names, message text, display names and button ids never choose one. A person must hold that business's own Discord role (Allevia staff alone do not ask a customer's team anything or decide its cards). Each business gets its own bot instance over its own graph. `#support` is people only: nothing in it reaches an agent. Join links are single-use, expire in 7 days, and give exactly one business's role. | `src/discord/hub-*.ts` | `tests/discord/hub-*.test.ts` |
+| The older single-business Discord bot (`discord --tenant`) | One business, one server and one channel, fixed when it starts. Nothing in a message, command or button chooses another. | `src/discord/bot.ts` | `discord-isolation` |
 | The CLI, scripts and stdio MCP | The operator's own machine: whoever can run them is the operator. They validate the slug the same way. | `src/cli/` | `slug`, `cli-auth` |
 
 ## How a request is bound to one business
@@ -127,12 +128,22 @@ Ranked by how bad it would have been.
    `SameSite=Strict` did not cover login-CSRF or a sibling subdomain. Fixed with the Origin / fetch-metadata check.
 7. **Shared content-keyed caches.** Not exploitable (see the table), but one folder per business removes the reliance.
 8. **MCP over HTTP had only a localhost guard.** With the flag on it now needs the business's token.
+9. **A demo business showed its Discord join link to anyone.** The page that shows an owner their business's Discord link
+   checked the deployment's public mode, not the request's, so with owner links on a visitor to a demo business (no token)
+   was given a link that puts a person in that business's Discord area with its role. Fixed: only an owner is shown one.
+10. **Photo caches on the Discord hub's paths.** The Studio run scoped its photo-reading cache per business, but the hub's
+    revisions and video first frames called the readers directly. The readers now pick the business's own cache from the
+    graph they are given, whoever calls them.
 
 Checked and found sound (tests keep them so): the `cypher` tool and every other tool are bound to one graph and cannot
 write; no tool accepts a tenant or graph argument; the MCP server is fixed to one business at start-up; parameters cannot
 break out of their quotes; Studio files cannot leave their folder; the projection cache and write stamps are per graph; a
-turn running for one business cannot be listed, followed, replayed or stopped through another; the Discord bot cannot be
-pointed at another business by a message, command or button; the per-business defaults come from code.
+turn running for one business cannot be listed, followed, replayed or stopped through another; a Discord message, command
+or button cannot be pointed at another business (the hub's own tests try forged channel names, threads, roles, buttons
+carrying another business's card, and two people joining at once); photos and videos from Discord are taken only from
+Discord's own hosts, size-limited and re-read as images; onboarding fetches a customer's website only at public
+addresses (checked again when the name resolves, so a name that points at a private address is refused); the per-business
+defaults come from code.
 
 ## What is still open (ranked)
 
@@ -150,11 +161,13 @@ pointed at another business by a message, command or button; the per-business de
    plan real sign-in before a business has more than one person.
 4. **The operator link is all-powerful** and stored the same way as an owner link. Keep it to one or two people; revoke
    and reissue when someone leaves.
-5. **Discord serves one business per deployment.** The bot's token, server and channel are global settings, so a second
-   business cannot have its own bot yet, and the bot treats the server owner as the business owner. Needed before a
-   customer uses Discord: a stored mapping from server to business, resolved on every event (never from message
-   text), per-business installation, and path links that carry no token. Not changed here (another builder owns
-   `src/discord/`).
+5. **Discord is a shared room with a staff key.** The hub's design is sound (see the table), but: Allevia staff can read
+   every customer's channels, by design, for support, so keep that role to a few people; everything said there lives on
+   Discord's servers, outside our control; whoever holds a customer's role (anyone who used its join link) can ask its
+   team and decide its cards, so treat a join link like the owner link; and the hub's mapping and the join links sit in
+   the registry graph beside the tenant list. Without owner links (`ALLEVIA_AUTH`) anyone who knows a business id can ask
+   the server for its join link (the server warns at start-up). The older `discord --tenant` bot is still one business per
+   process and treats the server owner as the business owner.
 6. **One model subscription serves every business.** All prompts and photos go through the same account (the provider
    treats them alike), and the limits are shared: two live questions at once, one onboarding at a time, one Studio run at
    a time, across all businesses. One busy business can slow the others. Per-business queues and limits are not built.
