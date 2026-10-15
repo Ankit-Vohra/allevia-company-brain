@@ -56,7 +56,7 @@ for (const [pageUrl, html] of pages) {
 // sitemap and pages agree
 const sitemap = existsSync(join(DIST, "sitemap.xml")) ? readFileSync(join(DIST, "sitemap.xml"), "utf8") : "";
 const inMap = new Set([...sitemap.matchAll(/<loc>https?:\/\/[^/]+(\/[^<]*)<\/loc>/g)].map((m) => m[1]));
-for (const u of pages.keys()) if (!inMap.has(u)) errors.push(`${u} is a page but not in sitemap.xml`);
+for (const u of pages.keys()) if (u !== "/404.html" && !inMap.has(u)) errors.push(`${u} is a page but not in sitemap.xml`);
 for (const u of inMap) if (!pages.has(u)) errors.push(`${u} is in sitemap.xml but there is no such page`);
 if (!existsSync(join(DIST, "robots.txt"))) errors.push("robots.txt is missing");
 

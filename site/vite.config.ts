@@ -1,7 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import { fileURLToPath } from "node:url";
 import { BLOCKS, PAGE_TOKENS } from "./src/render/blocks.ts";
-import { head, pageForRequest } from "./src/render/head.ts";
+import { head, notFoundHead, pageForRequest } from "./src/render/head.ts";
 import { CONTACT_URL, SITE_URL } from "./src/config.ts";
 import { PAGES, pageFile } from "./src/pages.ts";
 
@@ -39,6 +39,7 @@ function renderHead(): Plugin {
       order: "pre",
       handler(html, ctx) {
         return html.replace(/<!--\s*@head\s*-->/, () => {
+          if (ctx.path.endsWith("/404.html")) return notFoundHead();
           const page = pageForRequest(ctx.path);
           if (!page) throw new Error(`site: no page in src/pages.ts for ${ctx.path}`);
           return head(page);
@@ -92,7 +93,7 @@ export default defineConfig({
   build: {
     target: "es2022",
     rollupOptions: {
-      input: Object.fromEntries(PAGES.map((p) => [p.path === "/" ? "home" : p.path.replaceAll("/", ""), here(pageFile(p.path))])),
+      input: { ...Object.fromEntries(PAGES.map((p) => [p.path === "/" ? "home" : p.path.replaceAll("/", ""), here(pageFile(p.path))])), notfound: here("404.html") },
     },
   },
 });

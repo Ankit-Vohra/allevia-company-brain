@@ -4,10 +4,11 @@
 //
 //   npm run build && npm run shots                         # into scripts/.site-shots (not committed)
 //   OUT=/some/dir PAGES=/,/privacy/ npm run shots          # a folder of your choice, some pages only
-//   COMMIT=1 npm run shots                                 # also copy the first screen of the main pages into docs/screenshots
+//   COMMIT=1 npm run shots                                 # also write the first screen of the main pages into docs/screenshots as WebP (needs cwebp)
 import { chromium } from "playwright";
 import { preview } from "vite";
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -69,7 +70,7 @@ if (process.env.COMMIT) {
   mkdirSync(DOCS, { recursive: true });
   for (const p of ["/", "/how-it-works/", "/product/", "/security/", "/privacy/"]) for (const w of widths) {
     const f = join(OUT, `first-${slug(p)}-${w}.png`);
-    if (existsSync(f)) copyFileSync(f, join(DOCS, `site-v3-${slug(p)}-${w}.png`));
+    if (existsSync(f)) execFileSync("cwebp", ["-quiet", "-q", "80", f, "-o", join(DOCS, `site-v3-${slug(p)}-${w}.webp`)]);
   }
 }
 console.log(`${paths.length} pages x ${widths.length} widths in ${OUT}; ${problems} problem(s)`);

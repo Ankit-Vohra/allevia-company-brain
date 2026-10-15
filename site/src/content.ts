@@ -166,7 +166,7 @@ export const FAQ: FaqItem[] = [
   {
     topic: "limits",
     q: "What can't it do yet?",
-    a: "It cannot publish to Instagram or Google by itself. Live AI picture edits for customers are not switched on yet (the studio gives you a cleaned-up version of your photo, and the AI edit shown on this site was made ahead of time for our trial). Reels need a person in an editor. Connections beyond your website are being built, so your goals show \"we'll know after your first full week\" until your own numbers arrive. Owner sign-in is not live yet.",
+    a: "It cannot publish to Instagram or Google by itself. Live AI picture edits for customers are not switched on yet (the studio gives you a cleaned-up version of your photo, and the AI edit shown on this site was made ahead of time for our trial). Reels need a person in an editor. Connections beyond your website are being built, so your goals show \"we'll know after your first full week\" until your own numbers arrive. There are no personal sign-in accounts yet: a business opens with its own private owner link.",
   },
   {
     topic: "limits",

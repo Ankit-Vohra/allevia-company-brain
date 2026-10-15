@@ -46,9 +46,9 @@ describe("what the demo page says public mode does is true of the server", () =>
   it("answers Ask only by replaying a recorded showcase turn, and never starts a live turn", () => {
     const at = server.indexOf('app.post("/api/:t/ask"');
     const block = server.slice(at, server.indexOf("turns.start(", at));
-    expect(block).toContain("deps.publicMode");
+    expect(block).toContain("isPublic()");
     expect(block).toContain("findShowcaseTurn");
-    expect(block.indexOf("deps.publicMode")).toBeLessThan(block.indexOf("live++"));
+    expect(block.indexOf("isPublic()")).toBeLessThan(block.indexOf("live++"));
   });
 
   it("does not embed in a frame, so the site links to the demo instead of embedding it", () => {

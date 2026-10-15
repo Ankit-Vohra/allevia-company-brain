@@ -69,7 +69,6 @@ const ART = process.env.ART_DIR;
 if (ART && existsSync(ART)) {
   const art = [
     { src: "hero.png", name: "art-hero", widths: [1600, 900] },
-    { src: "team.png", name: "art-team", widths: [1400, 800] },
     { src: "before-after.png", name: "art-before-after", widths: [1600, 900] },
     { src: "ledger.png", name: "art-ledger", widths: [1200, 700] },
     { src: "security.png", name: "art-security", widths: [1200, 700] },

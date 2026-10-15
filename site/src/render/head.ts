@@ -140,3 +140,20 @@ export function pageForRequest(requestPath: string): PageDef | undefined {
   const clean = requestPath.replace(/index\.html$/, "").split("?")[0]!;
   return PAGES.find((p) => p.path === clean);
 }
+
+/** The head of 404.html: the same icons and script, no canonical link, and a note to search engines to leave it out. */
+export function notFoundHead(): string {
+  return [
+    `<meta charset="utf-8" />`,
+    `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />`,
+    `<title>Page not found · ${SITE_NAME}</title>`,
+    `<meta name="description" content="That page does not exist. Go back to the Allevia home page." />`,
+    `<meta name="robots" content="noindex" />`,
+    `<meta name="color-scheme" content="light" />`,
+    `<meta name="theme-color" content="#162151" />`,
+    `<link rel="icon" href="/favicon.svg" type="image/svg+xml" />`,
+    `<link rel="icon" href="/favicon-48.png" sizes="48x48" type="image/png" />`,
+    `<link rel="apple-touch-icon" href="/apple-touch-icon.png" />`,
+    `<script type="module" src="/src/main.ts"></script>`,
+  ].join("\n    ");
+}

@@ -20,7 +20,7 @@ function doc(opts: { title: string; lead: string; summary?: string[]; sections: 
     .map((s, i) => `<section class="legal__sec" id="${s.id}" aria-labelledby="${s.id}-h"><h2 id="${s.id}-h"><span class="legal__n">${i + 1}.</span> ${esc(s.title)}</h2>${s.html}</section>`)
     .join("");
   const summary = opts.summary
-    ? `<aside class="legal__short" aria-labelledby="short-h"><h2 id="short-h">The short version</h2><ul class="ticks">${opts.summary.map((x) => `<li>${x}</li>`).join("")}</ul><p class="fine">This summary is for convenience. The full text below is what applies.</p></aside>`
+    ? `<section class="legal__short" aria-labelledby="short-h"><h2 id="short-h">The short version</h2><ul class="ticks">${opts.summary.map((x) => `<li>${x}</li>`).join("")}</ul><p class="fine">This summary is for convenience. The full text below is what applies.</p></section>`
     : "";
   return `<section class="page-head" aria-labelledby="h1"><div class="wrap page-head__in page-head__in--one"><div><h1 id="h1" class="page-head__h page-head__h--legal">${esc(opts.title)}</h1><p class="lede">${opts.lead}</p><p class="legal__date">Last updated: ${esc(LEGAL_UPDATED)}</p></div></div></section>
 <section class="section legal"><div class="wrap legal__in"><nav aria-label="On this page"><details class="legal__toc" data-toc><summary class="legal__toc-h">On this page</summary><ol>${toc}</ol></details></nav><div class="legal__body">${summary}${body}</div></div></section>`;
@@ -61,6 +61,7 @@ export function privacy(): string {
           ["Photos and videos you upload (in the app or the Studio channel on Discord)", "The image or video, the note you add, and its size and shape. Location and device details are removed on arrival. See <a href=\"#photos\">Photos and videos</a>.", "To make clean-up versions and post captions for your approval.", "A folder of your own on our server, and a record in your business's database."],
           ["Spreadsheets and numbers you upload (this is being built)", "The figures, dates and column names in the file. Please do not upload files with your customers' personal details: we do not need them.", "To measure your goals against your own numbers.", "Your business's own database."],
           ["Accounts you connect (being built; see <a href=\"#google\">Google</a> and <a href=\"#instagram\">Instagram</a>)", "Read-only numbers: for Instagram, your profile details and post and account reach; for Search Console, clicks, impressions, search terms and pages; for Google Analytics, visits, sources and conversions; for your Google Business Profile, calls, direction requests, website clicks and reviews.", "To show how you are doing and to explain why a number moved.", "Your business's own database."],
+          ["Your owner link", "A one-way fingerprint of the private link that opens your business (never the link itself), and when it was made. If you join our Discord, which Discord role your invite gave you.", "To check that a request is from your business, and to cancel the link if you ask.", "Our registry, apart from every business's own database."],
           ["Discord", "What you write and the files you attach in your business's channels, and your membership of its area. See <a href=\"#discord\">Discord</a>.", "To answer you, to show approval cards, and to give you support.", "Discord, and your business's own database."],
           ["Billing (when payments open)", "Your name, billing email, plan and whether payments went through. Card numbers go to the payment provider, never to us.", "To charge you, give refunds and meet tax law.", "Our payment provider and our records."],
           ["Visiting this site or the demo", "The usual server log: your IP address, the time, the page asked for and your browser's name. No cookies, no analytics. See <a href=\"/cookies/\">Cookies and analytics</a>.", "To keep the site working and to spot abuse.", "Our web server."],
@@ -249,7 +250,7 @@ export function terms(): string {
     {
       id: "account",
       title: "Who can use it, and your account",
-      html: `<p>The service is for businesses and the people who work for them, and you must be 18 or older. You are responsible for who you invite to your team's area on Discord or give access to, and for what they do. Invites to Discord work once; do not share them. Tell us at once if you think someone has access who should not.</p>`,
+      html: `<p>The service is for businesses and the people who work for them, and you must be 18 or older. You are responsible for who you invite to your team's area on Discord or give access to, and for what they do. Your business opens with its own private owner link, and whoever holds it can act for your business, so keep it private and tell us at once if it leaks, and we will cancel it and make a new one. Invites to Discord work once; do not share them. Tell us at once if you think someone has access who should not.</p>`,
     },
     {
       id: "content",
@@ -401,8 +402,9 @@ export function dataDeletion(): string {
       html: `<p>When your business asks us to delete everything, we delete:</p>
 <ul class="ticks">
 <li>your business's whole database: what your team learned from your website, your conversations, your drafts, approvals, goals and the rules it learned from your edits;</li>
+<li>your owner link and your business's entry in our registry, so nothing can open it again;</li>
 <li>your photos and videos, every version we made of them, and the other files you uploaded;</li>
-<li>the saved copies of your website, notes from setting you up, and the stored answers of the AI model for your business;</li>
+<li>the saved copies of your website, notes from setting you up, the saved drafts of approved posts, and the stored answers of the AI model for your business (each business has its own folders for these);</li>
 <li>any connection to Instagram or Google, and the access tokens we hold;</li>
 <li>your business's private area on Discord (the channels and the role), and the question and answer text we stored from it.</li>
 </ul>
