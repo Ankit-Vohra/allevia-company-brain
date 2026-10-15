@@ -49,5 +49,8 @@ describe("unguardedEdgeAggregates", () => {
     expect(unguardedEdgeAggregates("MATCH (a)-[:R*1..__EXPR__]->(b) RETURN count(b)")).toEqual([]);
     expect(unguardedEdgeAggregates("MATCH (a:Agent) WHERE NOT (a)-[:OWNS]->() RETURN count(a)")).toEqual([]);
     expect(unguardedEdgeAggregates("MATCH (a)-[:R]->(b) RETURN b.id")).toEqual([]); // no aggregate
+    // a pattern matched after the last count is not counted by it
+    expect(unguardedEdgeAggregates("MATCH (t:Turn)-[r:TOUCHED]->(x) WHERE ID(r) >= 0 WITH t, count(x) AS n OPTIONAL MATCH (t)-[:IN_SESSION]->(s) RETURN t.id, s.id, n")).toEqual([]);
+    expect(unguardedEdgeAggregates("MATCH (t:Turn) OPTIONAL MATCH (t)-[:IN_SESSION]->(s) WITH t, count(s) AS n RETURN t.id, n")).toHaveLength(1);
   });
 });

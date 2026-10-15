@@ -19,7 +19,7 @@ interface Found { where: string; text: string }
 // to the count below, which can fall but not rise. Delete DEFERRED (and the ratchets) once they are clean.
 const DEFERRED = [/^src\/agent\//, /^src\/ingest\/pipeline\.ts:/, /^src\/ingest\/librarian\.ts:/];
 const DEFERRED_ANCHORS_MAX = 15;
-const DEFERRED_EDGE_AGGREGATES_MAX = 9;
+const DEFERRED_EDGE_AGGREGATES_MAX = 8;
 
 // Every query-looking literal, not only the ones that sort.
 function allCypher(): Found[] {

@@ -70,15 +70,18 @@ function singleHop(body: string): boolean {
   return max === "1";
 }
 
-// Positions of the relationship patterns of a query that are exposed: no alias, or an alias nothing else in the text uses.
+// The relationship patterns of a query that are exposed: no alias, or an alias nothing else in the text uses; and only those
+// that come before the last count/sum/collect (a pattern after it is matched once its rows are already counted).
 export function unguardedEdgeAggregates(text: string): string[] {
-  if (!AGGREGATE.test(text)) return [];
+  const lastAggregate = Math.max(-1, ...[...text.matchAll(new RegExp(AGGREGATE.source, "gi"))].map((m) => m.index!));
+  if (lastAggregate < 0) return [];
   const found: string[] = [];
   // `-[...]-`, `-[...]->`, `<-[...]-`, and the bare `--` / `-->` / `<--` forms
   const re = /(<?)-\s*(?:\[([^\]]*)\])?\s*-(>?)/g;
   for (const m of text.matchAll(re)) {
     const body = m[2];
     const at = m.index!;
+    if (at > lastAggregate) continue;
     if (m[0] === "--" && /\w\s*$/.test(text.slice(Math.max(0, at - 1), at))) continue; // `x--y`, not a pattern
     // variable length: each path counts, except a single hop (`*1..1`, `*1`), which the server plans like a plain edge
     if (body !== undefined && body.includes("*") && !singleHop(body)) continue;
