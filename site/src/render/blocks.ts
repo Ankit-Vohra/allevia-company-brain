@@ -104,7 +104,7 @@ export function pricingTeaser(): string {
   const g = P.growth;
   return `<div class="teaser">
   <div class="teaser__row teaser__row--lead"><p class="teaser__label">${esc(P90.name)}, the first ${P90.days} days</p><p class="teaser__price">${moneySpan(P90.upfront)}</p><p class="teaser__note">upfront, or ${P90.instalments.count} × ${moneySpan(P90.instalments.each)}. Setup, weekly tuning, strategist reviews on days ${P90.reviewDays.join(", ").replace(/, (\d+)$/, " and $1")}, and ${g.name}-level allowances.</p></div>
-  <div class="teaser__row"><p class="teaser__label">Then ${esc(g.name)}, the default</p><p class="teaser__price">${moneySpan(g.price.monthly)}<span class="per">/month</span></p><p class="teaser__note">${postsAndReels(g.allowances.studioCreditsPerMonth)} each month, a named Growth Partner, and all 10 staff.</p></div>
+  <div class="teaser__row"><p class="teaser__label">Then ${esc(g.name)}, the default</p><p class="teaser__price">${moneySpan(g.price.monthly)}<span class="per">/month</span></p><p class="teaser__note">All 10 staff, a named Growth Partner, and every month ${postsAndReels(g.allowances.studioCreditsPerMonth).replace(/^Up/, "up")}.</p></div>
   <div class="teaser__row"><p class="teaser__label">Founding ${P90.founding.seats}</p><p class="teaser__price">${moneySpan(P90.founding.upfront)}</p><p class="teaser__note">for the program, for our first ${P90.founding.seats} customers, in exchange for case-study rights. ${g.name} then stays at ${moneySpan(P90.founding.growthLocked)}/month for ${P90.founding.growthLockMonths} months.</p></div>
 </div>`;
 }
@@ -166,7 +166,7 @@ export function plans(): string {
         : `<p class="plan__badge plan__badge--none" aria-hidden="true">&nbsp;</p>`;
     const yearly = p.price.yearly
       ? `<p class="plan__alt">or ${moneySpan(p.price.yearly)} a year, 2 months free</p>`
-      : `<p class="plan__alt" aria-hidden="true">&nbsp;</p>`;
+      : `<p class="plan__alt plan__alt--none" aria-hidden="true">&nbsp;</p>`;
     const row = (k: string, v: string) => `<div class="plan__row"><dt>${k}</dt><dd>${v}</dd></div>`;
     return `<article class="plan${p.isDefault ? " plan--default" : ""}" aria-labelledby="plan-${p.id}">
   <h3 class="plan__name" id="plan-${p.id}">${esc(p.name)}</h3>

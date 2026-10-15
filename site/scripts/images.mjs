@@ -30,8 +30,8 @@ const shots = [
   { src: "live-ask-final.png", name: "shot-ask", crop: [505, 112, 2375, 1688], widths: [1800, 900] },
   { src: "onboard-done-desktop.png", name: "shot-onboard", crop: [40, 140, 2140, 1300], widths: [1600, 800] },
   { src: "ask-final-desktop.png", name: "shot-run", crop: [560, 255, 1240, 760], widths: [1240, 700] },
-  { src: "approvals-desktop.png", name: "shot-approve", crop: [255, 520, 2360, 580], widths: [1600, 800] },
-  { src: "approvals-desktop.png", name: "shot-learn", crop: [255, 150, 2370, 250], widths: [1600, 800] },
+  { src: "approvals-desktop.png", name: "shot-approve", crop: [255, 520, 1080, 585], widths: [1080, 700] },
+  { src: "approvals-desktop.png", name: "shot-learn", crop: [1800, 155, 825, 230], widths: [825, 600] },
 ];
 for (const s of shots) for (const w of s.widths) webp(join(SHOTS, s.src), `${s.name}-${w}.webp`, w, 84, s.crop);
 
