@@ -109,6 +109,25 @@ describe("server: studio (integration)", () => {
     expect((await post(h.make({ studio: async () => wiring }), "/api/mini/ask", { question: "x".repeat(70_000) })).status).toBe(413);
   }, 60_000);
 
+  it("the owner's settings: blur people's faces (off by default) and the language, per business, refused in public mode", async () => {
+    const app = h.make({ studio: async () => wiring });
+    const put = (a: typeof app, body: unknown) => a.request("/api/mini/studio/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    expect(await (await app.request("/api/mini/studio/settings")).json()).toEqual({ blurFaces: false, language: "auto" });
+    const on = await put(app, { blurFaces: true });
+    expect(await on.json()).toEqual({ blurFaces: true, language: "auto" });
+    expect(await (await put(app, { language: "Hindi" })).json()).toEqual({ blurFaces: true, language: "hindi" });
+    // a run now blurs the person Tara flagged, and says so on the card
+    const events = sseEvents(await (await upload(app, await facadePhoto({ tilt: 1 }), "blur on")).text());
+    const proposal = events.find((e): e is Extract<AgentEvent, { type: "proposal" }> => e.type === "proposal")!;
+    const [card] = await h.g.roQuery<{ p: string }>("MATCH (a:Approval {id:$id}) RETURN a.payload AS p", { id: proposal.approvalId });
+    expect(card!.p).toMatch(/your setting blurs people/);
+    expect(await (await put(app, { blurFaces: false, language: "auto" })).json()).toEqual({ blurFaces: false, language: "auto" });
+    expect((await put(app, {})).status).toBe(400);
+    expect((await put(app, { blurFaces: "yes" })).status).toBe(400);
+    expect((await put(h.make({ studio: async () => wiring, publicMode: true }), { blurFaces: true })).status).toBe(403);
+    expect((await app.request("/api/other/studio/settings")).status).toBe(404);
+  }, 60_000);
+
   it("serves the prepared sample photo and its honest caption", async () => {
     const app = h.make({ studio: async () => wiring });
     const s = await (await app.request("/api/mini/studio/sample")).json() as { note: string; caption: string; url: string };

@@ -139,3 +139,28 @@ export async function setLanguagePreference(g: GraphHandle, raw: unknown, now: n
   await upsertNode(g, { type: "Business", id, name: row?.name ?? id, props: { language: pref } }, now);
   return pref;
 }
+
+// ---------- the setting, in the owner's words ----------
+
+const LANG_WORDS = "english|hindi|hinglish|हिंदी|हिन्दी|spanish|french|german|arabic|gujarati|marathi|tamil|telugu|bengali|punjabi|urdu|portuguese";
+const PERSISTENT = /\b(?:from now on|always|by default|going forward|from here on|every time|each time|in future|henceforth)\b/i;
+const SPEAK = String.raw`(?:answer|reply|respond|write|talk|speak|answering|replying|writing)`;
+
+/**
+ * "Always answer in English" / "reply in Hindi from now on" / "reply in the language I write in": the language setting.
+ * Needs a standing marker ("from now on", "always"), so "can you write this post in Hindi?" is still just a question.
+ * null when the words are not about the setting.
+ */
+export function parseLanguageSetting(words: string): { language: string } | null {
+  const t = words.trim();
+  if (!t || t.length > 160 || !PERSISTENT.test(t)) return null;
+  const follow = /\b(?:in the language i (?:write|ask|use|type)|in my (?:own )?language|the language i (?:write|ask|use|type)|like i (?:write|ask))\b/i.test(t);
+  if (follow && new RegExp(String.raw`\b${SPEAK}\b`, "i").test(t)) return { language: "auto" };
+  const m = new RegExp(String.raw`\b${SPEAK}\b[^.?!]{0,30}?\b(?:in|using)\s+(${LANG_WORDS})\b`, "iu").exec(t);
+  return m ? { language: normaliseLanguagePref(m[1]) } : null;
+}
+
+export const LANGUAGE_REPLY = (pref: string): string =>
+  pref === "auto"
+    ? "Done. I will answer in the language you write in."
+    : `Done. From now on I will answer in ${pref === "english" ? "English" : pref === "hindi" ? "Hindi" : pref === "hinglish" ? "Hinglish" : pref}, whatever language you ask in. Say "answer in the language I write in" to go back.`;

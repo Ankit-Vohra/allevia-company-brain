@@ -16,6 +16,7 @@
 import type { AgentEvent, TurnChecks } from "../../shared/contracts.js";
 import { agentById } from "../../shared/roster.js";
 import type { AskInput, AskResult } from "../agent/ask.js";
+import { LANGUAGE_REPLY, parseLanguageSetting, setLanguagePreference } from "../agent/language.js";
 import type { GraphHandle } from "../graph/client.js";
 import { DecisionError, decideAndNotify, type ActionOpts, type OnDecision } from "../server/approvals.js";
 import { approvals as listApprovals, latestBrief, sessionDetail } from "../server/reads.js";
@@ -157,6 +158,18 @@ export class AlleviaBot {
     const question = m.content.trim();
     if (!question) return;
     const asker = m.authorIsOwner ? FOUNDER : MEMBER;
+    // "always answer in English": the business's language setting, said in plain words (only the owner changes it)
+    const lang = m.authorIsOwner && (m.channelId === this.d.channelId || m.threadParentId === this.d.channelId) ? parseLanguageSetting(question) : null;
+    if (lang) {
+      try {
+        const pref = await setLanguagePreference(this.d.graph, lang.language, this.now());
+        await m.reply(LANGUAGE_REPLY(pref));
+      } catch (e) {
+        this.log(`language setting failed: ${message(e)}`);
+        await m.reply("I couldn't save that setting. Try again in a moment.");
+      }
+      return;
+    }
     if (m.channelId === this.d.channelId) {
       const thread = await m.startThread(threadName(question));
       await this.turn(thread, question, asker, () => this.openSession(thread.id, question, asker));

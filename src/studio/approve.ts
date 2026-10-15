@@ -37,6 +37,8 @@ export interface StudioCard {
   voiceRuleIds: string[];
   // Set when the photo had a person or a plate to blur: said on the card in the owner's words.
   privacy?: { people: boolean; redacted: boolean; note: string };
+  // A plain sentence for the owner that goes with the card (a child kept the photo to a simple clean-up).
+  notice?: string;
 }
 
 export interface StudioPayload { title: string; body: string; target: string; studio: StudioCard }
@@ -48,7 +50,7 @@ export function recommendVariant(variants: VariantRecord[], fidelity: FidelityRe
 
 export async function proposeStudioDraft(
   g: GraphHandle,
-  o: { original: AssetRecord; variants: VariantRecord[]; fidelity: FidelityResult[]; caption: Caption; ctx: StudioContext; assessment: PhotoAssessment; now: number; privacy?: StudioCard["privacy"] },
+  o: { original: AssetRecord; variants: VariantRecord[]; fidelity: FidelityResult[]; caption: Caption; ctx: StudioContext; assessment: PhotoAssessment; now: number; privacy?: StudioCard["privacy"]; notice?: string },
 ): Promise<{ recommendationId: string; approvalId: string; title: string; payload: StudioPayload }> {
   const short = o.original.sha256.slice(0, 12);
   const recId = entityId("Recommendation", `studio ${short}`);
@@ -66,6 +68,7 @@ export async function proposeStudioDraft(
     ...(o.ctx.project ? { projectId: o.ctx.project.contentId, ...(o.ctx.project.pageId ? { pageId: o.ctx.project.pageId } : {}) } : {}),
     voiceRuleIds: o.ctx.brand.voiceRules.map((r) => r.id),
     ...(o.privacy ? { privacy: o.privacy } : {}),
+    ...(o.notice ? { notice: o.notice } : {}),
   };
   const payload: StudioPayload = { title, body, target: "instagram", studio };
   const why = [

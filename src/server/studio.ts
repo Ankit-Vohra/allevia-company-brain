@@ -14,6 +14,8 @@ import type { GraphHandle } from "../graph/client.js";
 import { approveStudioDraft, finalizeStudioDraft, studioCard } from "../studio/approve.js";
 import { ImageRejected, thumbnail } from "../studio/image.js";
 import { latestStudioRun, runStudio, type StudioDeps } from "../studio/pipeline.js";
+import { loadLanguagePreference, setLanguagePreference } from "../agent/language.js";
+import { loadStudioSettings, setBlurFaces } from "../studio/settings.js";
 import { VisionError } from "../studio/vision.js";
 import type { StudioSample } from "../studio/wiring.js";
 import type { Decision, OnDecision } from "./approvals.js";
@@ -145,6 +147,30 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
     const r = await approveStudioDraft(g, { approvalId, ...(variantId ? { variantId } : {}), ...(caption !== undefined ? { caption } : {}), now: h.now() },
       (id, edited) => h.decide(g, reg.slug, id, { decision: "approve", ...(edited ? { editedPayload: edited } : {}) }));
     return c.json({ ...r, approval: await readApproval(g, approvalId) });
+  });
+
+  // The owner's Studio and language settings: "Blur people's faces in my content" (off by default) and the language the
+  // team answers in ("auto" follows the question). Per business: a tenant only ever reads or writes its own graph.
+  app.get("/api/:t/studio/settings", async (c) => {
+    const { g } = await h.tenantOf(c);
+    return c.json({ ...(await loadStudioSettings(g)), language: (await loadLanguagePreference(g)) ?? "auto" });
+  });
+
+  app.put("/api/:t/studio/settings", async (c) => {
+    const { g } = await h.tenantOf(c);
+    h.refuseInPublicMode();
+    let body: { blurFaces?: unknown; language?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      h.fail(400, "The request body must be JSON.");
+    }
+    if (body!.blurFaces !== undefined && typeof body!.blurFaces !== "boolean") h.fail(400, "blurFaces must be true or false.");
+    if (body!.language !== undefined && typeof body!.language !== "string") h.fail(400, "language must be a word such as \"auto\", \"english\" or \"hindi\".");
+    if (body!.blurFaces === undefined && body!.language === undefined) h.fail(400, "Say what to change: blurFaces or language.");
+    if (typeof body!.blurFaces === "boolean") await setBlurFaces(g, undefined, body!.blurFaces, h.now());
+    if (typeof body!.language === "string") await setLanguagePreference(g, body!.language, h.now());
+    return c.json({ ...(await loadStudioSettings(g)), language: (await loadLanguagePreference(g)) ?? "auto" });
   });
 
   app.get("/api/:t/studio/sample", async (c) => {

@@ -19,6 +19,7 @@ import { approveStudioDraft, studioCard, type DecideFn } from "../studio/approve
 import type { PhotoAssessment } from "../studio/assess.js";
 import { ImageRejected } from "../studio/image.js";
 import { runStudio, type StudioDeps, type StudioResult } from "../studio/pipeline.js";
+import { parseStudioSetting, setBlurFaces, SETTING_REPLY } from "../studio/settings.js";
 import { reviseVariant, type ReviseResult } from "../studio/revise.js";
 import { assessFirstFrame, storeVideo, VideoRejected, type Ffmpeg } from "../studio/video.js";
 import { downloadAttachment, AttachmentRejected, MAX_ATTACHMENTS, pickMedia, type AttachmentRef, type FetchFn } from "./attachments.js";
@@ -139,11 +140,11 @@ export class StudioDiscord {
 
   private async post(thread: ThreadPort, r: StudioResult): Promise<void> {
     const a = r.assessment;
-    const privacy = a.overlays.some((o) => o.kind === "privacy");
     await thread.send(clip([
       `Tara looked at your photo: ${VERDICT_WORDS[a.verdict]}. ${a.story}`.trim(),
       ...(a.verdict === "reshoot" && a.coaching ? [a.coaching] : []),
-      ...(privacy ? ["I spotted a person in it and blurred them in the options."] : []),
+      ...(r.privacy.blurredPeople && !r.privacy.minor ? ["Faces are blurred in the options, because your setting blurs people's faces."] : []),
+      ...r.notices,
     ].join("\n"), 1900));
     const caption = [r.caption.caption, r.caption.hashtags.join(" ")].filter(Boolean).join("\n\n");
     const recommended = (await studioCard(this.d.graph, r.approvalId))?.payload.studio.recommended;
@@ -171,9 +172,24 @@ export class StudioDiscord {
 
   // ----- a text reply under the options -----
 
+  // "blur faces from now on" / "stop blurring faces": the one Studio setting, by a plain reply. True when it was one.
+  async onSetting(words: string, say: (text: string) => Promise<unknown>): Promise<boolean> {
+    const s = parseStudioSetting(words);
+    if (!s) return false;
+    try {
+      await setBlurFaces(this.d.graph, this.d.businessId, s.blurFaces, this.now());
+      await say(SETTING_REPLY[s.blurFaces ? "on" : "off"]);
+    } catch (e) {
+      this.log(`${this.d.tenant}: setting failed: ${message(e)}`);
+      await say("I couldn't save that setting. Try again in a moment.");
+    }
+    return true;
+  }
+
   async onReply(m: MessagePort, thread: ThreadPort): Promise<void> {
     const words = m.content.trim();
     if (!words) return;
+    if (await this.onSetting(words, (t) => thread.send(t))) return;
     const [row] = await this.d.graph.roQuery<{ id: string; approval: string | null }>(
       `MATCH (a:Entity:Asset) WHERE a.kind = 'original' AND a.discordThreadId = $tid
        RETURN a.id AS id, a.approvalId AS approval ORDER BY coalesce(a.studioRunAt, 0) DESC, a.id LIMIT 1`, { tid: thread.id });

@@ -11,6 +11,8 @@ import { upsertEdge, upsertNode } from "../graph/upsert.js";
 import { TARA, parseAssessment, type PhotoAssessment } from "./assess.js";
 import { studioCard, type StudioPayload } from "./approve.js";
 import { loadStudioContext } from "./context.js";
+import { readPrivacy } from "./privacy.js";
+import { loadStudioSettings } from "./settings.js";
 import { checkFidelity, type FidelityResult } from "./fidelity.js";
 import { estimateTilt, planCrop, straightenedBase, dhash } from "./image.js";
 import { chooseTilt, DEFAULT_MODELS, type StudioModels } from "./pipeline.js";
@@ -109,7 +111,8 @@ export async function reviseVariant(
   const ctx = await loadStudioContext(g, o.businessId, orig.note ?? "");
   const tilt = chooseTilt(await estimateTilt(originalBytes), assessment.quality.tiltDeg);
   const plan = planCrop({ w: original.w, h: original.h }, tilt.deg, assessment.overlays);
-  const base = await straightenedBase(originalBytes, plan, assessment.overlays.filter((x) => x.kind === "privacy"));
+  const blur = readPrivacy(assessment, { blurFaces: (await loadStudioSettings(g, o.businessId)).blurFaces }).blur;
+  const base = await straightenedBase(originalBytes, plan, blur);
 
   const label = nextLabel(s.variants.map((v) => v.label));
   const buffer = await adjustVariant(from, adjustment);

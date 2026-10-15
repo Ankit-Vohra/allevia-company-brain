@@ -16,6 +16,8 @@ import { StudioDiscord, StudioGate, studioButtonId } from "../../src/discord/stu
 import type { AreaRecord } from "../../src/discord/hub-types.js";
 import type { AttachmentRef, FetchFn } from "../../src/discord/attachments.js";
 import { FakeEngine } from "../../src/studio/engine.js";
+import { loadStudioSettings } from "../../src/studio/settings.js";
+import { loadLanguagePreference } from "../../src/agent/language.js";
 import type { Ffmpeg } from "../../src/studio/video.js";
 import { AssetStore } from "../../src/studio/store.js";
 import { FakeVision } from "../../src/studio/vision.js";
@@ -124,7 +126,7 @@ describe("photos in the Studio on Discord", () => {
     expect(text(log!.first)).toMatch(/^\*\*Work log\*\*/);
     expect(log!.edits.length).toBeGreaterThan(0); // one message, edited as the team worked
     expect(text(tara!.first)).toMatch(/^Tara looked at your photo: it needs a little polish\./);
-    expect(text(tara!.first)).toContain("blurred them"); // the person Tara flagged
+    expect(text(tara!.first)).not.toMatch(/blurred/); // a person is kept as they are unless the business asked for blurring
     expect(text(tara!.first)).not.toMatch(/verdict|overlay|asset|graph/i);
 
     const options = thread.options();
@@ -402,6 +404,45 @@ describe("through the hub: a business reaches only its own Studio", () => {
     await bot.onMessage(msg("make it a bit cooler", [], A.channels.studio!, [A.roleId!], t));
     expect(t.options()).toHaveLength(before + 1);
     expect((t.options().at(-1)!.first as Exclude<Outgoing, string>).content).toContain("cooler");
+  });
+
+  it("'blur faces from now on' in #studio sets A's setting only, a reply in a thread turns it off, and nothing is asked per photo", async () => {
+    const on = msg("Blur faces from now on", [], A.channels.studio!, [A.roleId!]);
+    await bot.onMessage(on);
+    expect(on.replies[0]).toMatch(/From now on I will blur people's faces/);
+    expect(await loadStudioSettings(wa.g, BIZ)).toEqual({ blurFaces: true });
+    expect(await loadStudioSettings(wb.g, BIZ)).toEqual({ blurFaces: false });
+    // the next photo says so, plainly, and has no question or buttons about people
+    const m = msg("with the setting on", [file("photo.jpg")], A.channels.studio!, [A.roleId!]);
+    await bot.onMessage(m);
+    const t = m.started[0]!;
+    expect(t.texts().join("\n")).toContain("Faces are blurred in the options, because your setting blurs people's faces.");
+    expect(t.texts().join("\n")).not.toMatch(/Is it you|Keep them|Blur them/);
+    const off = msg("stop blurring faces", [], A.channels.studio!, [A.roleId!], t);
+    await bot.onMessage(off);
+    expect(t.texts().at(-1)).toMatch(/faces will be kept as they are/i);
+    expect(await loadStudioSettings(wa.g, BIZ)).toEqual({ blurFaces: false });
+    // someone from B cannot change A's setting
+    const stranger = msg("blur faces from now on", [], A.channels.studio!, [B.roleId!]);
+    await bot.onMessage(stranger);
+    expect(stranger.replies).toEqual([]);
+    expect(await loadStudioSettings(wa.g, BIZ)).toEqual({ blurFaces: false });
+  });
+
+  it("'always answer in English' in #your-team sets A's language only and is not sent to the team as a question", async () => {
+    const m = msg("From now on, always answer in English please", [], A.channels["your-team"]!, [A.roleId!]);
+    await bot.onMessage(m);
+    expect(m.replies[0]).toMatch(/From now on I will answer in English/);
+    expect(asked).toEqual([]);
+    expect(await loadLanguagePreference(wa.g)).toBe("english");
+    expect(await loadLanguagePreference(wb.g)).toBeUndefined();
+    const back = msg("From now on reply in the language I write in", [], A.channels["your-team"]!, [A.roleId!]);
+    await bot.onMessage(back);
+    expect(await loadLanguagePreference(wa.g)).toBeUndefined();
+    // an ordinary question that mentions a language is still a question
+    await bot.onMessage(msg("Can you write the Diwali post in Hindi?", [], A.channels["your-team"]!, [A.roleId!]));
+    expect(asked.map((a) => a.question)).toEqual(["Can you write the Diwali post in Hindi?"]);
+    expect(await loadLanguagePreference(wa.g)).toBeUndefined();
   });
 
   it("an Approve press decides A's card in A's graph; B's card id from A's thread finds nothing; B's role is turned away", async () => {
