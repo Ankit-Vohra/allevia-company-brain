@@ -676,7 +676,13 @@ export async function loadOnboardModule(): Promise<OnboardFn | null> {
   if (typeof mod.onboard !== "function") return null;
   const onboard = mod.onboard;
   const { AgentSdkRunner } = await import("../ingest/llm.js");
-  return (input, emit, signal) => onboard(input, emit, { runner: new AgentSdkRunner({ concurrency: 3 }), signal });
+  // The brand library's production deps: files under the data dir, Claude vision on the subscription (cached on disk).
+  const { productionStudioDeps } = await import("../studio/wiring.js");
+  const { loadConfig } = await import("../config.js");
+  const studio = productionStudioDeps(loadConfig().dataDir);
+  return (input, emit, signal) => onboard(input, emit, {
+    runner: new AgentSdkRunner({ concurrency: 3 }), signal, brand: { store: studio.store, vision: studio.vision, googleFonts: true },
+  });
 }
 
 // shared/plans.ts: pricing data. Absent -> null (501).

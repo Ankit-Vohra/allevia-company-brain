@@ -61,7 +61,7 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
       });
     },
     studioFor: async (area) => new StudioDiscord({
-      tenant: area.slug, businessId: businessId(area.slug), graph: await tenantGraph(area.slug), studio: studioDeps, ffmpeg, gate,
+      tenant: area.slug, businessId: businessId(area.slug), graph: await tenantGraph(area.slug), studio: studioDeps, ffmpeg, gate, brandLibrary: true,
       ...(clip ? { clip } : {}),
       ...(onDecision ? { onDecision } : {}), ...(actions ? { actions } : {}), log,
     }),

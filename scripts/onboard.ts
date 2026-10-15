@@ -6,7 +6,9 @@
 import { parseArgs } from "node:util";
 import { closeAll } from "../src/graph/client.js";
 import { AgentSdkRunner } from "../src/ingest/llm.js";
+import { loadConfig } from "../src/config.js";
 import { onboard } from "../src/onboard/onboard.js";
+import { productionStudioDeps } from "../src/studio/wiring.js";
 
 const { values: a } = parseArgs({
   options: {
@@ -20,6 +22,7 @@ if (!a.name || !a.slug || !a.url) {
 }
 const int = (s: string | undefined) => (s === undefined ? undefined : Number.parseInt(s, 10));
 
+const studio = productionStudioDeps(loadConfig().dataDir);
 const t0 = Date.now();
 const res = await onboard(
   { name: a.name, slug: a.slug, url: a.url, ...(a.instagram ? { instagram: a.instagram } : {}), ...(a.industry ? { industry: a.industry } : {}) },
@@ -33,6 +36,7 @@ const res = await onboard(
   },
   {
     runner: new AgentSdkRunner({ concurrency: 3 }),
+    brand: { store: studio.store, vision: studio.vision, googleFonts: true },
     ...(a.model ? { model: a.model } : {}),
     crawlOptions: { ...(int(a["max-pages"]) ? { maxPages: int(a["max-pages"]) } : {}) },
     ...(int(a["understand-pages"]) ? { maxUnderstandPages: int(a["understand-pages"]) } : {}),

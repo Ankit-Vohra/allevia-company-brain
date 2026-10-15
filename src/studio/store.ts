@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { isTenantSlug } from "../graph/slug.js";
 
-const KEY = /^[0-9a-f]{64}\.(?:jpg|png|webp|mp4|mov|webm)$/;
+const KEY = /^[0-9a-f]{64}\.(?:jpg|png|webp|mp4|mov|webm|pdf|ttf|otf)$/;
 
 export class AssetStore {
   readonly root: string;
@@ -26,7 +26,7 @@ export class AssetStore {
     return p.startsWith(dir + sep) ? p : null;
   }
 
-  put(tenant: string, sha256: string, bytes: Buffer, ext: "jpg" | "png" | "webp" | "mp4" | "mov" | "webm" = "jpg"): string {
+  put(tenant: string, sha256: string, bytes: Buffer, ext: "jpg" | "png" | "webp" | "mp4" | "mov" | "webm" | "pdf" | "ttf" | "otf" = "jpg"): string {
     const key = `${sha256}.${ext}`;
     const p = this.path(tenant, key);
     if (!p) throw new Error(`bad storage key ${key}`);

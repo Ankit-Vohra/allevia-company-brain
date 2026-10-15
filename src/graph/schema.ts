@@ -151,6 +151,13 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   ...pat("Business", "ENROLLED_IN", "Program"),
   ...pat("Asset", "DERIVED_FROM", "Asset"), // edge props: step, treatment
   ...pat("Content", "USES_ASSET", "Asset"),
+  // the brand library and what is made from it: a poster uses the logo and font files it was drawn with, an owner
+  // uploads brand files, and a newer logo supersedes the one before it
+  ...pat(["Content", "Asset"], "USES_ASSET", "BrandAsset"),
+  ...pat("Person", "AUTHORED", "BrandAsset"),
+  ...pat("BrandAsset", "DERIVED_FROM", "BrandAsset"),
+  ...pat("BrandAsset", "SUPERSEDES", "BrandAsset"),
+  ...pat("Asset", "GUIDED_BY", ["BrandRule", "Rule"]),
   ...pat("Asset", "DEPICTS", ["Product", "Page", "Business", "Event"]),
   ...pat(["Turn", "Finding", "Content"], "GUIDED_BY", ["Memory", "Rule", "BrandRule"]),
   // the librarian's merge pass (src/ingest/merge.ts): same type only, duplicate -> canonical
