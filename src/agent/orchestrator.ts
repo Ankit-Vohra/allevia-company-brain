@@ -581,7 +581,9 @@ class Turn {
     const known = new Set([...this.findings.values()].map((f) => f.id));
     return {
       id: base.id, agent: base.agent, task: base.task, text,
-      citations: unique([...extractCitations(text), ...strings(s?.citations).filter((id) => this.touched.has(id))]),
+      // Only ids a tool returned this turn: a made-up [[id]] stays in the text (where the automatic check flags it) but
+      // never becomes a citation that is lit up, handed on or persisted.
+      citations: unique([...extractCitations(text), ...strings(s?.citations)]).filter((id) => this.touched.has(id)),
       basedOn: unique([...base.depIds, ...strings(s?.basedOn).filter((id) => known.has(id) && id !== base.id)]),
       proposals: strings(s?.proposals).slice(0, 5),
       revised: false, rejected: false,

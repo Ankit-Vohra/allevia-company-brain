@@ -338,6 +338,9 @@ describe("runTurn: reviews", () => {
     expect(p).toContain('- obs:signups:2026-10-05: Observation "signups (2026-10-05)", as of 2026-10-06');
     expect(p).toContain("Automatic check: cited but returned by no tool: made:up; numbers not found in any tool data: 77");
     expect(runtime.runs.find((r) => r.phase === "synthesis")!.prompt).toContain("Automatic check: cited but returned by no tool: made:up");
+    const out = await run();
+    expect(out.findings[0]!.citations).toEqual(["obs:signups:2026-10-05"]); // the record keeps only ids a tool returned
+    expect(out.findings[0]!.text).toContain("[[made:up]]");                 // the text keeps what was written
   });
 });
 

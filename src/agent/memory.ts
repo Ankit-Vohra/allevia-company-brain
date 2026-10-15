@@ -4,6 +4,8 @@
 // - saveTurn links the Turn to its session, asker, agents (HANDLED_BY), every touched node (TOUCHED) and its citations
 //   (CITED); writes each agent's Finding (PART_OF the Turn, PRODUCED by the agent, CITED, BASED_ON other Findings) and
 //   each review (REVIEWED, with verdict and note); and grows each agent's KNOWS_ABOUT weight for what its Findings cited.
+//   A citation counts (CITED, KNOWS_ABOUT) only if a tool returned that id this turn and it is in the graph: an id a
+//   model made up, or copied from text, is kept in the Turn's text but never becomes an edge.
 //   The two raw-Cypher writes here (Session.lastAt, the KNOWS_ABOUT merge) bypass upsert, so they go through rawWrite,
 //   which tells the projection cache (noteGraphWrite) that the graph changed.
 // - recallBrief: "what we already know" before a turn, with ids the agents may cite.
@@ -195,6 +197,8 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   const findingIds = new Set(t.findings.map((f) => f.id));
   const known = await existing(g, [...touchedIds, ...t.citations, ...t.findings.flatMap((f) => [...f.citations, ...f.basedOn])]);
   const exists = (id: string): boolean => known.has(id) && id !== t.turnId;
+  const seen = new Set(touchedIds);
+  const cited = (id: string): boolean => seen.has(id) && exists(id); // returned by a tool this turn, and in the graph
 
   const turnProps: Record<string, Prim> = {
     question: t.question, answer: t.answer, at: t.at, status: t.status ?? "ok", sessionId: t.sessionId, asker: t.asker,
@@ -207,7 +211,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   if (askerOk) edges.push({ from: t.asker, type: "ASKED", to: t.turnId });
   for (const a of unique(t.agents)) if (agentById(a)) edges.push({ from: t.turnId, type: "HANDLED_BY", to: agentNodeId(a) });
   for (const id of unique(touchedIds)) if (exists(id)) edges.push({ from: t.turnId, type: "TOUCHED", to: id });
-  for (const id of unique(t.citations)) if (exists(id)) edges.push({ from: t.turnId, type: "CITED", to: id });
+  for (const id of unique(t.citations)) if (cited(id)) edges.push({ from: t.turnId, type: "CITED", to: id });
 
   for (const f of t.findings) {
     const who = agentById(f.agent);
@@ -217,7 +221,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
     });
     edges.push({ from: f.id, type: "PART_OF", to: t.turnId });
     if (who) edges.push({ from: agentNodeId(f.agent), type: "PRODUCED", to: f.id });
-    for (const id of unique(f.citations)) if (exists(id)) edges.push({ from: f.id, type: "CITED", to: id });
+    for (const id of unique(f.citations)) if (cited(id)) edges.push({ from: f.id, type: "CITED", to: id });
     for (const id of unique(f.basedOn)) if (id !== f.id && (findingIds.has(id) || known.has(id))) edges.push({ from: f.id, type: "BASED_ON", to: id });
   }
   for (const r of t.reviews) {
@@ -228,7 +232,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
 
   const s = await writeBatch(g, { nodes, edges }, now);
   await rawWrite(g, "MATCH (s:Session {id:$id}) SET s.lastAt = CASE WHEN coalesce(s.lastAt, 0) > $at THEN s.lastAt ELSE $at END", { id: t.sessionId, at: t.at });
-  await growKnowsAbout(g, t, exists, now);
+  await growKnowsAbout(g, t, cited, now);
   return {
     nodesCreated: s.nodesCreated, edgesCreated: s.edgesCreated,
     errors: s.errors.map((e) => `${e.kind}: ${e.error}`),
@@ -236,12 +240,14 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
 }
 
 // Each agent knows a little more about what its (non-rejected) Findings cited; on the fast path the Chief's own
-// citations count. Counted once per turn per (agent, entity), so re-saving a turn changes nothing.
-async function growKnowsAbout(g: GraphHandle, t: SaveTurnInput, exists: (id: string) => boolean, now: number): Promise<void> {
+// citations count. Counted once per turn per (agent, entity): the edge keeps the ids of the turns that counted (the
+// last KNOWS_TURNS of them), so re-saving any turn, in any order, changes nothing.
+const KNOWS_TURNS = 200;
+async function growKnowsAbout(g: GraphHandle, t: SaveTurnInput, cited: (id: string) => boolean, now: number): Promise<void> {
   const pairs = new Map<string, { a: string; x: string }>();
   const add = (agent: string, ids: string[]) => {
     if (!agentById(agent)) return;
-    for (const x of ids) if (exists(x)) pairs.set(`${agent}|${x}`, { a: agentNodeId(agent), x });
+    for (const x of ids) if (cited(x)) pairs.set(`${agent}|${x}`, { a: agentNodeId(agent), x });
   };
   for (const f of t.findings) if (!f.rejected) add(f.agent, f.citations);
   if (!t.findings.length && (t.status ?? "ok") === "ok") add("chief-of-staff", t.citations);
@@ -251,8 +257,11 @@ async function growKnowsAbout(g: GraphHandle, t: SaveTurnInput, exists: (id: str
      MATCH (a:Entity {id:p.a}), (x:Entity {id:p.x})
      MERGE (a)-[r:KNOWS_ABOUT]->(x)
      ON CREATE SET r.since = $now, r.recordedAt = $now
-     SET r.weight = CASE WHEN r.lastTurn = $turn THEN coalesce(r.weight, 1) ELSE coalesce(r.weight, 0) + 1 END, r.lastTurn = $turn`,
-    { pairs: [...pairs.values()], now, turn: t.turnId });
+     WITH r, ($turn IN coalesce(r.turns, []) OR r.lastTurn = $turn) AS counted
+     SET r.weight = CASE WHEN counted THEN coalesce(r.weight, 1) ELSE coalesce(r.weight, 0) + 1 END,
+         r.turns = CASE WHEN counted THEN coalesce(r.turns, []) ELSE (coalesce(r.turns, []) + [$turn])[-$keep..] END,
+         r.lastTurn = $turn`,
+    { pairs: [...pairs.values()], now, turn: t.turnId, keep: KNOWS_TURNS });
 }
 
 // ---------- recall ----------

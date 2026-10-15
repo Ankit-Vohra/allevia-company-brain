@@ -132,6 +132,51 @@ describe("memory (integration)", () => {
     expect(await count("MATCH (:Agent {id:$a})-[r:KNOWS_ABOUT]->(:Entity {id:'metric:signups'}) RETURN count(r) AS c", { a: agentNodeId("data-analyst") })).toBe(1);
   });
 
+  // Each on its own graph, so the threads and weights tested elsewhere stay as they are.
+  async function ownGraph() {
+    const own = await testGraph();
+    await writeBatch(own.g, { nodes: [
+      { type: "Metric", id: "metric:signups", name: "Signups" },
+      { type: "Decision", id: "decision:pause-stories", name: "Pause daily stories" },
+    ] }, NOW);
+    const n = async (cypher: string) => (await own.g.roQuery<{ c: number }>(cypher))[0]!.c;
+    return { ...own, n };
+  }
+  const daFinding = (turn: string, citations: string[]) =>
+    ({ id: `finding:${turn}-data-analyst`, agent: "data-analyst", task: "x", text: citations.map((c) => `[[${c}]]`).join(" "), citations, basedOn: [], proposals: [], revised: false, rejected: false });
+
+  it("a forged citation (in the graph, but returned by no tool this turn) gets no CITED edge and no KNOWS_ABOUT weight", async () => {
+    const { g: og, cleanup: done, n } = await ownGraph();
+    try {
+      const forged = ["metric:signups", "decision:pause-stories"];
+      await saveTurn(og, { ...firstTurn, sessionId: "session:forged", turnId: "turn:f1", touched: ["metric:signups"], citations: forged, findings: [daFinding("f1", forged)], reviews: [] });
+      expect(await n("MATCH (:Turn {id:'turn:f1'})-[:CITED]->(x) RETURN count(x) AS c")).toBe(1);
+      expect(await n("MATCH (:Finding {id:'finding:f1-data-analyst'})-[:CITED]->(x) RETURN count(x) AS c")).toBe(1);
+      expect(await n("MATCH (:Entity)-[:CITED]->(:Decision {id:'decision:pause-stories'}) RETURN count(*) AS c")).toBe(0);
+      expect(await n("MATCH (:Agent)-[r:KNOWS_ABOUT]->(:Decision {id:'decision:pause-stories'}) RETURN count(r) AS c")).toBe(0);
+      expect(await n("MATCH (:Agent)-[r:KNOWS_ABOUT]->(:Metric {id:'metric:signups'}) RETURN count(r) AS c")).toBe(1);
+      // the fast path: the Chief's own forged citation doesn't grow its KNOWS_ABOUT either
+      await saveTurn(og, { ...firstTurn, sessionId: "session:forged", turnId: "turn:f2", touched: [], citations: ["decision:pause-stories"], findings: [], reviews: [] });
+      expect(await n("MATCH (:Agent)-[r:KNOWS_ABOUT]->(:Decision {id:'decision:pause-stories'}) RETURN count(r) AS c")).toBe(0);
+    } finally {
+      await done();
+    }
+  });
+
+  it("KNOWS_ABOUT counts each turn once, even when turns are saved A, B, A", async () => {
+    const { g: og, cleanup: done } = await ownGraph();
+    try {
+      const turn = (id: string): SaveTurnInput => ({ ...firstTurn, sessionId: "session:aba", turnId: `turn:${id}`, touched: ["metric:signups"], findings: [daFinding(id, ["metric:signups"])], reviews: [] });
+      await saveTurn(og, turn("A"));
+      await saveTurn(og, turn("B"));
+      await saveTurn(og, turn("A"));
+      const [k] = await og.roQuery<{ w: number }>("MATCH (:Agent {id:$a})-[r:KNOWS_ABOUT]->(:Metric {id:'metric:signups'}) RETURN r.weight AS w", { a: agentNodeId("data-analyst") });
+      expect(k!.w).toBe(2);
+    } finally {
+      await done();
+    }
+  });
+
   it("the raw-Cypher writes (KNOWS_ABOUT growth, Session.lastAt) each tell the projection cache the graph changed", async () => {
     const own = await testGraph(); // its own graph, so the extra turn doesn't disturb the threads tested below
     const note = vi.mocked(noteGraphWrite);
