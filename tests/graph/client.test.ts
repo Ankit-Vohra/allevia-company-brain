@@ -1,5 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { graphName, connect, listGraphs, closeAll, openGraph, type GraphHandle } from "../../src/graph/client.js";
+import { FalkorDB } from "falkordb";
+import { graphName, connect, listGraphs, closeAll, openGraph, GraphHandle } from "../../src/graph/client.js";
+import { loadConfig } from "../../src/config.js";
 import { testGraph } from "../helpers/graph.js";
 
 describe("graphName", () => {
@@ -55,6 +57,24 @@ describe("client (integration)", () => {
     await expect(g.roQuery("UNWIND range(1, 3000000) AS x WITH x WHERE x % 7 = 0 RETURN count(x) AS c", {}, { timeoutMs: 1 }))
       .rejects.toThrow(/timed out/i);
   });
+
+  it("waits out a full server queue instead of failing (the server admits 25 queued queries)", async () => {
+    // 40 connections, like 40 processes, each sending a slow read and a write at once: more than the queue holds.
+    const dbs = await Promise.all(Array.from({ length: 40 }, () => FalkorDB.connect({ url: loadConfig().falkordbUrl })));
+    try {
+      const hs = dbs.map((db) => new GraphHandle(g.name, db.selectGraph(g.name), db));
+      const slow = "UNWIND range(1, 300000) AS x WITH x WHERE x % 7 = 0 RETURN count(x) AS c";
+      const [reads, writes] = await Promise.all([
+        Promise.all(hs.map((h) => h.roQuery<{ c: number }>(slow, {}, { timeoutMs: 30_000 }))),
+        Promise.all(hs.map((h, i) => h.query<{ i: number }>("MERGE (n:Busy {i: $i}) RETURN n.i AS i", { i }))),
+      ]);
+      expect(reads.every((r) => r[0]!.c === 42857)).toBe(true);
+      expect(writes.map((r) => r[0]!.i)).toEqual(hs.map((_, i) => i));
+      expect(await g.roQuery("MATCH (n:Busy) RETURN count(n) AS c")).toEqual([{ c: 40 }]); // each write ran once
+    } finally {
+      await Promise.allSettled(dbs.map((db) => db.close()));
+    }
+  }, 60_000);
 
   it("refuses params the wire format cannot carry", async () => {
     await expect(g.roQuery("RETURN $x AS x", { x: Number.NaN })).rejects.toThrow(/finite/);
