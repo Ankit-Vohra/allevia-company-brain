@@ -78,7 +78,9 @@ select.field { appearance: none; padding-right: 2em; background-image: linear-gr
 .ob-ready { display: grid; gap: var(--space-md); animation: reveal-in var(--dur-long) var(--ease-out); }
 .ob-ready-line { max-width: 52ch; font-family: var(--font-display); font-size: var(--text-lg); line-height: 1.4; color: var(--color-ink-2); text-wrap: pretty; }
 .ob-avatars { display: flex; flex-wrap: wrap; gap: 4px; }
-.ob-goals { display: grid; gap: var(--space-xs); padding-top: var(--space-sm); }
+.ob-goals { display: grid; gap: var(--space-xs); }
+.ob-goal-ok { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-sm); font-weight: 600; color: var(--color-ok); }
+.owner-suggest-row.is-done .owner-suggest-title { color: var(--color-ink-2); }
 .ob-goals-title { font-family: var(--font-display); font-size: var(--text-md); font-weight: 500; }
 .ob-goals-lede { font-size: var(--text-sm); color: var(--color-muted); }
 .ob-goal-list { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-sm); margin-top: var(--space-2xs); }

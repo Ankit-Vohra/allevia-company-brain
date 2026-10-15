@@ -4,14 +4,13 @@
 // the goals, each has an OK button and a way to change the number: one tap, nothing to configure. Everything technical
 // (the check-in notes, the drafts-approved curve, the numbers behind each goal, what the team can see, how it is
 // measured) is behind one "Show how". Every number is GET /api/:t/program's; the words are the web app's own.
-import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import type { CapabilityState, ProgramScorecard } from "@shared/contracts";
 import { api } from "../api";
 import { AgentAvatar } from "../components/bits";
 import { CapabilityLadder } from "../components/Capabilities";
 import { FirstPassCurve } from "../components/FirstPassCurve";
-import { Icon } from "../components/Icon";
+import { SuggestedRow } from "../components/SuggestedGoal";
 import { Timeline } from "../components/ProgramCard";
 import { ShowDetails } from "../components/ShowDetails";
 import { fmtDate, fmtNum, fmtPct } from "../lib/format";
@@ -137,60 +136,9 @@ function Suggested({ items, onSet }: { items: GoalSetup[]; onSet: () => void }) 
       <h2 id="suggest-h" className="owner-h">Your team suggests these goals</h2>
       <p className="owner-quiet">We looked at {tenant.name} and picked three things worth growing. Tap OK, or change a number if you want it higher or lower.</p>
       <ul className="owner-suggest-list">
-        {items.map((s) => <SuggestedRow key={s.id} s={s} onSet={onSet} />)}
+        {items.map((s) => <SuggestedRow key={s.id} s={s} tenantId={tenant.id} onSet={onSet} />)}
       </ul>
     </section>
-  );
-}
-
-function SuggestedRow({ s, onSet }: { s: GoalSetup; onSet: () => void }) {
-  const { tenant } = useApp();
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(s.target === null ? "" : String(s.target));
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | undefined>();
-  const unit = s.unit ? ` ${s.unit}` : "";
-  const per = s.period === "week" ? "a week" : "a month";
-  const send = async (target?: number) => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await api.setGoal(tenant.id, s.id, target);
-      onSet();
-    } catch (e) {
-      setError((e as Error)?.message ?? "That didn't save. Try again.");
-      setBusy(false);
-    }
-  };
-  const save = (e: FormEvent) => {
-    e.preventDefault();
-    const n = Number(value.replace(/,/g, ""));
-    if (!Number.isFinite(n) || n <= 0) { setError("Type a number above zero."); return; }
-    void send(n);
-  };
-  return (
-    <li className="owner-suggest-row">
-      <div className="owner-suggest-text">
-        <span className="owner-card-name">{s.name}</span>
-        <p className="owner-suggest-title">{s.target === null ? s.name : `Get to ${fmtNum(s.target)}${unit} ${per}`}</p>
-        <p className="owner-card-why">{s.baseline === null ? "We'll know where you started after your first full week." : `You're at ${fmtNum(s.baseline)} now.`}</p>
-      </div>
-      {editing ? (
-        <form className="owner-edit" onSubmit={save}>
-          <label className="visually-hidden" htmlFor={`goal-${s.id}`}>Your goal for {s.name}</label>
-          <input id={`goal-${s.id}`} className="owner-input" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} autoFocus disabled={busy} />
-          <span className="owner-edit-unit">{unit.trim()} {per}</span>
-          <button type="submit" className="btn btn-gold btn-sm" disabled={busy}>Save</button>
-          <button type="button" className="btn btn-quiet btn-sm" onClick={() => { setEditing(false); setError(undefined); }} disabled={busy}>Cancel</button>
-        </form>
-      ) : (
-        <div className="owner-suggest-actions">
-          <button type="button" className="btn btn-gold btn-sm" onClick={() => void send()} disabled={busy}><Icon name="check" size={14} /> OK</button>
-          <button type="button" className="btn btn-quiet btn-sm" onClick={() => setEditing(true)} disabled={busy}>Change the number</button>
-        </div>
-      )}
-      {error && <p className="owner-error" role="alert">{error}</p>}
-    </li>
   );
 }
 
