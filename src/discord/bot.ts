@@ -42,6 +42,8 @@ export interface MessagePort {
   authorIsOwner: boolean;         // the server owner
   system: boolean;                // a system message (thread created, pins, joins…)
   content: string;                // the bot's own mention removed
+  memberRoleIds?: string[];       // the author's roles in the guild (hub mode)
+  attachments?: number;           // how many files came with it (hub mode: the support copy)
   thread(): ThreadPort | null;    // the thread it was posted in
   startThread(name: string): Promise<ThreadPort>;
   reply(m: Outgoing): Promise<void>;
@@ -55,6 +57,7 @@ export interface CommandPort {
   threadParentId: string | null;
   userId: string;
   isOwner: boolean;
+  memberRoleIds?: string[];                     // the user's roles in the guild (hub mode)
   defer(): Promise<void>;
   respond(m: Outgoing, opts?: { ephemeral?: boolean }): Promise<void>;
   followUp(m: Outgoing, opts?: { ephemeral?: boolean }): Promise<PostedPort>;
@@ -65,8 +68,11 @@ export interface CommandPort {
 export interface ButtonPort {
   customId: string;
   guildId: string | null;
+  channelId?: string;                           // the channel the card is in (hub mode: how the business is found)
+  threadParentId?: string | null;               // its parent channel, when the card is in a thread
   userId: string;
   isOwner: boolean;
+  memberRoleIds?: string[];                     // the user's roles in the guild (hub mode)
   defer?(): Promise<void>;                      // acknowledge before slow work (the card is edited later)
   reply(text: string, opts?: { ephemeral?: boolean }): Promise<void>;
   update(m: Outgoing): Promise<void>;           // edit the card the button is on
@@ -84,6 +90,7 @@ export interface BotDeps {
   now?: () => number;
   workLogIntervalMs?: number;                   // default 1,500
   maxLive?: number;                             // turns at once across threads (default 2)
+  shared?: { live: number };                    // hub mode: one count of running turns across every business's bot
   log?: (line: string) => void;
 }
 
@@ -128,7 +135,8 @@ export function approvalCard(a: ApprovalDto, opts: { buttons?: boolean } = {}): 
 // ---------- the bot ----------
 
 export class AlleviaBot {
-  private live = 0;
+  private own = { live: 0 };
+  private get gate(): { live: number } { return this.d.shared ?? this.own; }
   private queues = new Map<string, Promise<void>>();
   private sessions = new Map<string, string>();
 
@@ -259,11 +267,11 @@ export class AlleviaBot {
   }
 
   private async runTurn(thread: ThreadPort, question: string, asker: string, sessionId: string): Promise<void> {
-    if (this.live >= (this.d.maxLive ?? 2)) {
+    if (this.gate.live >= (this.d.maxLive ?? 2)) {
       await thread.send("The team is already working on other questions. Ask again in a minute.");
       return;
     }
-    this.live++;
+    this.gate.live++;
     const t0 = Date.now();
     try {
       const state = new WorkLogState();
@@ -293,7 +301,7 @@ export class AlleviaBot {
       for (const p of parts) await thread.send(p);
       this.log(`thread ${thread.id}: ${result?.ok ? "answered" : "failed"} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     } finally {
-      this.live--;
+      this.gate.live--;
     }
   }
 

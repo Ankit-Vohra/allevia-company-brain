@@ -116,7 +116,7 @@ export interface AreaRecord {
   updatedAt: number;
 }
 
-export type AreaPatch = Partial<Omit<AreaRecord, "slug" | "channels" | "createdAt" | "updatedAt">> & {
+export type AreaPatch = Partial<Omit<AreaRecord, "slug" | "channels" | "createdAt" | "updatedAt" | "lastError" | "nextAttemptAt" | "roleId" | "categoryId" | "welcomeMessageId">> & {
   channels?: Partial<Record<ChannelKind, string>>;
   // null clears a field
   lastError?: string | null; nextAttemptAt?: number | null; roleId?: string | null; categoryId?: string | null; welcomeMessageId?: string | null;
