@@ -1,27 +1,15 @@
 // `ask`: put a question to the agent company and watch the work log stream. `replay` prints a stored turn's log;
 // `threads` lists a tenant's threads (session ids for `ask --session`).
-// The real deps (SDK runtime, graph tools, search seeds) come from src/agent/wiring.ts, imported dynamically so this
-// command loads even before the tools land.
+// The real deps (SDK runtime, graph tools, search seeds) come from src/agent/wiring.ts, imported when `ask` runs so the
+// other commands start without loading the Agent SDK and the embedder.
 import { parseArgs } from "node:util";
 import { openGraph } from "../graph/client.js";
-import { ask, type AgentWiring } from "../agent/ask.js";
+import { ask } from "../agent/ask.js";
 import { getTurnEvents, listSessions } from "../agent/memory.js";
 import { formatIst } from "../util/time.js";
 import type { Command } from "./_command.js";
 import { interruptible } from "./_interrupt.js";
 import { workLog } from "./_worklog.js";
-
-const WIRING = "../agent/wiring.js"; // a variable, so the build doesn't require the file to exist yet
-
-async function loadWiring(): Promise<AgentWiring | undefined> {
-  try {
-    return (await import(WIRING)) as AgentWiring;
-  } catch (e) {
-    const err = e as { code?: string; message?: string };
-    if (err.code === "ERR_MODULE_NOT_FOUND" && /wiring/.test(err.message ?? "")) return undefined;
-    throw e;
-  }
-}
 
 export const commands: Command[] = [
   {
@@ -39,11 +27,7 @@ export const commands: Command[] = [
         console.error('Usage: npm run cli -- ask <tenant> "<question>" [--model haiku] [--session <id>] [--json]');
         return 2;
       }
-      const wiring = await loadWiring();
-      if (!wiring?.createAskDeps) {
-        console.error("The agent wiring (src/agent/wiring.ts, exporting createAskDeps) isn't in this build yet. It lands with the graph tools.");
-        return 1;
-      }
+      const { wiring } = await import("../agent/wiring.js");
       const deps = await wiring.createAskDeps({ tenant, ...(values.model ? { model: values.model } : {}) });
       const emit = values.json ? (e: unknown) => { process.stdout.write(`${JSON.stringify(e)}\n`); } : workLog();
       const stop = interruptible();
