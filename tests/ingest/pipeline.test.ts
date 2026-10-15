@@ -28,6 +28,8 @@ const EXTRACTIONS: Array<[string, Extraction]> = [
       { type: "Decision", name: "Require human review for every post", summary: "Every post and reel waits for the founder's approval." },
       { type: "Event", name: "Wrong prices on two reels", summary: "Two auto-posted reels had the wrong price in September." },
       { type: "Person", name: "the founder", summary: "Approves every post." },
+      // three documents, read in this order, give two different systems the alias "ig.ts" (see the idempotency test)
+      { type: "System", name: "IG publisher", summary: "Publishes approved reels.", aliases: ["ig.ts"] },
     ],
     relations: [
       { from: "Require human review for every post", fromType: "Decision", type: "BASED_ON", to: "Wrong prices on two reels", toType: "Event", evidence: "Two auto-posted reels had the wrong price in September.", conf: 0.9 },
@@ -36,7 +38,10 @@ const EXTRACTIONS: Array<[string, Extraction]> = [
     observations: [],
   }],
   ["path: 70-reports/daily/2026-10-10.md", {
-    entities: [{ type: "Channel", name: "Instagram", summary: "Reels reached 1,200 accounts." }],
+    entities: [
+      { type: "Channel", name: "Instagram", summary: "Reels reached 1,200 accounts." },
+      { type: "System", name: "Instagram connector", summary: "Reads the reel numbers.", aliases: ["ig.ts"] },
+    ],
     relations: [],
     observations: [{ ref: "o1", metric: "reels_reach", subject: "Instagram", subjectType: "Channel", value: 1200, evidence: "Instagram reels reached 1,200 accounts yesterday." }],
   }],
@@ -46,6 +51,7 @@ const EXTRACTIONS: Array<[string, Extraction]> = [
       { type: "Channel", name: "Instagram", summary: "The main channel." },
       { type: "Person", name: "Meera", summary: "The founder; reviews every post." },
       { type: "Product", name: "Hand-made widgets", summary: "What Widget Co sells." },
+      { type: "System", name: "ig.ts", summary: "The script behind the reels." },
     ],
     relations: [
       { from: "Instagram", fromType: "Channel", type: "PART_OF", to: "Widget Co", toType: "Business", evidence: "Instagram is the main channel", conf: 0.8 },

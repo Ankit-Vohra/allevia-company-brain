@@ -32,7 +32,7 @@ describe("ingest CLI", () => {
       tenant: "aamdani", startedAt: "", finishedAt: "", dryRun: false, model: "haiku", durationMs: 61_000, vaultHead: "8a6f6089baf9aaaa",
       sources: [{ source: "brain", docs: 58, nodes: 1158, edges: 2146, observations: 0, skipped: 66, ms: 1200 }],
       stats: { nodesCreated: 10, nodesUpdated: 2, versions: 1, edgesCreated: 20, edgesClosed: 1, observations: 5, errors: 0 },
-      extraction: { docs: 58, cached: 3, entities: 400, relations: 300, observations: 50, olderReadings: 2, dropped: 12, candidates: 58, skipped: 0, failed: 0, order: [], skippedDocs: [], failures: [] },
+      extraction: { docs: 58, cached: 3, entities: 400, relations: 300, observations: 50, olderReadings: 2, settlePasses: 1, dropped: 12, candidates: 58, skipped: 0, failed: 0, order: [], skippedDocs: [], failures: [] },
       embeddings: { entities: 900, chunks: 531 }, retired: { structure: 0, mentions: 0 },
       librarian: { knowsAbout: { edges: 700, created: 700, closed: 0, actors: 5, errors: 0 }, rank: { nodes: 2000 }, community: { nodes: 2000, communities: 80 }, orphans: { count: 3, byType: { Document: 3 }, sample: [] }, ms: 1 },
       graph: { nodes: { Chunk: 531, Document: 300 }, edges: { MENTIONS: 900 } },

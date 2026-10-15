@@ -9,7 +9,8 @@
 //   5. LLM extraction of the vault documents in priority order (decisions, the 14 most recent daily reports, the rest by
 //      in-links), at most `limitDocs` (default 80), 3 at a time through the on-disk cache; each result is resolved
 //      against the graph (known names, then the vector index with the name-agreement rule) and written in that same
-//      order, so a run is deterministic whatever order the model answers in
+//      order, so a run is deterministic whatever order the model answers in; then re-resolved from the cache against the
+//      finished graph until a pass changes nothing (so the next run has nothing left to change)
 //   6. GitHub issues → Tasks, owners and MENTIONS of what the graph now knows
 //   7. embeddings for everything new or changed (entities and chunks), then the librarian
 //   8. scanGraph: any hit fails the run loudly (after the report is saved)
@@ -45,6 +46,7 @@ import type { IngestReport, RawDoc, SourceResult } from "./types.js";
 export const DEFAULT_EXTRACT_LIMIT = 80;
 export const RECENT_DAILY_REPORTS = 14;
 export const EXTRACT_CONCURRENCY = 3;
+export const MAX_SETTLE_PASSES = 3;
 const EMBED_WRITE_BATCH = 32;
 const MAX_LISTED = 200; // per list in the report (skipped files, write errors…)
 
@@ -72,7 +74,7 @@ export interface PipelineReport extends IngestReport {
   durationMs: number;
   sources: Array<IngestReport["sources"][number] & { ms: number }>;
   extraction: IngestReport["extraction"] & {
-    candidates: number; skipped: number; failed: number; observations: number; olderReadings: number;
+    candidates: number; skipped: number; failed: number; observations: number; olderReadings: number; settlePasses: number;
     order: string[]; skippedDocs: Array<{ id: string; reason: string }>; failures: Array<{ id: string; error: string }>;
   };
   embeddings: { entities: number; chunks: number };
@@ -378,7 +380,7 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
     tenant: tc.slug, startedAt, finishedAt: startedAt, dryRun: !!opts.dryRun, model, durationMs: 0,
     sources: sourceRows, stats: { nodesCreated: 0, nodesUpdated: 0, versions: 0, edgesCreated: 0, edgesClosed: 0, observations: 0, errors: 0 },
     extraction: {
-      docs: 0, cached: 0, entities: 0, relations: 0, observations: 0, olderReadings: 0, dropped: 0, candidates: candidates.length,
+      docs: 0, cached: 0, entities: 0, relations: 0, observations: 0, olderReadings: 0, settlePasses: 0, dropped: 0, candidates: candidates.length,
       skipped: candidates.length - chosen.length, failed: 0, order: chosen.map((d) => d.id),
       skippedDocs: candidates.slice(limit).map((d) => ({ id: d.id, reason: `over the extraction limit (${limit})` })), failures: [],
     },
@@ -433,7 +435,7 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
   // ---- 5. extraction ----
   if (chosen.length) {
     const t = Date.now();
-    const known = await loadKnown(g);
+    let known = await loadKnown(g);
     const similar = similarFn(g, embed);
     const runner = opts.runner ?? new AgentSdkRunner({ concurrency: EXTRACT_CONCURRENCY, log });
     const sem = new Semaphore(EXTRACT_CONCURRENCY);
@@ -450,6 +452,30 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
       }
     }).then((v) => ({ ok: true as const, v }), (e: unknown) => ({ ok: false as const, e })));
 
+    // Resolve one document's extraction against `known`, write it, and (retire) close the MENTIONS the document no
+    // longer makes. Returns how much the graph changed.
+    const apply = async (d: RawDoc, ex: Extraction, retire: boolean) => {
+      const resolved = await resolveExtraction(ex, { docId: d.id, text: d.text, asOf: d.asOf, existing: known, similar, founderNames: tc.founderNames });
+      const readings = await keepNewestReadings(g, resolved.write.observations, d.id);
+      const write = { ...resolved.write, observations: readings.keep };
+      const s = await writeBatch(g, write, nowMs);
+      tally(s);
+      rememberWrite(known, write);
+      let closed = 0;
+      if (retire) {
+        const keep = new Set(write.edges.filter((e) => e.type === "MENTIONS" && e.from === d.id).map((e) => e.to));
+        const current = await g.roQuery<{ to: string }>("MATCH (:Document {id:$id})-[r:MENTIONS]->(x:Entity) WHERE r.until IS NULL RETURN x.id AS to", { id: d.id });
+        for (const r of current) if (!keep.has(r.to)) closed += await closeEdge(g, d.id, "MENTIONS", r.to, nowMs, "no longer in the document");
+        report.retired.mentions += closed;
+        totals.edgesClosed += closed;
+      }
+      const e = await embedNodes(g, embed, { ids: write.nodes.map((n) => n.id) });
+      report.embeddings.entities += e.entities;
+      return { s, dropped: resolved.dropped.length, older: readings.older, changes: s.nodesCreated + s.nodesUpdated + s.versions + s.edgesCreated + s.edgesClosed + closed };
+    };
+
+    const done: Array<{ d: RawDoc; ex: Extraction }> = [];
+    let changes = 0;
     for (const [i, d] of chosen.entries()) {
       const res = await jobs[i]!;
       if (fatal) break;
@@ -461,36 +487,33 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
       }
       const { extraction, cached } = res.v;
       const ex = typeof d.meta?.decisionName === "string" ? alignAdrDecision(extraction, d.meta.decisionName) : extraction;
-      const resolved = await resolveExtraction(ex, {
-        docId: d.id, text: d.text, asOf: d.asOf, existing: known, similar, founderNames: tc.founderNames,
-      });
-      const { dropped } = resolved;
-      const readings = await keepNewestReadings(g, resolved.write.observations, d.id);
-      const write = { ...resolved.write, observations: readings.keep };
-      report.extraction.olderReadings += readings.older;
-      const s = await writeBatch(g, write, nowMs);
-      tally(s);
-      rememberWrite(known, write);
-      if (!cached) {
-        // a changed document no longer mentions what its old text did
-        const keep = new Set(write.edges.filter((e) => e.type === "MENTIONS" && e.from === d.id).map((e) => e.to));
-        const stale = await g.roQuery<{ to: string }>("MATCH (:Document {id:$id})-[r:MENTIONS]->(x:Entity) WHERE r.until IS NULL RETURN x.id AS to", { id: d.id });
-        for (const r of stale) if (!keep.has(r.to)) report.retired.mentions += await closeEdge(g, d.id, "MENTIONS", r.to, nowMs, "no longer in the document");
-      }
-      const e = await embedNodes(g, embed, { ids: write.nodes.map((n) => n.id) });
-      report.embeddings.entities += e.entities;
+      const r = await apply(d, ex, !cached); // a changed document no longer mentions what its old text did
+      done.push({ d, ex });
+      changes += r.changes;
       report.extraction.docs++;
       if (cached) report.extraction.cached++;
       report.extraction.entities += ex.entities.length;
       report.extraction.relations += ex.relations.length;
       report.extraction.observations += ex.observations.length;
-      report.extraction.dropped += dropped.length;
-      log(`[extract] ${i + 1}/${chosen.length} ${d.kind} ${d.path ?? d.id}${cached ? " (cached)" : ""}: ${ex.entities.length} entities, ${ex.relations.length} relations, ${ex.observations.length} numbers, ${dropped.length} dropped; +${s.nodesCreated} nodes +${s.edgesCreated} edges`);
+      report.extraction.dropped += r.dropped;
+      report.extraction.olderReadings += r.older;
+      log(`[extract] ${i + 1}/${chosen.length} ${d.kind} ${d.path ?? d.id}${cached ? " (cached)" : ""}: ${ex.entities.length} entities, ${ex.relations.length} relations, ${ex.observations.length} numbers, ${r.dropped} dropped; +${r.s.nodesCreated} nodes +${r.s.edgesCreated} edges`);
     }
-    totals.edgesClosed += report.retired.mentions;
     if (fatal) {
       await Promise.allSettled(jobs);
       throw new Error(`extraction stopped: ${fatal.message}`);
+    }
+
+    // Settle. A document read early resolved its names against a graph that later documents then grew (a node that
+    // did not exist yet, a name two entities now share). Re-resolving every document against the whole graph, read
+    // afresh in id order exactly as the next run will read it, until a pass changes nothing, means the next run with
+    // the same sources changes nothing either. Cached extractions only: no model calls.
+    for (let pass = 1; changes > 0 && pass <= MAX_SETTLE_PASSES; pass++) {
+      known = await loadKnown(g);
+      changes = 0;
+      for (const { d, ex } of done) changes += (await apply(d, ex, true)).changes;
+      report.extraction.settlePasses = pass;
+      log(`[extract] settle pass ${pass}: ${changes} change(s)`);
     }
     log(`[extract] ${report.extraction.docs} documents (${report.extraction.cached} cached, ${report.extraction.failed} failed) in ${Date.now() - t} ms`);
   }
