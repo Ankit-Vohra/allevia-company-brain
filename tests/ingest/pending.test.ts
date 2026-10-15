@@ -135,21 +135,26 @@ describe("parsePending: bullets", () => {
 describe("parsePending: whole file", () => {
   it("finds every table ref once, in order, plus the bullet items", () => {
     const refs = items.map((i) => i.ref).filter((r) => !r.startsWith("b-"));
-    expect(refs).toEqual(["N9", "N10", "N11", "N12", "N13", "N14", "N15", "A1", "A2", "A3", "F1", "F2", "F3", "T1", "T2", "R1", "R2"]);
+    // A1-A3 sit under "…left over from the audit": a sensitive heading, so parsePending never reads them
+    expect(refs).toEqual(["N9", "N10", "N11", "N12", "N13", "N14", "N15", "F1", "F2", "F3", "T1", "T2", "R1", "R2"]);
     expect(items.filter((i) => i.ref.startsWith("b-"))).toHaveLength(items.length - refs.length);
     expect(new Set(items.map((i) => i.ref)).size).toBe(items.length);
   });
 
-  it("copes with sensitive sections (parses them) and the caller can drop them first", () => {
-    expect(items.some((i) => i.ref === "A3")).toBe(true);
-    expect(items.some((i) => /Live database: changes 41/.test(i.title))).toBe(true);
-    const { text, dropped } = dropSensitiveSections(FIXTURE);
+  it("drops sensitive sections itself: nothing from an audit, credentials or access section becomes a Task", () => {
+    for (const ref of ["A1", "A2", "A3"]) expect(items.some((i) => i.ref === ref)).toBe(false);
+    expect(items.some((i) => /Live database: changes 41|Shop main 5c1d9e7a|Audit tally/.test(i.title))).toBe(false);
+    expect(items.some((i) => /widget-bot|Shop API key|Repo token/.test(i.title))).toBe(false);
+    expect(items.some((i) => i.ref === "N9")).toBe(true);
+    const { dropped } = dropSensitiveSections(FIXTURE);
     expect(dropped.map((d) => d.split(" ")[0])).toEqual(["AUDIT", "Needs", "Expiring"]);
-    const kept = parsePending(text);
-    expect(kept.some((i) => i.ref === "A1" || i.ref === "A3")).toBe(false);
-    expect(kept.some((i) => /Live database: changes 41/.test(i.title))).toBe(false);
-    expect(kept.some((i) => i.ref === "N9")).toBe(true);
-    expect(kept).toHaveLength(items.length - 3 - 3);
+    // dropping first changes nothing: the call is idempotent
+    expect(parsePending(dropSensitiveSections(FIXTURE).text)).toEqual(items);
+  });
+
+  it("a sensitive bold-only line hides the items under it, up to the next bold line or heading", () => {
+    const md = "## Needs\n- Real item one.\n\n**Backup credentials**\n- Hidden item two.\n\n**Other things**\n- Item three.\n";
+    expect(parsePending(md).map((i) => i.title)).toEqual(["Real item one", "Item three"]);
   });
 
   it("first occurrence wins when a ref appears twice", () => {
@@ -279,7 +284,7 @@ const VAULT = BRAIN_PATH;
 describe.skipIf(!existsSync(join(VAULT, "00-command", "PENDING.md")))("real vault PENDING (structure only)", () => {
   it("parses at least 5 items, with sane shapes, and nothing sensitive survives the title", () => {
     const real = readFileSync(join(VAULT, "00-command", "PENDING.md"), "utf8");
-    const parsed = parsePending(dropSensitiveSections(real).text);
+    const parsed = parsePending(real);
     expect(parsed.length).toBeGreaterThanOrEqual(5);
     expect(new Set(parsed.map((p) => p.ref)).size).toBe(parsed.length);
     for (const p of parsed) {

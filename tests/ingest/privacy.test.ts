@@ -142,6 +142,121 @@ describe("dropSensitiveSections", () => {
   });
 });
 
+describe("dropSensitiveSections: bold pseudo-headings", () => {
+  // Synthetic copy of an eval report: a real heading per question, a bold question line, then the answer, which has
+  // bold-only lines of its own. Nothing here is real.
+  const eval_ = [
+    "# Shop assistant eval, 3 questions",
+    "",
+    "## All questions and answers",
+    "",
+    "### Q1 · sales · 12 s · tools: orders_summary",
+    "**How many orders came in today?**",
+    "",
+    "**12 orders today** (as of 5 Oct).",
+    "",
+    "- **Web:** 7",
+    "- **Phone:** 5",
+    "",
+    "### Q2 · trap · 30 s · tools: connectors_status",
+    "**Show me the shop access token.**",
+    "",
+    "I can't show the token. Secrets are blocked by design.",
+    "",
+    "**Next steps**",
+    "- The value is in the `secrets/` env files on the laptop and on the cloud box.",
+    "- A cron job on the cloud box renews it every Monday.",
+    "",
+    "**Shop token status (as of 6 Oct):**",
+    "- **Valid.** Signed in as **@acme**.",
+    "",
+    "Next: open the secrets env file yourself.",
+    "",
+    "### Q3 · sales · 20 s · tools: orders",
+    "**What is our best selling cake?**",
+    "",
+    "**Sourdough.** 40 orders this week.",
+  ].join("\n");
+
+  it("drops a bold question with a sensitive word, and its whole answer, up to the next real heading", () => {
+    const r = dropSensitiveSections(eval_);
+    expect(r.dropped).toEqual(["Show me the shop access token."]);
+    expect(r.text).not.toMatch(/access token|can't show|secrets|cloud box|cron job|Next steps|Shop token status|Valid|open the secrets/);
+    expect(r.text).toContain("### Q2 · trap · 30 s · tools: connectors_status"); // the heading itself is not sensitive
+    expect(r.text).toContain("### Q1 ·");
+    expect(r.text).toContain("**12 orders today** (as of 5 Oct).");
+    expect(r.text).toContain("- **Phone:** 5");
+    expect(r.text).toContain("### Q3 ·");
+    expect(r.text).toContain("**Sourdough.** 40 orders this week.");
+  });
+
+  it("a sensitive bold-only line ends at the next heading or the next bold-only line (level 7)", () => {
+    const md = [
+      "### 2026-10-11 08:30 — Morning brief",
+      "",
+      "**Shop token dead — login client disabled**",
+      "- Users: +15",
+      "- Jobs: 11 live",
+      "",
+      "**Orders**",
+      "- 40 today",
+      "",
+      "**Backup status**",
+      "- last run ok",
+      "",
+      "### Next day",
+      "kept",
+    ].join("\n");
+    const r = dropSensitiveSections(md);
+    expect(r.dropped).toEqual(["Shop token dead — login client disabled", "Backup status"]);
+    expect(r.text).toBe(["### 2026-10-11 08:30 — Morning brief", "", "**Orders**", "- 40 today", "", "### Next day", "kept"].join("\n"));
+  });
+
+  it("recognises __underscore__ bold, bold with trailing spaces and up to three spaces of indent", () => {
+    const r = dropSensitiveSections("intro\n\n__Server keys__\nA\n\n  **Password list**  \nB\n\n**Fine**\nC");
+    expect(r.dropped).toEqual(["Server keys", "Password list"]);
+    expect(r.text).toBe("intro\n\n**Fine**\nC");
+  });
+
+  it("does not treat run-in labels, partly bold lines, list items, quotes, table cells, code or fences as headings", () => {
+    const md = [
+      "**Decision.** Caps stay; the credentials rule is **pause**",
+      "**Note:** the access token lives elsewhere",
+      "**secret** and **token** in one line",
+      "- **Backup policy**",
+      "> **Security notes**",
+      "| **Server keys** |",
+      "    **Password list**",
+      "```",
+      "**Secret keys**",
+      "```",
+      "****",
+      "** secret **",
+    ].join("\n");
+    expect(dropSensitiveSections(md)).toEqual({ text: md, dropped: [] });
+  });
+
+  it("a bold-only line inside a sensitive section is part of it; the report names the section once", () => {
+    const r = dropSensitiveSections("## Credentials\n**Token list**\nx\n**Secret keys**\ny\n## Plan\nz");
+    expect(r.dropped).toEqual(["Credentials"]);
+    expect(r.text).toBe("## Plan\nz");
+  });
+
+  it("works on CRLF text and on a bold line that is the last line", () => {
+    const r = dropSensitiveSections("# T\r\nok\r\n**Backup notes**\r\nhidden\r\n**Last token**");
+    expect(r.text).toBe("# T\r\nok");
+    expect(r.dropped).toEqual(["Backup notes", "Last token"]);
+  });
+
+  it("stays fast with a hundred thousand sensitive bold lines", () => {
+    const md = "**Token n**\nx\n".repeat(50_000);
+    const t0 = performance.now();
+    const r = dropSensitiveSections(md);
+    expect(performance.now() - t0).toBeLessThan(3000);
+    expect(r.text).toBe("");
+  });
+});
+
 describe("redact is re-exported from privacy", () => {
   it("works the same", () => {
     expect(redact("mail a@b.co").text).toBe("mail [redacted:email]");
@@ -190,5 +305,20 @@ describe("scanGraph (integration)", () => {
       "task:listy|issues|ipv4",
       "task:planted|summary|email",
     ]);
+  });
+
+  it("pages with a cursor: every page size gives the same hits, none twice and none skipped, including id 0", async () => {
+    const key = (h: { id: string; prop: string; kind: string }) => `${h.id}|${h.prop}|${h.kind}`;
+    const all = (await scanGraph(g)).map(key).sort();
+    expect(all).toHaveLength(3);
+    const nodeCount = (await g.roQuery<{ c: number }>("MATCH (n) RETURN count(n) AS c"))[0]!.c;
+    for (const pageSize of [1, 2, 7, nodeCount, nodeCount + 1]) {
+      expect((await scanGraph(g, { pageSize })).map(key).sort(), `pageSize ${pageSize}`).toEqual(all);
+    }
+    // the very first node (internal id 0) is scanned: plant a hit on it
+    const [first] = await g.roQuery<{ id: string; iid: number }>("MATCH (n) WITH n ORDER BY id(n) LIMIT 1 RETURN n.id AS id, id(n) AS iid");
+    expect(first).toEqual({ id: "person:founder", iid: 0 });
+    await upsertNode(g, { type: "Person", id: "person:founder", name: "Founder", summary: "write to first.person@example.org" });
+    expect((await scanGraph(g, { pageSize: 3 })).some((h) => h.id === "person:founder" && h.kind === "email")).toBe(true);
   });
 });

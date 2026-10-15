@@ -12,10 +12,13 @@
 //   keeps the same Task and flips it to done instead of creating a second one.
 // - Done: the action starts with ~~strike~~, or has an uppercase "DONE <date>", or sits under a closed heading.
 // - Title: first sentence of the action (the struck text for done rows), redacted, at most 160 characters.
+// - Sections whose heading (or bold-only pseudo-heading) matches the privacy filter's sensitive-name pattern are dropped
+//   before anything is read; parsePending does this itself.
 import type { EdgeInput, NodeInput } from "../../graph/upsert.js";
 import type { GraphWrite } from "../types.js";
 import { entityId, sha256 } from "../../util/ids.js";
 import { fenceMask, frontmatterEnd, scanHeadings } from "../headings.js";
+import { dropSensitiveSections } from "../privacy.js";
 import { redact } from "../redact.js";
 import { founderNode, isReservedId } from "../actors.js";
 
@@ -185,7 +188,8 @@ function tableItems(block: string[], section: string): Raw[] {
 // ---------- parser ----------
 
 export function parsePending(md: string): PendingItem[] {
-  const lines = md.replace(/^﻿/, "").split(/\r?\n/).map((l) => (l.length > MAX_LINE ? l.slice(0, MAX_LINE) : l));
+  // Sensitive sections (audit fixes, credentials, access…) are cut here, so no caller can forget to: nothing from them becomes a Task.
+  const lines = dropSensitiveSections(md.replace(/^﻿/, "")).text.split(/\r?\n/).map((l) => (l.length > MAX_LINE ? l.slice(0, MAX_LINE) : l));
   const fenced = fenceMask(lines);
   const headings = new Map(scanHeadings(lines).map((h) => [h.line, h]));
   const items: PendingItem[] = [];
