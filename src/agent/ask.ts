@@ -1,10 +1,12 @@
 // ask(): one question from any surface (web, Discord, CLI, MCP) through the agent company, end to end.
-// session (new thread unless one is given) -> seed ids (injected search) -> recall brief -> runTurn -> checkTurn on the
-// final answer -> saveTurn (Turn, Findings, reviews, the full event log) -> `final`. `final` is always the last event,
+// session (new thread unless one is given) -> seed ids (injected search) -> recall brief and the capability ladder ->
+// runTurn -> checkTurn on the final answer -> saveTurn (Turn, Findings, reviews, the full event log) -> `final`. `final` is always the last event,
 // also after an error; an error is reported as an `error` event and the Turn is still saved, marked failed. The turn's
 // stream closes when `final` is made: anything a run emits after that is dropped from the stream and the log.
 import type { AgentEvent, TurnChecks } from "../../shared/contracts.js";
 import { openGraph, type GraphHandle } from "../graph/client.js";
+import { capabilityModes } from "../capabilities/ladder.js";
+import type { CapabilityModeInfo } from "../capabilities/modes.js";
 import { checkTurn, extractCitations } from "./checks.js";
 import { getSession, newSessionId, newTurnId, recallBrief, saveTurn, startSession } from "./memory.js";
 import { runTurn, type TurnOutcome } from "./orchestrator.js";
@@ -77,6 +79,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
   let g: GraphHandle | undefined = deps.graph;
   let outcome: TurnOutcome | undefined;
   let failure: string | undefined;
+  let capabilities: CapabilityModeInfo[] | undefined;
   try {
     if (!question) throw new Error("The question is empty.");
     g ??= await openGraph(input.tenant);
@@ -87,6 +90,8 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
     try { seeds = deps.seedSearch ? await deps.seedSearch(question) : []; } catch { seeds = []; } // recall is best-effort
     let recall = EMPTY_BRIEF;
     try { recall = await recallBrief(g, { question, seedIds: seeds, ...(continuing ? { sessionId } : {}) }); } catch { recall = EMPTY_BRIEF; }
+    // The capability ladder (best-effort): the Chief says where non-live data comes from, and the answer is checked for it.
+    try { capabilities = await capabilityModes(g, now); } catch { capabilities = undefined; }
 
     outcome = await runTurn(
       { tenant: input.tenant, question, sessionId, turnId, asker, recall },
@@ -95,6 +100,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
         ...(deps.model ? { model: deps.model } : {}), ...(deps.agentTimeoutMs ? { agentTimeoutMs: deps.agentTimeoutMs } : {}),
         ...(deps.embedQuery ? { embedQuery: deps.embedQuery } : {}), ...(deps.readOnly !== undefined ? { readOnly: deps.readOnly } : {}),
         ...(deps.timeZone ? { timeZone: deps.timeZone } : {}), ...(deps.signal ? { signal: deps.signal } : {}),
+        ...(capabilities ? { capabilities } : {}),
       },
       out);
     if (deps.signal?.aborted) failure = STOPPED_MESSAGE;
@@ -105,7 +111,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
   }
 
   const answer = outcome?.answer ?? "";
-  const checks = checkTurn(answer, outcome?.touched ?? new TouchedSet(), { now, question });
+  const checks = checkTurn(answer, outcome?.touched ?? new TouchedSet(), { now, question, ...(capabilities ? { capabilities } : {}) });
   const citations = extractCitations(answer);
   const agents = outcome?.agents ?? [];
   const ms = Date.now() - t0;

@@ -143,7 +143,7 @@ describe("wiring (integration)", () => {
     expect((events.find((e) => e.type === "recall") as Extract<AgentEvent, { type: "recall" }>).ids).toContain("turn:t-001");
 
     expect(r.answer).toBe(ANSWER);
-    expect(r.checks).toEqual({ citationsValid: true, invalidCitations: [], numbersGrounded: true, ungroundedNumbers: [], simulatedDisclosed: true, freshnessDisclosed: true });
+    expect(r.checks).toEqual({ citationsValid: true, invalidCitations: [], numbersGrounded: true, ungroundedNumbers: [], simulatedDisclosed: true, freshnessDisclosed: true, modeDisclosed: true });
     expect(r.agents).toEqual(expect.arrayContaining(["chief-of-staff", "tech-lead", "ops-manager", "data-analyst", "coe-lead"]));
 
     // The Turn is persisted with its log, findings, review and what it touched.

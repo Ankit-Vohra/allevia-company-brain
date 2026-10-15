@@ -106,7 +106,8 @@ export function workLog(opts: WorkLogOpts = {}): (e: AgentEvent) => void {
         line("");
         line(`${bold("Checks")}: citations ${mark(c.citationsValid, c.invalidCitations.length ? ` (${c.invalidCitations.join(", ")})` : "")}` +
           ` · numbers ${mark(c.numbersGrounded, c.ungroundedNumbers.length ? ` (${c.ungroundedNumbers.join(", ")})` : "")}` +
-          ` · simulated ${mark(c.simulatedDisclosed)} · freshness ${mark(c.freshnessDisclosed)}`);
+          ` · simulated ${mark(c.simulatedDisclosed)} · freshness ${mark(c.freshnessDisclosed)}` +
+          (c.modeDisclosed === undefined ? "" : ` · data source ${mark(c.modeDisclosed)}`));
         line(dim(`${(e.ms / 1000).toFixed(1)}s · ${e.agents.map((a) => agentById(a)?.name ?? a).join(", ") || "no agents"} · ${e.turnId}`));
         break;
       }

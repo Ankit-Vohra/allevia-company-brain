@@ -190,6 +190,36 @@ describe("checkTurn: simulated and freshness", () => {
   });
 });
 
+describe("checkTurn: access mode (capability ladder)", () => {
+  const caps = [
+    { key: "search_console" as const, name: "Google Search Console", accessMode: "public" as const },
+    { key: "ads" as const, name: "Ads", accessMode: "benchmark" as const },
+    { key: "ga4" as const, name: "GA4", accessMode: "api" as const },
+    { key: "instagram_insights" as const, name: "Instagram insights", accessMode: "public" as const },
+  ];
+  const t = touched({ pages: 2 }, [
+    { id: "rule:seo-check-meta-description", label: "Rule" }, { id: "rule:benchmark-meta-ads-ctr", label: "Rule" },
+    { id: "obs:ga4_sessions:channel:website:2026-10-13", label: "Observation" }, { id: "channel:instagram", label: "Channel" },
+  ]);
+  it("an answer citing a public-mode capability must say so", () => {
+    expect(checkTurn("2 pages lack a description [[rule:seo-check-meta-description]].", t, { now: NOW, capabilities: caps }).modeDisclosed).toBe(false);
+    expect(checkTurn("From a crawl of your public site, 2 pages lack a description [[rule:seo-check-meta-description]].", t, { now: NOW, capabilities: caps }).modeDisclosed).toBe(true);
+  });
+  it("citing a channel (a source, not its data) needs nothing", () => {
+    expect(checkTurn("If the token expires, Instagram [[channel:instagram]] stops posting.", t, { now: NOW, capabilities: caps }).modeDisclosed).toBe(true);
+  });
+  it("a benchmark must be called one", () => {
+    expect(checkTurn("A good CTR is above 1% [[rule:benchmark-meta-ads-ctr]].", t, { now: NOW, capabilities: caps }).modeDisclosed).toBe(false);
+    expect(checkTurn("The benchmark CTR is above 1% [[rule:benchmark-meta-ads-ctr]].", t, { now: NOW, capabilities: caps }).modeDisclosed).toBe(true);
+  });
+  it("live (api) data, uncited ids, made-up ids and no ladder need nothing", () => {
+    expect(checkTurn("Sessions rose [[obs:ga4_sessions:channel:website:2026-10-13]].", t, { now: NOW, capabilities: caps }).modeDisclosed).toBe(true);
+    expect(checkTurn("Nothing cited here.", t, { now: NOW, capabilities: caps }).modeDisclosed).toBe(true);
+    expect(checkTurn("Made up [[channel:instagram-x]].", t, { now: NOW, capabilities: caps }).modeDisclosed).toBe(true);
+    expect(checkTurn("2300 followers [[channel:instagram]].", t, { now: NOW }).modeDisclosed).toBe(true);
+  });
+});
+
 // The review's probe-checks.ts, as a table: each answer against its tool data.
 describe("checkTurn: the review's probe cases", () => {
   const cases: Array<[string, unknown, string, boolean, string[]?]> = [

@@ -29,6 +29,7 @@
 import { AGENTS, agentById, type AgentDef } from "../../shared/roster.js";
 import type { ActionKind, AgentEvent, EdgeRef, NodeRef, PlanStep, ToolResult } from "../../shared/contracts.js";
 import type { GraphHandle } from "../graph/client.js";
+import { modesUsed, type CapabilityModeInfo } from "../capabilities/modes.js";
 import { typeFromId } from "../util/ids.js";
 import { checkTurn, extractCitations, hasNumbers } from "./checks.js";
 import {
@@ -79,6 +80,7 @@ export interface TurnDeps {
   signal?: AbortSignal;                     // stops every agent run of the turn (a client went away, Ctrl-C)
   timeZone?: string;                        // the tenant's IANA zone for "today" in prompts
   draftWhileReviewing?: boolean;            // default true: the Chief drafts (held) while the last reviews finish
+  capabilities?: CapabilityModeInfo[];      // the capability ladder: the Chief says where non-live data comes from
 }
 
 export interface Plan { steps: PlanStep[]; rationale: string; chiefTask?: string }
@@ -840,14 +842,18 @@ class Turn {
     const stream = new AnswerStream(out);
     // A held draft treats the findings still under review as final: it is only shown if their reviews come back ok.
     const views = findings.map(this.view).map((v) => (held ? { ...v, draft: undefined } : v));
+    // Data-source modes: on the fast path every capability that isn't live (the Chief looks up for itself); from
+    // findings, the ones this turn's tool data drew on.
+    const caps = this.deps.capabilities ?? [];
+    const sources = fast ? caps.filter((c) => c.accessMode !== "api") : modesUsed(this.touched.nodes().map((n) => n.id), caps, "prompt");
     let res: RunOutput;
     try {
       res = await this.runAgent(chief, {
         phase, system: this.system(chief, tools), tools, streamText: true, maxTurns: lean ? MAX_TURNS.synthesis : MAX_TURNS.direct,
         prompt: fast
-          ? directPrompt({ question: this.input.question, recall: this.input.recall.text, task: plan.steps[0]!.task, toolRounds: toolRounds("direct") })
+          ? directPrompt({ question: this.input.question, recall: this.input.recall.text, task: plan.steps[0]!.task, toolRounds: toolRounds("direct"), sources })
           : synthesisPrompt({
-            question: this.input.question, recall: this.input.recall.text, findings: views, failed: this.failed, canLookUp: !lean,
+            question: this.input.question, recall: this.input.recall.text, findings: views, failed: this.failed, canLookUp: !lean, sources,
             ...(plan.chiefTask ? { chiefTask: plan.chiefTask } : {}),
           }),
         ...(held ? { abort: held.abort, onToolResult: this.toolResults(out, held.hold) } : {}),

@@ -71,7 +71,7 @@ describe("ask() (integration)", () => {
     expect(r.turnId).toMatch(/^turn:2026-10-15-/);
 
     expect(r.ok).toBe(true);
-    expect(r.checks).toEqual({ citationsValid: true, invalidCitations: [], numbersGrounded: false, ungroundedNumbers: ["56"], simulatedDisclosed: true, freshnessDisclosed: true });
+    expect(r.checks).toEqual({ citationsValid: true, invalidCitations: [], numbersGrounded: false, ungroundedNumbers: ["56"], simulatedDisclosed: true, freshnessDisclosed: true, modeDisclosed: true });
     expect(r.agents).toEqual(["chief-of-staff", "data-analyst", "coe-lead"]); // its numbers checked out: one numbers reviewer
 
     // persisted: the Turn, its session, the full event log (text deltas merged), findings and reviews
