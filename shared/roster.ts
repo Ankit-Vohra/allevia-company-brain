@@ -28,8 +28,8 @@ export interface AgentDef {
 
 export const DEPARTMENTS: DepartmentDef[] = [
   { id: "leadership", name: "Chief of Staff", blurb: "Takes every request, plans who does what, writes the answer and the morning brief.", hue: 270 },
-  { id: "coe", name: "Center of Excellence", blurb: "The numbers desk: KPIs, overall health, and a second check on every figure.", hue: 85 },
-  { id: "analytics", name: "Analytics", blurb: "Search Console, GA4, funnels, attribution: where people come from and where they drop.", hue: 230 },
+  { id: "coe", name: "Center of Excellence", blurb: "The numbers team: the key figures, how the business is doing overall, and a second check on every figure.", hue: 85 },
+  { id: "analytics", name: "Analytics", blurb: "Search Console, GA4 and sign-up steps: where people come from and where they drop off.", hue: 230 },
   { id: "marketing", name: "Marketing", blurb: "Channels, campaigns, ad spend and SEO strategy.", hue: 25 },
   { id: "content", name: "Content Studio", blurb: "Briefs, hooks and scripts in the brand's voice, checked before anyone sees them.", hue: 330 },
   { id: "tech", name: "Tech", blurb: "Website and app health, systems and what depends on what, issues to fix.", hue: 160 },
@@ -40,22 +40,22 @@ export const DEPARTMENTS: DepartmentDef[] = [
 export const AGENTS: AgentDef[] = [
   {
     id: "chief-of-staff", name: "Meera", title: "Chief of Staff", department: "leadership", model: "sonnet",
-    persona: "Reads the request, checks what we already know, sends work to the right desks, then writes one clear answer with sources.",
+    persona: "Reads the request, checks what we already know, sends work to the right people, then writes one clear answer with sources.",
     handles: ["every request", "morning brief", "final answers"],
     tools: ["search", "recall", "get_entity", "neighbors", "find_paths", "show_path", "remember", "propose_action"],
     sprite: { skin: "#C68B59", hair: "#1B1B2F", shirt: "#1F2A6B", accent: "#C8A23D" },
   },
   {
     id: "coe-lead", name: "Isha", title: "CoE Lead", department: "coe", model: "sonnet",
-    persona: "Owns the numbers: overall health, KPIs, trends, and whether a figure is real before it reaches the owner.",
-    handles: ["how is the business doing", "KPIs", "weekly numbers", "number checks"],
+    persona: "Owns the numbers: how the business is doing overall, trends, and whether a figure is real before it reaches the owner.",
+    handles: ["how is the business doing", "key numbers", "weekly numbers", "number checks"],
     tools: ["metric_trend", "important", "get_entity", "search", "cypher"], reviews: ["data-analyst", "growth-marketer"],
     sprite: { skin: "#8D5524", hair: "#2B1B17", shirt: "#C8A23D", accent: "#1F2A6B" },
   },
   {
     id: "data-analyst", name: "Kabir", title: "Data Analyst", department: "analytics", model: "sonnet",
     persona: "Joins Search Console, GA4, Instagram and signups to explain why a number moved.",
-    handles: ["traffic", "signups", "funnels", "search performance", "attribution"],
+    handles: ["traffic", "signups", "where people drop off", "search performance", "where customers come from"],
     tools: ["metric_trend", "seo_report", "content_performance", "find_paths", "search", "cypher"],
     sprite: { skin: "#E0AC69", hair: "#3B2F2F", shirt: "#3D5A98", accent: "#E8E8F0" },
   },
@@ -82,7 +82,7 @@ export const AGENTS: AgentDef[] = [
   },
   {
     id: "fact-checker", name: "Nisha", title: "Fact Checker", department: "content", model: "haiku",
-    persona: "Checks every claim in a draft against the graph; anything unsupported goes back.",
+    persona: "Checks every claim in a draft against what we know about the business; anything unsupported goes back.",
     handles: ["claim checks"], reviews: ["content-strategist", "growth-marketer", "data-analyst"],
     tools: ["search", "get_entity", "find_paths", "cypher"],
     sprite: { skin: "#E0AC69", hair: "#2E1A12", shirt: "#4A4E69", accent: "#F2E9E4" },
@@ -98,14 +98,14 @@ export const AGENTS: AgentDef[] = [
   // on call person". Zoya watches errors, crashes and uptime; Imran owns releases and the app stores.
   {
     id: "oncall-engineer", name: "Zoya", title: "On-call Engineer", department: "tech", model: "sonnet",
-    persona: "Watches errors, crashes and uptime around the clock; triages each new issue, ties it to what changed, and pages the right desk.",
-    handles: ["app errors", "crashes", "Sentry issues", "is the app or site down", "incidents"],
+    persona: "Watches errors, crashes and uptime around the clock; triages each new issue, ties it to what changed, and tells the right person.",
+    handles: ["app errors", "crashes", "Sentry error alerts", "is the app or site down", "incidents"],
     tools: ["metric_trend", "impact_of", "get_entity", "neighbors", "history", "search", "cypher", "propose_action"],
     sprite: { skin: "#8D5524", hair: "#120E0B", shirt: "#1B4332", accent: "#F28482" },
   },
   {
     id: "qa-release", name: "Imran", title: "QA & Release Manager", department: "tech", model: "haiku",
-    persona: "Owns every app release: build status, Play and App Store review, store ratings, and crash-free rates before and after each release.",
+    persona: "Owns every app release: build status, Play and App Store review, store ratings, and whether crashes went up or down after each release.",
     handles: ["releases", "app store review", "play store", "ratings", "did the last release break anything"],
     tools: ["metric_trend", "history", "get_entity", "search", "cypher", "propose_action"],
     reviews: ["tech-lead"],

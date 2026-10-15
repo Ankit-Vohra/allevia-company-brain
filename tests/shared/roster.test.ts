@@ -17,7 +17,7 @@ describe("roster", () => {
       ["tech-lead", "Arjun"], ["oncall-engineer", "Zoya"], ["qa-release", "Imran"],
     ]);
     expect(agentById("qa-release")!.reviews).toEqual(["tech-lead"]);
-    expect(agentById("oncall-engineer")!.handles).toContain("Sentry issues");
+    expect(agentById("oncall-engineer")!.handles).toContain("Sentry error alerts");
   });
 
   it("says its own size: counts and words come from the roster, so copy can't drift", () => {

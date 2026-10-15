@@ -152,7 +152,7 @@ export const seoRun: ScriptSpec = {
     s.track("chief-of-staff", 300)
       .start("Read the request and plan who does what")
       .status("Reading the question and what we already know", 200)
-      .tool("search", { q: "search clicks pages" }, 700, "Search Console export from 13 Oct and 5 /jobs pages", [GSC, "page:www.aamdani.ai/jobs", "document:gsc-export-2026-10-13"], 500)
+      .tool("search", { q: "search clicks pages" }, 700, "Search Console export from 13 Oct and 5 job pages", [GSC, "page:www.aamdani.ai/jobs", "document:gsc-export-2026-10-13"], 500)
       .emit({
         type: "plan", by: "chief-of-staff",
         rationale: "Numbers from Analytics, the technical cause from Tech, and a second look at the figures from the CoE.",
@@ -163,17 +163,17 @@ export const seoRun: ScriptSpec = {
         ],
       }, 600)
       .handoff("data-analyst", "Which pages lost clicks?", 300)
-      .handoff("tech-lead", "Why are /jobs pages slipping?", 120)
+      .handoff("tech-lead", "Why are job pages slipping?", 120)
       .done(2600, 200);
 
     s.track("data-analyst", 3400)
       .start("Find which pages lost search clicks in the last 28 days")
       .status("Comparing the last 28 days with the 28 before")
       .tool("seo_report", { pages: "/jobs/*", window: "28d", compare: "previous" }, 1700,
-        "/jobs pages: 1,930 clicks vs 2,610 (−26%). Impressions steady at 214,000; CTR 0.9%. The drop starts after the 18 Sep core update.",
+        "job pages: 1,930 clicks vs 2,610 (−26%). Impressions steady at 214,000; CTR 0.9%. The drop starts after the 18 Sep core update.",
         [GSC, "observation:gsc-jobs-clicks-prev", "page:www.aamdani.ai/jobs", "page:www.aamdani.ai/jobs/raipur/driver", "page:www.aamdani.ai/jobs/bhilai/security-guard", "query:driver-job-raipur", "query:security-guard-job-near-me", "event:google-core-update-2026-09", "document:gsc-export-2026-10-13"], 600)
       .finding("f-kabir-gsc",
-        `The /jobs pages lost 26% of search clicks: 2,610 → 1,930 in 28 days, while impressions held at 214,000 [[${GSC}]] [[observation:gsc-jobs-clicks-prev]]. People still see us; fewer click. The slide starts after Google's 18 Sep core update [[event:google-core-update-2026-09]].`, undefined, 900)
+        `The job pages lost 26% of search clicks: 2,610 → 1,930 in 28 days, while impressions held at 214,000 [[${GSC}]] [[observation:gsc-jobs-clicks-prev]]. People still see us; fewer click. The slide starts after Google's 18 Sep core update [[event:google-core-update-2026-09]].`, undefined, 900)
       .handoff("coe-lead", "Click figures for a check", 300)
       .done(4200, 200);
 
@@ -184,7 +184,7 @@ export const seoRun: ScriptSpec = {
         "No meta description; title shared with 37 other city pages.",
         ["page:www.aamdani.ai/jobs/raipur/driver", "rule:seo-meta-description-missing", "rule:seo-duplicate-title", "page:www.aamdani.ai/jobs"], 500)
       .tool("impact_of", { id: "rule:seo-meta-description-missing" }, 1100,
-        "38 /jobs pages fail this check; they carry 71% of /jobs impressions. Issue #41 is open and unassigned.",
+        "38 job pages fail this check; they carry 71% of /jobs impressions. Issue #41 is open and unassigned.",
         ["rule:seo-meta-description-missing", "page:www.aamdani.ai/jobs/raipur/driver", "page:www.aamdani.ai/jobs/bhilai/security-guard", "task:github-41-jobs-meta", "playbook:open-seo-audit"], 400)
       .finding("f-arjun-meta",
         `38 city × role pages have no meta description and share one title, so Google writes its own snippet [[rule:seo-meta-description-missing]] [[page:www.aamdani.ai/jobs/raipur/driver]]. They carry 71% of /jobs impressions. Issue #41 is open but unassigned [[task:github-41-jobs-meta]].`, undefined, 900)
@@ -202,13 +202,13 @@ export const seoRun: ScriptSpec = {
       .start("Write the answer from 2 checked findings")
       .status("Writing the answer", 300)
       .stream(
-        `**The /jobs pages are losing clicks, not rankings.** Clicks fell 26% (2,610 → 1,930) over the last 28 days while impressions held at 214,000 [[${GSC}]] [[observation:gsc-jobs-clicks-prev]].
+        `**The job pages are losing clicks, not rankings.** Clicks fell 26% (2,610 → 1,930) over the last 28 days while impressions held at 214,000 [[${GSC}]] [[observation:gsc-jobs-clicks-prev]].
 
 **Why:** 38 city × role pages have no meta description and share one title, so Google writes a generic snippet and fewer people click [[rule:seo-meta-description-missing]] [[page:www.aamdani.ai/jobs/raipur/driver]]. The slide began after the 18 Sep core update [[event:google-core-update-2026-09]].
 
 **Next:** approve the GitHub issue below. It assigns #41 with a title and description template for all 38 pages [[task:github-41-jobs-meta]]. Figures as of 13 Oct 2026.`, 70, 300)
       .path(["event:google-core-update-2026-09", "channel:google-search", "page:www.aamdani.ai/jobs", "page:www.aamdani.ai/jobs/raipur/driver", "rule:seo-meta-description-missing"], 400)
-      .emit({ type: "proposal", agent: "chief-of-staff", recommendationId: "rec:jobs-meta", approvalId: "appr:gh-jobs-meta", title: "Unique titles and meta descriptions for 38 /jobs pages", kind: "github_issue" }, 400)
+      .emit({ type: "proposal", agent: "chief-of-staff", recommendationId: "rec:jobs-meta", approvalId: "appr:gh-jobs-meta", title: "Unique titles and meta descriptions for 38 job pages", kind: "github_issue" }, 400)
       .done(6200, 300);
   },
 };
@@ -236,29 +236,29 @@ export const pendingRun: ScriptSpec = {
       .start("List everything the owner owns that is still open")
       .status("Reading PENDING and open GitHub issues")
       .tool("who_owns", { person: "person:founder", status: "open" }, 1200,
-        "3 open items: employer reel series (PENDING), OTP fallback to WhatsApp (PENDING), #41 jobs meta descriptions.",
+        "3 open items: employer reel series (PENDING), sign-up code fallback to WhatsApp (PENDING), #41 jobs meta descriptions.",
         ["person:founder", "task:pending-employer-reels", "task:pending-otp-fallback", "task:github-41-jobs-meta"], 500)
       .finding("f-vikram-open",
-        `3 things wait on you: the employer reel series [[task:pending-employer-reels]], the OTP fallback to WhatsApp [[task:pending-otp-fallback]], and issue #41 [[task:github-41-jobs-meta]].`, undefined, 700)
+        `3 things wait on you: the employer reel series [[task:pending-employer-reels]], the sign-up code fallback to WhatsApp [[task:pending-otp-fallback]], and issue #41 [[task:github-41-jobs-meta]].`, undefined, 700)
       .handoff("data-analyst", "Which of these costs the most?", 300)
       .done(3000, 200);
 
     s.track("data-analyst", 5800)
       .start("Size the cost of each open item")
       .tool("metric_trend", { metric: "funnel_drop", subject: "product:aamdani-app" }, 1100,
-        "41% of signups drop at the OTP step this week; 312 signups in week 41.",
+        "41% of signups drop at the sign-up code step this week; 312 signups in week 41.",
         ["observation:funnel-otp-drop-2026-10", "observation:signups-wk41", "product:aamdani-app", "task:pending-otp-fallback"], 500)
-      .finding("f-kabir-otp", `The OTP step loses 41% of people who start signing up [[observation:funnel-otp-drop-2026-10]]; 312 still finished in week 41 [[observation:signups-wk41]].`, undefined, 700)
-      .handoff("chief-of-staff", "OTP fallback first", 300)
+      .finding("f-kabir-otp", `The sign-up code step loses 41% of people who start signing up [[observation:funnel-otp-drop-2026-10]]; 312 still finished in week 41 [[observation:signups-wk41]].`, undefined, 700)
+      .handoff("chief-of-staff", "sign-up code fallback first", 300)
       .done(2900, 200);
 
     s.track("chief-of-staff", 9100)
       .start("Write the answer")
       .stream(
-        `**Three things wait on you; do the OTP fallback first.** 41% of people who start signing up drop at the OTP step [[observation:funnel-otp-drop-2026-10]] [[task:pending-otp-fallback]].
+        `**Three things wait on you; do the sign-up code fallback first.** 41% of people who start signing up drop at the sign-up code step [[observation:funnel-otp-drop-2026-10]] [[task:pending-otp-fallback]].
 
 - Employer reel series, still in PENDING [[task:pending-employer-reels]]
-- Issue #41, unique meta descriptions for /jobs pages [[task:github-41-jobs-meta]]
+- Issue #41, unique meta descriptions for job pages [[task:github-41-jobs-meta]]
 
 As of 12 Oct 2026.`, 70, 300)
       .path(["person:founder", "task:pending-otp-fallback", "observation:funnel-otp-drop-2026-10", "product:aamdani-app"], 400)
