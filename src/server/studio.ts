@@ -376,7 +376,7 @@ export function studioDecisionHook(openGraph: (slug: string) => Promise<GraphHan
         "MATCH (:Entity:Approval {id:$id})-[r1:RESULTED_IN]->(:Action)-[r2:RESULTED_IN]->(:Content)-[u:USES_ASSET]->(:Asset) WHERE ID(r1) >= 0 AND ID(r2) >= 0 RETURN count(u) AS c", { id: approval.id }) : [];
       if (card && !done?.c) {
         const v = card.payload.studio.variants.find((x) => x.id === card.payload.studio.recommended);
-        if (v?.badge === "unchanged") {
+        if (v?.badge === "unchanged" || (v?.badge === "unchecked" && card.payload.studio.creative?.allowUnchecked)) {
           await finalizeStudioDraft(g, approval.id, card.payload, v.id, approval.editedPayload?.body ?? card.payload.body, now());
         }
       }

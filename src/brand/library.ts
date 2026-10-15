@@ -17,6 +17,8 @@ export interface BrandAssetRow {
   status: string;                 // active | superseded
   description: string | null;
   family: string | null;          // fonts
+  weight: number | null;          // font files: 400 regular, 700 bold
+  fileFamily: string | null;      // the family name inside a font file
   value: string | null;           // colours and website references
   colours: string[];              // a palette image's or a guide's colours
   needsBetter: boolean;
@@ -27,20 +29,20 @@ export interface BrandAssetRow {
 }
 
 const COLUMNS = `a.id AS id, a.kind AS kind, a.name AS name, a.origin AS origin, a.mime AS mime, a.w AS w, a.h AS h,
-  a.storageKey AS storageKey, a.status AS status, a.description AS description, a.family AS family, a.value AS value,
+  a.storageKey AS storageKey, a.status AS status, a.description AS description, a.family AS family, a.weight AS weight, a.fileFamily AS fileFamily, a.value AS value,
   a.colours AS colours, a.guideColours AS guideColours, a.needsBetter AS needsBetter, a.askedForBetter AS askedForBetter,
   a.containsPerson AS containsPerson, a.source AS source, a.createdAt AS createdAt`;
 
 interface Raw {
   id: string; kind: string | null; name: string | null; origin: string | null; mime: string | null; w: number | null; h: number | null;
-  storageKey: string | null; status: string | null; description: string | null; family: string | null; value: string | null;
+  storageKey: string | null; status: string | null; description: string | null; family: string | null; weight: number | null; fileFamily: string | null; value: string | null;
   colours: string[] | null; guideColours: string[] | null; needsBetter: boolean | null; askedForBetter: boolean | null;
   containsPerson: boolean | null; source: string | null; createdAt: number | null;
 }
 
 const toRow = (r: Raw): BrandAssetRow => ({
   id: r.id, kind: r.kind ?? "other", name: r.name ?? r.id, origin: r.origin ?? "upload", mime: r.mime, w: r.w, h: r.h, storageKey: r.storageKey,
-  status: r.status ?? "active", description: r.description, family: r.family, value: r.value,
+  status: r.status ?? "active", description: r.description, family: r.family, weight: r.weight, fileFamily: r.fileFamily, value: r.value,
   colours: [...(r.colours ?? []), ...(r.guideColours ?? [])], needsBetter: r.needsBetter === true, askedForBetter: r.askedForBetter === true,
   containsPerson: r.containsPerson === true, source: r.source, createdAt: r.createdAt,
 });

@@ -179,7 +179,7 @@ export async function fetchWebsiteBrandFiles(
 }
 
 // Regular and bold TrueType files of a family, from Google Fonts. [] when Google does not have the family.
-async function googleFont(g: GraphHandle, family: string, deps: WebsiteBrandDeps, fetchFn: BrandFetch, asOf: string): Promise<WebsiteBrandResult["fonts"]> {
+export async function googleFont(g: GraphHandle, family: string, deps: Pick<WebsiteBrandDeps, "tenant" | "businessId" | "docId" | "store" | "now">, fetchFn: BrandFetch, asOf: string): Promise<WebsiteBrandResult["fonts"]> {
   const q = `${GOOGLE_CSS}?family=${encodeURIComponent(`${family}:wght@${FONT_WEIGHTS.join(";")}`)}`;
   const u = new URL(q);
   if (u.hostname !== GOOGLE_CSS_HOST) return [];
@@ -187,8 +187,11 @@ async function googleFont(g: GraphHandle, family: string, deps: WebsiteBrandDeps
   if (css.status !== 200) return [];
   const faces = [...css.body.toString("utf8").matchAll(/font-weight:\s*(\d+);[^}]*?src:\s*url\((https:\/\/[^)\s]+)\)\s*format\('truetype'\)/g)];
   const out: WebsiteBrandResult["fonts"] = [];
+  const seen = new Set<number>();
   for (const m of faces) {
     const weight = Number(m[1]);
+    if (seen.has(weight)) continue; // Google may list a family in several unicode-range pieces: the first is the main one
+    seen.add(weight);
     const url = new URL(m[2]!);
     if (!(FONT_WEIGHTS as readonly number[]).includes(weight) || url.hostname !== GOOGLE_FILE_HOST) continue; // only Google's own file host
     const r = await fetchFn(url.toString(), { maxBytes: MAX_FONT_BYTES, accept: "font/ttf,*/*;q=0.1" });
