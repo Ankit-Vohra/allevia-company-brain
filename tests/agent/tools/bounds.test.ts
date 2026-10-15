@@ -17,7 +17,7 @@ import { traceDecision } from "../../../src/agent/tools/decisions.js";
 import { recall } from "../../../src/agent/tools/memory.js";
 import { playbook } from "../../../src/agent/tools/playbook.js";
 import { search } from "../../../src/agent/tools/search.js";
-import { call, ids, makeCtx, seededGraph } from "../../helpers/tools.js";
+import { call, ids, makeCtx, seededGraph, whenFree } from "../../helpers/tools.js";
 
 const DOCS = 12_000;
 const day = (base: string, i: number) => new Date(Date.parse(`${base}T00:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10);
@@ -30,76 +30,77 @@ describe("tools on a tenant bigger than one result set", () => {
   beforeAll(async () => {
     ({ g, cleanup } = await seededGraph());
     seoBase = (await call(seoReport, {}, makeCtx(g))).data.summary;
+    const q = (cypher: string, params?: Record<string, unknown>) => whenFree(() => g.query(cypher, params));
 
     // 12,000 documents: 30 hubs SOURCED_FROM 400 each; all AUTHORED by one writer, MENTIONING one topic and DEPENDING_ON
     // one core (the alphabetically first dependent is created last); two stored communities of 6,000. Then a node whose
     // only source is its `src` prop, and Priya's 3 documents on the topic.
-    await g.query(`CREATE (:Entity:Person {id:'person:bulk-writer', name:'Bulk writer'}), (:Entity:Product {id:'product:bulk-topic', name:'Bulk topic'}),
+    await q(`CREATE (:Entity:Person {id:'person:bulk-writer', name:'Bulk writer'}), (:Entity:Product {id:'product:bulk-topic', name:'Bulk topic'}),
       (:Entity:System {id:'system:bulk-core', name:'Core'})`);
-    await g.query(`UNWIND range(0, 29) AS h CREATE (:Entity:System {id:'system:bulk-hub-' + toString(h), name:'Hub ' + toString(h)})`);
-    await g.query(`MATCH (w:Entity {id:'person:bulk-writer'}), (t:Entity {id:'product:bulk-topic'}), (c:Entity {id:'system:bulk-core'})
+    await q(`UNWIND range(0, 29) AS h CREATE (:Entity:System {id:'system:bulk-hub-' + toString(h), name:'Hub ' + toString(h)})`);
+    await q(`MATCH (w:Entity {id:'person:bulk-writer'}), (t:Entity {id:'product:bulk-topic'}), (c:Entity {id:'system:bulk-core'})
       UNWIND range(1, $n) AS i
       CREATE (d:Entity:Document {id:'document:bulk-' + toString(i), name:'Bulk doc ' + toString(i), community: 'bulk-' + toString(i % 2)})
       CREATE (w)-[:AUTHORED]->(d), (d)-[:MENTIONS]->(t), (d)-[:DEPENDS_ON]->(c)`, { n: DOCS });
-    await g.query("MATCH (c:Entity {id:'system:bulk-core'}) CREATE (:Entity:System {id:'system:bulk-aaa', name:'AAA first'})-[:DEPENDS_ON]->(c)");
-    await g.query(`UNWIND range(1, $n) AS i MATCH (d:Entity {id:'document:bulk-' + toString(i)}), (h:Entity {id:'system:bulk-hub-' + toString(i % 30)})
+    await q("MATCH (c:Entity {id:'system:bulk-core'}) CREATE (:Entity:System {id:'system:bulk-aaa', name:'AAA first'})-[:DEPENDS_ON]->(c)");
+    await q(`UNWIND range(1, $n) AS i MATCH (d:Entity {id:'document:bulk-' + toString(i)}), (h:Entity {id:'system:bulk-hub-' + toString(i % 30)})
       CREATE (h)-[:SOURCED_FROM]->(d)`, { n: DOCS });
-    await g.query("CREATE (:Entity:Task {id:'task:bulk-src', name:'Sourced by prop', src:'document:runbook'})");
-    await g.query(`MATCH (p:Entity {id:'person:priya'}), (t:Entity {id:'product:bulk-topic'}) UNWIND range(1, 3) AS i
+    await q("CREATE (:Entity:Task {id:'task:bulk-src', name:'Sourced by prop', src:'document:runbook'})");
+    await q(`MATCH (p:Entity {id:'person:priya'}), (t:Entity {id:'product:bulk-topic'}) UNWIND range(1, 3) AS i
       CREATE (d:Entity:Document {id:'document:priya-' + toString(i), name:'Priya on the topic ' + toString(i)}), (p)-[:AUTHORED]->(d), (d)-[:MENTIONS]->(t)`);
 
     // A 2,500-day series, and a second subject whose numbers are the latest and biggest.
-    await g.query("CREATE (:Entity:Channel {id:'channel:bulk-series', name:'Series'}), (:Entity:Channel {id:'channel:bulk-series-2', name:'Series 2'})");
+    await q("CREATE (:Entity:Channel {id:'channel:bulk-series', name:'Series'}), (:Entity:Channel {id:'channel:bulk-series-2', name:'Series 2'})");
     const series = Array.from({ length: 2500 }, (_, i) => ({ id: `obs:bulk_visits:channel:bulk-series:${day("2019-08-01", i)}`, at: day("2019-08-01", i), v: i }));
-    await g.query(`MATCH (s:Entity {id:'channel:bulk-series'}) UNWIND $rows AS r
+    await q(`MATCH (s:Entity {id:'channel:bulk-series'}) UNWIND $rows AS r
       CREATE (:Entity:Observation {id: r.id, name: r.id, metric:'bulk_visits', value: r.v, windowStart: r.at, windowEnd: r.at, asOf: r.at})-[:MEASURES]->(s)`, { rows: series });
     const series2 = Array.from({ length: 10 }, (_, i) => ({ id: `obs:bulk_visits:channel:bulk-series-2:${day("2026-10-01", i)}`, at: day("2026-10-01", i), v: 1e6 + i }));
-    await g.query(`MATCH (s:Entity {id:'channel:bulk-series-2'}) UNWIND $rows AS r
+    await q(`MATCH (s:Entity {id:'channel:bulk-series-2'}) UNWIND $rows AS r
       CREATE (:Entity:Observation {id: r.id, name: r.id, metric:'bulk_visits', value: r.v, windowStart: r.at, windowEnd: r.at, asOf: r.at})-[:MEASURES]->(s)`, { rows: series2 });
 
     // 3,000 pages failing one medium rule, then the worst page (two rules, 50,000 impressions), created last.
-    await g.query(`MATCH (r:Entity {id:'rule:seo-h1'}) UNWIND range(1, 3000) AS i
+    await q(`MATCH (r:Entity {id:'rule:seo-h1'}) UNWIND range(1, 3000) AS i
       CREATE (:Entity:Page {id:'page:bulk.example/p' + toString(i), name:'P' + toString(i)})-[:FAILS {evidence:'no H1'}]->(r)`);
-    await g.query(`MATCH (h:Entity {id:'rule:seo-h1'}), (m:Entity {id:'rule:seo-meta-description'})
+    await q(`MATCH (h:Entity {id:'rule:seo-h1'}), (m:Entity {id:'rule:seo-meta-description'})
       CREATE (p:Entity:Page {id:'page:bulk.example/worst', name:'Worst'}), (p)-[:FAILS]->(h), (p)-[:FAILS]->(m),
         (:Entity:Observation {id:'obs:impressions:page:bulk.example/worst:2026-10-09', name:'imp', metric:'impressions', value: 50000,
           windowStart:'2026-09-12', windowEnd:'2026-10-09', asOf:'2026-10-10'})-[:MEASURES]->(p)`);
 
     // 40 campaigns x 30 days x 5 metrics = 6,000 observations inside ad_report's 30-day window.
-    await g.query(`UNWIND range(1, 40) AS c CREATE (:Entity:Campaign {id:'campaign:bulk-' + toString(c), name:'Bulk campaign ' + toString(c)})`);
+    await q(`UNWIND range(1, 40) AS c CREATE (:Entity:Campaign {id:'campaign:bulk-' + toString(c), name:'Bulk campaign ' + toString(c)})`);
     const adDays = Array.from({ length: 30 }, (_, i) => day("2026-09-16", i));
-    await g.query(`UNWIND range(1, 40) AS c MATCH (k:Entity {id:'campaign:bulk-' + toString(c)}) UNWIND $days AS d
+    await q(`UNWIND range(1, 40) AS c MATCH (k:Entity {id:'campaign:bulk-' + toString(c)}) UNWIND $days AS d
       UNWIND [['spend', 10, 'INR'], ['signups', 1, 'count'], ['conversions', 1, 'count'], ['impressions', 100, 'count'], ['clicks', 5, 'count']] AS m
       CREATE (:Entity:Observation {id:'obs:' + m[0] + ':' + k.id + ':' + d, name: m[0], metric: m[0], value: m[1], unit: m[2], windowStart: d, windowEnd: d, asOf: d})-[:MEASURES]->(k)`,
       { days: adDays });
 
     // 600 reels on one hook (content_performance considers the newest 500), 10 daily view numbers each.
-    await g.query(`CREATE (:Entity:Rule {id:'rule:bulk-hook', name:'Bulk hook', kind:'hook'})`);
+    await q(`CREATE (:Entity:Rule {id:'rule:bulk-hook', name:'Bulk hook', kind:'hook'})`);
     const reels = Array.from({ length: 600 }, (_, i) => ({ id: `content:bulk-${i + 1}`, at: day("2023-01-01", i + 1) }));
-    await g.query(`MATCH (h:Entity {id:'rule:bulk-hook'}) UNWIND $rows AS r
+    await q(`MATCH (h:Entity {id:'rule:bulk-hook'}) UNWIND $rows AS r
       CREATE (:Entity:Content {id: r.id, name: 'Bulk reel ' + r.id, format:'reel', publishedAt: r.at})-[:USES_RULE]->(h)`, { rows: reels });
     const contentObs = reels.flatMap((r, i) => Array.from({ length: 10 }, (_, k) => ({ c: r.id, at: day("2023-01-01", i + 1 + k), v: 100 + k })));
-    await g.query(`UNWIND $rows AS r MATCH (c:Entity {id: r.c})
+    await q(`UNWIND $rows AS r MATCH (c:Entity {id: r.c})
       CREATE (:Entity:Observation {id:'obs:views:' + r.c + ':' + r.at, name:'views', metric:'views', value: r.v, windowEnd: r.at, asOf: r.at})-[:MEASURES]->(c)`,
       { rows: contentObs });
 
     // A decision based on 300 documents and affecting 200 others; a task with 120 versions.
-    await g.query(`CREATE (:Entity:Decision {id:'decision:bulk', name:'Bulk decision', status:'accepted'})`);
-    await g.query(`MATCH (x:Entity {id:'decision:bulk'}) UNWIND range(1, 300) AS i MATCH (d:Entity {id:'document:bulk-' + toString(i)}) CREATE (x)-[:BASED_ON]->(d)`);
-    await g.query(`MATCH (x:Entity {id:'decision:bulk'}) UNWIND range(301, 500) AS i MATCH (s:Entity {id:'document:bulk-' + toString(i)}) CREATE (x)-[:AFFECTS]->(s)`);
-    await g.query(`CREATE (t:Entity:Task {id:'task:bulk-versions', name:'Versioned', status:'s120', createdAt: 0})
+    await q(`CREATE (:Entity:Decision {id:'decision:bulk', name:'Bulk decision', status:'accepted'})`);
+    await q(`MATCH (x:Entity {id:'decision:bulk'}) UNWIND range(1, 300) AS i MATCH (d:Entity {id:'document:bulk-' + toString(i)}) CREATE (x)-[:BASED_ON]->(d)`);
+    await q(`MATCH (x:Entity {id:'decision:bulk'}) UNWIND range(301, 500) AS i MATCH (s:Entity {id:'document:bulk-' + toString(i)}) CREATE (x)-[:AFFECTS]->(s)`);
+    await q(`CREATE (t:Entity:Task {id:'task:bulk-versions', name:'Versioned', status:'s120', createdAt: 0})
       WITH t UNWIND range(0, 119) AS i
       CREATE (t)-[:HAD_VERSION]->(:Entity:Version {id:'version:task:bulk-versions:' + toString(i), since: i * 1000, until: (i + 1) * 1000,
         changed: ['status'], props: '{"status":"s' + toString(i) + '"}'})`);
     // A task whose 60 versions each changed a 3,000-character summary.
-    await g.query(`CREATE (t:Entity:Task {id:'task:bulk-long', name:'Long', summary: 'now', createdAt: 0}) WITH t UNWIND range(0, 59) AS i
+    await q(`CREATE (t:Entity:Task {id:'task:bulk-long', name:'Long', summary: 'now', createdAt: 0}) WITH t UNWIND range(0, 59) AS i
       CREATE (t)-[:HAD_VERSION]->(:Entity:Version {id:'version:task:bulk-long:' + toString(i), since: i * 1000, until: (i + 1) * 1000,
         changed: ['summary'], props: '{"summary":"' + reduce(s = '', k IN range(1, 300) | s + 'ten chars ') + '"}'})`);
 
     // Seven past turns on the topic (recall shows the latest 5); three decisions affect hub 0, the newest with the last id.
-    await g.query(`MATCH (t:Entity {id:'product:bulk-topic'}) UNWIND range(1, 7) AS i
+    await q(`MATCH (t:Entity {id:'product:bulk-topic'}) UNWIND range(1, 7) AS i
       CREATE (:Entity:Turn {id:'turn:bulk-' + toString(i), name:'Q' + toString(i), question:'Q' + toString(i), at: i * 1000})-[:TOUCHED]->(t)`);
-    await g.query(`MATCH (h:Entity {id:'system:bulk-hub-0'}) UNWIND [['a', '2026-01-01'], ['b', '2026-02-01'], ['c', '2026-03-01']] AS d
+    await q(`MATCH (h:Entity {id:'system:bulk-hub-0'}) UNWIND [['a', '2026-01-01'], ['b', '2026-02-01'], ['c', '2026-03-01']] AS d
       CREATE (:Entity:Decision {id:'decision:bulk-' + d[0], name:'Decision ' + d[0], decidedAt: d[1]})-[:AFFECTS]->(h)`);
   }, 180_000);
   afterAll(async () => cleanup());
