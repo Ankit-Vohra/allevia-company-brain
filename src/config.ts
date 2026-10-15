@@ -21,6 +21,7 @@ export interface AlleviaConfig {
   publicMode: boolean;
   authRequired: boolean; // ALLEVIA_AUTH=1: every /api/:t/... route needs that business's owner token (src/auth); only demo businesses open without one
   actionsLive: boolean; // approved github_issue / discord_post cards really create the issue / post (default: dry run)
+  actionTenants: string[]; // businesses besides the founder's own (tenant-config.ts) that may use the env file's GitHub repo and Discord channel
   port: number;
   webBaseUrl: string; // where the web app is reached, for links from Discord (default http://127.0.0.1:<port>)
 }
@@ -85,6 +86,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
     publicMode: /^(1|true|yes|on)$/i.test(get("ALLEVIA_PUBLIC_MODE") ?? ""),
     authRequired: /^(1|true|yes|on)$/i.test(get("ALLEVIA_AUTH") ?? ""),
     actionsLive: (get("ALLEVIA_ACTIONS_LIVE") ?? "") === "1",
+    actionTenants: (get("ALLEVIA_ACTION_TENANTS") ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     port,
     webBaseUrl: (get("ALLEVIA_WEB_URL") ?? `http://127.0.0.1:${port}`).replace(/\/+$/, ""),
   };

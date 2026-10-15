@@ -19,6 +19,8 @@ import type { ActionKind } from "../../shared/contracts.js";
 import { agentById } from "../../shared/roster.js";
 import { loadConfig, type AlleviaConfig } from "../config.js";
 import type { GraphHandle } from "../graph/client.js";
+import { assertTenantSlug } from "../graph/slug.js";
+import { TENANT_CONFIGS } from "../tenant-config.js";
 import { upsertEdge, upsertNode } from "../graph/upsert.js";
 import { entityId, slugify } from "../util/ids.js";
 import { isoDate } from "../util/time.js";
@@ -78,6 +80,14 @@ export const defaultHttp: HttpFn = async (url, init) => {
 
 export const actionIdFor = (approvalId: string): string => `action:${approvalId.replace(/^approval:/, "")}`;
 
+// The GitHub repo and the Discord channel in the env file are the founder's: they belong to the founder's own businesses
+// (tenant-config.ts) and to any business named in ALLEVIA_ACTION_TENANTS. A business a customer onboarded has no connector
+// of its own yet, so its approved cards file and post nowhere (a connector passed in deps.config is used as given).
+// Otherwise a customer's approved card would be filed on, or posted into, an account that is not theirs.
+function usesFoundersAccounts(tenant: string): boolean {
+  return Object.hasOwn(TENANT_CONFIGS, tenant) || loadConfig().actionTenants.includes(tenant);
+}
+
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 const agentName = (rosterId: string | undefined) => (rosterId ? agentById(rosterId)?.name ?? rosterId : "Allevia");
 
@@ -91,7 +101,8 @@ async function firstEvidence(g: GraphHandle, recId: string | undefined): Promise
 // ---------- github_issue ----------
 
 async function githubIssue(g: GraphHandle, input: ExecInput, deps: ExecutorDeps): Promise<Outcome> {
-  const repo = deps.config?.githubActionRepo ?? loadConfig().githubActionRepo;
+  const repo = deps.config?.githubActionRepo ?? (usesFoundersAccounts(deps.tenant) ? loadConfig().githubActionRepo : undefined);
+  if (!repo) return { status: "skipped", result: "No GitHub repository is connected for this business, so nothing was filed.", produced: [] };
   const gh = deps.gh ?? defaultGh;
   const p = input.payload;
   const body = `${p.body}\n\n---\nProposed by Allevia (${agentName(input.agent)}) and approved by the owner. Approval: ${input.approvalId}.`;
@@ -158,7 +169,7 @@ async function contentDraft(g: GraphHandle, input: ExecInput, deps: ExecutorDeps
   const suffix = input.approvalId.replace(/^approval:/, "");
   const contentId = entityId("Content", `draft ${suffix}`);
   const dataDir = deps.config?.dataDir ?? loadConfig().dataDir;
-  const file = join(dataDir, "drafts", slugify(deps.tenant) || "tenant", `${slugify(suffix) || "draft"}.md`);
+  const file = join(dataDir, "drafts", slugify(assertTenantSlug(deps.tenant)), `${slugify(suffix) || "draft"}.md`);
   const date = isoDate(input.now);
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, markdown({ title, body, format, channel: ch?.name, agent: agentName(agent), approvalId: input.approvalId, date, applied: first.applied, instructions: first.instructions }), "utf8");
@@ -205,8 +216,12 @@ async function pauseAd(g: GraphHandle, input: ExecInput): Promise<Outcome> {
 // ---------- discord_post ----------
 
 async function discordPost(input: ExecInput, deps: ExecutorDeps): Promise<Outcome> {
-  const discord = deps.config?.discord ?? loadConfig().discord;
-  const channel = str(input.payload.channelId)?.match(/^\d+$/) ? str(input.payload.channelId)! : discord.channelId;
+  const discord = deps.config?.discord ?? (usesFoundersAccounts(deps.tenant) ? loadConfig().discord : {});
+  // The channel is the connector's own. A card (or its edit) cannot name another channel for the bot to post in.
+  const channel = discord.channelId;
+  if (!discord.token && !channel && !usesFoundersAccounts(deps.tenant) && !deps.config?.discord) {
+    return { status: "skipped", result: "No Discord channel is connected for this business, so nothing was posted.", produced: [] };
+  }
   if (deps.dryRun) {
     return {
       status: "dry_run", produced: [],
