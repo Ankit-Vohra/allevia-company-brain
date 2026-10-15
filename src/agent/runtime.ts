@@ -5,6 +5,8 @@
 // Tool errors never crash a run: the model gets "error: …" and the work log gets a status line.
 //
 // Write tools (remember, propose_action) run only for agents whose roster lists them, whatever a registry hands out.
+// A stopped run's tool calls do nothing: refused before they run, and a result that comes back after the stop is not
+// recorded or emitted. The run's signal also reaches the tool (ctx.signal) so a write can check it before committing.
 //
 // ClaudeAgentSdkRuntime runs on the founder's Claude subscription through the Agent SDK (settings verified in
 // scripts/spikes/agent-sdk.ts): no user settings, no built-in tools, only our MCP tools. The child's environment is
@@ -151,19 +153,24 @@ export function mayUse(agentId: string, tool: Pick<AlleviaTool, "name" | "writes
 // The single path every tool call takes, in both runtimes.
 export async function invokeTool(tool: AlleviaTool, rawArgs: unknown, input: RunInput, emit: Emit, callId: string): Promise<ToolCallOutcome> {
   const agent = input.agentId;
+  const stopped = (): boolean => input.signal?.aborted === true;
+  const STOPPED: ToolCallOutcome = { text: `error: ${agent}'s run was stopped`, isError: true };
+  if (stopped()) return STOPPED;
   emit({ type: "tool_call", agent, id: callId, name: tool.name, args: rawArgs ?? {} });
   emit({ type: "agent_status", agent, text: statusLine(tool.name, rawArgs) });
   try {
     if (!mayUse(agent, tool)) throw new Error(`${tool.name} is not one of ${agent}'s tools`);
     const parsed = z.object(tool.input).safeParse(rawArgs ?? {});
     if (!parsed.success) throw new Error(`bad arguments: ${parsed.error.issues.map((i) => `${i.path.join(".") || "args"} ${i.message}`).join("; ")}`);
-    const ctx: ToolContext = { ...input.ctx, agentId: agent };
+    const ctx: ToolContext = { ...input.ctx, agentId: agent, ...(input.signal ? { signal: input.signal } : {}) };
     const result = await tool.run(parsed.data, ctx);
+    if (stopped()) return STOPPED; // came back after the stop: it doesn't count
     input.ctx.touched.add(result);
     emit({ type: "tool_result", agent, id: callId, name: tool.name, summary: summarise(result), nodes: result.nodes, edges: result.edges, sources: result.sources });
     input.onToolResult?.({ agent, id: callId, name: tool.name, args: parsed.data, result });
     return { text: forModel(result), isError: false, result };
   } catch (e) {
+    if (stopped()) return STOPPED;
     const msg = clip(e instanceof Error ? e.message : String(e), 300);
     emit({ type: "agent_status", agent, text: clip(`Couldn't use ${tool.name}: ${msg}`, 120) });
     emit({ type: "tool_result", agent, id: callId, name: tool.name, summary: clip(`error: ${msg}`, MAX_SUMMARY), nodes: [], edges: [], sources: [] });

@@ -406,7 +406,8 @@ class Turn {
   }
 
   // One agent run with a timeout. The timeout, the turn's signal and the run's own `abort` all abort the runtime (which
-  // closes the SDK subprocess), and the run stops waiting at once.
+  // closes the SDK subprocess), and the run stops waiting at once. Once it settles the run is no longer live: anything
+  // it still emits or reports (a tool call that was in flight) is dropped.
   private async runAgent(agent: AgentDef, o: RunOpts, emit: Emit = this.emit): Promise<RunOutput> {
     this.involve(agent.id);
     const ms = this.deps.agentTimeoutMs ?? AGENT_TIMEOUT_MS;
@@ -431,12 +432,16 @@ class Turn {
       }
     });
     stop.catch(() => {});
+    let live = true;
+    const onToolResult = o.onToolResult ?? this.toolResults(this.emit);
     try {
       if (ac.signal.aborted) return await stop; // never start a run that is already stopped
-      const run = this.deps.runtime.run(this.runInput(agent, o, ac.signal), emit);
+      const input: RunInput = { ...this.runInput(agent, o, ac.signal), onToolResult: (c) => { if (live) onToolResult(c); } };
+      const run = this.deps.runtime.run(input, (e) => { if (live) emit(e); });
       run.catch(() => {}); // a run that loses the race may reject later
       return await Promise.race([run, stop]);
     } finally {
+      live = false;
       for (const c of cleanup) c();
     }
   }

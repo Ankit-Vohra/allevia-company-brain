@@ -67,6 +67,35 @@ describe("invokeTool (the single tool path)", () => {
     expect(mayUse("growth-marketer", { name: "search" })).toBe(true);
   });
 
+  it("a stopped run's tool calls do nothing: a write is refused before it runs, a read's late result is not recorded", async () => {
+    const ac = new AbortController();
+    ac.abort();
+    const propose = { ...fakeTool("propose_action", result({ data: { approvalId: "approval:x" } })), writes: true };
+    const { events, emit } = recorder();
+    const out = await invokeTool(propose, { query: "x" }, input({ agentId: "tech-lead", signal: ac.signal }), emit, "c7");
+    expect(out.isError).toBe(true);
+    expect(propose.calls).toHaveLength(0);
+    expect(events).toEqual([]);
+
+    const late = new AbortController();
+    const slow: ReturnType<typeof fakeTool> = fakeTool("metric_trend", async () => { late.abort(); return signups; });
+    const inp = input({ signal: late.signal });
+    const seen: unknown[] = [];
+    const r = await invokeTool(slow, { metric: "signups" }, { ...inp, onToolResult: (c) => seen.push(c) }, emit, "c8");
+    expect(r.isError).toBe(true);
+    expect(inp.ctx.touched.has("metric:signups")).toBe(false);
+    expect(events.some((e) => e.type === "tool_result")).toBe(false);
+    expect(seen).toEqual([]);
+  });
+
+  it("passes the run's signal to the tool so a write can check it before committing", async () => {
+    const ac = new AbortController();
+    let got: AbortSignal | undefined;
+    const tool = fakeTool("metric_trend", (_a, ctx) => { got = ctx.signal; return signups; });
+    await invokeTool(tool, {}, input({ signal: ac.signal }), () => {}, "c9");
+    expect(got).toBe(ac.signal);
+  });
+
   it("rejects arguments that don't match the tool's input shape", async () => {
     const tool = fakeTool("metric_trend", signups);
     const out = await invokeTool(tool, { metric: 42 }, input(), () => {}, "c3");

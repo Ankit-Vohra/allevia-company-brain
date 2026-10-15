@@ -698,3 +698,44 @@ describe("runTurn: findings nobody reviews", () => {
     expect(runtime.runs.filter((r) => r.phase === "synthesis")).toHaveLength(1);
   });
 });
+
+// From the review's probe-late.mts: a desk times out while its tool calls are still running.
+describe("runTurn: nothing from a stopped run lands after it stops", () => {
+  it("in-flight tool calls of timed-out desks emit nothing, record nothing, and a write sees its run stopped", async () => {
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    let proposeSawStop: boolean | undefined;
+    const tools: Record<string, AlleviaTool> = {
+      metric_trend: { name: "metric_trend", description: "", input: { metric: z.string().optional() }, async run() {
+        await sleep(300);
+        return result({ data: { v: 41 }, nodes: [node("metric:late", "Metric", "Late")] });
+      } },
+      show_path: { name: "show_path", description: "", input: { ids: z.array(z.string()) }, async run(a) { return result({ data: {}, nodes: (a.ids as string[]).map((id) => node(id, "E")) }); } },
+      propose_action: { name: "propose_action", description: "", writes: true, input: { title: z.string(), kind: z.string() }, async run(_a, ctx) {
+        await sleep(250);
+        proposeSawStop = ctx.signal?.aborted; // a real write tool checks this before it commits
+        return result({ data: { recommendationId: "recommendation:x", approvalId: "approval:x" } });
+      } },
+    };
+    const getTools = (names: string[]) => names.map((n) => tools[n]).filter((t): t is AlleviaTool => !!t);
+    const after: string[] = [];
+    let returned = false;
+    const events: AgentEvent[] = [];
+    const out = await runTurn(INPUT, {
+      runtime: new FakeRuntime({
+        "chief-of-staff:plan": plan([{ agent: "data-analyst", task: "trend" }, { agent: "growth-marketer", task: "ads" }]),
+        "data-analyst": { calls: [{ name: "metric_trend", args: {} }], ...finding("x") },
+        "growth-marketer": { calls: [{ name: "propose_action", args: { title: "Pause ad", kind: "pause_ad" } }], ...finding("y") },
+        "chief-of-staff:synthesis": { text: "An answer that is long enough to count as an answer for the stream sealing rule, yes indeed." },
+      }),
+      getTools, graph: {} as GraphHandle, now: NOW, agentTimeoutMs: 100,
+    }, (e) => { events.push(e); if (returned) after.push(`${e.type}:${(e as { agent?: string }).agent ?? ""}`); });
+    returned = true;
+    expect(out.failed.sort()).toEqual(["data-analyst", "growth-marketer"]);
+    await sleep(450);
+    expect(after).toEqual([]);
+    expect(proposeSawStop).toBe(true);
+    expect(out.proposals).toEqual([]);
+    expect(events.some((e) => e.type === "proposal" || (e.type === "tool_result" && e.agent !== "chief-of-staff"))).toBe(false);
+    expect(out.touched.has("metric:late")).toBe(false);
+  });
+});

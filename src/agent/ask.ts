@@ -1,7 +1,8 @@
 // ask(): one question from any surface (web, Discord, CLI, MCP) through the agent company, end to end.
 // session (new thread unless one is given) -> seed ids (injected search) -> recall brief -> runTurn -> checkTurn on the
 // final answer -> saveTurn (Turn, Findings, reviews, the full event log) -> `final`. `final` is always the last event,
-// also after an error; an error is reported as an `error` event and the Turn is still saved, marked failed.
+// also after an error; an error is reported as an `error` event and the Turn is still saved, marked failed. The turn's
+// stream closes when `final` is made: anything a run emits after that is dropped from the stream and the log.
 import type { AgentEvent, TurnChecks } from "../../shared/contracts.js";
 import { openGraph, type GraphHandle } from "../graph/client.js";
 import { checkTurn, extractCitations } from "./checks.js";
@@ -54,6 +55,7 @@ export interface AskResult {
 }
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+export const STOPPED_MESSAGE = "Stopped before the answer was finished.";
 const EMPTY_BRIEF: RecallBrief = { text: "", ids: [] };
 
 export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<AskResult> {
@@ -66,8 +68,9 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
 
   // Everything is logged for replay; a consumer that throws must not break the turn.
   const log: AgentEvent[] = [];
+  let closed = false;
   const deliver = (e: AgentEvent) => { try { emit(e); } catch { /* the stream's problem, not the turn's */ } };
-  const out: Emit = (e) => { log.push(e); deliver(e); };
+  const out: Emit = (e) => { if (closed) return; log.push(e); deliver(e); };
 
   out({ type: "session", tenant: input.tenant, sessionId, turnId, question });
 
@@ -94,9 +97,10 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
         ...(deps.timeZone ? { timeZone: deps.timeZone } : {}), ...(deps.signal ? { signal: deps.signal } : {}),
       },
       out);
-    if (!outcome.ok) failure = "The Chief of Staff could not write the answer.";
+    if (deps.signal?.aborted) failure = STOPPED_MESSAGE;
+    else if (!outcome.ok) failure = "The Chief of Staff could not write the answer.";
   } catch (e) {
-    failure = message(e);
+    failure = deps.signal?.aborted ? STOPPED_MESSAGE : message(e);
     out({ type: "error", message: failure });
   }
 
@@ -106,6 +110,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
   const agents = outcome?.agents ?? [];
   const ms = Date.now() - t0;
   const final: AgentEvent = { type: "final", turnId, answer, citations, checks, agents, ms };
+  closed = true;
   log.push(final);
 
   if (g) {

@@ -16,6 +16,8 @@ export interface ToolContext {
   now: number;              // epoch ms, fixed per turn (tests pin it)
   embedQuery?: (text: string) => Promise<number[]>; // injected; vector search is skipped when absent
   readOnly?: boolean;       // MCP/public mode: write tools refuse
+  signal?: AbortSignal;     // aborted when the agent's run is stopped (timeout, turn stopped): a write tool checks it
+                            // right before it commits, so a run that was stopped mid-call changes nothing
 }
 
 export interface AlleviaTool<S extends z.ZodRawShape = z.ZodRawShape> {

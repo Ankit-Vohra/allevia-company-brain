@@ -152,7 +152,7 @@ describe("ask() (integration)", () => {
     expect(r.ok).toBe(false);
     expect(runtime.runs).toHaveLength(0); // nothing was started
     expect(a.events.at(-1)!.type).toBe("final");
-    const [t] = await g.roQuery<Record<string, unknown>>("MATCH (t:Turn {id:$id}) RETURN t.status AS s", { id: r.turnId });
-    expect(t).toEqual({ s: "failed" });
+    const [t] = await g.roQuery<Record<string, unknown>>("MATCH (t:Turn {id:$id}) RETURN t.status AS s, t.error AS e", { id: r.turnId });
+    expect(t).toEqual({ s: "failed", e: "Stopped before the answer was finished." }); // a stop, not a Chief failure
   });
 });
