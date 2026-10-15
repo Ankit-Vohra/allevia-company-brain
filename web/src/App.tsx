@@ -8,13 +8,14 @@ const BrainPage = lazy(() => import("./pages/Brain"));
 const InsightsPage = lazy(() => import("./pages/Insights"));
 const ApprovalsPage = lazy(() => import("./pages/Approvals"));
 const OnboardPage = lazy(() => import("./pages/Onboard"));
-const SoonPage = lazy(() => import("./pages/Soon"));
+const ProgramPage = lazy(() => import("./pages/Program"));
+const PlanPage = lazy(() => import("./pages/Plan"));
 const StudioPage = lazy(() => import("./pages/Studio"));
 const TeamPage = lazy(() => import("./pages/Team"));
 
 const TITLES: Record<string, string> = {
   "/": "Office", "/ask": "Ask", "/brain": "Brain", "/insights": "Insights", "/approvals": "Approvals", "/onboard": "Add a business",
-  "/studio": "Studio", "/team": "Your team", "/plan": "Plan and usage", "/program": "Your 90 days",
+  "/studio": "Studio", "/team": "Your team", "/plan": "Plan and credits", "/program": "Your growth plan",
 };
 
 export function App() {
@@ -40,8 +41,8 @@ export function App() {
             <Route path="/onboard" element={<OnboardPage />} />
             <Route path="/studio" element={<StudioPage />} />
             <Route path="/team" element={<TeamPage />} />
-            <Route path="/plan" element={<SoonPage id="plan" />} />
-            <Route path="/program" element={<SoonPage id="program" />} />
+            <Route path="/plan" element={<PlanPage />} />
+            <Route path="/program" element={<ProgramPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
