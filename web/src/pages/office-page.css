@@ -97,7 +97,7 @@
 .try-q:hover svg { color: var(--color-accent-ink); transform: translateX(2px); }
 .roster-list { list-style: none; display: grid; gap: 8px; }
 .roster-dept { display: grid; gap: 2px; padding-left: 10px; border-left: 2px solid oklch(62% 0.11 var(--hue)); }
-.roster-dept-name { font-size: var(--text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-muted); }
+.roster-dept-name { font-size: var(--text-xs); font-weight: 600; color: var(--color-muted); }
 .roster-agent {
   display: flex; align-items: center; gap: 8px; padding: 3px 4px; margin-left: -4px;
   border: 0; border-radius: var(--radius-sm); background: transparent; color: inherit; cursor: pointer; text-align: left;

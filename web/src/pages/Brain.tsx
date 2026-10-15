@@ -16,6 +16,9 @@ import "./brain.css";
 
 const GraphView = lazy(() => import("../components/GraphView"));
 
+/** BASED_ON → "based on": relationship names read as plain words. */
+const relText = (type = "") => type.toLowerCase().replace(/_/g, " ");
+
 export default function BrainPage() {
   const { tenant, effectiveTheme, reducedMotion } = useApp();
   const [params, setParams] = useSearchParams();
@@ -270,7 +273,12 @@ function fmtValue(v: unknown): string {
   return JSON.stringify(v);
 }
 
-const humanKey = (k: string) => k.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+/** decidedAt → "Decided at", lcp → "LCP": sentence case, with the usual acronyms kept. */
+const ACRONYMS = new Set(["lcp", "ctr", "cpa", "seo", "url", "h1", "id", "kpi", "ga4"]);
+const humanKey = (k: string) =>
+  k.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/_/g, " ").toLowerCase()
+    .split(" ").map((w) => (ACRONYMS.has(w) ? w.toUpperCase() : w)).join(" ")
+    .replace(/^./, (c) => c.toUpperCase());
 
 function NodePanel({ id, detail, loading, error, onSelect, onClose, focusNeighbours, setFocusNeighbours }: {
   id: string; detail?: NodeDetail; loading: boolean; error?: string; onSelect: (id: string) => void; onClose: () => void;
@@ -367,7 +375,7 @@ function NodePanel({ id, detail, loading, error, onSelect, onClose, focusNeighbo
               const [dir, type] = k.split("|");
               return (
                 <div key={k} className="nb-group">
-                  <p className="nb-rel"><code>{dir === "out" ? `${type} →` : `← ${type}`}</code></p>
+                  <p className="nb-rel" title={type}>{dir === "out" ? `${relText(type)} →` : `← ${relText(type)}`}</p>
                   <ul>
                     {list!.map((nb) => (
                       <li key={nb.node.id + k}>

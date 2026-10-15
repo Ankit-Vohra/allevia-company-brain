@@ -100,7 +100,7 @@ button.legend-chip:hover { border-color: var(--color-ink-2); }
 .source-row > span:nth-child(2) { flex: 1; min-width: 0; }
 .nb-groups { display: grid; gap: 12px; }
 .nb-group { display: grid; gap: 3px; }
-.nb-rel code { font-size: var(--text-2xs); color: var(--color-muted); letter-spacing: 0.02em; }
+.nb-rel { font-size: var(--text-xs); font-style: italic; color: var(--color-accent-ink); }
 .nb-group ul { list-style: none; display: grid; gap: 1px; }
 .nb-row { width: 100%; display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 9px; align-items: center; padding: 5px 6px; margin: 0 -6px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-ink); text-align: left; cursor: pointer; }
 .nb-row:hover { background: var(--color-paper-2); }

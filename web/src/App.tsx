@@ -8,9 +8,11 @@ const BrainPage = lazy(() => import("./pages/Brain"));
 const InsightsPage = lazy(() => import("./pages/Insights"));
 const ApprovalsPage = lazy(() => import("./pages/Approvals"));
 const OnboardPage = lazy(() => import("./pages/Onboard"));
+const SoonPage = lazy(() => import("./pages/Soon"));
 
 const TITLES: Record<string, string> = {
-  "/": "Office", "/ask": "Ask", "/brain": "Brain", "/insights": "Insights", "/approvals": "Approvals", "/onboard": "Set up a business",
+  "/": "Office", "/ask": "Ask", "/brain": "Brain", "/insights": "Insights", "/approvals": "Approvals", "/onboard": "Add a business",
+  "/studio": "Studio", "/team": "Tell your team", "/plan": "Plan and usage", "/program": "Your 90 days",
 };
 
 export function App() {
@@ -34,6 +36,10 @@ export function App() {
             <Route path="/insights" element={<InsightsPage />} />
             <Route path="/approvals" element={<ApprovalsPage />} />
             <Route path="/onboard" element={<OnboardPage />} />
+            <Route path="/studio" element={<SoonPage id="studio" />} />
+            <Route path="/team" element={<SoonPage id="team" />} />
+            <Route path="/plan" element={<SoonPage id="plan" />} />
+            <Route path="/program" element={<SoonPage id="program" />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

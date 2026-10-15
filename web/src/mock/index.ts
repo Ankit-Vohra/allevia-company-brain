@@ -47,7 +47,7 @@ function seed() {
     [storiesRun, "s-aamdani-stories", "Why we paused daily stories", "2026-10-14T09:05:00+05:30"],
     [seoRun, "s-aamdani-seo", "Pages losing search clicks", "2026-10-13T18:30:00+05:30"],
     [pendingRun, "s-aamdani-pending", "What's waiting on me", "2026-10-12T08:15:00+05:30"],
-    [avsRun, "s-avs-architect", "Not ranking for 'architect in Raipur'", "2026-10-15T10:25:00+05:30"],
+    [avsRun, "s-avs-architect", "Not ranking for 'architect in London'", "2026-10-15T10:25:00+05:30"],
   ];
   for (const [spec, sid, title, at] of seeds) {
     const events = compile(spec, graphs[spec.tenant]!, { sessionId: sid, turnId: `t-${sid.slice(2)}` }).map((x) => x.event);
@@ -231,7 +231,7 @@ export const mockApi = {
       if (e.type === "done" && !tenants.some((x) => x.id === tenant)) {
         let domain = req.url;
         try { domain = new URL(/^https?:/.test(req.url) ? req.url : `https://${req.url}`).hostname.replace(/^www\./, ""); } catch { /* keep */ }
-        tenants.push({ id: tenant, name: req.name.trim() || domain, domain, industry: "Set up from its website" });
+        tenants.push({ id: tenant, name: req.name.trim() || domain, domain, industry: "Set up from its website", country: req.country, currency: req.currency, locale: req.locale });
         graphs[tenant] = buildGraph(nodes, edges);
       }
       onEvent(e);

@@ -13,7 +13,7 @@ import { WorkLanes } from "../components/WorkLanes";
 import { labelOfId, nameOfId } from "../lib/labels";
 import { useMedia } from "../lib/useMedia";
 import { useApp, useAsync } from "../state/app";
-import { type RunView, deriveRun } from "../state/derive";
+import { type RunView, deriveRun, laneOf } from "../state/derive";
 import { type RunRecord, runStore, useRunStore } from "../state/runs";
 import type { SessionSummary, TurnRecord } from "../types-ext";
 import { SUGGESTIONS } from "./Office";
@@ -437,6 +437,25 @@ function GraphPane({ view, turnLabel, focus, highlight, onFocus, onClear, dark, 
   const pathIds = view?.path?.nodes.map((n) => n.id) ?? [];
   const { tenant } = useApp();
   const focusNode = useAsync(() => (focus ? api.node(tenant.id, focus).catch(() => null) : Promise.resolve(null)), [focus, tenant.id]);
+  // while a run is live: the nodes each working desk read in its latest step, ringed in gold on the graph
+  const reading = useMemo(() => {
+    if (!view || view.final || view.path) return { ids: [] as string[], who: [] as string[] };
+    const ids = new Set<string>();
+    const who: string[] = [];
+    for (const a of view.activeAgents) {
+      const lane = laneOf(view, a);
+      const step = [...(lane?.steps ?? [])].reverse().find((st) => st.done && st.nodes.length);
+      if (!step) continue;
+      step.nodes.forEach((n) => ids.add(n.id));
+      who.push(agentDef(a)?.name ?? a);
+    }
+    if (!ids.size) {
+      // the working desks have not read anything yet: show the last thing anyone read
+      const last = Object.values(view.lanes).flatMap((l) => l.steps).filter((st) => st.done && st.nodes.length).sort((x, y) => y.at - x.at)[0];
+      if (last) { last.nodes.forEach((n) => ids.add(n.id)); who.push(agentDef(last.agent)?.name ?? last.agent); }
+    }
+    return { ids: [...ids], who };
+  }, [view]);
 
   return (
     <div className="graph-pane">
@@ -444,7 +463,7 @@ function GraphPane({ view, turnLabel, focus, highlight, onFocus, onClear, dark, 
         <div>
           <h2 className="graph-pane-title">{view?.path ? "The path behind the answer" : view && nodes.length ? "What the team is reading" : "The graph"}</h2>
           <p className="graph-pane-meta">
-            {view && nodes.length ? <>{nodes.length} nodes · {edges.length} links{view.path ? <> · <span className="gold-text">{view.path.nodes.length} on the path</span></> : null}</> : "Lights up as your team works"}
+            {view && nodes.length ? <>{nodes.length} nodes · {edges.length} links{view.path ? <> · <span className="gold-text">{view.path.nodes.length} on the path</span></> : reading.who.length ? <> · <span className="gold-text">ringed: what {reading.who.join(" and ")} read last</span></> : null}</> : "Lights up as your team works"}
             {turnLabel && <> · {turnLabel}</>}
           </p>
         </div>
@@ -463,6 +482,8 @@ function GraphPane({ view, turnLabel, focus, highlight, onFocus, onClear, dark, 
               dark={dark}
               reducedMotion={reducedMotion}
               onNodeClick={onFocus}
+              followGrowth={!view?.path}
+              activeIds={reading.ids}
               ariaLabel={`Knowledge graph: ${nodes.length} nodes the team read.${pathIds.length ? ` The answer's path: ${view!.path!.nodes.map((n) => n.name).join(", then ")}.` : ""}`}
             />
           </Suspense>

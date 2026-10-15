@@ -116,7 +116,8 @@ label.label .hint { font-weight: 400; color: var(--color-muted); font-size: var(
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--color-rule-2);
 }
-.section-title { font-size: var(--text-xs); font-weight: 600; color: var(--color-muted); letter-spacing: 0.04em; text-transform: uppercase; }
+/* section heads read like ledger headings: a small serif in ink, sentence case */
+.section-title { font-family: var(--font-display); font-size: var(--text-md); font-weight: 500; line-height: 1.25; color: var(--color-ink); letter-spacing: -0.005em; font-optical-sizing: auto; }
 .page-title { font-family: var(--font-display); font-size: var(--text-xl); line-height: 1.15; letter-spacing: -0.012em; font-weight: 400; }
 .empty {
   display: grid; gap: var(--space-xs); justify-items: start; padding: var(--space-lg);

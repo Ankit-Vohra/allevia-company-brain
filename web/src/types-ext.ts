@@ -94,7 +94,7 @@ export interface Recommendation {
   why: string;              // markdown with [[node-id]] citations
   impact: string;
   /** Money at stake, when there is a figure: shown in the business's currency. */
-  value?: { amount: number; currency?: string; per?: "week" | "month" | "year" };
+  value?: { amount: number; currency?: string; per?: "week" | "month" | "year"; note?: string };
   confidence: number;       // 0–1
   score: number;
   status: "open" | "proposed" | "approved" | "dismissed";
@@ -125,7 +125,15 @@ export interface Approval {
 
 export interface ApprovalDecision { decision: "approve" | "reject"; editedPayload?: { title: string; body: string; target?: string } }
 
-export interface OnboardRequest { name: string; url: string; instagram?: string }
+export interface OnboardRequest {
+  name: string;
+  url: string;
+  instagram?: string;
+  /** Where the business trades, and so which currency and date style the team reports in (product design §8). */
+  country?: string;
+  currency?: string;   // ISO 4217
+  locale?: string;     // BCP 47
+}
 
 /** A stored turn's event log, as returned by GET /api/:t/turns/:id/replay. */
 export type ReplayLog = AgentEvent[];

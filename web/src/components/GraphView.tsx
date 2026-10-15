@@ -22,6 +22,8 @@ export interface GraphViewProps {
   citedIds?: string[];
   /** Nodes to bring forward (the rest dim); the view zooms to them. */
   highlightIds?: string[];
+  /** Nodes being read right now: ringed in gold and labelled, without dimming the rest. */
+  activeIds?: string[];
   colorBy?: "label" | "community";
   /** Size nodes by PageRank (rank) instead of by how connected they are on screen. */
   sizeBy?: "rank" | "degree";
@@ -33,6 +35,10 @@ export interface GraphViewProps {
   labels?: "auto" | "all";
   ariaLabel: string;
   fitPadding?: number;
+  /** Keep the whole graph in view while it grows (onboarding, a run in progress), until the user pans or zooms. */
+  followGrowth?: boolean;
+  /** The closest a fit may zoom in, so two or three nodes do not fill the screen. */
+  maxFitZoom?: number;
 }
 
 const keyOf = (e: { from: string; type: string; to: string }) => `${e.from}|${e.type}|${e.to}`;
@@ -52,8 +58,8 @@ function gravity(strength: number) {
 }
 
 export default function GraphView({
-  nodes, edges, path, focusId, citedIds, highlightIds, colorBy = "label", sizeBy = "rank", dark, reducedMotion, onNodeClick, height, centerId,
-  labels = "auto", ariaLabel, fitPadding = 36,
+  nodes, edges, path, focusId, citedIds, highlightIds, activeIds, colorBy = "label", sizeBy = "rank", dark, reducedMotion, onNodeClick, height, centerId,
+  labels = "auto", ariaLabel, fitPadding = 36, followGrowth = false, maxFitZoom = 2.6,
 }: GraphViewProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<ForceGraphMethods<PNode, LinkObject<GNode, GLink>> | undefined>(undefined);
@@ -62,8 +68,17 @@ export default function GraphView({
   const [data, setData] = useState<{ nodes: GNode[]; links: GLink[] }>({ nodes: [], links: [] });
   const [size, setSize] = useState({ w: 0, h: height ?? 0 });
   const hoverRef = useRef<string | null>(null);
-  const fitCount = useRef(0);
+  const fitCount = useRef("");
   const userMoved = useRef(false);
+  const grownTo = useRef(0);
+
+  /** Fit everything (or a subset) in view, then back off if that zoomed in too far. */
+  const fit = (ms: number, filter?: (n: PNode) => boolean, pad = fitPadding) => {
+    const fg = fgRef.current;
+    if (!fg) return;
+    fg.zoomToFit(ms, pad, filter);
+    setTimeout(() => { if (fgRef.current && fgRef.current.zoom() > maxFitZoom) fgRef.current.zoom(maxFitZoom, reducedMotion ? 0 : 250); }, ms + 30);
+  };
 
   useLayoutEffect(() => {
     const el = wrapRef.current;
@@ -82,7 +97,7 @@ export default function GraphView({
       // a different graph altogether: start over, and fit it again
       nodeMap.current.clear();
       linkMap.current.clear();
-      fitCount.current = 0;
+      fitCount.current = "";
       userMoved.current = false;
     }
     for (const n of nodes) {
@@ -129,6 +144,7 @@ export default function GraphView({
   }, [path]);
   const cited = useMemo(() => new Set(citedIds ?? []), [citedIds]);
   const hl = useMemo(() => new Set(highlightIds ?? []), [highlightIds]);
+  const active = useMemo(() => new Set(activeIds ?? []), [activeIds]);
   const dimmed = (id: string) => hl.size > 0 && !hl.has(id) && !pathNodes.has(id);
   const isPathLink = (l: GLink) => pathLinks.has(`${idOf(l.source)}|${idOf(l.target)}`);
 
@@ -185,22 +201,44 @@ export default function GraphView({
   // bring a highlighted set into view
   useEffect(() => {
     if (!hl.size) return;
-    const t = setTimeout(() => fgRef.current?.zoomToFit(reducedMotion ? 0 : 600, 56, (n) => hl.has((n as GNode).id)), 80);
+    const t = setTimeout(() => fit(reducedMotion ? 0 : 600, (n) => hl.has((n as GNode).id), 56), 80);
     return () => clearTimeout(t);
   }, [hl, reducedMotion]);
 
   // a path that arrives after the layout settled: show all of it
   useEffect(() => {
     if (!pathNodes.size || userMoved.current || focusId) return;
-    const t = setTimeout(() => fgRef.current?.zoomToFit(reducedMotion ? 0 : 700, fitPadding), 900);
+    const t = setTimeout(() => fit(reducedMotion ? 0 : 700), 900);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathNodes, reducedMotion, fitPadding, focusId]);
+
+  // a growing graph: refit shortly after each batch of new nodes, so nothing grows out of frame
+  useEffect(() => {
+    if (!followGrowth || userMoved.current || focusId || hl.size || pathNodes.size) return;
+    if (data.nodes.length === grownTo.current) return;
+    const t = setTimeout(() => { grownTo.current = data.nodes.length; fit(reducedMotion ? 0 : 450); }, 420);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, followGrowth, focusId, hl, pathNodes, reducedMotion]);
 
   const drawLabels = (ctx: CanvasRenderingContext2D, scale: number) => {
     const fs = 11 / scale;
     const hover = hoverRef.current;
-    const placed: [number, number, number, number][] = [];
-    const hit = (r: [number, number, number, number]) => placed.some((p) => r[0] < p[0] + p[2] && r[0] + r[2] > p[0] && r[1] < p[1] + p[3] && r[1] + r[3] > p[1]);
+    type Rect = [number, number, number, number];
+    const placed: Rect[] = [];
+    const overlaps = (r: Rect, p: Rect) => r[0] < p[0] + p[2] && r[0] + r[2] > p[0] && r[1] < p[1] + p[3] && r[1] + r[3] > p[1];
+    // labels keep off other nodes as well as off each other
+    const dots: (Rect & { id?: string })[] = [];
+    for (const g of nodeMap.current.values()) {
+      const n = g as PNode;
+      if (n.x === undefined || n.y === undefined || dimmed(n.id)) continue;
+      const r = radius(n) + 1.5 / scale;
+      const box = [n.x - r, n.y - r, r * 2, r * 2] as Rect & { id?: string };
+      box.id = n.id;
+      dots.push(box);
+    }
+    const hit = (r: Rect, self?: string) => placed.some((p) => overlaps(r, p)) || dots.some((d) => d.id !== self && overlaps(r, d));
     const ranked: { n: PNode; pri: number }[] = [];
     for (const g of nodeMap.current.values()) {
       const n = g as PNode;
@@ -210,29 +248,51 @@ export default function GraphView({
       else if (n.id === hover) pri = 90;
       else if (pathNodes.has(n.id)) pri = 80 - (pathOrder.get(n.id) ?? 0) * 0.1;
       else if (hl.has(n.id)) pri = 70;
+      else if (active.has(n.id)) pri = 75;
       else if (n.id === centerId) pri = 65;
       else if (labels === "all") pri = 20 + (n.rank ?? n.weight ?? 0);
       else if ((n.rank ?? 0) >= 0.5 || (n.weight ?? 0) >= 0.75 || scale > 2.2) pri = 10 + (n.weight ?? n.rank ?? 0) * 10 + n.deg * 0.1;
       if (pri >= 0) ranked.push({ n, pri });
     }
     ranked.sort((a, b) => b.pri - a.pri);
+    const fg = fgRef.current;
+    const tl = fg?.screen2GraphCoords(0, 0), br = fg?.screen2GraphCoords(size.w, size.h);
+    const m = 4 / scale;
+    const view = tl && br ? { x0: tl.x + m, y0: tl.y + m, x1: br.x - m, y1: br.y - m } : { x0: -Infinity, y0: -Infinity, x1: Infinity, y1: Infinity };
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     for (const { n, pri } of ranked) {
       const strong = pri >= 70;
       const inPath = pathNodes.has(n.id);
       ctx.font = `${strong ? 600 : 500} ${fs}px "IBM Plex Sans", system-ui, sans-serif`;
-      const name = n.name.length > 30 ? n.name.slice(0, 28) + "…" : n.name;
+      const max = inPath ? 26 : 30;
+      const name = n.name.length > max ? n.name.slice(0, max - 2).trimEnd() + "…" : n.name;
       const text = inPath && pathOrder.has(n.id) ? `${pathOrder.get(n.id)! + 1}. ${name}` : name;
       const w = ctx.measureText(text).width + 4 / scale;
       const h = fs * 1.25;
       const r = radius(n);
-      const below: [number, number, number, number] = [n.x! - w / 2, n.y! + r + 2 / scale, w, h];
-      const above: [number, number, number, number] = [n.x! - w / 2, n.y! - r - 2 / scale - h, w, h];
-      const rect = !hit(below) ? below : !hit(above) ? above : pri >= 90 ? below : null;
+      const gap = 2 / scale;
+      const options: Rect[] = [
+        [n.x! - w / 2, n.y! + r + gap, w, h],              // below
+        [n.x! - w / 2, n.y! - r - gap - h, w, h],          // above
+        [n.x! + r + gap * 2, n.y! - h / 2, w, h],          // right
+        [n.x! - r - gap * 2 - w, n.y! - h / 2, w, h],      // left
+      ];
+      // keep labels inside the canvas: nudge sideways rather than run off an edge
+      for (const o of options) {
+        if (o[0] < view.x0) o[0] = view.x0;
+        if (o[0] + o[2] > view.x1) o[0] = view.x1 - o[2];
+      }
+      const usable = options.filter((o) => o[1] >= view.y0 && o[1] + o[3] <= view.y1);
+      let rect = usable.find((o) => !hit(o, n.id)) ?? null;
+      // the path and the node in focus are always labelled: take the spot that covers the least
+      if (!rect && pri >= 70) {
+        const cost = (o: Rect) => placed.filter((p) => overlaps(o, p)).length * 3 + dots.filter((d) => d.id !== n.id && overlaps(o, d)).length;
+        rect = [...(usable.length ? usable : options)].sort((a, b) => cost(a) - cost(b))[0]!;
+      }
       if (!rect) continue;
       placed.push(rect);
-      const tx = n.x!, ty = rect[1] + 0.5 / scale;
+      const tx = rect[0] + w / 2, ty = rect[1] + 0.5 / scale;
       ctx.lineWidth = 3.2 / scale;
       ctx.lineJoin = "round";
       ctx.strokeStyle = colors.haloSoft;
@@ -273,9 +333,11 @@ export default function GraphView({
           onNodeHover={(n) => { hoverRef.current = n ? n.id : null; if (wrapRef.current) wrapRef.current.style.cursor = n && onNodeClick ? "pointer" : ""; }}
           onNodeClick={(n) => onNodeClick?.(n.id)}
           onEngineStop={() => {
-            if (focusId || hl.size || userMoved.current || fitCount.current === data.nodes.length) return;
-            fitCount.current = data.nodes.length;
-            fgRef.current?.zoomToFit(reducedMotion ? 0 : 500, fitPadding);
+            // fit once per shape of the graph: when nodes arrive, and again once a path has settled
+            const key = `${data.nodes.length}:${pathNodes.size}`;
+            if (focusId || hl.size || userMoved.current || fitCount.current === key) return;
+            fitCount.current = key;
+            fit(reducedMotion ? 0 : 500);
           }}
           linkColor={(l) => (isPathLink(l) ? colors.gold : hl.size && (dimmed(idOf(l.source)) || dimmed(idOf(l.target))) ? colors.linkFaint : colors.link)}
           linkWidth={(l) => (isPathLink(l) ? 2.6 : 1)}
@@ -309,6 +371,17 @@ export default function GraphView({
               ctx.fillStyle = colors.gold;
               ctx.globalAlpha = 0.35;
               ctx.fill();
+              ctx.globalAlpha = 1;
+            }
+            if (active.has(n.id) && !inPath) {
+              // being read right now: a gold ring that breathes
+              const t = reducedMotion ? 0.5 : (Math.sin(performance.now() / 260) + 1) / 2;
+              ctx.beginPath();
+              ctx.arc(x, y, r + 2.6 + t * 1.6, 0, Math.PI * 2);
+              ctx.strokeStyle = colors.gold;
+              ctx.lineWidth = 1.8;
+              ctx.globalAlpha = 0.65 + 0.35 * t;
+              ctx.stroke();
               ctx.globalAlpha = 1;
             }
             if (dim) ctx.globalAlpha = 0.18;

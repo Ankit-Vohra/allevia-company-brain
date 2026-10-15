@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, useNavigate } from "react-router";
+import { NavLink, useLocation, useNavigate } from "react-router";
 import { api } from "../api";
 import { useApp, useAsync } from "../state/app";
+import { SOON } from "../lib/soon";
 import { Icon, type IconName } from "./Icon";
 
 const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
@@ -99,6 +100,55 @@ function ThemeToggle() {
   );
 }
 
+/** The menu for screens not in the main bar: setting up a business, and the screens that are coming soon. On a phone
+ *  it also holds what the top bar has no room for. */
+function MoreMenu({ variant }: { variant: "desktop" | "mobile" }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const loc = useLocation();
+  useEffect(() => { setOpen(false); }, [loc.pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  const items = variant === "desktop" ? SOON.filter((x) => x.id !== "studio") : SOON;
+  const active = items.some((x) => loc.pathname === x.path) || (variant === "mobile" && loc.pathname === "/onboard");
+  return (
+    <div className={`more more-${variant}`} ref={ref}>
+      {variant === "desktop" ? (
+        <button type="button" className={`topnav-link more-btn${active ? " active" : ""}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          More <Icon name="chevron" size={15} />
+        </button>
+      ) : (
+        <button type="button" className="btn btn-quiet btn-icon more-btn" aria-haspopup="menu" aria-expanded={open} aria-label="More screens" onClick={() => setOpen((o) => !o)}>
+          <Icon name="menu" />
+        </button>
+      )}
+      {open && (
+        <div className="switcher-menu more-menu" role="menu" aria-label="More screens">
+          {variant === "mobile" && (
+            <NavLink to="/onboard" role="menuitem" className="more-item">
+              <span className="more-icon"><Icon name="plus" size={16} /></span>
+              <span className="switcher-text"><span className="switcher-name">Add a business</span><span className="switcher-domain">Build a brain from a website</span></span>
+            </NavLink>
+          )}
+          {items.map((x) => (
+            <NavLink key={x.id} to={x.path} role="menuitem" className="more-item">
+              <span className="more-icon"><Icon name={x.icon} size={16} /></span>
+              <span className="switcher-text"><span className="switcher-name">{x.nav}</span><span className="switcher-domain">{x.blurb}</span></span>
+              <span className="soon-tag">Soon</span>
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TopBar() {
   const { mode } = useApp();
   const pending = usePendingApprovals();
@@ -117,9 +167,15 @@ export function TopBar() {
             {n.to === "/approvals" && pending > 0 && <span className="count" aria-label={`${pending} pending`}>{pending}</span>}
           </NavLink>
         ))}
+        <NavLink to="/studio" className="topnav-link">
+          <Icon name="sparkle" size={17} />
+          Studio
+          <span className="soon-tag">Soon</span>
+        </NavLink>
+        <MoreMenu variant="desktop" />
         <NavLink to="/onboard" className="topnav-link topnav-add">
           <Icon name="plus" size={16} />
-          Onboard
+          Add a business
         </NavLink>
       </nav>
       <div className="topbar-right">
@@ -129,6 +185,7 @@ export function TopBar() {
           </span>
         )}
         <ThemeToggle />
+        <MoreMenu variant="mobile" />
       </div>
     </header>
   );

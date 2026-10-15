@@ -10,6 +10,7 @@ import { AgentAvatar, agentDef, fmtMs } from "../components/bits";
 import { Icon } from "../components/Icon";
 import { WorkFeed } from "../components/WorkFeed";
 import { OfficeCanvas } from "../office/OfficeCanvas";
+import { fmtLongDate } from "../lib/format";
 import { useMedia } from "../lib/useMedia";
 import { useApp, useAsync } from "../state/app";
 import { laneOf } from "../state/derive";
@@ -22,7 +23,7 @@ export const SUGGESTIONS: Record<string, string[]> = {
     "Which pages are losing search clicks, and why?",
     "What is waiting on me this week?",
   ],
-  "avs-atelier": ["Why don't we show up when people search 'architect in Raipur'?"],
+  "avs-atelier": ["Why don't we show up when people search 'architect in London'?"],
 };
 
 export function OfficePage() {
@@ -94,7 +95,7 @@ export function OfficePage() {
   }, [view, working]);
 
   const suggestions = SUGGESTIONS[tenant.id] ?? SUGGESTIONS["avs-atelier"]!;
-  const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
+  const today = fmtLongDate();
   const statusLine = running
     ? `${working.length ? `${working.map((a) => agentDef(a)?.name).join(", ")} working` : "Starting"} · ${fmtMs(Math.max(0, elapsed))}`
     : record?.status === "done" && view?.final
