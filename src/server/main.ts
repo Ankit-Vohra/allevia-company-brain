@@ -47,10 +47,11 @@ export function productionDeps(o: { model?: string; publicMode: boolean; authReq
 }
 
 // What an operator should hear at start-up when the settings leave every registered business open to whoever reaches the port.
-export function exposureWarnings(o: { host: string; publicMode: boolean; authRequired: boolean }): string[] {
+export function exposureWarnings(o: { host: string; publicMode: boolean; authRequired: boolean; hubEnabled?: boolean }): string[] {
   if (o.authRequired) return [];
   const loopback = o.host === "127.0.0.1" || o.host === "localhost" || o.host === "::1";
   return [
+    ...(o.hubEnabled ? ["the Discord hub is on and ALLEVIA_AUTH is off: anyone who knows a business's id can ask this server for a link into that business's Discord area, which lets them ask its team and decide its cards. Set ALLEVIA_AUTH=1 before real customers use the hub."] : []),
     ...(o.publicMode ? ["public mode shows EVERY registered business read-only to anyone who can reach this port. With real customers registered, set ALLEVIA_AUTH=1 and mark only the demo businesses (auth:demo)."] : []),
     ...(!o.publicMode && !loopback ? [`ALLEVIA_AUTH is off and the server listens on ${o.host}: anyone who can reach it can read and change any business. Set ALLEVIA_AUTH=1 before real customers are on it.`] : []),
   ];
@@ -76,7 +77,7 @@ export async function startServer(opts: ServeOpts = {}): Promise<{ server: Serve
     s.once("error", reject);
   });
   const url = `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}`;
-  for (const w of exposureWarnings({ host, publicMode, authRequired })) console.error(`WARNING: ${w}`);
+  for (const w of exposureWarnings({ host, publicMode, authRequired, hubEnabled: !!hub })) console.error(`WARNING: ${w}`);
   console.error(`Allevia on ${url}${publicMode ? " (public read-only mode)" : ""}${authRequired ? " (owner links required)" : ""}${staticDir ? "" : " (API only: build the web app with `cd web && npm run build`)"}`);
   return { server, url, close: () => { stopRetry?.(); return new Promise<void>((r) => server.close(() => r())); } };
 }
