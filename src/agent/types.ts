@@ -18,6 +18,7 @@ export interface FindingRecord {
   rejected: boolean;
   partial?: boolean;     // its desk ran out of turns: this is what it had written by then
   guidedBy?: string[];   // the owner's instruction Memories its desk worked under (saved as GUIDED_BY)
+  skills?: string[];     // ids of the skills its desk opened (saved on the Finding)
 }
 
 // The owner's settings for the team, loaded from the graph before a turn (src/settings/directives.ts loadTeamSettings):

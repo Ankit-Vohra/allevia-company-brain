@@ -8,7 +8,9 @@ export interface EdgeRef { from: string; type: string; to: string; since?: numbe
 export interface SourceRef { id: string; title: string; asOf?: string }
 
 // What every graph tool returns: the data plus the nodes/edges it touched (for the path view and the citation check).
-export interface ToolResult<T = unknown> { data: T; nodes: NodeRef[]; edges: EdgeRef[]; sources: SourceRef[]; note?: string }
+// `guidance` is text for the model only (a skill's method): it is shown to the agent but is never evidence, so it is not
+// recorded as something the turn saw and no citation or number check counts it.
+export interface ToolResult<T = unknown> { data: T; nodes: NodeRef[]; edges: EdgeRef[]; sources: SourceRef[]; note?: string; guidance?: string }
 
 export type AgentId = string; // a roster id, e.g. "chief-of-staff"
 
@@ -46,6 +48,8 @@ export type AgentEvent =
   | { type: "asset"; agent: AgentId; assetId: string; kind: AssetKind; parentId?: string; thumb?: string; simulated?: boolean }
   | { type: "assessment"; agent: AgentId; assetId: string; verdict: AssessmentVerdict; overlays: AssessmentOverlay[] }
   | { type: "learned"; ruleId: string; text: string; fromApprovalId: string }
+  // An agent loaded one of its skills (how it does this kind of work here): "Tara is using: Instagram post craft".
+  | { type: "skill_used"; agent: AgentId; skillId: string; name: string; source: "code" | "business" }
   | { type: "error"; agent?: AgentId; message: string };
 
 // An Asset node's role: the owner's upload, a generated or edited variant of it, or the approved final.

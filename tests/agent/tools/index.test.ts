@@ -6,7 +6,7 @@ import { AGENTS } from "../../../shared/roster.js";
 const SPEC_TOOLS = [
   "search", "get_entity", "neighbors", "find_paths", "trace_decision", "who_owns", "who_knows", "impact_of", "important", "topics",
   "metric_trend", "content_performance", "seo_report", "ad_report", "playbook", "history", "recall", "cypher", "remember",
-  "propose_action", "show_path",
+  "propose_action", "show_path", "use_skill",
 ];
 
 // The first {...} after "Example:" in a description.

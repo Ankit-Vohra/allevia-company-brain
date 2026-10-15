@@ -36,6 +36,7 @@ import type { GraphHandle } from "../graph/client.js";
 import { modesUsed, type CapabilityModeInfo } from "../capabilities/modes.js";
 import { typeFromId } from "../util/ids.js";
 import { checkTurn, extractCitations, hasNumbers } from "./checks.js";
+import type { SkillCatalog } from "./skills/catalog.js";
 import { clipToItem } from "./style.js";
 import { languageNote } from "./language.js";
 import {
@@ -66,6 +67,8 @@ export const PLANNER_MODEL = "haiku";
 // A desk the owner put on light mode runs on the cheapest model too.
 export const LIGHT_MODEL = "haiku";
 
+export const USE_SKILL = "use_skill";
+
 // What the Chief may use while writing the answer from the desks' findings.
 const SYNTHESIS_TOOLS: ReadonlySet<string> = new Set(["show_path", "propose_action"]);
 
@@ -93,6 +96,7 @@ export interface TurnDeps {
   capabilities?: CapabilityModeInfo[];      // the capability ladder: the Chief says where non-live data comes from
   team?: TeamSettings;                      // desks switched off or light, and the owner's standing instructions
   language?: string;                        // the business's own language setting (language.ts); absent: follow the question
+  skills?: SkillCatalog;                    // the skills agents can open (use_skill): the shipped packs plus this business's own; none = no skills
 }
 
 export interface Plan { steps: PlanStep[]; rationale: string; chiefTask?: string }
@@ -110,7 +114,10 @@ export interface TurnOutcome {
   failed: string[];                         // agents whose work failed
   touched: TouchedSet;
   guidedBy: string[];                       // the owner's instructions the turn worked under (saved as Turn GUIDED_BY)
+  skills: SkillUse[];                       // the skills agents opened this turn, once each per agent (saved on the Turn)
 }
+
+export interface SkillUse { agent: string; skillId: string; name: string; source: "code" | "business" }
 
 // ---------- pure helpers (exported for tests) ----------
 
@@ -225,12 +232,14 @@ export function reviewersFor(producerId: string, text: string, opts: { checked?:
 // write tools when it reviews or revises, only show_path/propose_action when the Chief writes from findings, and
 // `remember` only when the owner's question asks for it (and then guarded by rememberRefusal).
 export function toolsFor(
-  agent: AgentDef, phase: RunPhase, getTools: (names: string[]) => AlleviaTool[], opts: { lean?: boolean; question?: string } = {},
+  agent: AgentDef, phase: RunPhase, getTools: (names: string[]) => AlleviaTool[], opts: { lean?: boolean; question?: string; skills?: SkillCatalog } = {},
 ): AlleviaTool[] {
   const noWrites = phase === "plan" || phase === "review" || phase === "revise";
   const question = opts.question ?? "";
   const names = agent.tools.filter((n) =>
     !(phase === "synthesis" && opts.lean && !SYNTHESIS_TOOLS.has(n)) && !(n === REMEMBER && !asksToRemember(question)));
+  // An agent with skills can open them in every job (a plan too: the Chief's planning skill), at no cost when it doesn't.
+  if (opts.skills?.has(agent.id) && (phase !== "plan" || agent.id === CHIEF)) names.push(USE_SKILL);
   const allowed = new Set(names);
   return getTools(names)
     .filter((t) => allowed.has(t.name) && !(noWrites && isWriteTool(t)))
@@ -514,6 +523,7 @@ class Turn {
   private readonly light: ReadonlySet<string>;           // desks on light mode: the cheapest model
   readonly reviews: ReviewRecord[] = [];
   readonly proposals: ProposalRecord[] = [];
+  readonly skillsUsed: SkillUse[] = [];
   path?: { nodes: NodeRef[]; edges: EdgeRef[] };
   readonly touched = new TouchedSet();
 
@@ -540,17 +550,17 @@ class Turn {
   }
 
   private ctx(agentId: string): ToolContext {
-    const { graph, now, embedQuery, readOnly } = this.deps;
+    const { graph, now, embedQuery, readOnly, skills } = this.deps;
     return {
       graph, tenant: this.input.tenant, turnId: this.input.turnId, agentId, asker: this.input.asker, touched: this.touched, now,
-      ...(embedQuery ? { embedQuery } : {}), ...(readOnly !== undefined ? { readOnly } : {}),
+      ...(embedQuery ? { embedQuery } : {}), ...(readOnly !== undefined ? { readOnly } : {}), ...(skills ? { skills } : {}),
     };
   }
 
   private model(agent: AgentDef): string { return this.deps.model ?? (this.light.has(agent.id) ? LIGHT_MODEL : agent.model); }
 
   private tools(agent: AgentDef, phase: RunPhase, lean = false): AlleviaTool[] {
-    return toolsFor(agent, phase, this.deps.getTools, { lean, question: this.input.question });
+    return toolsFor(agent, phase, this.deps.getTools, { lean, question: this.input.question, ...(this.deps.skills ? { skills: this.deps.skills } : {}) });
   }
 
   private get promptOpts(): PromptOpts {
@@ -562,7 +572,7 @@ class Turn {
 
   // Every prompt an agent gets carries the owner's standing instructions about it. What a prompt showed counts as seen
   // (like the recall brief): the agent may cite it.
-  private system(agent: AgentDef, tools: AlleviaTool[]): string {
+  private system(agent: AgentDef, tools: AlleviaTool[], phase: RunPhase = "work"): string {
     const instructions = (this.deps.team?.instructions ?? []).filter((n) => n.agents.includes(agent.id));
     if (instructions.length) {
       const unseen = instructions.filter((n) => !this.touched.has(n.id));
@@ -573,7 +583,9 @@ class Turn {
       for (const n of instructions) seen.add(n.id);
       this.prompted.set(agent.id, seen);
     }
-    return agentSystemPrompt(agent, tools, { ...this.promptOpts, instructions });
+    // Skills are listed (name and when to use it) only when the agent can open them.
+    const skills = tools.some((t) => t.name === USE_SKILL) ? this.deps.skills?.forAgent(agent.id) ?? [] : [];
+    return agentSystemPrompt(agent, tools, { ...this.promptOpts, instructions, skills, skillPhase: phase === "review" ? "review" : "other" });
   }
 
   // The instructions that guided the turn, by agent: those its prompts carried that apply here. One scoped to a channel
@@ -606,6 +618,14 @@ class Turn {
       if (name === "show_path") {
         emit({ type: "path", nodes: result.nodes, edges: result.edges });
         commit(() => { this.path = { nodes: result.nodes, edges: result.edges }; });
+      } else if (name === USE_SKILL) {
+        const d = (result.data && typeof result.data === "object" ? result.data : {}) as Record<string, unknown>;
+        if (typeof d.skill === "string" && typeof d.name === "string") {
+          const use: SkillUse = { agent, skillId: d.skill, name: d.name, source: d.source === "business" ? "business" : "code" };
+          emit({ type: "skill_used", ...use });
+          emit({ type: "agent_status", agent, text: `${nameOf(agent)} is using: ${use.name}` });
+          commit(() => { if (!this.skillsUsed.some((u) => u.agent === agent && u.skillId === use.skillId)) this.skillsUsed.push(use); });
+        }
       } else if (name === "propose_action") {
         const p = toProposal(agent, args, result);
         if (p) {
@@ -691,9 +711,13 @@ class Turn {
   async plan(): Promise<Plan> {
     const chief = agentById(CHIEF)!;
     const enabled = AGENTS.map((a) => a.id).filter((id) => !this.off.has(id));
+    // The planner has no lookups, but it may open its planning skill (the desks' skills are named in its prompt).
+    const skills = this.deps.skills;
+    const tools = skills?.has(CHIEF) ? this.deps.getTools([USE_SKILL]) : [];
     const out = await this.step(chief, "Planning who does what", () => this.runAgent(chief, {
-      phase: "plan", model: this.deps.model ?? PLANNER_MODEL, system: planSystemPrompt({ ...this.promptOpts, disabled: [...this.off] }),
-      prompt: planPrompt({ question: this.input.question, recall: this.input.recall.text }), tools: [], outputSchema: planSchema(enabled), maxTurns: MAX_TURNS.plan,
+      phase: "plan", model: this.deps.model ?? PLANNER_MODEL,
+      system: planSystemPrompt({ ...this.promptOpts, disabled: [...this.off], ...(skills ? { skills, chiefCanOpenSkills: tools.length > 0 } : {}) }),
+      prompt: planPrompt({ question: this.input.question, recall: this.input.recall.text }), tools, outputSchema: planSchema(enabled), maxTurns: MAX_TURNS.plan,
     }));
     const plan = normalisePlan(out ? out.structured ?? tryParseJson(out.text) : undefined, this.input.question, { disabled: this.off });
     if (!out) plan.rationale = "Planning didn't finish, so I'm answering directly.";
@@ -848,7 +872,7 @@ class Turn {
       try {
         const tools = this.tools(reviewer, "review");
         const out = await this.runAgent(reviewer, {
-          phase: "review", system: this.system(reviewer, tools), tools, outputSchema: REVIEW_SCHEMA, maxTurns: MAX_TURNS.review,
+          phase: "review", system: this.system(reviewer, tools, "review"), tools, outputSchema: REVIEW_SCHEMA, maxTurns: MAX_TURNS.review,
           prompt: reviewPrompt({ question: this.input.question, reviewer, finding: this.view(f), evidence: this.evidence(f), toolRounds: toolRounds("review") }),
         });
         const s = (out.structured ?? tryParseJson(out.text)) as Record<string, unknown> | undefined;
@@ -878,7 +902,7 @@ class Turn {
     await this.step(producer, "Revising after review", async () => {
       const tools = this.tools(producer, "revise");
       const out = await this.runAgent(producer, {
-        phase: "revise", system: this.system(producer, tools), tools, outputSchema: FINDING_SCHEMA, maxTurns: MAX_TURNS.revise,
+        phase: "revise", system: this.system(producer, tools, "revise"), tools, outputSchema: FINDING_SCHEMA, maxTurns: MAX_TURNS.revise,
         prompt: revisePrompt({ question: this.input.question, task: f.task, finding: this.view(f), notes: notes.map((n) => ({ reviewer: n.reviewer, verdict: n.verdict, note: n.note })), toolRounds: toolRounds("revise"), agent: producer.id, language: this.languageNote }),
       });
       const next = this.toFinding(out, { id: f.id, agent: f.agent, task: f.task, depIds: f.basedOn });
@@ -1010,7 +1034,7 @@ class Turn {
     let res: RunOutput;
     try {
       res = await this.runAgent(chief, {
-        phase, system: this.system(chief, tools), tools, streamText: true, maxTurns: lean ? MAX_TURNS.synthesis : MAX_TURNS.direct,
+        phase, system: this.system(chief, tools, phase), tools, streamText: true, maxTurns: lean ? MAX_TURNS.synthesis : MAX_TURNS.direct,
         prompt: fast
           ? directPrompt({ question: this.input.question, recall: this.input.recall.text, task: plan.steps[0]!.task, toolRounds: toolRounds("direct"), sources, language: this.languageNote })
           : synthesisPrompt({
@@ -1064,9 +1088,11 @@ export async function runTurn(input: TurnInput, deps: TurnDeps, emit: Emit): Pro
   for (const f of findings) {
     const ids = byAgent.get(f.agent);
     if (ids?.length) f.guidedBy = ids;
+    const used = t.skillsUsed.filter((u) => u.agent === f.agent).map((u) => u.skillId);
+    if (used.length) f.skills = used;
   }
   return {
     ok, answer: text, plan, fastPath, findings, reviews: t.reviews, proposals: t.proposals, agents: t.agents, failed: t.failed, touched: t.touched,
-    guidedBy, ...(t.path ? { path: t.path } : {}),
+    guidedBy, skills: t.skillsUsed, ...(t.path ? { path: t.path } : {}),
   };
 }

@@ -5,6 +5,7 @@
 import type { z } from "zod";
 import type { GraphHandle } from "../graph/client.js";
 import type { EdgeRef, NodeRef, SourceRef, ToolResult } from "../../shared/contracts.js";
+import type { SkillCatalog } from "./skills/catalog.js";
 
 export interface ToolContext {
   graph: GraphHandle;
@@ -15,6 +16,7 @@ export interface ToolContext {
   touched: TouchedSet;
   now: number;              // epoch ms, fixed per turn (tests pin it)
   embedQuery?: (text: string) => Promise<number[]>; // injected; vector search is skipped when absent
+  skills?: SkillCatalog;    // this business's skills (use_skill); absent when skills are off
   readOnly?: boolean;       // MCP/public mode: write tools refuse
   signal?: AbortSignal;     // aborted when the agent's run is stopped (timeout, turn stopped): a write tool checks it
                             // right before it commits, so a run that was stopped mid-call changes nothing

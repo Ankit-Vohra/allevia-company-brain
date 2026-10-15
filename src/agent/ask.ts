@@ -16,6 +16,7 @@ import { getSession, newSessionId, newTurnId, recallBrief, saveTurn, startSessio
 import { runTurn, type TurnOutcome } from "./orchestrator.js";
 import type { AgentRuntime, Emit } from "./runtime.js";
 import { TouchedSet, type AlleviaTool, type ToolContext } from "./tool.js";
+import type { SkillCatalog } from "./skills/catalog.js";
 import type { RecallBrief, TeamSettings } from "./types.js";
 
 export type Channel = "web" | "discord" | "cli" | "mcp";
@@ -40,6 +41,7 @@ export interface AskDeps {
   readOnly?: boolean;
   timeZone?: string;                                  // the tenant's IANA zone for dates in prompts (default IST)
   signal?: AbortSignal;                               // stops the turn: every agent run is aborted, the turn saved as failed
+  skills?: SkillCatalog | null;                       // the shipped skill packs; this business's own are laid over them each turn. none/null: no skills
 }
 
 // What src/agent/wiring.ts (written once the graph tools land) must export, so every surface (CLI, server, Discord,
@@ -100,6 +102,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
     // runs with the full team and no instructions (and says so in the log).
     let team: TeamSettings | undefined;
     try { team = await loadTeamSettings(g); } catch (e) { out({ type: "error", message: `Could not read the team settings, so the whole team is on: ${message(e)}` }); }
+    const skills = deps.skills ?? undefined;
 
     // "Fill it in": the owner accepts the draft's suggestions. Done in code on the draft already in this thread (fillin.ts):
     // no desks run, nothing is re-invented, and the sources are the ones the draft already had.
@@ -112,7 +115,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
       out({ type: "agent_done", agent: "chief-of-staff", ms: 0, ok: true });
       outcome = {
         ok: true, answer: filled.answer, plan: { steps: [{ agent: "chief-of-staff", task: "Fill in the suggestions" }], rationale: "The owner accepted the suggestions in the last draft." },
-        fastPath: true, findings: [], reviews: [], proposals: [], agents: ["chief-of-staff"], failed: [], touched, guidedBy: [],
+        fastPath: true, findings: [], reviews: [], proposals: [], agents: ["chief-of-staff"], failed: [], touched, guidedBy: [], skills: [],
       };
     }
 
@@ -127,7 +130,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
         ...(deps.model ? { model: deps.model } : {}), ...(deps.agentTimeoutMs ? { agentTimeoutMs: deps.agentTimeoutMs } : {}),
         ...(deps.embedQuery ? { embedQuery: deps.embedQuery } : {}), ...(deps.readOnly !== undefined ? { readOnly: deps.readOnly } : {}),
         ...(deps.timeZone ? { timeZone: deps.timeZone } : {}), ...(deps.signal ? { signal: deps.signal } : {}),
-        ...(capabilities ? { capabilities } : {}), ...(team ? { team } : {}), ...(language ? { language } : {}),
+        ...(capabilities ? { capabilities } : {}), ...(team ? { team } : {}), ...(language ? { language } : {}), ...(skills ? { skills } : {}),
       },
       out);
     if (deps.signal?.aborted) failure = STOPPED_MESSAGE;
@@ -152,6 +155,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
         turnId, sessionId, question, answer, asker, source: input.channel, at: now, ms, status: failure ? "failed" : "ok", ...(failure ? { error: failure } : {}),
         checks, agents, events: log, touched: outcome?.touched ?? [], citations,
         findings: outcome?.findings ?? [], reviews: outcome?.reviews ?? [], guidedBy: outcome?.guidedBy ?? [],
+        ...(outcome?.skills?.length ? { skills: outcome.skills } : {}),
       });
       if (saved.errors.length) deliver({ type: "error", message: `Saved the turn with ${saved.errors.length} skipped write(s): ${saved.errors[0]}` });
     } catch (e) {

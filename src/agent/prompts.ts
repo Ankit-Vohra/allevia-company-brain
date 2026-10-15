@@ -7,6 +7,9 @@
 import { AGENTS, agentById, departmentById, type AgentDef } from "../../shared/roster.js";
 import { MODE_PHRASE, type CapabilityModeInfo } from "../capabilities/modes.js";
 import { ANSWER_SHAPE, CONTENT_SHAPE, DESK_SHAPE, OWNER_WORDS_RULE } from "./style.js";
+import type { SkillCatalog } from "./skills/catalog.js";
+import type { Skill } from "./skills/format.js";
+import { skillNames, skillsBlock } from "./skills/render.js";
 import type { AlleviaTool } from "./tool.js";
 import type { InstructionNote } from "./types.js";
 
@@ -75,7 +78,12 @@ export function instructionsBlock(notes: readonly InstructionNote[]): string {
   return `Standing instructions from the owner, for you. Follow them in everything you write; they come before your own habits but never before the house rules above. Cite the id when one shapes your work:\n${lines.join("\n")}`;
 }
 
-export function agentSystemPrompt(agent: AgentDef, tools: AlleviaTool[], opts: PromptOpts & { instructions?: readonly InstructionNote[] }): string {
+// `skills`: the agent's skills when it can open them (use_skill is among its tools). Only each one's name and when to use it
+// go in the prompt; the text loads when the agent opens one.
+export function agentSystemPrompt(
+  agent: AgentDef, tools: AlleviaTool[],
+  opts: PromptOpts & { instructions?: readonly InstructionNote[]; skills?: readonly Skill[]; skillPhase?: "plan" | "review" | "other" },
+): string {
   const dept = departmentById(agent.department);
   return [
     `You are ${agent.name}, ${agent.title} in ${dept ? `the ${dept.name} department` : "the team"} of Allevia, the AI staff that runs the company brain of the business "${opts.tenant}".`,
@@ -84,6 +92,7 @@ export function agentSystemPrompt(agent: AgentDef, tools: AlleviaTool[], opts: P
     `You handle: ${agent.handles.join(", ")}.`,
     `Today is ${localDate(opts.now, opts.timeZone)} (${localStamp(opts.now, opts.timeZone)}).`,
     `Your tools (read the company graph; nothing you do changes the business without the owner's approval):\n${toolList(tools)}`,
+    skillsBlock(opts.skills ?? [], { phase: opts.skillPhase ?? "other" }),
     HOUSE_RULES,
     OWNER_WORDS_RULE,
     opts.language ?? "",
@@ -198,18 +207,22 @@ const rounds = (n: number, what = "rounds of tool calls"): string => `You have a
 
 // ---------- PLAN (Chief of Staff, structured, no tools) ----------
 
-export function planSystemPrompt(opts: PromptOpts & { disabled?: readonly string[] }): string {
+export function planSystemPrompt(opts: PromptOpts & { disabled?: readonly string[]; skills?: SkillCatalog; chiefCanOpenSkills?: boolean }): string {
   const off = new Set((opts.disabled ?? []).filter((id) => id !== CHIEF));
   const desks = AGENTS.filter((a) => a.id !== CHIEF && !off.has(a.id)).map((a) => {
     const dept = departmentById(a.department)?.name ?? a.department;
     const reviews = a.reviews?.length ? ` Reviews ${a.reviews.join(", ")} automatically.` : "";
-    return `- ${a.id}: ${a.name}, ${a.title} (${dept}). Handles ${a.handles.join(", ")}. Tools: ${a.tools.join(", ")}.${reviews}`;
+    const sk = opts.skills?.forAgent(a.id) ?? [];
+    const skills = sk.length ? ` Skills: ${skillNames(sk)}.` : "";
+    return `- ${a.id}: ${a.name}, ${a.title} (${dept}). Handles ${a.handles.join(", ")}. Tools: ${a.tools.join(", ")}.${skills}${reviews}`;
   }).join("\n");
+  const mine = opts.chiefCanOpenSkills ? skillsBlock(opts.skills?.forAgent(CHIEF) ?? [], { phase: "plan" }) : "";
   const chief = agentById(CHIEF)!;
   return [
     `You are ${chief.name}, Chief of Staff of Allevia, the AI staff that runs the company brain of the business "${opts.tenant}". Right now you only PLAN who does what; you do not answer yet.`,
     `Today is ${localDate(opts.now, opts.timeZone)}.`,
     `The desks:\n${desks}\n- ${CHIEF}: you. Tools: ${chief.tools.join(", ")}. Take a quick lookup yourself.`,
+    mine,
     `How to plan (the fewest desks wins: every extra desk makes the owner wait):
 - Default to ONE step. If a quick lookup answers it (a fact, an entity, a decision, what we already know), plan only "${CHIEF}".
 - Add a second desk only when the question clearly needs another department's work. At most ${MAX_DESKS} desks for any ordinary question; up to ${MAX_DESKS_BROAD} only for a broad review of the whole business (a weekly brief, "how is the business doing overall").
