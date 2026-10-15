@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { EntityType } from "../../src/graph/schema.js";
 import {
-  FOUNDER_ID, MERGE_SIMILARITY, namesAgree, normName, normQuote, numberProblem, numbersIn, quoteProblem, rememberWrite, resolveExtraction,
+  EXTRACTED_OBSERVATION_CONF, FOUNDER_ID, MERGE_SIMILARITY, namesAgree, normName, normQuote, numberProblem, numbersIn, quoteProblem, rememberWrite, resolveExtraction,
   type Extraction, type KnownEntity, type ResolveContext,
 } from "../../src/ingest/extract.js";
 import type { GraphWrite } from "../../src/ingest/types.js";
@@ -399,9 +399,13 @@ describe("resolveExtraction: observations", () => {
       ],
     }), ctx());
     expect(write.observations).toEqual([
-      { subject: "channel:instagram", metric: "share_of_reach", value: 90, unit: "%", asOf: "2026-09-28", src: DOC, evidence: "reels drove 90% of reach" },
-      { subject: "channel:instagram", metric: "followers", value: 1200, asOf: "2026-09-30", src: DOC, evidence: "Instagram has 1,200 followers." },
+      // conf < 1: a number reported in a document never replaces one a connector measured (graph/observations.ts)
+      { subject: "channel:instagram", metric: "share_of_reach", value: 90, unit: "%", asOf: "2026-09-28", src: DOC, evidence: "reels drove 90% of reach", conf: EXTRACTED_OBSERVATION_CONF },
+      { subject: "channel:instagram", metric: "followers", value: 1200, asOf: "2026-09-30", src: DOC, evidence: "Instagram has 1,200 followers.", conf: EXTRACTED_OBSERVATION_CONF },
     ]);
+    expect(EXTRACTED_OBSERVATION_CONF).toBeGreaterThan(0);
+    expect(EXTRACTED_OBSERVATION_CONF).toBeLessThan(1);
+    expect(write.observations.map((o) => o.conf)).toEqual([EXTRACTED_OBSERVATION_CONF, EXTRACTED_OBSERVATION_CONF]);
     expect(edges(write, "BASED_ON")).toEqual(["decision:pause-facebook-posts -BASED_ON-> obs:share_of_reach:channel:instagram:2026-09-28"]);
     expect(dropped.map((d) => d.reason)).toEqual([
       expect.stringMatching(/unknown.*TikTok/),

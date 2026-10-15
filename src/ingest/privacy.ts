@@ -11,7 +11,9 @@ import { fenceMask, frontmatterEnd, scanHeadings } from "./headings.js";
 
 export { redact } from "./redact.js";
 
-export const SENSITIVE = /security|audit|access|secret|credential|incident|backup|password|token|ssh|aws|server|infra|finance|bank|kyc/i;
+// "server-side" (conversions, tracking, rendering) is a marketing and web term, not the infrastructure "server" means here:
+// matching it dropped ADR 003 whole, because its title says "server-side conversions".
+export const SENSITIVE = /security|audit|access|secret|credential|incident|backup|password|token|ssh|aws|server(?!-side)|infra|finance|bank|kyc/i;
 
 // ---------- layer 1: paths ----------
 
@@ -127,9 +129,15 @@ function maskSample(s: string): string {
   return s.length <= 6 ? "***" : `${s.slice(0, 2)}${"*".repeat(Math.min(8, s.length - 3))}${s.slice(-1)}`;
 }
 
+// A `sha` prop (the upstream commit a vendored playbook pack was taken from) is skipped only while it holds a bare git
+// digest: the long-random-token rule cannot tell a commit id from a key without the word "commit" next to it.
+const DIGEST_PROPS = new Set(["sha"]);
+const DIGEST = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+
 function scanProps(owner: string, kv: Array<[string, unknown]>, hits: ScanHit[]): void {
   for (const [prop, value] of kv) {
     if (SKIP_PROPS.has(prop)) continue;
+    if (DIGEST_PROPS.has(prop) && typeof value === "string" && DIGEST.test(value)) continue;
     const strings = typeof value === "string" ? [value] : Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
     for (const s of strings) {
       for (const h of findSensitive(s)) hits.push({ id: owner, prop, kind: h.kind, sample: maskSample(h.match) });

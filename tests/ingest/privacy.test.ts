@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { pathAllowed, dropSensitiveSections, redact, scanGraph, SENSITIVE } from "../../src/ingest/privacy.js";
+import { SENSITIVE_SECTION } from "../../src/ingest/sources/ops-map/privacy.js";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
 import { upsertNode, upsertEdge } from "../../src/graph/upsert.js";
 import { sha256 } from "../../src/util/ids.js";
@@ -73,6 +74,17 @@ describe("pathAllowed", () => {
   it("exports the sensitive-name pattern", () => {
     expect(SENSITIVE.test("Security notes")).toBe(true);
     expect(SENSITIVE.test("Channel mix")).toBe(false);
+  });
+
+  it("does not take server-side conversions for server infrastructure (a whole ADR was lost to that)", () => {
+    expect(SENSITIVE.test("003 — Our own first-touch attribution; server-side conversions; no MMP yet")).toBe(false);
+    expect(SENSITIVE.test("Server-side tracking")).toBe(false);
+    expect(SENSITIVE.test("Server setup")).toBe(true);
+    expect(SENSITIVE.test("Two servers and a box")).toBe(true);
+    expect(SENSITIVE.test("server-side secrets")).toBe(true); // still caught by "secret"
+    expect(pathAllowed("20-growth/server-side-conversions.md").allowed).toBe(true);
+    expect(pathAllowed("20-growth/server-notes.md").allowed).toBe(false);
+    expect(SENSITIVE_SECTION.source).toBe(SENSITIVE.source); // the ops mappers use the same pattern
   });
 });
 
@@ -275,6 +287,8 @@ describe("scanGraph (integration)", () => {
     });
     await upsertNode(g, { type: "Task", id: "task:pending-n7", name: "Renew the widget licence", props: { status: "open", title: "Renew the widget licence", issues: ["#12", "app#42"] } });
     await upsertEdge(g, { from: "person:founder", type: "OWNS", to: "task:pending-n7", props: { note: "ordinary note" } });
+    // a vendored pack records the upstream commit it was taken from: a digest, not a secret
+    await upsertNode(g, { type: "Playbook", id: "playbook:demo-pack", name: "Demo pack", props: { sha: "d03c56bb598be770c60b201f94237e5d1a4268a6" } });
   });
   afterAll(async () => {
     await cleanup();
@@ -320,5 +334,11 @@ describe("scanGraph (integration)", () => {
     expect(first).toEqual({ id: "person:founder", iid: 0 });
     await upsertNode(g, { type: "Person", id: "person:founder", name: "Founder", summary: "write to first.person@example.org" });
     expect((await scanGraph(g, { pageSize: 3 })).some((h) => h.id === "person:founder" && h.kind === "email")).toBe(true);
+  });
+
+  it("skips a sha prop only when it holds a digest: anything else in it is scanned", async () => {
+    await upsertNode(g, { type: "Playbook", id: "playbook:demo-bad", name: "Bad pack", props: { sha: "ghp_demoDemoDemoDemo1234567890" } });
+    const hits = await scanGraph(g);
+    expect(hits.filter((h) => h.prop === "sha").map((h) => h.id)).toEqual(["playbook:demo-bad"]);
   });
 });

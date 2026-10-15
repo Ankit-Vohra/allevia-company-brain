@@ -26,6 +26,9 @@ import type { GraphWrite } from "./types.js";
 export const MERGE_SIMILARITY = 0.92;
 export const MIN_RELATION_CONF = 0.5;
 export const AMBIGUOUS_MENTION_CONF = 0.55;
+// A number read out of a document by the model. Below 1 (a connector's measurement), so it never replaces one
+// (graph/observations.ts keeps the stronger reading).
+export const EXTRACTED_OBSERVATION_CONF = 0.8;
 const MAX_ALIASES = 12;
 
 export interface ResolveContext {
@@ -236,7 +239,7 @@ class DocResolver {
     const input: ObservationInput = {
       subject: subj.id, metric, value: o.value, ...(o.unit ? { unit: o.unit } : {}), asOf: day,
       ...(windowStart ? { windowStart } : {}), ...(windowEnd ? { windowEnd } : {}), src: this.ctx.docId,
-      evidence: clip(o.evidence.trim(), LIMITS.evidenceChars),
+      evidence: clip(o.evidence.trim(), LIMITS.evidenceChars), conf: EXTRACTED_OBSERVATION_CONF,
     };
     const id = observationId(input);
     const prev = this.observations.get(id);
