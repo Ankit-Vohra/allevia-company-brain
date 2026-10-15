@@ -16,6 +16,7 @@ import { gunzipSync } from "node:zlib";
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright";
 import { BlockedUrlError, Pacer, RedirectRefusedError, USER_AGENT, checkUrl, guardedFetch, type FetchOpts, type FetchResult, type Resolver } from "./fetch.js";
 import { allowAll, disallowAll, parseRobots, parseSitemap, type Robots } from "./robots.js";
+import { CONVERSION_SCRIPT, redactCapture, type ConversionCapture } from "../../../checkup/conversion.js";
 import { CAPTURE_SCRIPT, STYLE_SCRIPT, fromCapture, type Captured, type PageData, type StyleSample } from "./page.js";
 import { isActionPath, isBinaryPath, isListingVariant, keyPagePriority, normalizeUrl, sectionOf, toSiteUrl } from "./urls.js";
 import { Semaphore } from "../../llm.js";
@@ -33,6 +34,9 @@ export interface CrawlOptions {
   resolver?: Resolver;
   userAgent?: string;
   screenshotDir?: string;
+  // the website check-up: on the home and key pages (the brand pages), also read what a visitor ready to buy sees
+  // (src/checkup/conversion.ts), at desktop size and at phone size
+  conversion?: boolean;
   onPage?: (p: PageData) => void | Promise<void>;
   launch?: () => Promise<Browser>;
   log?: (line: string) => void;
@@ -277,15 +281,17 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
       if (unloaded) log(`[crawl] ${doc.finalUrl}: ${unloaded} stylesheet(s) did not load; its styles are not sampled`);
       const styles = brand && !unloaded ? ((await page.evaluate(STYLE_SCRIPT)) as StyleSample[]) : undefined;
       const cap = (await page.evaluate(CAPTURE_SCRIPT)) as Captured;
-      return { cap, styles, loadMs };
+      const conv = brand && o.conversion ? await readConversion(page, log) : undefined;
+      return { cap, styles, loadMs, conv };
     } finally {
       log(`[crawl] assets for ${doc.finalUrl}: ${[...tally].sort().map(([k, n]) => `${k} ${n}`).join(", ") || "none"}`);
       await page.close().catch(() => {});
     }
   };
 
-  const mobileShot = async (doc: FetchResult): Promise<void> => {
-    if (!o.screenshotDir) return;
+  const mobileShot = async (doc: FetchResult, shot = true): Promise<ConversionCapture | undefined> => {
+    const wantShot = shot && !!o.screenshotDir;
+    if (!wantShot && !o.conversion) return undefined;
     const m = await newContext(true);
     try {
       docs.clear();
@@ -297,13 +303,18 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
       await p.goto(doc.finalUrl, { waitUntil: "load", timeout: o.pageTimeoutMs });
       await p.waitForLoadState("networkidle", { timeout: 2_500 }).catch(() => {});
       const unloaded = await stylesReady(p, 4_000);
-      if (unloaded) log(`[crawl] mobile screenshot: ${unloaded} stylesheet(s) did not load`);
-      const path = join(o.screenshotDir, "home-mobile.png");
-      await p.screenshot({ path });
-      screenshots.mobile = path;
-      log(`[crawl] assets for the mobile screenshot: ${[...tally].sort().map(([k, n]) => `${k} ${n}`).join(", ") || "none"}`);
+      if (unloaded) log(`[crawl] mobile view: ${unloaded} stylesheet(s) did not load`);
+      if (wantShot) {
+        const path = join(o.screenshotDir!, "home-mobile.png");
+        await p.screenshot({ path });
+        screenshots.mobile = path;
+      }
+      const conv = o.conversion ? await readConversion(p, log) : undefined;
+      log(`[crawl] assets for the mobile view: ${[...tally].sort().map(([k, n]) => `${k} ${n}`).join(", ") || "none"}`);
+      return conv;
     } catch (e) {
-      log(`[crawl] mobile screenshot failed: ${msg(e)}`);
+      log(`[crawl] mobile view failed: ${msg(e)}`);
+      return undefined;
     } finally {
       await m.close().catch(() => {});
     }
@@ -398,7 +409,7 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
     } else {
       const brand = first || (brandCount < o.brandPages - 1 && it.prio >= 70);
       try {
-        const { cap, styles, loadMs } = await hardLimit(render({ ...doc, finalUrl: site }, brand, first, deadline), "the page never finished");
+        const { cap, styles, loadMs, conv } = await hardLimit(render({ ...doc, finalUrl: site }, brand, first, deadline), "the page never finished");
         if (brand && !first) brandCount++;
         const dom = fromCapture(cap, origin);
         const xrt = doc.headers["x-robots-tag"];
@@ -407,7 +418,13 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
           ...(xrt ? { robotsMeta: [dom.robotsMeta, xrt].filter(Boolean).join(", ") } : {}),
           timing: { responseMs: doc.responseMs, fetchMs: doc.totalMs, loadMs }, ...(styles ? { styles } : {}),
         };
-        if (first) await hardLimit(mobileShot({ ...doc, finalUrl: site }), "the mobile view never finished").catch((e) => log(`[crawl] mobile screenshot: ${msg(e)}`));
+        if (first || (brand && o.conversion)) {
+          const mobile = await hardLimit(mobileShot({ ...doc, finalUrl: site }, first), "the mobile view never finished").catch((e) => {
+            log(`[crawl] mobile view: ${msg(e)}`);
+            return undefined;
+          });
+          if (conv || mobile) page.conversion = { ...(conv ? { desktop: conv } : {}), ...(mobile ? { mobile } : {}) };
+        }
       } catch (e) {
         page = { ...emptyPage(it.url, doc, `render failed: ${msg(e)}`), finalUrl: site };
       }
@@ -508,5 +525,16 @@ async function stylesReady(page: Page, timeoutMs: number): Promise<number> {
     return Number(await page.evaluate(READY_SCRIPT(timeoutMs))) || 0;
   } catch {
     return 0;
+  }
+}
+
+// The conversion reading (src/checkup/conversion.ts) of the page as it is rendered now; its prose redacted. A page
+// whose script throws gives nothing rather than a guess.
+async function readConversion(page: Page, log: (line: string) => void): Promise<ConversionCapture | undefined> {
+  try {
+    return redactCapture((await page.evaluate(CONVERSION_SCRIPT)) as ConversionCapture);
+  } catch (e) {
+    log(`[crawl] conversion reading failed: ${msg(e)}`);
+    return undefined;
   }
 }
