@@ -172,6 +172,36 @@ async function keepNewestReadings(g: GraphHandle, obs: ObservationInput[], docId
   return { keep, older: obs.length - keep.length };
 }
 
+// ---------- writes that survive a busy or restarting server ----------
+
+// FalkorDB is shared (other processes run tests and agents on it): a busy server refuses queries ("Max pending queries
+// exceeded"), a restarting one is unreachable or still loading. Those items are retried; anything else is a real error.
+const TRANSIENT_DB_ERROR = /max pending queries|LOADING|socket closed|ECONNREFUSED|ECONNRESET|connection is closed|timed? ?out/i;
+export const isTransientDbError = (msg: string): boolean => TRANSIENT_DB_ERROR.test(msg);
+
+type Write = { nodes?: NodeInput[]; edges?: EdgeInput[]; observations?: ObservationInput[] };
+const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+export async function writeWithRetry(
+  w: Write, writer: (w: Write) => Promise<WriteStats>, sleep: (ms: number) => Promise<void> = sleepMs, attempts = 3,
+): Promise<WriteStats> {
+  const total = await writer(w);
+  for (let i = 1; i < attempts; i++) {
+    const retry = total.errors.filter((e) => isTransientDbError(e.error));
+    if (!retry.length) break;
+    total.errors = total.errors.filter((e) => !isTransientDbError(e.error));
+    await sleep(1500 * i);
+    const s = await writer({
+      nodes: retry.filter((e) => e.kind === "node").map((e) => e.item as NodeInput),
+      observations: retry.filter((e) => e.kind === "observation").map((e) => e.item as ObservationInput),
+      edges: retry.filter((e) => e.kind === "edge").map((e) => e.item as EdgeInput),
+    });
+    for (const k of ["nodesCreated", "nodesUpdated", "versions", "edgesCreated", "edgesClosed", "observations", "skippedWeaker"] as const) total[k] += s[k];
+    total.errors.push(...s.errors);
+  }
+  return total;
+}
+
 // ---------- graph helpers ----------
 
 type Totals = Omit<WriteStats, "errors"> & { errors: number };
@@ -404,6 +434,7 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
   const g = await openGraph(tc.slug);
   await ensureIndexes(g);
   const totals = zero();
+  const put = (w: Write) => writeWithRetry(w, (x) => writeBatch(g, x, nowMs));
   const tally = (s: WriteStats) => {
     for (const k of ["nodesCreated", "nodesUpdated", "versions", "edgesCreated", "edgesClosed", "observations", "skippedWeaker"] as const) totals[k] += s[k];
     totals.errors += s.errors.length;
@@ -413,11 +444,11 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
   // ---- 3. deterministic writes ----
   {
     const t = Date.now();
-    const s = await writeBatch(g, {
+    const s = await put({
       nodes: mergeNodes(results.map((r) => r.write.nodes)),
       observations: results.flatMap((r) => r.write.observations),
       edges: results.flatMap((r) => r.write.edges),
-    }, nowMs);
+    });
     tally(s);
     report.retired.structure = await retireStructure(g, brainDocs, brainStructure, nowMs);
     totals.edgesClosed += report.retired.structure;
@@ -458,7 +489,7 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
       const resolved = await resolveExtraction(ex, { docId: d.id, text: d.text, asOf: d.asOf, existing: known, similar, founderNames: tc.founderNames });
       const readings = await keepNewestReadings(g, resolved.write.observations, d.id);
       const write = { ...resolved.write, observations: readings.keep };
-      const s = await writeBatch(g, write, nowMs);
+      const s = await put(write);
       tally(s);
       rememberWrite(known, write);
       let closed = 0;
@@ -524,7 +555,7 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
     for (const { repo, issues: list, ms } of issues) {
       const r = mapIssues(list, { repo, founderLogins: tc.github?.founderLogins ?? [], known, businessId: businessId(tc.slug) });
       took(r, ms);
-      const s = await writeBatch(g, r.write, nowMs);
+      const s = await put(r.write);
       tally(s);
     }
   }

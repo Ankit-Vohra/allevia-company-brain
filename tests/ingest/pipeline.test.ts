@@ -9,8 +9,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes, createHash } from "node:crypto";
 import { closeAll, openGraph, openGraphByName, type GraphHandle } from "../../src/graph/client.js";
-import { runIngest, alignAdrDecision, extractionOrder, mergeNodes, type IngestRun } from "../../src/ingest/pipeline.js";
+import { runIngest, alignAdrDecision, extractionOrder, mergeNodes, writeWithRetry, isTransientDbError, type IngestRun } from "../../src/ingest/pipeline.js";
 import type { Extraction } from "../../src/ingest/extract.js";
+import type { WriteStats } from "../../src/graph/upsert.js";
 import type { LlmRunner, StructuredInput } from "../../src/ingest/llm.js";
 import type { RawDoc } from "../../src/ingest/types.js";
 import type { TenantConfig } from "../../src/tenant-config.js";
@@ -122,6 +123,29 @@ describe("mergeNodes", () => {
       { type: "System", id: "system:instagram", name: "Instagram Graph API", summary: "Publishes reels.", props: { kind: "connector", status: "ok", owner: "ops" }, src: "document:snap", asOf: "2026-10-15" },
       { type: "Channel", id: "channel:x", name: "X", asOf: "2026-10-01" },
     ]);
+  });
+});
+
+describe("writeWithRetry", () => {
+  const stats = (errors: WriteStats["errors"], created = 0): WriteStats =>
+    ({ nodesCreated: created, nodesUpdated: 0, versions: 0, edgesCreated: 0, edgesClosed: 0, observations: 0, skippedWeaker: 0, errors });
+  it("retries only the items that failed for a passing server reason, and adds up the stats", async () => {
+    const a = { type: "Task" as const, id: "task:a", name: "A" };
+    const b = { type: "Task" as const, id: "task:b", name: "B" };
+    const calls: string[][] = [];
+    const writer = async (w: { nodes?: Array<{ id: string }> }) => {
+      calls.push((w.nodes ?? []).map((n) => n.id));
+      return calls.length === 1
+        ? stats([{ kind: "node", item: a, error: "Error: Max pending queries exceeded" }, { kind: "node", item: b, error: "InvalidWrite: bad" }], 3)
+        : stats([], 1);
+    };
+    const s = await writeWithRetry({ nodes: [a, b] }, writer, async () => {});
+    expect(calls).toEqual([["task:a", "task:b"], ["task:a"]]);
+    expect(s.nodesCreated).toBe(4);
+    expect(s.errors.map((e) => e.error)).toEqual(["InvalidWrite: bad"]);
+    expect(isTransientDbError("LOADING Redis is loading the dataset in memory")).toBe(true);
+    expect(isTransientDbError("Socket closed unexpectedly")).toBe(true);
+    expect(isTransientDbError("MissingEndpoint: x")).toBe(false);
   });
 });
 
