@@ -17,7 +17,7 @@
 //   use: the real executors, with GitHub issues and Discord posts as a dry run unless ALLEVIA_ACTIONS_LIVE=1. The
 //   answer is the card plus `learned` (the learned-rule AgentEvents, in the JSON) and `action`.
 // Focused route files: routes/program.ts (program, capabilities, learning), routes/team.ts (agents, directives),
-// routes/work.ts (insights and brief runs).
+// routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page).
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
@@ -29,12 +29,14 @@ import { z } from "zod";
 import type { AgentEvent, OnboardEvent } from "../../shared/contracts.js";
 import { ask, STOPPED_MESSAGE, type AskDeps } from "../agent/ask.js";
 import type { ToolContext } from "../agent/tool.js";
+import { loadConfig } from "../config.js";
 import type { GraphHandle } from "../graph/client.js";
 import type { LlmRunner } from "../ingest/llm.js";
 import { DecisionError, decide, type ActionOpts, type OnDecision } from "./approvals.js";
 import { HttpError, readBody, type RouteCtx } from "./http.js";
 import { registerProgramRoutes } from "./routes/program.js";
 import { registerTeamRoutes } from "./routes/team.js";
+import { registerUsageRoutes } from "./routes/usage.js";
 import { registerWorkRoutes } from "./routes/work.js";
 import * as reads from "./reads.js";
 import { sse } from "./sse.js";
@@ -428,6 +430,7 @@ export function createApp(deps: ServerDeps): Hono {
   registerTeamRoutes(app, routeCtx, deps.directiveLlm !== undefined ? { directiveLlm: deps.directiveLlm } : {});
   registerProgramRoutes(app, routeCtx);
   registerWorkRoutes(app, routeCtx);
+  registerUsageRoutes(app, routeCtx, { actionsLive: () => deps.actions?.live ?? loadConfig().actionsLive });
 
   app.get("/api/:t/agents/:id", async (c) => {
     const { g } = await tenantOf(c);
