@@ -10,7 +10,10 @@ import { extractDoc, cacheKey, type LlmRunner } from "../../src/ingest/extract.j
 import { makeAsk } from "../../src/ingest/sources/website/ask.js";
 import type { RawDoc } from "../../src/ingest/types.js";
 import { legacyCacheDir, tenantCacheDir } from "../../src/util/cache.js";
-import { CachedVision, FakeVision, visionKey, type VisionInput } from "../../src/studio/vision.js";
+import sharp from "sharp";
+import { openGraph } from "../../src/graph/client.js";
+import { assessPhoto } from "../../src/studio/assess.js";
+import { CachedVision, FakeVision, visionForGraph, visionKey, type VisionInput } from "../../src/studio/vision.js";
 import { CRAFTED_SLUGS } from "./crafted.js";
 
 let dataDir: string;
@@ -116,5 +119,41 @@ describe("the photo-reading cache", () => {
   it("refuses a crafted business name as a folder", () => {
     const cache = new CachedVision(new FakeVision({}), join(dataDir, "cache", "studio"));
     for (const [, slug] of CRAFTED_SLUGS) expect(() => cache.forTenant(slug)).toThrow(/tenant slug/);
+  });
+});
+
+describe("whoever asks, a photo is read through the cache of the graph it belongs to", () => {
+  const ctx = { businessName: "Same Name Ltd", w: 100, h: 100 };
+  const answer = { subject: "a door", subjectKind: "building", angle: "front", lighting: "even", clutter: "none", resolution: "ok",
+    quality: { tiltDeg: 0, exposure: "ok", cast: "none", sharpness: "ok" }, salvageable: [], locks: [], verdict: "good", overlays: [], textInImage: [], story: "s", caption: "c", altText: "a" };
+
+  it("the Studio's reading steps (assess, and fidelity the same way) use the view for the graph they are given, so Discord, revisions and videos are covered too", async () => {
+    const a = await openGraph("test_cache_a");
+    const b = await openGraph("test_cache_b");
+    const photo = await sharp({ create: { width: 64, height: 64, channels: 3, background: "#808080" } }).jpeg().toBuffer();
+    const inner = new FakeVision({ "content-strategist": [answer, { ...answer, subject: "second" }, { ...answer, subject: "third" }] });
+    const cache = new CachedVision(inner, join(dataDir, "cache", "studio-g"));
+    const ra = await assessPhoto(a, "asset:x", photo, ctx, { vision: cache, model: "sonnet", now: 1, record: false });
+    const rb = await assessPhoto(b, "asset:x", photo, ctx, { vision: cache, model: "sonnet", now: 1, record: false });
+    const ra2 = await assessPhoto(a, "asset:x", photo, ctx, { vision: cache, model: "sonnet", now: 1, record: false });
+    expect(ra.subject).toBe("a door");
+    expect(rb.subject).toBe("second"); // B asked its own, though A had already asked the same
+    expect(ra2.subject).toBe("a door"); // A's repeat is A's hit
+    expect(inner.calls).toHaveLength(2);
+    expect(readdirSync(join(dataDir, "cache", "studio-g", "test_cache_a"))).toHaveLength(1);
+    expect(readdirSync(join(dataDir, "cache", "studio-g", "test_cache_b"))).toHaveLength(1);
+    expect(readdirSync(join(dataDir, "cache", "studio-g")).filter((n) => n.endsWith(".json"))).toEqual([]); // nothing in the shared folder
+  });
+
+  it("a view asked for again is itself, for another business is refused, and a scratch graph keeps the runner as it is", () => {
+    const cache = new CachedVision(new FakeVision({}), join(dataDir, "cache", "studio-h"));
+    const mine = cache.forTenant("tenant_a");
+    expect(mine.forTenant?.("tenant_a")).toBe(mine);
+    expect(() => mine.forTenant?.("tenant_b")).toThrow(/tenant_a's/);
+    expect(visionForGraph(mine, "allevia_tenant_a")).toBe(mine);
+    const plain = new FakeVision({});
+    expect(visionForGraph(plain, "allevia_tenant_a")).toBe(plain); // a runner with no cache is its own view
+    expect(visionForGraph(cache, "some_scratch_graph")).toBe(cache);
+    expect(visionForGraph(cache, "allevia_meta")).toBe(cache); // not a business
   });
 });

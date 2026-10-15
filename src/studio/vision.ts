@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { query, type Options, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { assertSubscription, subscriptionEnv } from "../agent/sdk-env.js";
-import { assertTenantSlug } from "../graph/slug.js";
+import { assertTenantSlug, isTenantSlug } from "../graph/slug.js";
 import { TENANT_CONFIGS } from "../tenant-config.js";
 import { sha256Hex } from "./image.js";
 
@@ -120,13 +120,21 @@ export function visionKey(input: VisionInput): string {
 // The founder's own businesses also read the shared folder of earlier versions (<dir>/) and copy a hit into their own.
 // Used without forTenant it keeps its single folder (scripts and tests).
 export class CachedVision implements VisionRunner {
-  constructor(private inner: VisionRunner, private dir: string, private legacyDir?: string, private tally = { hits: 0, misses: 0 }) {}
+  constructor(
+    private inner: VisionRunner, private dir: string, private legacyDir?: string, private tally = { hits: 0, misses: 0 },
+    private readonly owner?: string,
+  ) {}
 
   get hits(): number { return this.tally.hits; }   // one tally for the cache and every business's view of it
   get misses(): number { return this.tally.misses; }
 
+  // Asking a business's own view for a view again is the same view; for another business's it is a wiring mistake.
   forTenant(tenant: string): VisionRunner {
-    return new CachedVision(this.inner, tenantFolder(this.dir, tenant), Object.hasOwn(TENANT_CONFIGS, tenant) ? this.dir : undefined, this.tally);
+    if (this.owner !== undefined) {
+      if (this.owner !== tenant) throw new Error(`this photo-reading cache is ${this.owner}'s, not ${tenant}'s`);
+      return this;
+    }
+    return new CachedVision(this.inner, tenantFolder(this.dir, tenant), Object.hasOwn(TENANT_CONFIGS, tenant) ? this.dir : undefined, this.tally, tenant);
   }
 
   async see(input: VisionInput): Promise<unknown> {
@@ -153,6 +161,14 @@ export class CachedVision implements VisionRunner {
 }
 
 const tenantFolder = (dir: string, tenant: string): string => join(dir, assertTenantSlug(tenant));
+
+// The runner to use for a call made on this business's graph handle (`allevia_<slug>`): its own view of the cache. Whatever
+// the caller (the Studio run, a revision, a video's first frame, Discord's #studio), a photo is read through the cache of the
+// graph it belongs to. A graph whose name is not a tenant's (a scratch graph) gets the runner as it is.
+export function visionForGraph(vision: VisionRunner, graphName: string): VisionRunner {
+  const slug = graphName.replace(/^allevia_/, "");
+  return graphName.startsWith("allevia_") && isTenantSlug(slug) ? vision.forTenant?.(slug) ?? vision : vision;
+}
 
 // Tests: answers per agent (a value, a list consumed in order, or a function of the input); records every call.
 export class FakeVision implements VisionRunner {

@@ -11,7 +11,7 @@ import { upsertEdge, upsertNode } from "../graph/upsert.js";
 import { agentNodeId } from "../agent/memory.js";
 import { dhash, hamming, similarity, visionCopy } from "./image.js";
 import type { VariantRecord } from "./variants.js";
-import type { VisionRunner } from "./vision.js";
+import { visionForGraph, type VisionRunner } from "./vision.js";
 
 export const NISHA = "fact-checker";
 export const STRUCTURE_FLOOR = 0.45;
@@ -118,7 +118,7 @@ export async function checkFidelity(
   const baseHash = await dhash(input.base);
   let verdicts = new Map<string, VisionVerdict>();
   try {
-    const raw = await deps.vision.see({
+    const raw = await visionForGraph(deps.vision, g.name).see({
       agent: NISHA, model: deps.model, system: fidelitySystem(input.businessName), prompt: fidelityPrompt(labels, input.locks),
       schema: FIDELITY_SCHEMA,
       images: [
