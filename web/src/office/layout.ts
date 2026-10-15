@@ -129,7 +129,7 @@ const overlaps = (a: Rect, b: Rect, pad = 0) =>
   a.x - pad < b.x + b.w && a.x + a.w + pad > b.x && a.y - pad < b.y + b.h && a.y + a.h + pad > b.y;
 
 const GAP = 12;
-const ZONE_H = 94;
+const ZONE_H = 86;
 
 /** The desks of a department in a zone: one row if they fit, else more. Returns the desk rects and the block's height. */
 function placeDesks(dept: DepartmentDef, Z: Rect, desks: Record<string, DeskSpot>): Rect[] {
@@ -146,7 +146,7 @@ function placeDesks(dept: DepartmentDef, Z: Rect, desks: Record<string, DeskSpot
     const rowW = inRow * DESK_W + (inRow - 1) * GAP;
     const x0 = Math.round(Z.x + (Z.w - rowW) / 2);
     const c = i % perRow;
-    const desk: Rect = { x: x0 + c * (DESK_W + GAP), y: Z.y + 36 + r * unitH, w: DESK_W, h: DESK_H };
+    const desk: Rect = { x: x0 + c * (DESK_W + GAP), y: Z.y + 38 + r * unitH, w: DESK_W, h: DESK_H };
     out.push({ x: desk.x - 2, y: desk.y - 18, w: desk.w + 4, h: desk.h + 30 });
     const sprite = { x: desk.x + 6, y: desk.y - 15 };
     desks[agent] = {
@@ -157,7 +157,7 @@ function placeDesks(dept: DepartmentDef, Z: Rect, desks: Record<string, DeskSpot
       center: { x: desk.x + DESK_W / 2, y: desk.y + 3 },
       seat: { x: sprite.x + 8, y: desk.y + 1 },
       side: { x: desk.x - 7, y: desk.y + 8 },
-      drop: { x: desk.x + DESK_W / 2 + 4, y: desk.y + DESK_H + 8 },
+      drop: { x: desk.x + DESK_W + 5, y: desk.y + 22 },
     };
   });
   return out;
@@ -170,7 +170,7 @@ function placeBoards(kinds: WallKind[], Z: Rect, avoid: Rect[]): Item<WallKind>[
     let cx = i === 0 ? Z.x + Z.w / 2 : Z.x + Z.w * (i % 2 === 1 ? 0.2 : 0.8);
     if (kinds.length === 1) cx = Z.x + Z.w / 2;
     const x = Math.max(Z.x + 3, Math.min(Z.x + Z.w - w - 3, Math.round(cx - w / 2)));
-    const rect = { x, y: Z.y + 12, w, h };
+    const rect = { x, y: Z.y + 11, w, h };
     if (out.some((o) => overlaps(o.rect, rect, 2)) || avoid.some((a) => overlaps(a, rect, 0))) return;
     out.push({ kind, rect });
   });
@@ -342,7 +342,7 @@ export function buildLayout(orientation: "landscape" | "portrait"): OfficeLayout
     const COMMON = 150;
     const rowW = (ids: string[]) => ids.reduce((s, x) => s + widthFor(x), 0) + COMMON;
     w = Math.max(rowW(top), rowW(bot)) + WALL * 2;
-    const AH = 42;
+    const AH = 38;
     const aY = floorTop, bY = floorTop + ZONE_H + AH;
     h = bY + ZONE_H + WALL;
     const row = (ids: string[], y: number, common: "cafe" | "lounge") => {
@@ -479,9 +479,9 @@ export function buildLayout(orientation: "landscape" | "portrait"): OfficeLayout
   const lounge = rooms.find((r) => r.kind === "lounge")!;
   const petHomes = {
     dogs: [
-      { x: dogbed!.x + 5, y: dogbed!.y + 7 },
-      { x: dogbed!.x + 12, y: dogbed!.y + 8 },
-      { x: lounge.rect.x + 20, y: lounge.rect.y + lounge.rect.h - 22 },
+      { x: dogbed!.x + 9, y: dogbed!.y + 7 },
+      { x: lounge.rect.x + Math.round(lounge.rect.w * 0.52), y: lounge.rect.y + lounge.rect.h - 6 },
+      { x: lounge.rect.x + Math.round(lounge.rect.w * 0.3), y: lounge.rect.y + lounge.rect.h - 6 },
     ],
     cats: [{ x: catbed!.x + 6, y: catbed!.y + 6 }, { x: cafe.rect.x + Math.round(cafe.rect.w * 0.7), y: cafe.rect.y + Math.round(cafe.rect.h * 0.8) }],
     ball: { x: lounge.rect.x + Math.round(lounge.rect.w * 0.3), y: lounge.rect.y + Math.round(lounge.rect.h * 0.82) },

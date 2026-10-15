@@ -164,8 +164,8 @@ export class Life {
   warmUp(env: LifeEnv) {
     this.refreshSleepy(env, true);
     const idle = [...this.people.values()].filter((p) => !env.busy.has(p.id) && !env.off.has(p.id) && !p.sleepy);
-    let n = Math.min(idle.length - 1, Math.max(2, Math.round(idle.length * 0.4)));
-    const wants: Kind[] = ["pingpong", "coffee", "console", "tea", "table", "chat", "plant"];
+    let n = Math.min(idle.length - 1, Math.max(4, Math.round(idle.length * 0.5)));
+    const wants: Kind[] = ["pingpong", "coffee", "tea", "console", "chat", "plant", "table"];
     for (const kind of wants) {
       if (n <= 0 || !idle.length) break;
       const used = this.startKind(kind, idle[0]!, env, true);
@@ -485,7 +485,7 @@ export class Life {
     dog.path = []; dog.d = 0; dog.len = 0;
     dog.facing = dog.x < d.center.x ? "right" : "left";
     // the receiver gives a treat: it arcs from their hand to the dog, they hop for joy, and there are hearts
-    this.fx.push({ kind: "treat", x: d.seat.x + (dog.facing === "right" ? -4 : 4), y: d.seat.y - 12, toX: dog.x + (dog.facing === "right" ? 16 : 4), toY: dog.y - 6, t0: this.t, dur: 650 });
+    this.fx.push({ kind: "treat", x: d.seat.x + (dog.facing === "right" ? -4 : 6), y: d.seat.y - 12, toX: dog.x + (dog.facing === "right" ? 12 : -12), toY: dog.y - 7, t0: this.t, dur: 650 });
     this.fx.push({ kind: "heart", x: dog.x + 6, y: dog.y - 16, t0: this.t + 650, dur: 1500 });
     this.fx.push({ kind: "heart", x: d.seat.x, y: d.seat.y - 26, t0: this.t + 150, dur: 1500 });
     if (to) { to.jumpAt = this.t; to.happyUntil = this.t + 1800; }
@@ -518,9 +518,9 @@ export class Life {
           if (t >= p.until) { p.mode = "sit"; p.until = t + 1500; p.panting = false; }
           break;
         case "sit":
-          if (p.job) break;
           if (p.then && t >= p.until) { const f = p.then; p.then = undefined; f(); break; }
-          if (!p.then && t >= p.nextAt) this.petDecide(p, env);
+          if (p.job || p.then) break;
+          if (t >= p.nextAt) this.petDecide(p, env);
           break;
         default:
           if (p.job) break;

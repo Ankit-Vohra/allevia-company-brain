@@ -2,10 +2,11 @@
 // focusable button per desk. The canvas is scaled to fit any width from a phone to a wide monitor (crisp whole-pixel
 // scaling when it fits, a smooth fit otherwise, never zero). Idle life, the pets and the lighting all run here, on the
 // client only.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentEvent, AgentId } from "@shared/contracts";
 import { AGENTS, DEPARTMENTS } from "@shared/roster";
 import { lightingAt } from "../lib/daylight";
+import { plain } from "../lib/words";
 import { type LaneView, type RunView, laneOf } from "../state/derive";
 import {
   drawBadge, drawChair, drawClock, drawDesk, drawDrawerOpen, drawFileStack, drawHands, drawLearnedShelf, drawNotes, drawPlan, drawScreen,
@@ -57,6 +58,8 @@ export interface OfficeCanvasProps {
   onBook?: (ruleId: string) => void;
   /** Said to screen readers and shown in the page when something happens (a dog delivers). */
   onStatus?: (text: string) => void;
+  /** Pinned to the bottom of the office (the quiet "Tara is drafting ideas…" line). */
+  overlay?: ReactNode;
 }
 
 export interface ShelfBook { id: string; text: string; hue: number; confidence: number }
@@ -89,7 +92,7 @@ const petLine = (id: PetId) => {
   return d.kind === "dog" ? `${d.name} · ${d.breed} · ${n} ${n === 1 ? "delivery" : "deliveries"} today` : `${d.name} · ${d.breed} · office cat, off duty`;
 };
 
-export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed, minutes, compact, maxHeight, selected, onSelect, off, books, onBook, onStatus }: OfficeCanvasProps) {
+export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed, minutes, compact, maxHeight, selected, onSelect, off, books, onBook, onStatus, overlay }: OfficeCanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -406,7 +409,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
         const step = lane.steps[lane.steps.length - 1];
         const pending = step && !step.done ? step : undefined;
         if (a.id === CHIEF && view?.answerStarted && !view.final) out.push({ agent: a.id, text: "Writing your answer…", tone: "speak", x: d.bubble.x, y: d.bubble.y });
-        else out.push({ agent: a.id, text: (pending ? lane.status ?? lane.task : lane.status ?? lane.task) ?? "Working", tone: "work", x: d.bubble.x, y: d.bubble.y });
+        else out.push({ agent: a.id, text: plain((pending ? lane.status ?? lane.task : lane.status ?? lane.task) ?? "Working"), tone: "work", x: d.bubble.x, y: d.bubble.y });
         continue;
       }
       const ch = chatter[a.id];
@@ -569,12 +572,13 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
             })()}
             {!compact &&
               bubbles.map((b) => (
-                <div key={b.agent} className={`bubble tone-${b.tone}`} style={{ left: b.x * k, top: b.y * k }} aria-hidden="true">
+                <div key={b.agent} className={`bubble tone-${b.tone}${b.y * k < 44 ? " is-below" : ""}`} style={{ left: b.x * k, top: b.y * k < 44 ? (b.y + 34) * k : b.y * k }} aria-hidden="true">
                   <span className="bubble-text">{b.text}</span>
                 </div>
               ))}
             {tip && <div className="pet-tip" role="status" style={{ left: tip.x * k, top: tip.y * k }}>{tip.text}</div>}
           </div>
+          {overlay && <div className="office-slot">{overlay}</div>}
           <div className="visually-hidden" role="group" aria-label="The office pets">
             {PETS.map((p) => <button key={p.id} type="button" onClick={() => showTip(p.id, true)}>{petLine(p.id)}</button>)}
           </div>

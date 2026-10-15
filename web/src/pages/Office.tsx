@@ -21,6 +21,7 @@ import { usePreviewFromUrl, useOfficeClock } from "../lib/daylight";
 import { OfficeCanvas, type ShelfBook } from "../office/OfficeCanvas";
 import { fmtLongDate } from "../lib/format";
 import { useMedia } from "../lib/useMedia";
+import { plain } from "../lib/words";
 import { useApp, useAsync } from "../state/app";
 import { laneOf } from "../state/derive";
 import { runStore, useRun, useRunStore, useRunView } from "../state/runs";
@@ -62,6 +63,12 @@ export function OfficePage() {
   const autoStarted = useRef(false);
   const clock = useOfficeClock(tenant.timeZone);
   usePreviewFromUrl();
+  const [vh, setVh] = useState(() => (typeof window === "undefined" ? 900 : window.innerHeight));
+  useEffect(() => {
+    const on = () => setVh(window.innerHeight);
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
 
   // the plan, the ladder, the team's desks and what it learned; refreshed when another screen changes them
   const [tick, setTick] = useState(0);
@@ -150,7 +157,7 @@ export function OfficePage() {
     const a = working[working.length - 1];
     if (!a) return { agent: "chief-of-staff" as AgentId, text: "Meera is reading your question…", done: false };
     const lane = laneOf(view, a);
-    const status = (lane?.status ?? lane?.task ?? "").replace(/[.…]+$/, "").trim();
+    const status = plain(lane?.status ?? lane?.task ?? "").replace(/[.…]+$/, "").trim();
     const nm = agentDef(a)?.name ?? "";
     const text = !status ? `${nm} is on it…` : /^\w+ing\b/i.test(status) ? `${nm} is ${lowerFirst(status)}…` : `${nm}: ${lowerFirst(status)}…`;
     return { agent: a, text, done: false };
@@ -160,6 +167,37 @@ export function OfficePage() {
   const topIdea = useMemo(() => [...(recs.data ?? [])].filter((r) => r.status !== "dismissed").sort((a, b) => b.score - a.score)[0], [recs.data]);
   const showSuggest = askFocus && !question.trim() && !running && !narrow;
   const week = weekLine(program.data);
+
+  const tickerEl = tickerLine && record ? (
+    <div className={`run-ticker${logOpen ? " is-open" : ""}${tickerLine.done ? " is-done" : ""}`}>
+      {logOpen && (
+        <div className="run-log">
+          <p className="run-log-q">{record.question}</p>
+          <WorkFeed events={record.events} view={view} status={record.status} askHref={askHref} nodes={view?.nodes} limit={compact ? 6 : undefined} />
+          {!running && (
+            <div className="log-foot">
+              <button type="button" className="btn btn-quiet btn-sm" onClick={() => { setRunKey(undefined); setLogOpen(false); }}>Clear</button>
+              {view?.sessionId && <button type="button" className="btn btn-ghost btn-sm" onClick={() => nav(askHref)}>Read the full answer</button>}
+            </div>
+          )}
+        </div>
+      )}
+      <button type="button" className="run-line" aria-expanded={logOpen} onClick={() => setLogOpen((o) => !o)}>
+        <AgentAvatar id={tickerLine.agent} size={22} ring={!tickerLine.done} />
+        <span className="run-text" aria-live="polite">{tickerLine.text}</span>
+        {running && <span className="run-time">{fmtMs(Math.max(0, elapsed))}</span>}
+        <span className="run-open">{logOpen ? "Hide" : tickerLine.done ? "How it went" : "Show"}<Icon name="chevron" size={14} className="run-chev" /></span>
+      </button>
+      {running && !logOpen && (
+        <button type="button" className="run-stop btn btn-quiet btn-sm" onClick={() => runKey && runStore.stop(runKey)} disabled={record?.stopping}>
+          <Icon name="stop" size={13} /> {record?.stopping ? "Stopping…" : "Stop"}
+        </button>
+      )}
+      {tickerLine.done && !logOpen && view?.sessionId && (
+        <Link className="run-read btn btn-gold btn-sm" to={askHref}>Read the answer</Link>
+      )}
+    </div>
+  ) : null;
 
   return (
     <div className="office-page">
@@ -228,46 +266,17 @@ export function OfficePage() {
           speed={speed}
           minutes={clock.minutes}
           compact={compact}
-          maxHeight={narrow ? 100000 : undefined}
+          maxHeight={narrow ? 100000 : Math.max(300, vh - 56 - 250)}
           selected={selected}
           onSelect={setSelected}
           off={off}
           books={learning.data ? books : undefined}
           onBook={(id) => setOpenRule(learning.data?.rules.find((r) => r.id === id) ?? null)}
           onStatus={setPetNote}
+          overlay={tickerEl}
         />
         <p className="visually-hidden" role="status" aria-live="polite">{petNote}</p>
 
-        {tickerLine && record && (
-          <div className={`run-ticker${logOpen ? " is-open" : ""}${tickerLine.done ? " is-done" : ""}`}>
-            {logOpen && (
-              <div className="run-log">
-                <p className="run-log-q">{record.question}</p>
-                <WorkFeed events={record.events} view={view} status={record.status} askHref={askHref} nodes={view?.nodes} limit={compact ? 6 : undefined} />
-                {!running && (
-                  <div className="log-foot">
-                    <button type="button" className="btn btn-quiet btn-sm" onClick={() => { setRunKey(undefined); setLogOpen(false); }}>Clear</button>
-                    {view?.sessionId && <button type="button" className="btn btn-ghost btn-sm" onClick={() => nav(askHref)}>Read the full answer</button>}
-                  </div>
-                )}
-              </div>
-            )}
-            <button type="button" className="run-line" aria-expanded={logOpen} onClick={() => setLogOpen((o) => !o)}>
-              <AgentAvatar id={tickerLine.agent} size={22} ring={!tickerLine.done} />
-              <span className="run-text" aria-live="polite">{tickerLine.text}</span>
-              {running && <span className="run-time">{fmtMs(Math.max(0, elapsed))}</span>}
-              <span className="run-open">{logOpen ? "Hide" : tickerLine.done ? "How it went" : "Show"}<Icon name="chevron" size={14} className="run-chev" /></span>
-            </button>
-            {running && !logOpen && (
-        <button type="button" className="run-stop btn btn-quiet btn-sm" onClick={() => runKey && runStore.stop(runKey)} disabled={record?.stopping}>
-          <Icon name="stop" size={13} /> {record?.stopping ? "Stopping…" : "Stop"}
-        </button>
-      )}
-      {tickerLine.done && !logOpen && view?.sessionId && (
-              <Link className="run-read btn btn-gold btn-sm" to={askHref}>Read the answer</Link>
-            )}
-          </div>
-        )}
       </section>
 
       <div className="office-right">
