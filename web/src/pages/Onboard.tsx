@@ -50,8 +50,8 @@ const REGIONS = [
 ];
 
 const PLURAL: Record<string, [string, string]> = {
-  Page: ["page", "pages"], BrandAsset: ["brand style", "brand styles"], BrandRule: ["writing rule", "writing rules"], Rule: ["website fix", "website fixes"],
-  Product: ["service", "services"], Audience: ["customer group", "customer groups"], Need: ["customer need", "customer needs"], Playbook: ["method", "methods"],
+  Page: ["page", "pages"], BrandAsset: ["brand style", "brand styles"], BrandRule: ["writing rule", "writing rules"], Rule: ["check", "checks"], Fix: ["thing to fix", "things to fix"],
+  Product: ["product or service", "products and services"], Audience: ["customer group", "customer groups"], Need: ["customer need", "customer needs"], Playbook: ["method", "methods"],
   Channel: ["channel", "channels"], Business: ["business", "businesses"], Chunk: ["passage", "passages"],
 };
 const plural = (label: string, n: number) => `${fmtNum(n)} ${(PLURAL[label] ?? [label.toLowerCase(), `${label.toLowerCase()}s`])[n === 1 ? 0 : 1]}`;
@@ -360,7 +360,7 @@ function Log({ run, counts, host, regionCurrency }: { run: RunState; counts: Rec
         <ul className="ob-receipt">
           <li>Read {plural("Page", c.Page ?? run.pages.length)} of {host}</li>
           <li>Picked up {plural("BrandAsset", c.BrandAsset ?? 0)} and {plural("BrandRule", c.BrandRule ?? 0)}</li>
-          <li>Ran 42 website checks and found {plural("Rule", c.Rule ?? 0)} to fix</li>
+          <li>Ran 42 website checks and found {plural("Fix", c["rel:FAILS"] ?? 0)}</li>
           <li>Mapped {plural("Product", c.Product ?? 0)}, {plural("Audience", c.Audience ?? 0)} and what they need</li>
           <li>Chose {plural("Playbook", c.Playbook ?? 0)} for your kind of business</li>
           <li>Filed {plural("Chunk", c.Chunk ?? 0)} so answers can name their sources</li>
