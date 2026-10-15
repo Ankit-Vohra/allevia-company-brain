@@ -8,6 +8,7 @@ import { ask, type AgentWiring } from "../agent/ask.js";
 import { getTurnEvents, listSessions } from "../agent/memory.js";
 import { formatIst } from "../util/time.js";
 import type { Command } from "./_command.js";
+import { interruptible } from "./_interrupt.js";
 import { workLog } from "./_worklog.js";
 
 const WIRING = "../agent/wiring.js"; // a variable, so the build doesn't require the file to exist yet
@@ -45,9 +46,14 @@ export const commands: Command[] = [
       }
       const deps = await wiring.createAskDeps({ tenant, ...(values.model ? { model: values.model } : {}) });
       const emit = values.json ? (e: unknown) => { process.stdout.write(`${JSON.stringify(e)}\n`); } : workLog();
-      const r = await ask({ tenant, question, channel: "cli", ...(values.session ? { sessionId: values.session } : {}) }, deps, emit);
-      if (!values.json) console.log(`\nContinue this thread: npm run cli -- ask ${tenant} "<follow-up>" --session ${r.sessionId}`);
-      return r.ok ? 0 : 1;
+      const stop = interruptible();
+      try {
+        const r = await ask({ tenant, question, channel: "cli", ...(values.session ? { sessionId: values.session } : {}) }, { ...deps, signal: stop.signal }, emit);
+        if (!values.json) console.log(`\nContinue this thread: npm run cli -- ask ${tenant} "<follow-up>" --session ${r.sessionId}`);
+        return r.ok ? 0 : 1;
+      } finally {
+        stop.dispose();
+      }
     },
   },
   {

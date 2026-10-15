@@ -31,6 +31,8 @@ export interface AskDeps {
   agentTimeoutMs?: number;
   embedQuery?: ToolContext["embedQuery"];
   readOnly?: boolean;
+  timeZone?: string;                                  // the tenant's IANA zone for dates in prompts (default IST)
+  signal?: AbortSignal;                               // stops the turn: every agent run is aborted, the turn saved as failed
 }
 
 // What src/agent/wiring.ts (written once the graph tools land) must export, so every surface (CLI, server, Discord,
@@ -89,6 +91,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
         runtime: deps.runtime, getTools: deps.getTools, graph: g, now,
         ...(deps.model ? { model: deps.model } : {}), ...(deps.agentTimeoutMs ? { agentTimeoutMs: deps.agentTimeoutMs } : {}),
         ...(deps.embedQuery ? { embedQuery: deps.embedQuery } : {}), ...(deps.readOnly !== undefined ? { readOnly: deps.readOnly } : {}),
+        ...(deps.timeZone ? { timeZone: deps.timeZone } : {}), ...(deps.signal ? { signal: deps.signal } : {}),
       },
       out);
     if (!outcome.ok) failure = "The Chief of Staff could not write the answer.";

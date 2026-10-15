@@ -137,4 +137,22 @@ describe("ask() (integration)", () => {
     expect(n).toBeGreaterThan(10);
     expect(await getTurnEvents(g, r2.turnId)).not.toBeNull();
   });
+
+  it("passes the tenant's time zone to the prompts and the caller's signal to every run (a stopped turn is saved as failed)", async () => {
+    const zoned = new FakeRuntime(deskScripts);
+    await ask({ tenant: "test", question: "Why did signups drop?", channel: "web" }, deps({}, { runtime: zoned, timeZone: "America/New_York" }), () => {});
+    const work = zoned.runs.find((r) => r.phase === "work")!;
+    expect(work.system).toMatch(/Today is 2026-10-1\d \(\d\d Oct 2026, \d\d:\d\d (?:GMT-4|EDT)\)/);
+
+    const stopped = new AbortController();
+    stopped.abort();
+    const runtime = new FakeRuntime(deskScripts);
+    const a = recorder();
+    const r = await ask({ tenant: "test", question: "Why did signups drop?", channel: "web" }, deps({}, { runtime, signal: stopped.signal }), a.emit);
+    expect(r.ok).toBe(false);
+    expect(runtime.runs).toHaveLength(0); // nothing was started
+    expect(a.events.at(-1)!.type).toBe("final");
+    const [t] = await g.roQuery<Record<string, unknown>>("MATCH (t:Turn {id:$id}) RETURN t.status AS s", { id: r.turnId });
+    expect(t).toEqual({ s: "failed" });
+  });
 });
