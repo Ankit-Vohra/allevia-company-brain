@@ -182,12 +182,12 @@ export async function runStudio(g: GraphHandle, input: StudioInput, deps: Studio
 }
 
 // The latest run's events for the Studio page, newest first by run time.
-export async function latestStudioRun(g: GraphHandle): Promise<{ assetId: string; at: number; events: AgentEvent[] } | null> {
-  const [row] = await g.roQuery<{ id: string; at: number; events: string }>(
-    "MATCH (a:Asset) WHERE a.kind = 'original' AND a.studioEvents IS NOT NULL RETURN a.id AS id, a.studioRunAt AS at, a.studioEvents AS events ORDER BY a.studioRunAt DESC LIMIT 1");
+export async function latestStudioRun(g: GraphHandle): Promise<{ assetId: string; at: number; note: string; events: AgentEvent[] } | null> {
+  const [row] = await g.roQuery<{ id: string; at: number; events: string; note: string | null }>(
+    "MATCH (a:Asset) WHERE a.kind = 'original' AND a.studioEvents IS NOT NULL RETURN a.id AS id, a.studioRunAt AS at, a.studioEvents AS events, a.note AS note ORDER BY a.studioRunAt DESC LIMIT 1");
   if (!row) return null;
   try {
-    return { assetId: row.id, at: row.at, events: JSON.parse(row.events) as AgentEvent[] };
+    return { assetId: row.id, at: row.at, note: row.note ?? "", events: JSON.parse(row.events) as AgentEvent[] };
   } catch {
     return null;
   }
