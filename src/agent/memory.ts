@@ -66,12 +66,13 @@ async function rosterOnce(g: GraphHandle, now: number): Promise<void> {
 // ---------- helpers ----------
 
 // Every write that bypasses upsert/writeBatch: run it, then invalidate the graph's cached projection (even if the query
-// failed part-way, a stale projection is worse than a rebuild).
+// failed part-way, a stale projection is worse than a rebuild). Awaited like upsert's, so other processes see the
+// write stamp before we go on.
 async function rawWrite(g: GraphHandle, cypher: string, params: Record<string, unknown>): Promise<void> {
   try {
     await g.query(cypher, params);
   } finally {
-    noteGraphWrite(g.name);
+    await noteGraphWrite(g.name);
   }
 }
 

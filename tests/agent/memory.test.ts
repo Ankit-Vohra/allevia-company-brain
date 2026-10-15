@@ -196,6 +196,8 @@ describe("memory (integration)", () => {
         const next = raw.find((r) => r.order > w.order)?.order ?? Infinity;
         expect(noted.some((n) => n.graph === own.g.name && n.order > w.order && n.order < next)).toBe(true);
       }
+      // and each stamp was awaited: every noteGraphWrite promise had settled by the time saveTurn returned
+      for (const r of note.mock.results) expect(await Promise.race([r.value, Promise.resolve("pending")])).toBeUndefined();
     } finally {
       query.mockRestore();
       await own.cleanup();
