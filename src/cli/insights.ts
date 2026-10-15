@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { agentById } from "../../shared/roster.js";
 import { graphName, listGraphs, openGraph, type GraphHandle } from "../graph/client.js";
+import { loadConfig } from "../config.js";
 import { decideApproval, listApprovals, type Decision } from "../actions/approvals.js";
 import type { Payload } from "../actions/shared.js";
 import { writeBrief } from "../insights/brief.js";
@@ -106,7 +107,11 @@ export const commands: Command[] = [
       }
       const r = await decideApproval(g, {
         approvalId: id, decision: verb as Decision, ...(values.edit ? { editedPayload: readEdit(values.edit) } : {}), ...(values.actor ? { actor: values.actor } : {}),
-      }, { tenant: tenant!, onLearned: (e) => console.log(`Learned: ${e.text} (${e.ruleId})`) });
+      }, {
+        // Same safety default as the API and Discord: GitHub issues and Discord posts are dry runs unless ALLEVIA_ACTIONS_LIVE=1.
+        tenant: tenant!, executors: { dryRun: !loadConfig().actionsLive },
+        onLearned: (e) => console.log(`Learned: ${e.text} (${e.ruleId})`),
+      });
       if (values.json) { console.log(JSON.stringify(r, null, 2)); return 0; }
       if (r.alreadyDecided) console.log(`Already decided: ${r.approval.status}. Nothing done.`);
       else console.log(`${r.approval.id}: ${r.approval.status}${r.approval.firstPass ? " (first pass)" : ""}`);
