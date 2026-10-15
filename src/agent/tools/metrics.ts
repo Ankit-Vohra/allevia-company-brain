@@ -16,7 +16,14 @@ const DOC_NODES = 20;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}/;
 
 interface Row { s: NodeRow; o: NodeRow; e: EdgeRow; value: number; unit: string | null; ws: string | null; at: string }
-interface Point { date: string; value: number }
+// `window`: the reading is a total or a rate over a period longer than its date (a 28-day snapshot), so it is never read
+// as that one day or that week. Live trial 2026-10-15: "209 sign-ups" over 18 Sep to 15 Oct was reported as one day's and
+// as one week's figure.
+interface Point { date: string; value: number; window?: { from: string; to: string } }
+
+const day = (s: string): string => s.slice(0, 10);
+// The period a reading covers, when it is longer than one day.
+const windowOf = (r: Row): { from: string; to: string } | undefined => (r.ws && day(r.ws) < day(r.at) ? { from: day(r.ws), to: day(r.at) } : undefined);
 
 export function weekStart(date: string): string {
   const d = new Date(`${date.slice(0, 10)}T00:00:00Z`);
@@ -36,13 +43,19 @@ export function stats(points: Point[]) {
 }
 
 function series(rows: Row[], groupBy: "day" | "week" | undefined, agg: Aggregate): Point[] {
-  if (!groupBy) return rows.map((r) => ({ date: r.at.slice(0, 10), value: r.value }));
+  const own = (r: Row): Point => { const w = windowOf(r); return { date: day(r.at), value: r.value, ...(w ? { window: w } : {}) }; };
+  if (!groupBy) return rows.map(own);
   const buckets = new Map<string, Row[]>();
+  const whole: Point[] = [];
   for (const r of rows) {
+    // a reading over a longer period than the bucket keeps its own point and its period; it is not summed into a day or week
+    const w = windowOf(r);
+    if (w && (groupBy === "day" || w.from < weekStart(r.at))) { whole.push(own(r)); continue; }
     const key = groupBy === "week" ? weekStart(r.at) : r.at.slice(0, 10);
     buckets.set(key, [...(buckets.get(key) ?? []), r]);
   }
-  return [...buckets.entries()].map(([date, rs]) => ({ date, value: round(aggregate(agg, rs), 4) }));
+  return [...[...buckets.entries()].map(([date, rs]) => ({ date, value: round(aggregate(agg, rs), 4) })), ...whole]
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // For an unknown metric name: the metrics that share a word with it first (most shared words first; "clicks" ~ "click"),
@@ -121,14 +134,18 @@ async function runTrend(args: { metric: string; subject?: string; from?: string;
   } else {
     const summaries = [...bySubject.values()].map((rs) => {
       const pts = series(rs, args.groupBy, agg);
-      return { subject: rs[0]!.s, rows: rs, stats: stats(pts) };
+      const last = pts.at(-1)!;
+      return { subject: rs[0]!.s, rows: rs, stats: stats(pts), simulated: rs.some((r) => r.o.simulated === true), ...(last.window ? { window: last.window } : {}) };
     }).sort((a, b) => b.stats.last - a.stats.last || a.subject.id.localeCompare(b.subject.id));
     for (const s of summaries) {
       col.node(s.subject);
       used.push(...s.rows.slice(-3));
     }
     notes.push(`${ranked?.subjects ?? bySubject.size} subjects have ${args.metric}${(ranked?.subjects ?? 0) > summaries.length ? `; the ${summaries.length} with the highest latest value are shown` : ""}; pass subject for one full series.`);
-    data = { metric: args.metric, unit, bySubject: summaries.map((s) => ({ ...brief(s.subject), ...s.stats })) };
+    // each subject says whether its own numbers are samples, so a sample flag on one campaign is not read onto a real total
+    data = { metric: args.metric, unit, bySubject: summaries.map((s) => ({ ...brief(s.subject), ...s.stats, simulated: s.simulated, ...(s.window ? { lastWindow: s.window } : {}) })) };
+    const sim = summaries.filter((x) => x.simulated).map((x) => x.subject.id);
+    if (sim.length && sim.length < summaries.length) notes.push(`Only these subjects are simulated: ${sim.join(", ")}; the others are real.`);
   }
   // The newest MAX_POINTS observations behind the figures come back as nodes, the rest as provenance; their documents
   // are evidence too, so up to DOC_NODES of them are returned as nodes, not only as sources.
@@ -143,6 +160,9 @@ async function runTrend(args: { metric: string; subject?: string; from?: string;
   if (cut) notes.push(subject ? `Read the newest ${SERIES_CAP.toLocaleString("en-US")} of ${read[0]!.n.toLocaleString("en-US")} observations; narrow with from/to.`
     : `Summaries use each subject's newest ${SUMMARY_POINTS} observations.`);
   if (simulated) notes.unshift("Includes simulated data.");
+  const windowed = rows.some((r) => windowOf(r));
+  if (windowed) notes.push("Some readings cover a period (window from/to), not one day: give that period with the number.");
+  // with no subject, each subject also carries its own flag (above), so a real total is not read as a sample
   return col.result(ctx, { ...data, ...(simulated ? { simulated: true } : {}) }, notes.join(" ") || undefined);
 }
 
