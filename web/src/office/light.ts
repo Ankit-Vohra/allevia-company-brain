@@ -57,10 +57,10 @@ function renderMap(layer: LightLayer, L: OfficeLayout, st: LightState) {
   };
   for (const l of L.lights) {
     switch (l.kind) {
-      case "lamp": if (l.agent && lampOn(l.agent, st)) pool(l.at.x + 6, l.at.y + 5, l.r, 0.85, [255, 214, 150]); break;
-      case "pendant": if (lt.lamps > 0.25) pool(l.at.x, l.at.y + 4, l.r, 0.95 * lt.lamps, [255, 218, 160]); break;
+      case "lamp": if (l.agent && lampOn(l.agent, st)) pool(l.at.x + 6, l.at.y + 5, l.r, 0.62, [255, 196, 120]); break;
+      case "pendant": if (lt.lamps > 0.25) pool(l.at.x, l.at.y + 4, l.r * 0.9, 0.62 * lt.lamps, [255, 198, 125]); break;
       case "tv": pool(l.at.x, l.at.y + 6, l.r, st.tvPlaying ? 0.7 : 0.18 * lt.lamps, st.tvPlaying ? [150, 190, 255] : [180, 200, 255]); break;
-      case "screen": if (lt.lamps > 0.25) pool(l.at.x, l.at.y, l.r, 0.5 * lt.lamps, [170, 205, 255]); break;
+      case "screen": if (lt.lamps > 0.25) pool(l.at.x, l.at.y, l.r, 0.4 * lt.lamps, [150, 195, 255]); break;
       case "fridge": if (lt.lamps > 0.25) pool(l.at.x, l.at.y, l.r, 0.35, [210, 230, 255]); break;
     }
   }
@@ -91,7 +91,7 @@ export function drawLighting(c: Ctx, layer: LightLayer, L: OfficeLayout, st: Lig
   c.globalCompositeOperation = "screen";
   for (const l of L.lights) {
     let a = 0, col: [number, number, number] = [255, 214, 150];
-    if (l.kind === "lamp" && l.agent && lampOn(l.agent, st)) a = 0.16 * Math.max(lt.lamps, st.lit.has(l.agent) ? 0.35 : 0);
+    if (l.kind === "lamp" && l.agent && lampOn(l.agent, st)) a = 0.14 * Math.max(lt.lamps, st.lit.has(l.agent) ? 0.35 : 0);
     else if (l.kind === "pendant") a = 0.16 * lt.lamps;
     else if (l.kind === "tv" && st.tvPlaying) { a = 0.18; col = [150, 190, 255]; }
     if (a <= 0.01) continue;
@@ -103,7 +103,7 @@ export function drawLighting(c: Ctx, layer: LightLayer, L: OfficeLayout, st: Lig
   }
 
   // sun patches under every window, longer and more golden toward evening
-  c.globalCompositeOperation = "source-over";
+  c.globalCompositeOperation = "screen";
   c.imageSmoothingEnabled = false;
   if (lt.sun > 0.03) {
     const top = L.topWall.y + L.topWall.h + 1;
@@ -113,9 +113,8 @@ export function drawLighting(c: Ctx, layer: LightLayer, L: OfficeLayout, st: Lig
       for (let y = 0; y < len; y += 2) {
         const fade = 1 - y / len;
         const x = r.x + Math.round(lt.sunSlant * y * 0.55) - 1;
-        c.fillStyle = rgb(lt.sunColor, 0.2 * lt.sun * fade);
+        c.fillStyle = rgb(lt.sunColor, 0.62 * lt.sun * fade);
         c.fillRect(x, top + y, r.w + 2, 2);
-        c.fillStyle = rgb([255, 255, 255], 0.0);
       }
     }
   }

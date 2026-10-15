@@ -50,7 +50,7 @@ const KEYS: Key[] = [
   { at: H(12, 30), ambient: [255, 255, 255], wash: [255, 255, 255], washA: 0, sun: 0.5, sunColor: [255, 250, 232], sunLen: 0.7, lamps: 0, shadow: 0.08, sleepy: 0.05 },
   { at: H(15, 0), ambient: [255, 253, 248], wash: [255, 236, 200], washA: 0.03, sun: 0.6, sunColor: [255, 240, 205], sunLen: 1, lamps: 0, shadow: 0.15, sleepy: 0.15 },
   { at: H(16, 45), ambient: [255, 232, 204], wash: [255, 178, 96], washA: 0.11, sun: 1, sunColor: [255, 196, 110], sunLen: 1.8, lamps: 0, shadow: 0.45, sleepy: 0.2 },
-  { at: H(17, 50), ambient: [236, 196, 186], wash: [255, 150, 110], washA: 0.1, sun: 0.75, sunColor: [255, 162, 104], sunLen: 2.2, lamps: 0.35, shadow: 0.55, sleepy: 0.25 },
+  { at: H(17, 50), ambient: [247, 212, 172], wash: [255, 160, 90], washA: 0.1, sun: 0.75, sunColor: [255, 162, 104], sunLen: 2.2, lamps: 0.35, shadow: 0.55, sleepy: 0.25 },
   { at: H(18, 45), ambient: [148, 150, 206], wash: [120, 120, 220], washA: 0.06, sun: 0.1, sunColor: [255, 150, 120], sunLen: 2.2, lamps: 0.9, shadow: 0.2, sleepy: 0.35 },
   { at: H(20, 30), ambient: [112, 118, 186], wash: [80, 90, 190], washA: 0.05, sun: 0, sunColor: [255, 150, 120], sunLen: 1, lamps: 1, shadow: 0, sleepy: 0.55 },
   { at: H(22, 0), ambient: NIGHT, wash: [50, 60, 140], washA: 0.05, sun: 0, sunColor: [255, 240, 210], sunLen: 1, lamps: 0.9, shadow: 0, sleepy: 0.9 },

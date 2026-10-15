@@ -129,7 +129,7 @@ const overlaps = (a: Rect, b: Rect, pad = 0) =>
   a.x - pad < b.x + b.w && a.x + a.w + pad > b.x && a.y - pad < b.y + b.h && a.y + a.h + pad > b.y;
 
 const GAP = 12;
-const ZONE_H = 86;
+const ZONE_H = 92;
 
 /** The desks of a department in a zone: one row if they fit, else more. Returns the desk rects and the block's height. */
 function placeDesks(dept: DepartmentDef, Z: Rect, desks: Record<string, DeskSpot>): Rect[] {
@@ -342,7 +342,7 @@ export function buildLayout(orientation: "landscape" | "portrait"): OfficeLayout
     const COMMON = 150;
     const rowW = (ids: string[]) => ids.reduce((s, x) => s + widthFor(x), 0) + COMMON;
     w = Math.max(rowW(top), rowW(bot)) + WALL * 2;
-    const AH = 38;
+    const AH = 40;
     const aY = floorTop, bY = floorTop + ZONE_H + AH;
     h = bY + ZONE_H + WALL;
     const row = (ids: string[], y: number, common: "cafe" | "lounge") => {

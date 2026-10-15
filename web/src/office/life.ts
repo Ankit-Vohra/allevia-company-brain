@@ -206,7 +206,7 @@ export class Life {
   // ------------------------------------------------------------------ people
 
   private refreshSleepy(env: LifeEnv, first = false) {
-    const free = this.order.filter((id) => !env.busy.has(id) && !env.off.has(id));
+    const free = this.order.filter((id) => !env.busy.has(id) && !env.off.has(id) && (id !== "chief-of-staff" || env.lighting.sleepy > 0.6));
     // one sleepy soul always (when there are enough people to spare), more as the evening goes on
     const want = free.length >= 3 ? Math.min(free.length - 1, Math.max(1, Math.round(env.lighting.sleepy * free.length * 0.55))) : 0;
     const set = new Set(free.slice(0, want));
