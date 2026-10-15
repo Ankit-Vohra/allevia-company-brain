@@ -134,6 +134,64 @@ describe("evidence", () => {
     expect(numberProblem(2000, "do hazaar naye followers")).toBeUndefined();
     expect(numberProblem(150000, "Sale dedh lakh ki hui")).toBeUndefined();
   });
+
+  it("reads Hinglish tens; the ones that are English words (bees, tees, saath) only before a multiplier", () => {
+    expect(numbersIn("das naye leads")).toContain(10);
+    expect(numbersIn("chalis orders aaye")).toContain(40);
+    expect(numbersIn("chaalis")).toContain(40);
+    expect(numbersIn("pachas log")).toContain(50);
+    expect(numbersIn("pachaas")).toContain(50);
+    expect(numbersIn("sattar")).toContain(70);
+    expect(numbersIn("assi")).toContain(80);
+    expect(numbersIn("nabbe")).toContain(90);
+    expect(numbersIn("bees hazaar views")).toContain(20000);
+    expect(numbersIn("tees lakh")).toContain(3000000);
+    expect(numbersIn("saath hazaar")).toContain(60000);
+    expect(numbersIn("bees buzz near the tees, unke saath")).toEqual([]);
+  });
+
+  it("reads sau as a multiplier and the karod/karor, hajar/hajaar, laakh spellings", () => {
+    expect(numbersIn("paanch sau orders")).toContain(500);
+    expect(numbersIn("do sau")).toContain(200);
+    expect(numbersIn("dedh sau")).toContain(150);
+    expect(numbersIn("sau log aaye")).toContain(100);
+    expect(numbersIn("2 karod")).toContain(20000000);
+    expect(numbersIn("2 karor")).toContain(20000000);
+    expect(numbersIn("5 hajar")).toContain(5000);
+    expect(numbersIn("5 hajaar")).toContain(5000);
+    expect(numbersIn("3 laakh")).toContain(300000);
+    expect(numbersIn("do laakh")).toContain(200000);
+  });
+
+  it("adds up compound amounts with falling multipliers", () => {
+    expect(numbersIn("1 lakh 20 thousand")).toContain(120000);
+    expect(numbersIn("₹2 crore 50 lakh")).toContain(25000000);
+    expect(numbersIn("do lakh pachas hazaar")).toContain(250000);
+    expect(numbersIn("do hazaar paanch sau")).toContain(2500);
+    expect(numbersIn("1 lakh 20 hazaar 500")).toContain(120500);
+    expect(numbersIn("1 lakh aur 20 hazaar")).toContain(120000);
+    expect(numberProblem(120000, "Revenue 1 lakh 20 thousand this month")).toBeUndefined();
+    // a rising multiplier or a word in between starts a new amount
+    expect(numbersIn("20 thousand 1 lakh")).not.toContain(120000);
+    expect(numbersIn("1 lakh, 20 thousand")).toContain(120000); // punctuation is not a break: a harmless extra candidate
+    expect(numbersIn("1 lakh users, 20 thousand orders")).not.toContain(120000);
+    expect(numbersIn("1 lakh users and then 20 thousand")).not.toContain(120000);
+    expect(numbersIn("1 lakh or 20 thousand")).not.toContain(120000);
+  });
+
+  it("counts a one-letter multiplier only straight after the digits", () => {
+    expect(numbersIn("5 m tall")).toEqual([5]);
+    expect(numbersIn("a 2 l bottle")).toEqual([2]);
+    expect(numbersIn("3 k steps")).toEqual([3]);
+    expect(numbersIn("5km run")).toEqual([5]);
+    expect(numbersIn("10ml")).toEqual([10]);
+    expect(numbersIn("55k views")).toContain(55000);
+    expect(numbersIn("₹2 cr")).toContain(20000000);
+    expect(numbersIn("2 Cr")).toContain(20000000);
+    expect(numbersIn("2cr")).toContain(20000000);
+    expect(numberProblem(5000000, "the sign is 5 m tall")).toMatch(/does not appear/);
+    expect(numberProblem(200000, "a 2 l bottle")).toMatch(/does not appear/);
+  });
 });
 
 describe("resolveExtraction: entities", () => {
