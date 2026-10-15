@@ -1,16 +1,20 @@
 // ask(): one question from any surface (web, Discord, CLI, MCP) through the agent company, end to end.
-// session (new thread unless one is given) -> seed ids (injected search) -> recall brief -> runTurn -> checkTurn on the
-// final answer -> saveTurn (Turn, Findings, reviews, the full event log) -> `final`. `final` is always the last event,
-// also after an error; an error is reported as an `error` event and the Turn is still saved, marked failed. The turn's
-// stream closes when `final` is made: anything a run emits after that is dropped from the stream and the log.
+// session (new thread unless one is given) -> seed ids (injected search) -> recall brief, the capability ladder and the
+// team settings -> runTurn -> checkTurn on the final answer -> saveTurn (Turn, Findings, reviews, the full event log,
+// GUIDED_BY the owner's instructions that applied) -> `final`. `final` is always the last event, also after an error;
+// an error is reported as an `error` event and the Turn is still saved, marked failed. The turn's stream closes when
+// `final` is made: anything a run emits after that is dropped from the stream and the log.
 import type { AgentEvent, TurnChecks } from "../../shared/contracts.js";
 import { openGraph, type GraphHandle } from "../graph/client.js";
+import { capabilityModes } from "../capabilities/ladder.js";
+import type { CapabilityModeInfo } from "../capabilities/modes.js";
+import { loadTeamSettings } from "../settings/team.js";
 import { checkTurn, extractCitations } from "./checks.js";
 import { getSession, newSessionId, newTurnId, recallBrief, saveTurn, startSession } from "./memory.js";
 import { runTurn, type TurnOutcome } from "./orchestrator.js";
 import type { AgentRuntime, Emit } from "./runtime.js";
 import { TouchedSet, type AlleviaTool, type ToolContext } from "./tool.js";
-import type { RecallBrief } from "./types.js";
+import type { RecallBrief, TeamSettings } from "./types.js";
 
 export type Channel = "web" | "discord" | "cli" | "mcp";
 
@@ -77,6 +81,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
   let g: GraphHandle | undefined = deps.graph;
   let outcome: TurnOutcome | undefined;
   let failure: string | undefined;
+  let capabilities: CapabilityModeInfo[] | undefined;
   try {
     if (!question) throw new Error("The question is empty.");
     g ??= await openGraph(input.tenant);
@@ -87,6 +92,12 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
     try { seeds = deps.seedSearch ? await deps.seedSearch(question) : []; } catch { seeds = []; } // recall is best-effort
     let recall = EMPTY_BRIEF;
     try { recall = await recallBrief(g, { question, seedIds: seeds, ...(continuing ? { sessionId } : {}) }); } catch { recall = EMPTY_BRIEF; }
+    // The capability ladder (best-effort): the Chief says where non-live data comes from, and the answer is checked for it.
+    try { capabilities = await capabilityModes(g, now); } catch { capabilities = undefined; }
+    // The owner's team settings: desks switched off or light, standing instructions. If they can't be read, the turn
+    // runs with the full team and no instructions (and says so in the log).
+    let team: TeamSettings | undefined;
+    try { team = await loadTeamSettings(g); } catch (e) { out({ type: "error", message: `Could not read the team settings, so the whole team is on: ${message(e)}` }); }
 
     outcome = await runTurn(
       { tenant: input.tenant, question, sessionId, turnId, asker, recall },
@@ -95,6 +106,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
         ...(deps.model ? { model: deps.model } : {}), ...(deps.agentTimeoutMs ? { agentTimeoutMs: deps.agentTimeoutMs } : {}),
         ...(deps.embedQuery ? { embedQuery: deps.embedQuery } : {}), ...(deps.readOnly !== undefined ? { readOnly: deps.readOnly } : {}),
         ...(deps.timeZone ? { timeZone: deps.timeZone } : {}), ...(deps.signal ? { signal: deps.signal } : {}),
+        ...(capabilities ? { capabilities } : {}), ...(team ? { team } : {}),
       },
       out);
     if (deps.signal?.aborted) failure = STOPPED_MESSAGE;
@@ -105,7 +117,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
   }
 
   const answer = outcome?.answer ?? "";
-  const checks = checkTurn(answer, outcome?.touched ?? new TouchedSet(), { now, question });
+  const checks = checkTurn(answer, outcome?.touched ?? new TouchedSet(), { now, question, ...(capabilities ? { capabilities } : {}) });
   const citations = extractCitations(answer);
   const agents = outcome?.agents ?? [];
   const ms = Date.now() - t0;
@@ -118,7 +130,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
       const saved = await saveTurn(g, {
         turnId, sessionId, question, answer, asker, at: now, ms, status: failure ? "failed" : "ok", ...(failure ? { error: failure } : {}),
         checks, agents, events: log, touched: outcome?.touched ?? [], citations,
-        findings: outcome?.findings ?? [], reviews: outcome?.reviews ?? [],
+        findings: outcome?.findings ?? [], reviews: outcome?.reviews ?? [], guidedBy: outcome?.guidedBy ?? [],
       });
       if (saved.errors.length) deliver({ type: "error", message: `Saved the turn with ${saved.errors.length} skipped write(s): ${saved.errors[0]}` });
     } catch (e) {

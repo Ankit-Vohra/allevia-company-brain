@@ -8,9 +8,12 @@
 //   numbers (tool.ts), so "12%" is never grounded by "2026-10-12";
 // - simulated: if a touched node is simulated, the answer says so;
 // - freshness: if the newest asOf used is over 7 days old, the answer says "as of <date>" (or "as at", or the Hindi
-//   "<date> तक" / "<date> के अनुसार") with an actual date: "as of now" doesn't count.
+//   "<date> तक" / "<date> के अनुसार") with an actual date: "as of now" doesn't count;
+// - access mode: for every capability the answer cites (its [[ids]]) whose access mode is not "api", the answer says
+//   where the data came from ("from your public profile", "benchmark"); see src/capabilities/modes.ts.
 // Failed checks never block an answer; they are shown as "unverified" and stored on the Turn.
 import type { TurnChecks } from "../../shared/contracts.js";
+import { modeCheck, type CapabilityModeInfo } from "../capabilities/modes.js";
 import type { TouchedSet } from "./tool.js";
 
 const DAY_MS = 86_400_000;
@@ -161,12 +164,14 @@ const HINDI_AS_OF = new RegExp(String.raw`(?:${ANY_DATE}|\d{1,2}\s+${HINDI_MONTH
 export interface CheckOpts {
   now?: number;
   question?: string; // numbers the owner wrote in the question ("3 reel ideas") are allowed in the answer
+  capabilities?: readonly CapabilityModeInfo[]; // the tenant's capability ladder; without it modeDisclosed is true
 }
 
 export function checkTurn(answer: string, touched: TouchedSet, opts: CheckOpts = {}): TurnChecks {
   const now = opts.now ?? Date.now();
 
-  const invalidCitations = extractCitations(answer).filter((id) => !touched.has(id));
+  const cited = extractCitations(answer);
+  const invalidCitations = cited.filter((id) => !touched.has(id));
 
   const data = [...touched.numbers()].map(Number).filter(Number.isFinite);
   if (opts.question) for (const q of findNumbers(opts.question)) data.push(q.value, ...(q.scale !== 1 ? [q.value * q.scale] : []));
@@ -183,10 +188,13 @@ export function checkTurn(answer: string, touched: TouchedSet, opts: CheckOpts =
   const ascii = toAsciiDigits(answer);
   const freshnessDisclosed = fresh || AS_OF.test(ascii) || HINDI_AS_OF.test(ascii);
 
+  // Only citations a tool returned this turn count as drawn on (a made-up id is the citation check's failure).
+  const modeDisclosed = modeCheck(answer, cited.filter((id) => touched.has(id)), opts.capabilities ?? []).ok;
+
   return {
     citationsValid: invalidCitations.length === 0, invalidCitations,
     numbersGrounded: ungroundedNumbers.length === 0, ungroundedNumbers,
-    simulatedDisclosed, freshnessDisclosed,
+    simulatedDisclosed, freshnessDisclosed, modeDisclosed,
   };
 }
 

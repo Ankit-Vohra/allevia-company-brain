@@ -19,6 +19,9 @@ export interface TurnChecks {
   citationsValid: boolean; invalidCitations: string[];
   numbersGrounded: boolean; ungroundedNumbers: string[];
   simulatedDisclosed: boolean; freshnessDisclosed: boolean;
+  // The answer says where its data came from for every capability it cites whose access mode is not "api" ("from your
+  // public profile", "benchmark"). Always set by checkTurn; absent on turns saved before the capability ladder.
+  modeDisclosed?: boolean;
 }
 
 export type AgentEvent =
@@ -63,3 +66,70 @@ export type OnboardEvent =
   | { type: "nodes"; nodes: NodeRef[]; edges: EdgeRef[] }                             // graph grows live
   | { type: "done"; tenant: string; counts: Record<string, number> }
   | { type: "error"; message: string };
+
+// ---------- capability ladder and team settings (product design §2.3, §2.4, §8) ----------
+
+// What each connected (or not) source lets the agents do, at the best access mode available, best first.
+export type CapabilityKey = "ga4" | "search_console" | "gbp" | "instagram_insights" | "reviews" | "studio" | "ads";
+export type AccessMode = "api" | "delegated" | "upload" | "public" | "benchmark" | "none";
+// ok: working at its mode; stale: its connector data is over 7 days old; down: its connector reports an error (it
+// dropped a rung); not_connected: no connector at all.
+export type CapabilityStatus = "ok" | "stale" | "down" | "not_connected";
+
+// GET /api/:t/capabilities
+export interface CapabilityState {
+  id: string;                 // capability:<key>
+  key: CapabilityKey;
+  name: string;               // "Instagram insights"
+  accessMode: AccessMode;
+  status: CapabilityStatus;
+  lastOkAt: number | null;    // epoch ms of the newest live connector data, if there ever was any
+  upgradeHint: string;        // the one action that would move it up a rung, in plain words
+  dependsOn: string[];        // the Channel and System ids it reads
+}
+
+export type AgentMode = "full" | "light" | "off";
+
+// GET /api/:t/agents
+export interface AgentSettings {
+  id: AgentId;                // roster id
+  nodeId: string;             // agent:allevia-<id>
+  name: string;
+  title: string;
+  department: string;
+  enabled: boolean;
+  mode: AgentMode;
+  autonomy: number;           // 0 draft only, 1 scheduled after approval, 2 auto-publish with a digest, 3 full
+  statusNote?: string;        // "till the new site launches"
+  instructions: Array<{ id: string; text: string; channel?: string; at?: number }>;
+}
+
+// "Tell your team": the owner's words turned into typed patches, previewed as a diff, then applied.
+export type DirectivePatch =
+  | { kind: "agent.enabled"; agent: AgentId; enabled: boolean; note?: string }
+  | { kind: "agent.mode"; agent: AgentId; mode: AgentMode }
+  | { kind: "agent.autonomy"; agent: AgentId; autonomy: number }
+  | { kind: "memory.instruction"; agents: AgentId[]; text: string; channel?: string; limit?: { kind: "max_daily_spend"; amount: number; currency: string } }
+  | { kind: "brand_rule.add"; text: string; ruleKind: "voice" | "visual" };
+
+export interface DirectiveDiffLine {
+  patch: number;              // index into patches
+  op: "change" | "add" | "same";
+  target: string;             // the node it writes (agent:allevia-tech-lead, memory:…, brand-rule:…)
+  label: string;              // "Arjun (Tech Lead)"
+  before?: string;
+  after: string;
+}
+
+// POST /api/:t/directives (preview) and POST /api/:t/directives/:id/apply
+export interface DirectivePreview {
+  id: string;                 // document:directive-…
+  text: string;
+  actor: string;
+  status: "preview" | "applied";
+  patches: DirectivePatch[];
+  diff: DirectiveDiffLine[];
+  unparsed: string[];         // parts of the text that became no patch
+  notes: string[];            // why something was left out ("the Chief of Staff can't be switched off")
+  parser: "rules" | "rules+llm";
+}

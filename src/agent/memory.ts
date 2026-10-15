@@ -5,7 +5,9 @@
 //   (CITED); writes each agent's Finding (PART_OF the Turn, PRODUCED by the agent, CITED, BASED_ON other Findings) and
 //   each review (REVIEWED, with verdict and note); and grows each agent's KNOWS_ABOUT weight for what its Findings cited.
 //   A citation counts (CITED, KNOWS_ABOUT) only if a tool returned that id this turn and it is in the graph: an id a
-//   model made up, or copied from text, is kept in the Turn's text but never becomes an edge.
+//   model made up, or copied from text, is kept in the Turn's text but never becomes an edge. The owner's instructions
+//   the turn worked under (guidedBy, from the orchestrator) become GUIDED_BY from the Turn and from each Finding whose
+//   desk they guided, when they are a Memory, Rule or BrandRule in the graph.
 //   The two raw-Cypher writes here (Session.lastAt, the KNOWS_ABOUT merge) bypass upsert, so they go through rawWrite,
 //   which tells the projection cache (noteGraphWrite) that the graph changed.
 // - recallBrief: "what we already know" before a turn, with ids the agents may cite.
@@ -15,6 +17,7 @@ import type { AgentEvent, NodeRef, TurnChecks } from "../../shared/contracts.js"
 import type { GraphHandle } from "../graph/client.js";
 import { noteGraphWrite } from "../graph/projection.js";
 import { writeBatch, type EdgeInput, type NodeInput, type Prim } from "../graph/upsert.js";
+import { typeFromId } from "../util/ids.js";
 import { istDate } from "../util/time.js";
 import { TouchedSet } from "./tool.js";
 import type { FindingRecord, RecallBrief, ReviewRecord } from "./types.js";
@@ -183,9 +186,13 @@ export interface SaveTurnInput {
   citations: string[];              // [[ids]] in the answer
   findings: FindingRecord[];
   reviews: ReviewRecord[];
+  guidedBy?: string[];              // the owner's instructions (Memory, Rule, BrandRule ids) the turn worked under
 }
 
 export interface SaveTurnResult { nodesCreated: number; edgesCreated: number; errors: string[] }
+
+// GUIDED_BY reaches only these (schema: Turn|Finding|Content -GUIDED_BY-> Memory|Rule|BrandRule).
+const GUIDES = new Set(["Memory", "Rule", "BrandRule"]);
 
 export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTurnResult> {
   const now = t.at;
@@ -196,7 +203,9 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
 
   const touchedIds = t.touched instanceof TouchedSet ? [...t.touched.nodes().map((n) => n.id), ...t.touched.sources().map((s) => s.id)] : t.touched;
   const findingIds = new Set(t.findings.map((f) => f.id));
-  const known = await existing(g, [...touchedIds, ...t.citations, ...t.findings.flatMap((f) => [...f.citations, ...f.basedOn])]);
+  const guideIds = [...(t.guidedBy ?? []), ...t.findings.flatMap((f) => f.guidedBy ?? [])].filter((id) => GUIDES.has(typeFromId(id) ?? ""));
+  const known = await existing(g, [...touchedIds, ...t.citations, ...t.findings.flatMap((f) => [...f.citations, ...f.basedOn]), ...guideIds]);
+  const guide = (id: string): boolean => known.has(id) && GUIDES.has(typeFromId(id) ?? ""); // an instruction still in the graph
   const exists = (id: string): boolean => known.has(id) && id !== t.turnId;
   const seen = new Set(touchedIds);
   const cited = (id: string): boolean => seen.has(id) && exists(id); // returned by a tool this turn, and in the graph
@@ -213,6 +222,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   for (const a of unique(t.agents)) if (agentById(a)) edges.push({ from: t.turnId, type: "HANDLED_BY", to: agentNodeId(a) });
   for (const id of unique(touchedIds)) if (exists(id)) edges.push({ from: t.turnId, type: "TOUCHED", to: id });
   for (const id of unique(t.citations)) if (cited(id)) edges.push({ from: t.turnId, type: "CITED", to: id });
+  for (const id of unique(t.guidedBy ?? [])) if (guide(id)) edges.push({ from: t.turnId, type: "GUIDED_BY", to: id });
 
   for (const f of t.findings) {
     const who = agentById(f.agent);
@@ -227,6 +237,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
     if (who) edges.push({ from: agentNodeId(f.agent), type: "PRODUCED", to: f.id });
     for (const id of unique(f.citations)) if (cited(id)) edges.push({ from: f.id, type: "CITED", to: id });
     for (const id of unique(f.basedOn)) if (id !== f.id && (findingIds.has(id) || known.has(id))) edges.push({ from: f.id, type: "BASED_ON", to: id });
+    for (const id of unique(f.guidedBy ?? [])) if (guide(id)) edges.push({ from: f.id, type: "GUIDED_BY", to: id });
   }
   for (const r of t.reviews) {
     if (agentById(r.reviewer) && findingIds.has(r.findingId)) {

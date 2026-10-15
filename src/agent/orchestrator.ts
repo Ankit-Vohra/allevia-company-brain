@@ -19,6 +19,10 @@
 // - an answer written in full and pathed is kept even if the Chief's run then fails (out of turns, a timeout).
 //
 // Fast path: a plan that is a single chief-of-staff step skips Findings and reviews; the Chief answers with its tools.
+// The owner's settings (TurnDeps.team, product design §2.4): a desk switched off is never in the plan schema, the
+// planner's desk list or a review; a light desk runs on the cheapest model; every prompt an agent gets carries the
+// owner's standing instructions about it, and the ones that applied are returned as guidedBy (memory.ts writes
+// GUIDED_BY from the Turn and each Finding).
 // Failure: each agent run has a timeout (120 s) that also aborts its runtime (and so its SDK subprocess); a turn-level
 // signal stops every run. A failed agent emits agent_done {ok:false} and the Chief is told.
 // Untrusted text: findings and tool results are data. Write tools reach only agents whose roster lists them (toolsFor
@@ -29,15 +33,18 @@
 import { AGENTS, agentById, type AgentDef } from "../../shared/roster.js";
 import type { ActionKind, AgentEvent, EdgeRef, NodeRef, PlanStep, ToolResult } from "../../shared/contracts.js";
 import type { GraphHandle } from "../graph/client.js";
+import { modesUsed, type CapabilityModeInfo } from "../capabilities/modes.js";
 import { typeFromId } from "../util/ids.js";
 import { checkTurn, extractCitations, hasNumbers } from "./checks.js";
 import {
-  CHIEF, FINDING_MAX_CHARS, FINDING_SCHEMA, MAX_DESKS, MAX_DESKS_BROAD, PLAN_SCHEMA, REVIEW_SCHEMA, agentSystemPrompt, directPrompt,
+  CHIEF, FINDING_MAX_CHARS, FINDING_SCHEMA, MAX_DESKS, MAX_DESKS_BROAD, REVIEW_SCHEMA, agentSystemPrompt, directPrompt, planSchema,
   planPrompt, planSystemPrompt, reviewPrompt, revisePrompt, synthesisPrompt, workPrompt, type FindingView, type PromptOpts, type ReviewEvidence,
 } from "./prompts.js";
 import { invokeTool, isWriteTool, nextCallId, type AgentRuntime, type Emit, type RunInput, type RunOutput, type RunPhase } from "./runtime.js";
 import { TouchedSet, type AlleviaTool, type ToolContext } from "./tool.js";
-import { findingId, type FindingRecord, type ProposalRecord, type RecallBrief, type ReviewRecord } from "./types.js";
+import {
+  findingId, type FindingRecord, type InstructionNote, type ProposalRecord, type RecallBrief, type ReviewRecord, type TeamSettings,
+} from "./types.js";
 
 export const AGENT_TIMEOUT_MS = 120_000;
 export const MAX_REVIEWERS = 2;
@@ -54,6 +61,8 @@ export const toolRounds = (phase: RunPhase): number => TOOL_ROUNDS[phase];
 
 // Planning is a short structured choice of desks: the cheapest model does it (unless TurnDeps.model overrides all).
 export const PLANNER_MODEL = "haiku";
+// A desk the owner put on light mode runs on the cheapest model too.
+export const LIGHT_MODEL = "haiku";
 
 // What the Chief may use while writing the answer from the desks' findings.
 const SYNTHESIS_TOOLS: ReadonlySet<string> = new Set(["show_path", "propose_action"]);
@@ -79,6 +88,8 @@ export interface TurnDeps {
   signal?: AbortSignal;                     // stops every agent run of the turn (a client went away, Ctrl-C)
   timeZone?: string;                        // the tenant's IANA zone for "today" in prompts
   draftWhileReviewing?: boolean;            // default true: the Chief drafts (held) while the last reviews finish
+  capabilities?: CapabilityModeInfo[];      // the capability ladder: the Chief says where non-live data comes from
+  team?: TeamSettings;                      // desks switched off or light, and the owner's standing instructions
 }
 
 export interface Plan { steps: PlanStep[]; rationale: string; chiefTask?: string }
@@ -95,6 +106,7 @@ export interface TurnOutcome {
   agents: string[];                         // every agent that ran, in order of first involvement
   failed: string[];                         // agents whose work failed
   touched: TouchedSet;
+  guidedBy: string[];                       // the owner's instructions the turn worked under (saved as Turn GUIDED_BY)
 }
 
 // ---------- pure helpers (exported for tests) ----------
@@ -121,6 +133,13 @@ export function mentionsDesk(task: string, agentId: string): boolean {
   return words([a.id, a.id.replace(/-/g, " "), a.title], "iu").test(task) || words([a.name], "u").test(task);
 }
 
+// Does a text name a channel: its name or its id's key ("LinkedIn", "linkedin"), as a word, in any case?
+export function namesChannel(text: string, ch: { id: string; name: string }): boolean {
+  const key = ch.id.slice(ch.id.indexOf(":") + 1).replace(/-/g, " ");
+  const words = unique([ch.name, key].map((w) => w.trim()).filter((w) => w.length >= 3));
+  return words.some((w) => new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(w)}(?![\\p{L}\\p{N}])`, "iu").test(text));
+}
+
 // A broad review of the whole business may use up to MAX_DESKS_BROAD desks; anything else, MAX_DESKS.
 const BROAD = new RegExp([
   String.raw`\b(?:doing|going|performing) overall\b`, String.raw`\boverall (?:picture|health|performance|status|summary)\b`,
@@ -133,18 +152,20 @@ const BROAD = new RegExp([
 export const isBroadQuestion = (question: string): boolean => BROAD.test(question);
 export const deskCap = (question: string): number => (isBroadQuestion(question) ? MAX_DESKS_BROAD : MAX_DESKS);
 
-// Validates the Chief's plan: unknown agents dropped, one step per agent (tasks merged), at most deskCap(question)
-// steps (3, or 5 for a broad review; the first ones listed are kept), `after` limited to planned agents (plus desks a
-// task names), topologically ordered (a cycle is broken by dropping the stuck step's unmet deps). The Chief alongside
-// other desks becomes a note for synthesis. Nothing usable -> a single chief-of-staff step.
-export function normalisePlan(raw: unknown, question: string): Plan {
+// Validates the Chief's plan: unknown agents and desks the owner switched off dropped, one step per agent (tasks
+// merged), at most deskCap(question) steps (3, or 5 for a broad review; the first ones listed are kept), `after` limited
+// to planned agents (plus desks a task names), topologically ordered (a cycle is broken by dropping the stuck step's
+// unmet deps). The Chief alongside other desks becomes a note for synthesis. Nothing usable -> a single chief-of-staff
+// step.
+export function normalisePlan(raw: unknown, question: string, opts: { disabled?: Iterable<string> } = {}): Plan {
+  const off = new Set([...(opts.disabled ?? [])].filter((id) => id !== CHIEF));
   const r = (raw && typeof raw === "object" ? raw : {}) as { steps?: unknown; rationale?: unknown };
   const merged = new Map<string, { agent: string; task: string; after: string[] }>();
   for (const s of Array.isArray(r.steps) ? r.steps : []) {
     if (!s || typeof s !== "object") continue;
     const o = s as Record<string, unknown>;
     const agent = typeof o.agent === "string" ? o.agent.trim() : "";
-    if (!agentById(agent)) continue;
+    if (!agentById(agent) || off.has(agent)) continue;
     const task = typeof o.task === "string" ? o.task.trim() : "";
     const prev = merged.get(agent);
     if (prev) {
@@ -187,11 +208,11 @@ export function normalisePlan(raw: unknown, question: string): Plan {
 // Reviewers whose roster `reviews` covers the producer and who are relevant to this finding: the copy editor only for
 // content; the fact checker for content and for marketing/analytics findings with numbers; the CoE lead only when the
 // finding has numbers. When the automatic check already passed (`checked`: every cited id and number found in this
-// turn's tool data), one numbers reviewer is enough: the CoE lead, not the fact checker as well. At most MAX_REVIEWERS,
-// in roster order.
-export function reviewersFor(producerId: string, text: string, opts: { checked?: boolean } = {}): AgentDef[] {
+// turn's tool data), one numbers reviewer is enough: the CoE lead, not the fact checker as well. A desk the owner
+// switched off never reviews. At most MAX_REVIEWERS, in roster order.
+export function reviewersFor(producerId: string, text: string, opts: { checked?: boolean; disabled?: ReadonlySet<string> } = {}): AgentDef[] {
   const numbers = hasNumbers(text);
-  let rs = AGENTS.filter((r) => r.id !== producerId && r.reviews?.includes(producerId) && relevantReviewer(r.id, producerId, numbers));
+  let rs = AGENTS.filter((r) => r.id !== producerId && !opts.disabled?.has(r.id) && r.reviews?.includes(producerId) && relevantReviewer(r.id, producerId, numbers));
   if (opts.checked && rs.some((r) => r.id === "coe-lead")) rs = rs.filter((r) => r.id !== "fact-checker");
   return rs.slice(0, MAX_REVIEWERS);
 }
@@ -411,12 +432,18 @@ class Turn {
   private readonly early = new Set<string>();            // finding ids handed on before their review ended
   private readonly results: Array<{ agent: string; name: string; data: unknown; ids: string[] }> = []; // every tool result
   private readonly listeners = new Set<() => void>();    // told when a finding is sent back or settles
+  private readonly prompted = new Map<string, Set<string>>(); // agent -> the owner's instruction ids its prompts carried
+  private readonly off: ReadonlySet<string>;             // desks the owner switched off (never the Chief)
+  private readonly light: ReadonlySet<string>;           // desks on light mode: the cheapest model
   readonly reviews: ReviewRecord[] = [];
   readonly proposals: ProposalRecord[] = [];
   path?: { nodes: NodeRef[]; edges: EdgeRef[] };
   readonly touched = new TouchedSet();
 
-  constructor(readonly input: TurnInput, readonly deps: TurnDeps, readonly emit: Emit) {}
+  constructor(readonly input: TurnInput, readonly deps: TurnDeps, readonly emit: Emit) {
+    this.off = new Set((deps.team?.disabled ?? []).filter((id) => id !== CHIEF));
+    this.light = new Set(deps.team?.light ?? []);
+  }
 
   private involve(agentId: string): void {
     if (!this.agents.includes(agentId)) this.agents.push(agentId);
@@ -443,7 +470,7 @@ class Turn {
     };
   }
 
-  private model(agent: AgentDef): string { return this.deps.model ?? agent.model; }
+  private model(agent: AgentDef): string { return this.deps.model ?? (this.light.has(agent.id) ? LIGHT_MODEL : agent.model); }
 
   private tools(agent: AgentDef, phase: RunPhase, lean = false): AlleviaTool[] {
     return toolsFor(agent, phase, this.deps.getTools, { lean, question: this.input.question });
@@ -453,8 +480,41 @@ class Turn {
     return { now: this.deps.now, tenant: this.input.tenant, ...(this.deps.timeZone ? { timeZone: this.deps.timeZone } : {}) };
   }
 
+  // Every prompt an agent gets carries the owner's standing instructions about it. What a prompt showed counts as seen
+  // (like the recall brief): the agent may cite it.
   private system(agent: AgentDef, tools: AlleviaTool[]): string {
-    return agentSystemPrompt(agent, tools, this.promptOpts);
+    const instructions = (this.deps.team?.instructions ?? []).filter((n) => n.agents.includes(agent.id));
+    if (instructions.length) {
+      const unseen = instructions.filter((n) => !this.touched.has(n.id));
+      if (unseen.length) {
+        this.touched.add({ data: unseen.map((n) => n.text), nodes: unseen.map((n) => ({ id: n.id, label: "Memory", name: clip(n.text, 80) })), edges: [], sources: [] });
+      }
+      const seen = this.prompted.get(agent.id) ?? new Set<string>();
+      for (const n of instructions) seen.add(n.id);
+      this.prompted.set(agent.id, seen);
+    }
+    return agentSystemPrompt(agent, tools, { ...this.promptOpts, instructions });
+  }
+
+  // The instructions that guided the turn, by agent: those its prompts carried that apply here. One scoped to a channel
+  // ("no emojis on LinkedIn") applies when the turn touched that channel or named it (in the question, a task, a finding
+  // or the answer: `texts`); an unscoped one always does.
+  guidance(texts: string[]): { turn: string[]; byAgent: Map<string, string[]> } {
+    const corpus = [this.input.question, ...texts].join("\n");
+    const notes = new Map((this.deps.team?.instructions ?? []).map((n) => [n.id, n] as const));
+    const applies = (n: InstructionNote) => !n.channel || this.touched.has(n.channel.id) || namesChannel(corpus, n.channel);
+    const byAgent = new Map<string, string[]>();
+    for (const [agent, ids] of this.prompted) {
+      const used = [...ids].filter((id) => { const n = notes.get(id); return !!n && applies(n); });
+      if (used.length) byAgent.set(agent, used);
+    }
+    return { turn: unique([...byAgent.values()].flat()), byAgent };
+  }
+
+  private guidanceFor(agents: string[], texts: string[]): InstructionNote[] {
+    const { byAgent } = this.guidance(texts);
+    const ids = new Set(agents.flatMap((a) => byAgent.get(a) ?? []));
+    return (this.deps.team?.instructions ?? []).filter((n) => ids.has(n.id));
   }
 
   // show_path and propose_action results become path/proposal events. Through a Hold, the events wait in it and what
@@ -547,13 +607,15 @@ class Turn {
 
   // ----- plan -----
 
+  // The plan schema and the planner's desk list hold only the desks the owner has on.
   async plan(): Promise<Plan> {
     const chief = agentById(CHIEF)!;
+    const enabled = AGENTS.map((a) => a.id).filter((id) => !this.off.has(id));
     const out = await this.step(chief, "Planning who does what", () => this.runAgent(chief, {
-      phase: "plan", model: this.deps.model ?? PLANNER_MODEL, system: planSystemPrompt(this.promptOpts),
-      prompt: planPrompt({ question: this.input.question, recall: this.input.recall.text }), tools: [], outputSchema: PLAN_SCHEMA, maxTurns: MAX_TURNS.plan,
+      phase: "plan", model: this.deps.model ?? PLANNER_MODEL, system: planSystemPrompt({ ...this.promptOpts, disabled: [...this.off] }),
+      prompt: planPrompt({ question: this.input.question, recall: this.input.recall.text }), tools: [], outputSchema: planSchema(enabled), maxTurns: MAX_TURNS.plan,
     }));
-    const plan = normalisePlan(out ? out.structured ?? tryParseJson(out.text) : undefined, this.input.question);
+    const plan = normalisePlan(out ? out.structured ?? tryParseJson(out.text) : undefined, this.input.question, { disabled: this.off });
     if (!out) plan.rationale = "Planning didn't finish, so I'm answering directly.";
     this.emit({ type: "plan", by: CHIEF, steps: plan.steps, rationale: plan.rationale });
     return plan;
@@ -598,7 +660,7 @@ class Turn {
   }
 
   private reviewersOf(f: FindingRecord): AgentDef[] {
-    return reviewersFor(f.agent, f.text, { checked: this.checksOut(f) });
+    return reviewersFor(f.agent, f.text, { checked: this.checksOut(f), disabled: this.off });
   }
 
   private toFinding(out: RunOutput, base: { id: string; agent: string; task: string; depIds: string[] }): FindingRecord {
@@ -840,14 +902,20 @@ class Turn {
     const stream = new AnswerStream(out);
     // A held draft treats the findings still under review as final: it is only shown if their reviews come back ok.
     const views = findings.map(this.view).map((v) => (held ? { ...v, draft: undefined } : v));
+    // Data-source modes: on the fast path every capability that isn't live (the Chief looks up for itself); from
+    // findings, the ones this turn's tool data drew on.
+    const caps = this.deps.capabilities ?? [];
+    const sources = fast ? caps.filter((c) => c.accessMode !== "api") : modesUsed(this.touched.nodes().map((n) => n.id), caps, "prompt");
+    // The owner's instructions the desks worked under, so the answer honours them and the path can show them.
+    const guidance = fast ? [] : this.guidanceFor(plan.steps.map((s) => s.agent), [...plan.steps.map((s) => s.task), ...findings.map((f) => f.text)]);
     let res: RunOutput;
     try {
       res = await this.runAgent(chief, {
         phase, system: this.system(chief, tools), tools, streamText: true, maxTurns: lean ? MAX_TURNS.synthesis : MAX_TURNS.direct,
         prompt: fast
-          ? directPrompt({ question: this.input.question, recall: this.input.recall.text, task: plan.steps[0]!.task, toolRounds: toolRounds("direct") })
+          ? directPrompt({ question: this.input.question, recall: this.input.recall.text, task: plan.steps[0]!.task, toolRounds: toolRounds("direct"), sources })
           : synthesisPrompt({
-            question: this.input.question, recall: this.input.recall.text, findings: views, failed: this.failed, canLookUp: !lean,
+            question: this.input.question, recall: this.input.recall.text, findings: views, failed: this.failed, canLookUp: !lean, sources, guidance,
             ...(plan.chiefTask ? { chiefTask: plan.chiefTask } : {}),
           }),
         ...(held ? { abort: held.abort, onToolResult: this.toolResults(out, held.hold) } : {}),
@@ -893,8 +961,13 @@ export async function runTurn(input: TurnInput, deps: TurnDeps, emit: Emit): Pro
   await work?.final;
 
   const findings = plan.steps.map((s) => t.findings.get(s.agent)).filter((f): f is FindingRecord => !!f);
+  const { turn: guidedBy, byAgent } = t.guidance([...plan.steps.map((s) => s.task), ...findings.map((f) => f.text), text]);
+  for (const f of findings) {
+    const ids = byAgent.get(f.agent);
+    if (ids?.length) f.guidedBy = ids;
+  }
   return {
     ok, answer: text, plan, fastPath, findings, reviews: t.reviews, proposals: t.proposals, agents: t.agents, failed: t.failed, touched: t.touched,
-    ...(t.path ? { path: t.path } : {}),
+    guidedBy, ...(t.path ? { path: t.path } : {}),
   };
 }
