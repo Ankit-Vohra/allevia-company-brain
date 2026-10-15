@@ -25,14 +25,14 @@ export const ruleClause = (text: string) => {
 export function LearnedChips({ events, edited }: { events: LearnedEvent[] | undefined; edited: boolean }) {
   if (!events) return null;
   if (!events.length) {
-    return edited ? <p className="learned-none">Your edit is saved with this draft. It did not teach a rule for next time.</p> : null;
+    return edited ? <p className="learned-none">Your edit is saved with this draft. Nothing new to remember for next time.</p> : null;
   }
   return (
     <ul className="learned-chips" aria-label="What the team learned from your edit">
       {events.map((e) => (
         <li key={e.ruleId} className="learned-pill">
           <Icon name="sparkle" size={13} />
-          <span><b>Learned:</b> {ruleClause(e.text)} <span className="learned-pill-tail">· applied to future drafts</span></span>
+          <span><b>Your team learned:</b> {ruleClause(e.text)} <span className="learned-pill-tail">· applied to future drafts</span></span>
         </li>
       ))}
     </ul>
@@ -72,17 +72,13 @@ export function RuleRow({ rule, onRetire, onOpen, compact }: {
             </span>
           )}
           {retired ? <span>Retired {fmtDate(rule.retiredAt ?? undefined)}</span> : <span>Learned {fmtDate(rule.learnedAt ?? undefined)}</span>}
-          <span>applied <b className="num">{rule.appliedCount}</b>×</span>
-          <span className="rule-conf" title={`Confidence ${fmtPct(rule.confidence)}: it grows each time you make the same edit again`}>
-            <span className="meter"><span style={{ width: `${Math.round(rule.confidence * 100)}%` }} /></span>
-            <span className="num">{fmtPct(rule.confidence)}</span>
-          </span>
+          {rule.appliedCount > 0 && <span>used in <b className="num">{rule.appliedCount}</b> {rule.appliedCount === 1 ? "draft" : "drafts"}</span>}
         </p>
         {err && <p className="notice notice-bad" role="alert">{err}</p>}
       </div>
       {onRetire && !retired && (
-        <button type="button" className="btn btn-quiet btn-sm rule-retire" onClick={retire} disabled={busy || getPublicMode()} aria-label={`Retire the rule: ${rule.text}`}>
-          {busy ? "Retiring…" : "Retire"}
+        <button type="button" className="btn btn-quiet btn-sm rule-retire" onClick={retire} disabled={busy || getPublicMode()} aria-label={`Stop using this: ${rule.text}`}>
+          {busy ? "Stopping…" : "Stop using"}
         </button>
       )}
     </li>
@@ -104,7 +100,7 @@ interface PathData {
 
 function PathNode({ n, role, onOpen }: { n: NodeRef; role: string; onOpen: (id: string) => void }) {
   return (
-    <button type="button" className="lp-node" style={{ ["--hue" as string]: hueFor(n.label) }} onClick={() => onOpen(n.id)} title={`${n.label}: ${n.name}. Open in the brain.`}>
+    <button type="button" className="lp-node" style={{ ["--hue" as string]: hueFor(n.label) }} onClick={() => onOpen(n.id)} title={`${n.label}: ${n.name}. See what your team knows.`}>
       <span className="lp-node-role"><span className="lp-dot" aria-hidden="true" />{role}</span>
       <span className="lp-node-name">{n.name.replace(/^(?:content_draft|github_issue|pause_ad|discord_post): /, "")}</span>
       <span className="lp-node-id">{n.label}</span>
@@ -190,7 +186,7 @@ export function LearnedPathDialog({ rule, onClose, onRetired }: { rule: LearnedR
               <ol className="lp-graph">
                 <li><PathNode n={p.rule} role="The rule" onOpen={open} /></li>
                 <li className="lp-edge" aria-label="learned from"><span>learned from</span></li>
-                <li>{p.approval ? <PathNode n={p.approval} role="Your approval, with edits" onOpen={open} /> : <span className="lp-missing">The approval is no longer in the graph</span>}</li>
+                <li>{p.approval ? <PathNode n={p.approval} role="Your approval, with edits" onOpen={open} /> : <span className="lp-missing">That draft is no longer in your records</span>}</li>
                 {p.draft && <li className="lp-edge" aria-label="resulted in"><span>resulted in</span></li>}
                 {p.draft && <li><PathNode n={p.draft} role="The draft" onOpen={open} /></li>}
               </ol>

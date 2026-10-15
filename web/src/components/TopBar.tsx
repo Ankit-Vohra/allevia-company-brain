@@ -165,7 +165,7 @@ function MoreMenu({ variant }: { variant: "desktop" | "mobile" }) {
           </NavLink>
           <NavLink to="/team" role="menuitem" className="more-item">
             <span className="more-icon"><Icon name="office" size={16} /></span>
-            <span className="switcher-text"><span className="switcher-name">Your team</span><span className="switcher-domain">Tell your team something, switch desks on or off</span></span>
+            <span className="switcher-text"><span className="switcher-name">Your team</span><span className="switcher-domain">Tell your team something, switch people on or off</span></span>
           </NavLink>
           <NavLink to="/onboard" role="menuitem" className="more-item">
             <span className="more-icon"><Icon name="plus" size={16} /></span>

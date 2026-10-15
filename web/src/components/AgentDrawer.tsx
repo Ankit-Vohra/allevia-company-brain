@@ -11,6 +11,7 @@ import { avatarUrl } from "../office/sprites";
 import { fmtAgo, fmtDate } from "./bits";
 import { Icon } from "./Icon";
 import { Markdown } from "./Markdown";
+import { Reveal } from "./Reveal";
 
 const GraphView = lazy(() => import("./GraphView"));
 
@@ -73,8 +74,10 @@ export function AgentDrawer({ agentId, onClose, view }: { agentId: AgentId | nul
               <ul className="chips">{agent.handles.map((h) => <li key={h} className="chip">{h}</li>)}</ul>
             </section>
 
+            <Reveal label={`Show how ${agent.name} works`} className="drawer-more">
+              <div className="drawer-more-body">
             <section className="drawer-section" aria-labelledby="ad-tools">
-              <h3 id="ad-tools" className="section-title">Tools on the desk</h3>
+              <h3 id="ad-tools" className="section-title">Tools {agent.name} uses</h3>
               <ul className="chips">{agent.tools.map((t) => <li key={t} className="chip chip-mono">{t}</li>)}</ul>
               {(agent.reviews?.length || reviewers.length > 0) && (
                 <p className="drawer-note">
@@ -87,11 +90,11 @@ export function AgentDrawer({ agentId, onClose, view }: { agentId: AgentId | nul
             <section className="drawer-section" aria-labelledby="ad-know">
               <div className="drawer-section-head">
                 <h3 id="ad-know" className="section-title">What {agent.name} knows</h3>
-                {data && <span className="muted small">{data.knowledge.nodes.length - 1} entities · grows with every finding</span>}
+                {data && <span className="muted small">{data.knowledge.nodes.length - 1} things · grows with every note</span>}
               </div>
               <div className="knowledge-map">
-                {loading && !data ? <div className="skeleton" style={{ height: "100%" }} /> : error ? <p className="empty">Couldn't load the knowledge map: {error}</p> : knowledge.nodes.length <= 1 ? (
-                  <p className="empty">Nothing yet. {agent.name}'s map fills in as findings cite the graph.</p>
+                {loading && !data ? <div className="skeleton" style={{ height: "100%" }} /> : error ? <p className="empty">Couldn't load the map of what they know: {error}</p> : knowledge.nodes.length <= 1 ? (
+                  <p className="empty">Nothing yet. {agent.name}'s map fills in as the team does its work.</p>
                 ) : (
                   <Suspense fallback={<div className="skeleton" style={{ height: "100%" }} />}>
                     <GraphView
@@ -103,7 +106,7 @@ export function AgentDrawer({ agentId, onClose, view }: { agentId: AgentId | nul
                       height={230}
                       labels="auto"
                       fitPadding={28}
-                      ariaLabel={`${agent.name}'s knowledge map: ${knowledge.nodes.length - 1} entities they know about.`}
+                      ariaLabel={`${agent.name}'s map of what they know: ${knowledge.nodes.length - 1} things they know about.`}
                     />
                   </Suspense>
                 )}
@@ -122,12 +125,12 @@ export function AgentDrawer({ agentId, onClose, view }: { agentId: AgentId | nul
 
             {data && (
               <section className="drawer-section" aria-labelledby="ad-stats">
-                <h3 id="ad-stats" className="section-title">Record</h3>
+                <h3 id="ad-stats" className="section-title">Track record</h3>
                 <dl className="stats">
-                  <div><dt>Requests</dt><dd className="num">{data.stats.requests}</dd></div>
-                  <div><dt>Findings</dt><dd className="num">{data.stats.findings}</dd></div>
-                  <div><dt>Passed review</dt><dd className="num">{data.stats.checksTotal ? Math.round((data.stats.checksPassed / data.stats.checksTotal) * 100) : 100}%</dd></div>
-                  <div><dt>{data.stats.reviewsGiven ? "Reviews given" : "Proposals"}</dt><dd className="num">{data.stats.reviewsGiven || data.stats.proposals}</dd></div>
+                  <div><dt>Questions</dt><dd className="num">{data.stats.requests}</dd></div>
+                  <div><dt>Notes written</dt><dd className="num">{data.stats.findings}</dd></div>
+                  <div><dt>Checked and fine</dt><dd className="num">{data.stats.checksTotal ? Math.round((data.stats.checksPassed / data.stats.checksTotal) * 100) : 100}%</dd></div>
+                  <div><dt>{data.stats.reviewsGiven ? "Reviews given" : "Ideas"}</dt><dd className="num">{data.stats.reviewsGiven || data.stats.proposals}</dd></div>
                 </dl>
                 {data.stats.lastActiveAt && <p className="drawer-note">Last on a request {fmtAgo(data.stats.lastActiveAt)}.</p>}
               </section>
@@ -143,7 +146,7 @@ export function AgentDrawer({ agentId, onClose, view }: { agentId: AgentId | nul
             )}
 
             <section className="drawer-section" aria-labelledby="ad-find">
-              <h3 id="ad-find" className="section-title">Recent findings</h3>
+              <h3 id="ad-find" className="section-title">Recent notes</h3>
               {data?.findings.length ? (
                 <ul className="findings">
                   {data.findings.map((f) => (
@@ -164,9 +167,11 @@ export function AgentDrawer({ agentId, onClose, view }: { agentId: AgentId | nul
                   ))}
                 </ul>
               ) : (
-                <p className="empty">{loading ? "Loading…" : `No findings yet for ${tenant.name}.`}</p>
+                <p className="empty">{loading ? "Loading…" : `No notes yet for ${tenant.name}.`}</p>
               )}
             </section>
+              </div>
+            </Reveal>
           </div>
         </>
       )}

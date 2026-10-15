@@ -91,7 +91,7 @@ export function WorkFeed({ events, view, status, askHref, nodes, limit }: { even
             <span>Answered in {fmtMs(view.final.ms)} by {view.final.agents.length} staff</span>
           </div>
           <ChecksBadges checks={view.final.checks} compact />
-          {askHref && <Link className="btn btn-sm btn-ghost" to={askHref}>Open the full answer and graph <Icon name="chevron-right" size={14} /></Link>}
+          {askHref && <Link className="btn btn-sm btn-ghost" to={askHref}>Open the full answer <Icon name="chevron-right" size={14} /></Link>}
         </li>
       )}
       {status === "error" && view?.error && <li className="feed-item feed-error">{view.error}</li>}
@@ -152,7 +152,7 @@ function FeedItem({ en, view, nodes }: { en: Entry; view?: RunView; nodes?: Reco
         <li className="feed-item feed-finding">
           <AgentAvatar id={en.agent} size={24} />
           <div>
-            <b>{name(en.agent)}</b> filed a finding
+            <b>{name(en.agent)}</b> added a note
             <Markdown text={en.text} nodes={nodes} className="feed-md" />
           </div>
         </li>

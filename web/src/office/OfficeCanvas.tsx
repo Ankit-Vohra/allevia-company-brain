@@ -119,7 +119,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
   // The scale: how many CSS px one art pixel gets. Whole device pixels per art pixel when it fits nearly exactly (crisp);
   // otherwise a smooth fit from a backing store of at least one device pixel per art pixel. Never zero, at any width.
   const availH = maxHeight ?? (box.h || 9999);
-  const fit = Math.max(0.35, Math.min(box.w / layout.w, availH / layout.h));
+  const fit = Math.max(0.35, Math.min(box.w / layout.w, availH / layout.h, orientation === "portrait" ? 2.2 : 99));
   const sDev = fit * dpr;
   const whole = sDev >= 1 && sDev - Math.floor(sDev) < 0.12;
   const s = whole ? Math.floor(sDev) : Math.max(1, Math.ceil(sDev)); // device px per art px in the backing store
@@ -138,6 +138,10 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
   // the living office
   const life = useMemo(() => new Life(layout, SESSION_SEED, reducedMotion), [layout, reducedMotion]);
   const warmed = useRef<Life | null>(null);
+  // for the screenshot and video scripts: ?debug=1 exposes the simulation to the page
+  useEffect(() => {
+    if (new URLSearchParams(location.search).has("debug")) (window as unknown as { __office?: { life: Life } }).__office = { life };
+  }, [life]);
 
   const [litBook, setLitBook] = useState<number | undefined>();
   const live = useRef({ view, reducedMotion, layout, pal, staticCanvas, lightLayer, s, selected, off, books, litBook, minutes, dark, life });
