@@ -244,6 +244,14 @@ describe("discord-hub status checks", () => {
     expect(failing(cs)).toEqual(["There is room for more customers (247 of 250 roles used)"]);
   });
 
+  it("ffmpeg is optional: its absence is said, never a FAIL", async () => {
+    const { hub, staff } = setup();
+    const without = await checkHub({ settings: full(staff.id), hub, ffmpeg: false });
+    expect(failing(without)).toEqual([]);
+    expect(without.find((c) => /ffmpeg/.test(c.label))!.label).toMatch(/videos are kept but not looked at/);
+    expect((await checkHub({ settings: full(staff.id), hub, ffmpeg: true })).find((c) => /ffmpeg/.test(c.label))!.label).toMatch(/videos can be looked at/);
+  });
+
   it("an unexpected Discord outage is reported, not thrown", async () => {
     const { hub, staff } = setup();
     hub.fail = (op) => (op === "guildName" ? "socket hang up" : undefined);

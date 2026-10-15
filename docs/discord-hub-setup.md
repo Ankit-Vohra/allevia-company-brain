@@ -9,19 +9,58 @@ repository.
 
 ## What each customer gets
 
-| Made automatically | What it is for |
+Each company is one private category named after the business (for example "AVS Atelier"), with the same channels in
+the same order every time:
+
+| Channel | What it is for |
 |---|---|
-| Role `customer-<business>` | Has no powers of its own. It only unlocks that business's area. |
-| Private category `<Business name>` | Only that role, the Allevia staff role and the bot can see it. |
-| `#your-team` | Ask the team anything. Each question opens a thread. |
+| `#your-team` | Ask the team anything, any time, in your own words. Each question opens a thread. The answer is the same one the web app gives. |
+| `#studio` | Drop photos and videos. The team turns a photo into post options for your OK. |
 | `#approvals` | Things waiting for the owner's OK, with Approve and Reject buttons. Read-only otherwise. |
 | `#todays-note` | The daily note. Read-only. |
 | `#support` | People only. The team of assistants never answers it. |
-| A welcome message | Says what each channel is and what to try first, in plain words. |
-| A join link | One person, one use, expires in 7 days. |
 
-Everything a customer writes in `#support` is copied to a staff-only channel, `#support-inbox`, with the business name
-and a link to the message. Allevia creates `#support-inbox` itself, the first time it sets a business up.
+Behind it: a role `customer-<business>` that has no powers of its own and only unlocks that area, a welcome message in
+plain words, and a join link (one person, one use, 7 days). Only that role, the Allevia staff role and the bot can see
+the area. Each channel's topic says in one line what it is for.
+
+Staff-only channels live in one **Allevia Staff** category at the top of the server. Today that is `#support-inbox`:
+everything a customer writes in `#support` is copied there, with the business name and a link to the message. Allevia
+creates the category and the inbox itself, the first time it sets a business up.
+
+## One conversation, two doors
+
+The owner can talk to the team in `#your-team` or in the web app. It is one conversation:
+
+- A question asked in `#your-team` goes through the same path as the web app. A Discord thread and a web thread are the
+  same conversation in the graph, and each turn records which door it came through (web or Discord).
+- A thread started on Discord shows in the web app's history and can be continued there.
+- A thread started in the web app can be carried on in Discord: type `/continue` in `#your-team`, tap the conversation,
+  and a Discord thread opens with a recap. Replies there continue the same conversation.
+- While the team works, the thread shows one message that is edited as each person starts and finishes a step.
+
+## Photos and videos in `#studio`
+
+The owner drops photos in `#studio` (or attaches one in `#your-team`). In a new thread the team does the Studio flow:
+Tara looks at the photo, makes options, Nisha checks the building is unchanged, Dev writes the caption. Each option comes
+back as an image with the caption and **Approve** and **Change** buttons.
+
+- **Approve** saves the option as a draft post (nothing is published) and records it, with where it came from, in the
+  graph. It is the same decision as approving on the web. It uses 1 Studio credit.
+- A text reply under the options ("make it warmer", "a bit darker", "more contrast") makes the next option, built on the
+  last one. These are the team's own light and colour tools. Asking to change what is IN the photo ("remove the bin") is
+  answered honestly: the team cannot do that yet.
+- A person in the photo is flagged and blurred in the options. No identity is stored, and EXIF (including location) is
+  removed from what is kept.
+- **Videos** (MP4, MOV, WebM, up to 25 MB) are kept as they are. If `ffmpeg` is installed on the server, the location and
+  device details are removed from the file and Tara looks at the first frame. If it is not, the video is kept untouched and
+  the owner is told in plain words that the team cannot look inside videos on this server yet. Nothing edits video today.
+  `brew install ffmpeg` (or your package manager) switches the first-frame look on; `discord-hub status` says which.
+
+What is accepted: at most 4 files per message; photos JPEG, PNG or WebP up to 10 MB; only files uploaded to Discord itself
+(`cdn.discordapp.com` or `media.discordapp.net`, over https). Anything else is refused with a plain sentence. One Studio run
+happens at a time across all customers; the next one waits and is told so. Photos use the local recorded engine and the
+subscription's vision; no paid Higgsfield call is made from Discord.
 
 ## Step 1. The staff role
 
@@ -96,7 +135,7 @@ Setting `DISCORD_HUB_GUILD_ID` is what switches on hub mode:
 - `npm run cli -- serve` sets a business up on the hub right after onboarding, and shows the owner "Join your team on
   Discord". If Discord is slow or down, onboarding still finishes, the owner sees "We'll send your Discord link
   shortly", and the server keeps retrying in the background.
-- `npm run cli -- discord` runs the shared bot for every customer. Add `--demo` to run the old demo bot instead.
+- `npm run cli -- discord` runs the shared bot for every customer (conversations, `#studio`, approval cards, the daily note, support copies). Add `--demo` to run the old demo bot instead.
   Leave `DISCORD_HUB_GUILD_ID` unset and nothing changes from before.
 
 ## Step 5. Check it
@@ -107,18 +146,21 @@ npm run cli -- discord-hub status
 
 This only reads from Discord. It creates and changes nothing. It prints a PASS / FAIL list in plain words: the settings
 are present, the bot's token is accepted, the bot is in the hub, it has every permission, both switches are on, the
-staff role exists, the bot's role sits above the customer roles, and there is room left on the server. Each FAIL says
+staff role exists, the bot's role sits above the customer roles, there is room left on the server, and whether ffmpeg is
+installed (optional, never a FAIL). Each FAIL says
 what to do. It exits with an error while anything fails.
 
 ## Staff commands
 
 ```
 npm run cli -- discord-hub status
+npm run cli -- discord-hub list                    # every company with its channels, checked against Discord (read-only)
 npm run cli -- discord-hub provision <business>    # set the business up, or repair it; safe to run again
 npm run cli -- discord-hub reinvite <business>     # a fresh one-use link; the old one stops working
 ```
 
-`provision` never builds a second copy: it finds what is already there, creates only what is missing and puts the
+`provision` also puts the channels back in order, moves `#support-inbox` into Allevia Staff, and adds `#studio` to a company
+that was set up before it existed. `provision` never builds a second copy: it finds what is already there, creates only what is missing and puts the
 permissions back to what they should be. That also means a permission someone adds by hand to a customer channel is
 removed by the next run, on purpose. Use the roles.
 
@@ -137,8 +179,8 @@ Use `reinvite` for a lost or expired link, or to bring a second person from the 
   (two links used in the same moment, or a link used while the bot was off) the person gets no access, and
   `#support-inbox` says who to give the role to by hand (Server Settings, Members, add the `customer-...` role). Do not
   delete join links by hand: use `reinvite`, so Allevia knows what happened to them.
-- **Size.** Discord allows 250 roles and 500 channels in one server. Each customer uses 1 role and 5 channels, so one
-  hub holds about 100 customers. `discord-hub status` warns before the limit.
+- **Size.** Discord allows 250 roles and 500 channels in one server. Each customer uses 1 role and 6 channels (the category
+  and five channels), so one hub holds about 80 customers. `discord-hub status` warns before the limit.
 - **Approval cards and the daily note** are posted into each customer's channels by the shared bot (checked every
   minute). A card decided on the web loses its buttons in Discord.
 - **Dry run by default.** Approving a card on Discord does exactly what approving it on the web does: GitHub issues and

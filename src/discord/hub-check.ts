@@ -10,6 +10,7 @@ export interface CheckDeps {
   hub?: HubPort;              // absent when the settings are not complete
   store?: HubStore;
   inviteUrl?: string;         // the link that adds the bot to the hub with the right permissions
+  ffmpeg?: boolean;           // is ffmpeg on this machine (optional: without it videos are kept but not looked at)
 }
 
 const PLAIN: Record<PermName, string> = {
@@ -74,6 +75,10 @@ export async function checkHub(d: CheckDeps): Promise<Check[]> {
     add(channels.length < CHANNEL_LIMIT - 10, `There is room for more customers (${channels.length} of ${CHANNEL_LIMIT} channels used)`, "Discord allows 500 channels in one server. Each customer uses five. Time for a second hub.");
   } catch {
     add(false, "The server's roles and channels could be read", "Discord would not show them.");
+  }
+
+  if (d.ffmpeg !== undefined) {
+    out.push({ ok: true, label: d.ffmpeg ? "ffmpeg is installed, so videos can be looked at" : "ffmpeg is not installed: videos are kept but not looked at (optional; install ffmpeg to change that)" });
   }
 
   if (d.store) {

@@ -125,5 +125,6 @@ export async function hubStatusChecks(over: { cfg?: AlleviaConfig; hub?: HubPort
   return checkHub({
     settings: { token: !!d.token, appId: !!d.appId, ...(d.hubGuildId ? { guildId: d.hubGuildId } : {}), ...(d.staffRoleId ? { staffRoleId: d.staffRoleId } : {}) },
     ...(hub ? { hub } : {}), store: over.store ?? new GraphHubStore(), ...(d.appId ? { inviteUrl: hubInviteUrl(d.appId) } : {}),
+    ffmpeg: await (await import("../studio/video.js")).realFfmpeg().available(),
   });
 }
