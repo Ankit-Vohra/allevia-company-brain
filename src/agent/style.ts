@@ -60,6 +60,17 @@ export const ANSWER_SHAPE = `Shape the answer so a busy reader can act on it (th
 export const DESK_SHAPE = `Write it so it can be used as is: the finding first, then at most 5 supporting points, most important first, each a whole sentence. If you run out of room, drop the lowest-ranked point; never stop in the middle of one. Plain words (no "baseline", "Day 0", "agent", "desk", "graph", "node"), and name sample numbers as "sample numbers".`;
 
 /**
+ * What the content desk writes (content trial 2026-10-15): the post itself, in finished words, not a plan for one. Posts and
+ * reels are the one deliverable that is the text; a summary of it cannot be posted.
+ */
+export const CONTENT_SHAPE = `You write the copy itself, not a summary of it. The owner must be able to paste what you write.
+- Each caption is finished text: the first line is the hook (use a hook formula the playbook lists for this channel), then two or three short, plain sentences from what the record says, then a closing line only if the brand's rules allow one. Never a label ("Project, place, year."): a caption a person would not say out loud is not done.
+- Write each caption in the language the brand posts in (see its voice rules and audience), even when the owner asked in another language. Your notes to the owner stay in the owner's language.
+- A reel script is whole: timed beats from the first second to the last, the words said or shown on screen in each, and what to film. Say what to film as a direction ("Film: the shelves by the window, if you have them"), never as a fact about the business.
+- Every fact (names, places, years, numbers, materials, awards, results) must come from a tool result you cite. Where you need a detail the record does not hold, write "[you tell us: the brief in one line]" in that spot. Don't invent it, and don't drop the whole caption or scene because one detail is missing.
+- Give the whole deliverable in the text, in order (day by day, scene by scene), as the owner would post it. The five-point limit does not apply: a week is seven posts, in date order.`;
+
+/**
  * Cut a write-up to at most `max` characters without ending in the middle of an item: at the last whole line (a bullet
  * or a numbered step), else the last whole sentence, else the last whole word with an ellipsis. The ellipsis is only
  * ever added when a single item is itself longer than `max`.

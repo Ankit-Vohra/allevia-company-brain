@@ -182,7 +182,8 @@ export function parseAssessment(raw: unknown): PhotoAssessment {
   };
 }
 
-export interface AssessDeps { vision: VisionRunner; model: string; now: number }
+// record:false leaves the graph alone (the caller records the assessment once privacy has said the photo may be kept).
+export interface AssessDeps { vision: VisionRunner; model: string; now: number; record?: boolean }
 
 export async function assessPhoto(
   g: GraphHandle, assetId: string, buffer: Buffer, ctx: AssessContext, deps: AssessDeps,
@@ -192,7 +193,7 @@ export async function assessPhoto(
     images: [{ label: "the owner's photo", mime: "image/jpeg", data: await visionCopy(buffer) }],
   });
   const a = parseAssessment(raw);
-  await recordAssessment(g, assetId, a, deps.now);
+  if (deps.record !== false) await recordAssessment(g, assetId, a, deps.now);
   return a;
 }
 

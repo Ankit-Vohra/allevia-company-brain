@@ -74,6 +74,8 @@ const IGNORED: RegExp[] = [
   new RegExp(`(?:\\b(?:[Ll]ast|[Pp]ast|[Nn]ext|[Pp]revious)|पिछले|अगले)\\s+\\d+\\s+${WINDOW_UNIT}`, "g"), // last 7 days
   /\b\d+(?:st|nd|rd|th)\b/g,                                                          // ordinals: 2nd
   /\b(?:[Ww]eek|[Ww]k\.?)\s?#?\d{1,2}\b/g,                                             // week numbers: week 41, wk 40
+  /\b\d{1,3}\s?[–-]\s?\d{1,3}\s?(?:s|sec|secs|seconds)\b/g,                           // script timecodes: 0–3s, 3-8 s
+  /\b[Rr]eel\b[^\n.]{0,60}?\(\s?(?:about |around |~)?\d{1,3}\s?(?:s|sec|secs|seconds)\s?\)/g, // Reel: "title" (about 25 seconds)
   /\b(?:[Tt]op|[Bb]ottom)\s+\d{1,3}\b/g,                                               // top 3
   /^[ \t]*(?:[-*+][ \t]+)?\d+[.)](?=\s)/gm,                                            // list ordinals: "1." "2)"
 ];

@@ -41,13 +41,20 @@ export async function normalizeUpload(bytes: Buffer, opts: NormalizeOpts = {}): 
   const minSide = opts.minSide ?? DEFAULT_MIN_SIDE;
   if (Math.min(w0, h0) < minSide) throw new ImageRejected(`That image is too small (${w0}×${h0}): a post needs at least ${minSide} pixels on the short side.`);
   const maxSide = opts.maxSide ?? DEFAULT_MAX_SIDE;
-  const { data, info } = await sharp(bytes, { limitInputPixels: maxPixels, failOn: "error" })
-    .rotate() // auto-orient from EXIF before the EXIF goes
-    .flatten({ background: "#ffffff" })
-    .resize({ width: maxSide, height: maxSide, fit: "inside", withoutEnlargement: true })
-    .toColourspace("srgb")
-    .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
-    .toBuffer({ resolveWithObject: true });
+  let decoded: { data: Buffer; info: { width: number; height: number } };
+  try {
+    decoded = await sharp(bytes, { limitInputPixels: maxPixels, failOn: "error" })
+      .rotate() // auto-orient from EXIF before the EXIF goes
+      .flatten({ background: "#ffffff" })
+      .resize({ width: maxSide, height: maxSide, fit: "inside", withoutEnlargement: true })
+      .toColourspace("srgb")
+      .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
+      .toBuffer({ resolveWithObject: true });
+  } catch {
+    // a good header with a broken body: a photo cut off mid-upload (content trial 2026-10-15)
+    throw new ImageRejected("That photo looks damaged: it didn't finish uploading or the file is broken. Send it again.");
+  }
+  const { data, info } = decoded;
   return { buffer: data, w: info.width, h: info.height, mime: "image/jpeg", sha256: sha256Hex(data), dhash: await dhash(data), bytes: data.length };
 }
 
@@ -381,7 +388,7 @@ const luma = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.07
 export function gradeTowards(mean: { r: number; g: number; b: number }, paperHex: string, targetLuma = 128): { gains: [number, number, number]; exposure: number; offset: number } {
   const [pr, pg, pb] = hexRgb(paperHex);
   const pl = luma(pr, pg, pb), ml = Math.max(1, luma(mean.r, mean.g, mean.b));
-  const clampG = (v: number) => Math.min(1.25, Math.max(0.8, v));
+  const clampG = (v: number) => Math.min(1.45, Math.max(0.7, v)); // a strong cool cast needs more than 25% (content trial)
   const gain = (p: number, m: number) => clampG(1 + 0.7 * (p / pl / (Math.max(1, m) / ml) - 1));
   const gains: [number, number, number] = [gain(pr, mean.r), gain(pg, mean.g), gain(pb, mean.b)];
   const exposure = Math.min(1.6, Math.max(1, 1 + 0.55 * (targetLuma / ml - 1)));
@@ -393,7 +400,24 @@ export interface VariantRender { buffer: Buffer; w: number; h: number; treatment
 
 export const POST_SIZE = { w: 1080, h: 1350 };
 
-export async function renderVariantA(base: Buffer, o: { paper: string; rotate?: number }): Promise<VariantRender> {
+// How grainy the frame is: the RMS of what a 2 px blur removes from a half-size greyscale copy, in levels (0..255). A clean
+// phone photo reads under 1.5; a dark, high-ISO one 4 or more.
+export async function grainLevel(buffer: Buffer): Promise<number> {
+  const m = await sharp(buffer).metadata();
+  const w = Math.max(64, Math.round((m.width ?? 640) / 2));
+  const g = await sharp(buffer).resize({ width: w }).greyscale().raw().toBuffer();
+  const s = await sharp(buffer).resize({ width: w }).greyscale().blur(2).raw().toBuffer();
+  let sum = 0;
+  for (let i = 0; i < g.length; i++) sum += (g[i]! - s[i]!) ** 2;
+  return Math.sqrt(sum / g.length);
+}
+const GRAINY = 2.5;
+
+export async function renderVariantA(input: Buffer, o: { paper: string; rotate?: number }): Promise<VariantRender> {
+  // sensor noise is removed before the crop is enlarged and graded (both would make it louder)
+  const grain = await grainLevel(input);
+  const denoised = grain > GRAINY;
+  const base = denoised ? await sharp(input).median(3).blur(0.9).toBuffer() : input;
   const st = await sharp(base).stats();
   const [r, g, b] = st.channels;
   const grade = gradeTowards({ r: r!.mean, g: g!.mean, b: b!.mean }, o.paper);
@@ -409,13 +433,15 @@ export async function renderVariantA(base: Buffer, o: { paper: string; rotate?: 
     .linear(mul, [grade.offset, grade.offset, grade.offset])
     .modulate({ saturation: 0.92 })
     .resize(POST_SIZE.w, POST_SIZE.h, { fit: "cover", kernel: "lanczos3" })
-    .sharpen({ sigma: 0.6 })
     .toBuffer();
-  const out = await sharp(graded).composite([{ input: vignette, blend: "multiply" }]).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+  // a little crispness back after the enlarge, but not on a frame that was just denoised (it would bring the grain back)
+  const crisp = denoised ? graded : await sharp(graded).sharpen({ sigma: 0.6 }).toBuffer();
+  const out = await sharp(crisp).composite([{ input: vignette, blend: "multiply" }]).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
   const ev = Math.log2(grade.exposure);
   const parts = [
     ...(o.rotate ? [`straighten ${o.rotate > 0 ? "+" : ""}${o.rotate.toFixed(1)}°`] : ["straighten (level already)"]),
     "crop 4:5",
+    ...(denoised ? ["denoise"] : []),
     `exposure +${ev.toFixed(1)} EV`,
     `white balance toward ${o.paper}`,
     "muted saturation",

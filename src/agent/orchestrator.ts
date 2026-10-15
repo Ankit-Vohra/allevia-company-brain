@@ -38,7 +38,7 @@ import { typeFromId } from "../util/ids.js";
 import { checkTurn, extractCitations, hasNumbers } from "./checks.js";
 import { clipToItem } from "./style.js";
 import {
-  CHIEF, FINDING_MAX_CHARS, FINDING_SCHEMA, MAX_DESKS, MAX_DESKS_BROAD, REVIEW_SCHEMA, agentSystemPrompt, directPrompt, planSchema,
+  CHIEF, FINDING_SCHEMA, findingMaxChars, MAX_DESKS, MAX_DESKS_BROAD, REVIEW_SCHEMA, agentSystemPrompt, directPrompt, planSchema,
   planPrompt, planSystemPrompt, reviewPrompt, revisePrompt, synthesisPrompt, workPrompt, type FindingView, type PromptOpts, type ReviewEvidence,
 } from "./prompts.js";
 import { invokeTool, isWriteTool, nextCallId, type AgentRuntime, type Emit, type RunInput, type RunOutput, type RunPhase } from "./runtime.js";
@@ -504,6 +504,7 @@ class Turn {
   private readonly drafts = new Map<string, string[]>(); // agent -> finding ids it was handed as drafts
   private readonly gates = new Map<string, WorkGates>(); // agent -> its step's gates
   private readonly early = new Set<string>();            // finding ids handed on before their review ended
+  private readonly unreviewed = new Map<string, Set<string>>(); // finding id -> reviewers that could not run, even on a second try
   private readonly results: Array<{ agent: string; name: string; data: unknown; ids: string[] }> = []; // every tool result
   private readonly listeners = new Set<() => void>();    // told when a finding is sent back or settles
   private readonly prompted = new Map<string, Set<string>>(); // agent -> the owner's instruction ids its prompts carried
@@ -739,7 +740,7 @@ class Turn {
 
   private toFinding(out: RunOutput, base: { id: string; agent: string; task: string; depIds: string[] }): FindingRecord {
     const s = (out.structured ?? tryParseJson(out.text)) as Record<string, unknown> | undefined;
-    const text = clipToItem(typeof s?.text === "string" ? s.text : out.text, FINDING_MAX_CHARS); // cut between items, never inside one
+    const text = clipToItem(typeof s?.text === "string" ? s.text : out.text, findingMaxChars(base.agent)); // cut between items, never inside one
     if (!text) throw new Error("returned an empty finding");
     const known = new Set([...this.findings.values()].map((f) => f.id));
     return {
@@ -772,7 +773,7 @@ class Turn {
       const tools = drafts.length ? gateWrites(own, () => this.draftsFinal(drafts)) : own;
       const out = await this.runAgent(agent, {
         phase: "work", system: this.system(agent, tools), tools, outputSchema: FINDING_SCHEMA, maxTurns: MAX_TURNS.work,
-        prompt: workPrompt({ question: this.input.question, task: s.task, recall: this.input.recall.text, inputs: inputs.map(this.view), failedDeps, toolRounds: toolRounds("work") }),
+        prompt: workPrompt({ question: this.input.question, task: s.task, recall: this.input.recall.text, inputs: inputs.map(this.view), failedDeps, toolRounds: toolRounds("work"), agent: agent.id }),
       });
       const f = this.toFinding(out, { id: findingId(this.input.turnId, agent.id), agent: agent.id, task: s.task, depIds: inputs.map((x) => x.id) });
       this.findings.set(agent.id, f);
@@ -833,21 +834,39 @@ class Turn {
     return { citedNodes, autoCheck: this.autoCheck(f.text), ...(toolData.length ? { toolData } : {}) };
   }
 
+  // A reviewer whose run dies (content trial 2026-10-15: the Claude Code process crashed under load) gets one more try,
+  // unless it timed out or the turn was stopped. If it still cannot run, the finding is marked unreviewed, and the Chief is
+  // told to say so: a missing fact check must never read as a passed one.
   private async runReview(reviewer: AgentDef, f: FindingRecord, producer: AgentDef): Promise<ReviewRecord | undefined> {
-    return this.step(reviewer, `Reviewing ${producer.name}'s finding`, async () => {
-      const tools = this.tools(reviewer, "review");
-      const out = await this.runAgent(reviewer, {
-        phase: "review", system: this.system(reviewer, tools), tools, outputSchema: REVIEW_SCHEMA, maxTurns: MAX_TURNS.review,
-        prompt: reviewPrompt({ question: this.input.question, reviewer, finding: this.view(f), evidence: this.evidence(f), toolRounds: toolRounds("review") }),
-      });
-      const s = (out.structured ?? tryParseJson(out.text)) as Record<string, unknown> | undefined;
-      const verdict = s?.verdict === "fix" || s?.verdict === "reject" ? s.verdict : "ok";
-      const note = clip(typeof s?.note === "string" ? s.note.trim() : out.text.trim(), 400);
-      const r: ReviewRecord = { reviewer: reviewer.id, findingId: f.id, verdict, note };
-      this.emit({ type: "review", agent: reviewer.id, findingId: f.id, verdict, note });
-      if (verdict !== "ok") { this.sentBack.add(f.id); this.changed(); } // a draft of the answer built on it is now stale
-      return r;
+    let failure: unknown;
+    const attempt = (): Promise<ReviewRecord | undefined> => this.step(reviewer, `Reviewing ${producer.name}'s finding`, async () => {
+      try {
+        const tools = this.tools(reviewer, "review");
+        const out = await this.runAgent(reviewer, {
+          phase: "review", system: this.system(reviewer, tools), tools, outputSchema: REVIEW_SCHEMA, maxTurns: MAX_TURNS.review,
+          prompt: reviewPrompt({ question: this.input.question, reviewer, finding: this.view(f), evidence: this.evidence(f), toolRounds: toolRounds("review") }),
+        });
+        const s = (out.structured ?? tryParseJson(out.text)) as Record<string, unknown> | undefined;
+        const verdict = s?.verdict === "fix" || s?.verdict === "reject" ? s.verdict : "ok";
+        const note = clip(typeof s?.note === "string" ? s.note.trim() : out.text.trim(), 400);
+        const r: ReviewRecord = { reviewer: reviewer.id, findingId: f.id, verdict, note };
+        this.emit({ type: "review", agent: reviewer.id, findingId: f.id, verdict, note });
+        if (verdict !== "ok") { this.sentBack.add(f.id); this.changed(); } // a draft of the answer built on it is now stale
+        return r;
+      } catch (e) {
+        failure = e;
+        throw e;
+      }
     });
+    let r = await attempt();
+    const message = failure instanceof Error ? failure.message : String(failure ?? "");
+    if (!r && !this.deps.signal?.aborted && !/timed out|was stopped|set aside/i.test(message)) r = await attempt();
+    if (!r && !this.deps.signal?.aborted) {
+      const set = this.unreviewed.get(f.id) ?? new Set<string>();
+      set.add(reviewer.id);
+      this.unreviewed.set(f.id, set);
+    }
+    return r;
   }
 
   private async revise(f: FindingRecord, producer: AgentDef, notes: ReviewRecord[]): Promise<void> {
@@ -855,7 +874,7 @@ class Turn {
       const tools = this.tools(producer, "revise");
       const out = await this.runAgent(producer, {
         phase: "revise", system: this.system(producer, tools), tools, outputSchema: FINDING_SCHEMA, maxTurns: MAX_TURNS.revise,
-        prompt: revisePrompt({ question: this.input.question, task: f.task, finding: this.view(f), notes: notes.map((n) => ({ reviewer: n.reviewer, verdict: n.verdict, note: n.note })), toolRounds: toolRounds("revise") }),
+        prompt: revisePrompt({ question: this.input.question, task: f.task, finding: this.view(f), notes: notes.map((n) => ({ reviewer: n.reviewer, verdict: n.verdict, note: n.note })), toolRounds: toolRounds("revise"), agent: producer.id }),
       });
       const next = this.toFinding(out, { id: f.id, agent: f.agent, task: f.task, depIds: f.basedOn });
       Object.assign(f, { text: next.text, citations: next.citations, basedOn: next.basedOn, proposals: next.proposals.length ? next.proposals : f.proposals, revised: true });
@@ -867,6 +886,7 @@ class Turn {
     const caveat = this.draftCaveat(f.agent);
     return {
       id: f.id, agent: f.agent, text: f.text, citations: f.citations, proposals: f.proposals, rejected: f.rejected, ...(f.partial ? { partial: true } : {}),
+      ...(f.revised ? { revised: true } : {}), ...(this.unreviewed.get(f.id)?.size ? { unreviewed: [...this.unreviewed.get(f.id)!] } : {}),
       reviews: this.reviews.filter((r) => r.findingId === f.id).map((r) => ({ reviewer: r.reviewer, verdict: r.verdict, note: r.note })),
       autoCheck: this.autoCheck(f.text),
       ...(this.settled.has(f.id) ? {} : { draft: true }), ...(caveat ? { caveat } : {}),

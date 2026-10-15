@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { AGENTS, agentById } from "../../shared/roster.js";
 import {
-  HOUSE_RULES, MAX_DESKS, MAX_DESKS_BROAD, PLAN_SCHEMA, agentSystemPrompt, directPrompt, localDate, localStamp, planPrompt, planSystemPrompt,
+  CONTENT_FINDING_MAX_CHARS, FINDING_MAX_CHARS, findingMaxChars, HOUSE_RULES, MAX_DESKS, MAX_DESKS_BROAD, PLAN_SCHEMA, agentSystemPrompt, directPrompt, localDate, localStamp, planPrompt, planSystemPrompt,
   reviewPrompt, revisePrompt, synthesisPrompt, workPrompt,
 } from "../../src/agent/prompts.js";
 import { fakeTool, result, NOW } from "../helpers/agent.js";
@@ -101,6 +101,54 @@ describe("prompts", () => {
     const partial = { ...finding, partial: true };
     expect(synthesisPrompt({ question: "q", recall: "", findings: [partial], failed: [] })).toContain("PARTIAL: it ran out of turns before finishing");
     expect(workPrompt({ question: "q", task: "t", recall: "", inputs: [partial], failedDeps: [] })).toContain("PARTIAL: it ran out of turns before finishing");
+  });
+
+  // Content trial 2026-10-15 (AVS and Aamdani): a week of captions plus a script cannot fit 1200 characters, captions came back
+  // as bare labels ("Project, place, year."), the revision dropped the whole script to satisfy one note, and the Chief
+  // turned the captions into "Caption: tell us what happened" and told the owner to fix things already fixed.
+  describe("content work (Tara)", () => {
+    const content = { ...finding, id: "finding:turn:t1-content-strategist", agent: "content-strategist", text: "Caption 1: ..." };
+    it("a content desk may write the whole deliverable (4000 characters), other desks keep 1200", () => {
+      expect(findingMaxChars("content-strategist")).toBe(CONTENT_FINDING_MAX_CHARS);
+      expect(CONTENT_FINDING_MAX_CHARS).toBeGreaterThanOrEqual(3500);
+      expect(findingMaxChars("data-analyst")).toBe(FINDING_MAX_CHARS);
+      expect(workPrompt({ question: "q", task: "t", recall: "", inputs: [], failedDeps: [], agent: "content-strategist" })).toContain(`at most ${CONTENT_FINDING_MAX_CHARS} characters`);
+      expect(workPrompt({ question: "q", task: "t", recall: "", inputs: [], failedDeps: [], agent: "data-analyst" })).toMatch(/at most 1200 characters/);
+    });
+    it("the brief asks for finished copy: a hook line, the whole script, filming directions as directions, gaps as placeholders", () => {
+      const p = workPrompt({ question: "q", task: "t", recall: "", inputs: [], failedDeps: [], agent: "content-strategist" });
+      expect(p).toMatch(/the copy itself, not a summary of it/);
+      expect(p).toMatch(/first line is the hook/);
+      expect(p).toMatch(/never a label/i);
+      expect(p).toMatch(/timed beats/);
+      expect(p).toMatch(/Film:/);
+      expect(p).toContain("[you tell us:");
+      expect(p).toMatch(/language the brand posts in/);
+    });
+    it("a revision keeps every part of the deliverable and fixes only what was flagged", () => {
+      const v = revisePrompt({ question: "q", task: "t", finding: content, notes: [{ reviewer: "fact-checker", verdict: "fix", note: "the desk is not recorded" }], agent: "content-strategist" });
+      expect(v).toContain(`at most ${CONTENT_FINDING_MAX_CHARS} characters`);
+      expect(v).toMatch(/Keep every caption and the whole script/);
+      expect(v).toMatch(/never drop a part/i);
+      expect(v).toContain("[you tell us:");
+    });
+    it("the fact checker leaves mood to the copy editor, and the copy editor sends bare labels back", () => {
+      const nisha = reviewPrompt({ question: "q", reviewer: agentById("fact-checker")!, finding: content });
+      expect(nisha).toMatch(/A mood or a way of framing is not a claim/);
+      expect(nisha).toMatch(/"Film:" direction is not a claim/);
+      const dev = reviewPrompt({ question: "q", reviewer: agentById("copy-editor")!, finding: content });
+      expect(dev).toMatch(/only a label/);
+    });
+    it("the answer gives the copy word for word; notes a revision already fixed are not owner to-dos", () => {
+      const revised = { ...content, revised: true, reviews: [{ reviewer: "fact-checker", verdict: "fix", note: "remove the desk" }] };
+      const p = synthesisPrompt({ question: "q", recall: "", findings: [revised], failed: [] });
+      expect(p).toMatch(/word for word/);
+      expect(p).toMatch(/payload\.body/);
+      expect(p).toContain("Reviews of the earlier draft (the text above is the revised version that already addresses them)");
+      expect(p).toMatch(/not to-dos for the owner/);
+      // other findings are untouched
+      expect(synthesisPrompt({ question: "q", recall: "", findings: [finding], failed: [] })).not.toMatch(/word for word/);
+    });
   });
 
   it("each job's prompt states its tool-round budget; drafts are flagged to the desk that receives them", () => {

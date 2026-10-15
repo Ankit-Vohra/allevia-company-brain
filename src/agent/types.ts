@@ -10,7 +10,7 @@ export interface FindingRecord {
   id: string;            // finding:<turnId>-<agentId>, stable across a revision
   agent: AgentId;
   task: string;
-  text: string;          // ≤ 1,200 chars with [[id]] citations
+  text: string;          // ≤ 1,200 chars (4,000 for the content desk) with [[id]] citations
   citations: string[];
   basedOn: string[];     // finding ids it builds on (the handoff)
   proposals: string[];   // suggested actions, free text (proposals that became approvals arrive as ProposalRecord)

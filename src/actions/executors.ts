@@ -131,6 +131,11 @@ function markdown(d: { title: string; body: string; format: string; channel?: st
 
 async function contentDraft(g: GraphHandle, input: ExecInput, deps: ExecutorDeps): Promise<Outcome> {
   const p = input.payload;
+  // A card with nothing to post is not a draft (content trial 2026-10-15: a plan with "script: not yet written" and no body
+  // was approved into an empty file and counted as a first-pass approval). Fail closed and say why.
+  if (!(typeof p.body === "string" && p.body.trim())) {
+    return { status: "failed", result: "Nothing was saved: the card has no text to post (payload.body is empty). Ask the team to write the full text and propose it again.", produced: [] };
+  }
   const agent = input.agent ?? "content-strategist";
   const agentId = await ensureAgentNode(g, agent, input.now);
   const format = str(p.format) ?? "post";

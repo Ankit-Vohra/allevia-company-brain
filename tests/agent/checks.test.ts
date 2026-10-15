@@ -38,6 +38,13 @@ describe("findNumbers", () => {
   it("ignores numbers inside [[ids]], bare ids, URLs and letter-attached names like GA4 or Q3", () => {
     expect(raws("See [[obs:signups:2026-10-05]] and obs:clicks:2026-10-01, https://x.ai/p/123, GA4 and Q3: 7 pages")).toEqual(["7"]);
   });
+  // Content trial 2026-10-15: a reel script's timecodes ("0–3s", "about 25 seconds") are a plan for the owner to film, not
+  // figures about the business, and tripped the "unverified" badge on a good answer. Seconds that are a measured result
+  // ("average watch 25 seconds") are still numbers.
+  it("ignores a script's timecodes and a reel's length, but not a measured number of seconds", () => {
+    expect(raws("0–3s: hook. 3-8 s: the problem. 13–19s: the answer. Reel: \"This is The Penthouse\" (about 25 seconds). Got 40 views")).toEqual(["40"]);
+    expect(raws("Average watch time was 25 seconds on 12 reels")).toEqual(["25", "12"]);
+  });
   it("ignores ordinals (1st, 2nd) and 'last 7 days' style windows", () => {
     expect(raws("the 2nd post in the last 7 days had 40 likes; over the past 28 days, 90")).toEqual(["40", "90"]);
   });

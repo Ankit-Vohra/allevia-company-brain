@@ -73,4 +73,18 @@ describe("propose_action (integration)", () => {
     const none = await call(proposeAction, { ...args, evidence: ["nope:1"] }, ctx());
     expect(none.data.error).toMatch(/None of the evidence ids exist/);
   });
+
+  // Content trial 2026-10-15: Aamdani's week-of-reels card held {items, fixes, script: "Not yet written"} and no body, so the
+  // approved draft was an empty file counted as a first-pass approval.
+  it("a content_draft card must carry the text to post in payload.body, whole, not a plan or a to-do list", async () => {
+    const ctx = () => makeCtx(g, { agentId: "content-strategist", turnId: "t-300" });
+    const base = { title: "Reel plan 16-22 Oct", why: "A week of reels in the best pattern.", kind: "content_draft", evidence: ["page:www.aamdani.ai/jobs"] };
+    for (const payload of [{}, { title: "Reel plan", items: ["Fri: hook"], script: "Not yet written" }, { title: "Reel plan", body: "   " }, { title: "Reel plan", body: "tbd" }]) {
+      const r = await call(proposeAction, { ...base, payload }, ctx());
+      expect(r.data.error).toMatch(/payload\.body/);
+    }
+    expect((await g.roQuery<{ c: number }>("MATCH (r:Recommendation {id:'recommendation:reel-plan-16-22-oct'}) RETURN count(r) AS c"))[0]!.c).toBe(0);
+    const ok = await call(proposeAction, { ...base, payload: { title: "Reel plan", body: "Fri: Applied, then silence? Caption: Aapki arzi, aapka jawab.\n\nScript 0-3s: the hook line." } }, ctx());
+    expect(ok.data).toMatchObject({ kind: "content_draft", status: "pending" });
+  });
 });

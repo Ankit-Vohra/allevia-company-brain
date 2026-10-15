@@ -1,5 +1,6 @@
 // Studio image utilities (product design §6, steps 1, 4 and 7): metadata stripped on intake, a perceptual dHash, a
 // local tilt estimate, the 4:5 straighten-and-crop plan, variant A's grade, and the SSIM-like structure score Nisha uses.
+import { randomBytes } from "node:crypto";
 import { describe, it, expect } from "vitest";
 import sharp from "sharp";
 import {
@@ -48,6 +49,20 @@ describe("studio image utilities", () => {
     await expect(normalizeUpload(tiny)).rejects.toThrow(/too small/);
     const big = await sharp({ create: { width: 3000, height: 2000, channels: 3, background: "#777" } }).png().toBuffer();
     await expect(normalizeUpload(big, { maxPixels: 4_000_000 })).rejects.toThrow(/too large/);
+  });
+
+  // Content trial 2026-10-15: a JPEG cut off mid-upload has a good header, so it passed the checks and then failed in the
+  // decode with "VipsJpeg: premature end", which the owner saw as "an unexpected problem".
+  it("a photo cut off mid-upload is refused in plain words, not as an unexpected problem", async () => {
+    const noise = (w: number, h: number) => sharp(randomBytes(w * h * 3), { raw: { width: w, height: h, channels: 3 } });
+    const full = await noise(1200, 900).jpeg().toBuffer();
+    for (const cut of [0.3, 0.6, 0.9]) {
+      const e = await normalizeUpload(full.subarray(0, Math.floor(full.length * cut))).catch((x) => x);
+      expect(e, `cut at ${cut}`).toBeInstanceOf(ImageRejected);
+      expect((e as Error).message).toMatch(/damaged|cut off|didn't finish|did not finish/i);
+    }
+    const png = await noise(800, 600).png().toBuffer();
+    expect(await normalizeUpload(png.subarray(0, Math.floor(png.length * 0.5))).catch((x) => x)).toBeInstanceOf(ImageRejected);
   });
 
   it("dHash: the same picture is close after a regrade, a different picture is far", async () => {
@@ -103,6 +118,33 @@ describe("studio image utilities", () => {
     expect(a.treatment).toMatch(/straighten/);
     const s = await similarity(base, a.buffer);
     expect(s.structure).toBeGreaterThan(0.8);
+  });
+
+  // Content trial 2026-10-15: the local variant of a dark, cool, noisy phone photo came out grey and grainy (variant A is the
+  // one that must still look good when the generative edit is unavailable).
+  it("variant A removes sensor noise and corrects a strong cool cast on a dark phone photo", async () => {
+    const w = 864, h = 1080;
+    const noise = randomBytes(w * h * 3);
+    const px = Buffer.alloc(w * h * 3);
+    for (let i = 0; i < px.length; i += 3) {
+      const x = ((i / 3) % w) / w;
+      const band = x > 0.45 && x < 0.6 ? 25 : 0; // one soft vertical feature so the frame is not flat
+      px[i] = Math.max(0, Math.min(255, 60 + band + (noise[i]! - 128) * 0.22));
+      px[i + 1] = Math.max(0, Math.min(255, 70 + band + (noise[i + 1]! - 128) * 0.22));
+      px[i + 2] = Math.max(0, Math.min(255, 95 + band + (noise[i + 2]! - 128) * 0.22));
+    }
+    const base = await sharp(px, { raw: { width: w, height: h, channels: 3 } }).jpeg({ quality: 95 }).toBuffer();
+    const grain = async (buf: Buffer) => { // the share of each pixel's value that does not survive a blur
+      const g = await sharp(buf).resize(432, 540).greyscale().raw().toBuffer();
+      const s = await sharp(buf).resize(432, 540).greyscale().blur(2).raw().toBuffer();
+      const mean = g.reduce((a, v) => a + v, 0) / g.length;
+      return Math.sqrt(g.reduce((a, v, i) => a + (v - s[i]!) ** 2, 0) / g.length) / mean;
+    };
+    const a = await renderVariantA(base, { paper: "#f4f1ea" });
+    expect(await grain(a.buffer)).toBeLessThan((await grain(base)) * 0.6);
+    const after = (await sharp(a.buffer).stats()).channels;
+    expect(after[0]!.mean - after[2]!.mean).toBeGreaterThan(-8); // no longer clearly blue (it began 35 below)
+    expect(a.treatment).toMatch(/denoise/);
   });
 
   it("registerToFrame finds the frame inside a reframed, relit edit; a featureless edit does not match", async () => {
