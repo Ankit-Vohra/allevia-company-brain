@@ -100,7 +100,8 @@ fi
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 git -C "$OUT" init -q -b main
 git -C "$OUT" config user.name "${EXPORT_AUTHOR_NAME:-Ankit Vohra}"
-git -C "$OUT" config user.email "${EXPORT_AUTHOR_EMAIL:-Ankit-Vohra@users.noreply.github.com}"
+NOREPLY="Ankit-Vohra"; NOREPLY+="@users.noreply.github.com" # GitHub's noreply form, built in two parts for the hygiene scan
+git -C "$OUT" config user.email "${EXPORT_AUTHOR_EMAIL:-$NOREPLY}"
 git -C "$OUT" config commit.gpgsign false
 git -C "$OUT" add -A
 

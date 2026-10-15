@@ -295,7 +295,7 @@ WITH DISTINCT t RETURN t.id AS id, t.question AS q, t.answer AS a, t.at AS at OR
 
 | | |
 |---|---|
-| Code | `src/agent/tools/common.ts:214` (`sourceRows`), `src/agent/tools/decisions.ts:38` and `:42` (`trace_decision`), Studio lineage at `src/studio/variants.ts:55` and `src/studio/revise.ts:120` |
+| Code | `src/agent/tools/common.ts:214` (`sourceRows`), `src/agent/tools/decisions.ts:38` and `:42` (`trace_decision`), Studio lineage at `src/studio/variants.ts:55` and `src/studio/revise.ts:157` |
 | Answers | For every node a tool returns, the Document behind it: itself, its `SOURCED_FROM` targets, the Document named by its `src`, or a Chunk's parent. `trace_decision` walks Decision → `BASED_ON` evidence → its sources, `DECIDED` by whom, `SUPERSEDES` both ways. |
 
 ```cypher
