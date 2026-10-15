@@ -18,6 +18,7 @@ export interface AlleviaConfig {
   githubActionRepo: string;
   publicMode: boolean;
   port: number;
+  webBaseUrl: string; // where the web app is reached, for links from Discord (default http://127.0.0.1:<port>)
 }
 
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -77,5 +78,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
     githubActionRepo: get("ALLEVIA_ACTION_REPO") ?? "Ankit-Vohra/allevia",
     publicMode: /^(1|true|yes|on)$/i.test(get("ALLEVIA_PUBLIC_MODE") ?? ""),
     port,
+    webBaseUrl: (get("ALLEVIA_WEB_URL") ?? `http://127.0.0.1:${port}`).replace(/\/+$/, ""),
   };
 }

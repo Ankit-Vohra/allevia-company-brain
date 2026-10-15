@@ -70,7 +70,8 @@ export function searchSeeds(graph: GraphHandle, tenant: string, embedQuery?: Emb
   };
 }
 
-async function tenantGraph(tenant: string): Promise<GraphHandle> {
+// The tenant's graph, which must already exist (asking or serving must not create a tenant by accident).
+export async function tenantGraph(tenant: string): Promise<GraphHandle> {
   const name = graphName(tenant); // validates the slug
   if (!(await listGraphs()).includes(name)) throw new Error(`No graph for tenant "${tenant}" (${name}). Ingest or seed it first.`);
   return openGraph(tenant);

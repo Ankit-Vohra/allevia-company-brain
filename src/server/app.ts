@@ -21,10 +21,10 @@ import { ask, type AskDeps } from "../agent/ask.js";
 import type { ToolContext } from "../agent/tool.js";
 import type { GraphHandle } from "../graph/client.js";
 import { upsertNode, type Prim } from "../graph/upsert.js";
-import { DecisionError, decideApproval } from "./approvals.js";
+import { DecisionError, decideAndNotify, type OnDecision } from "./approvals.js";
 import * as reads from "./reads.js";
 import { sse } from "./sse.js";
-import type { ApprovalDto, TenantDto } from "./types.js";
+import type { TenantDto } from "./types.js";
 
 // ---------- deps ----------
 
@@ -68,7 +68,7 @@ export interface ServerDeps {
   embedQuery?: () => Promise<ToolContext["embedQuery"] | undefined>; // for /search; absent = full-text only
   // Called after an approval decision is recorded (executors and the learning loop plug in here). Its failure is
   // logged, never the owner's problem: the decision stands.
-  onDecision?: (tenant: string, approval: ApprovalDto) => Promise<void> | void;
+  onDecision?: OnDecision;
   loadOnboard?: () => Promise<OnboardFn | null>;   // null: onboarding is not installed (501)
   loadPlans?: () => Promise<PlansModule | null>;    // null: pricing data is not installed (501)
   now?: () => number;
@@ -396,19 +396,7 @@ export function createApp(deps: ServerDeps): Hono {
     const { reg, g } = await tenantOf(c);
     refuseInPublicMode();
     const body = await readBody(c, DecisionBody);
-    const id = c.req.param("id");
-    const before = await reads.approval(g, id);
-    if (!before) throw new HttpError(404, "No such approval.");
-    await decideApproval(g, id, body, before.payload, now());
-    const after = (await reads.approval(g, id))!;
-    if (deps.onDecision) {
-      try {
-        await deps.onDecision(reg.slug, after);
-      } catch (e) {
-        log(`[approvals] onDecision for ${id} failed: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
-    return c.json((await reads.approval(g, id)) ?? after);
+    return c.json(await decideAndNotify(g, reg.slug, c.req.param("id"), body, { now: now(), log, ...(deps.onDecision ? { onDecision: deps.onDecision } : {}) }));
   });
 
   app.post("/api/:t/ask", async (c) => {
