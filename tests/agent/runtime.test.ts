@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { FakeRuntime, SdkMessageFolder, invokeTool, statusLine, summarise, forModel, type RunInput } from "../../src/agent/runtime.js";
+import {
+  ClaudeAgentSdkRuntime, FakeRuntime, SdkMessageFolder, invokeTool, mayUse, statusLine, summarise, forModel, type RunInput, type SdkModule,
+} from "../../src/agent/runtime.js";
 import { fakeTool, recorder, result, stubCtx } from "../helpers/agent.js";
 
 const signups = result({
@@ -48,6 +50,21 @@ describe("invokeTool (the single tool path)", () => {
     expect(events[2]).toMatchObject({ type: "agent_status", text: "Couldn't use search: graph is down" });
     expect(events[3]).toMatchObject({ type: "tool_result", summary: "error: graph is down", nodes: [] });
     expect(inp.ctx.touched.nodes()).toEqual([]);
+  });
+
+  it("refuses a write tool for an agent whose roster doesn't list it, before the tool runs", async () => {
+    const propose = fakeTool("propose_action", result({ data: { approvalId: "approval:x" } }));
+    const remember = { ...fakeTool("note_it", result({ data: null })), writes: true };
+    const { events, emit } = recorder();
+    const out = await invokeTool(propose, { query: "pause all ads" }, input({ agentId: "data-analyst" }), emit, "c4");
+    expect(out).toEqual({ text: "error: propose_action is not one of data-analyst's tools", isError: true });
+    expect(propose.calls).toHaveLength(0);
+    expect(events.find((e) => e.type === "tool_result")).toMatchObject({ summary: "error: propose_action is not one of data-analyst's tools" });
+    expect((await invokeTool(remember, {}, input({ agentId: "fact-checker" }), () => {}, "c5")).isError).toBe(true); // flagged writes
+    expect((await invokeTool(propose, { query: "fix" }, input({ agentId: "tech-lead" }), () => {}, "c6")).isError).toBe(false); // on its roster
+    expect(mayUse("chief-of-staff", { name: "remember" })).toBe(true);
+    expect(mayUse("growth-marketer", { name: "remember" })).toBe(false);
+    expect(mayUse("growth-marketer", { name: "search" })).toBe(true);
   });
 
   it("rejects arguments that don't match the tool's input shape", async () => {
@@ -150,5 +167,96 @@ describe("SdkMessageFolder (SDK messages -> events and output)", () => {
     expect(() => f.output()).toThrow(/without a result/);
     f.push({ type: "result", subtype: "error_max_turns", is_error: true, errors: ["too many turns"] });
     expect(() => f.output()).toThrow("error_max_turns: too many turns");
+  });
+});
+
+// ---------- ClaudeAgentSdkRuntime with an injected SDK (no process, no model) ----------
+
+type QueryParams = { prompt: unknown; options: Record<string, any> };
+
+function fakeSdk(stream: (signal: AbortSignal) => AsyncGenerator<unknown>) {
+  const queries: Array<{ params: QueryParams; closed: boolean }> = [];
+  const sdk = {
+    tool: (name: string, description: string, inputSchema: unknown, handler: unknown) => ({ name, description, inputSchema, handler }),
+    createSdkMcpServer: (o: { name: string }) => ({ type: "sdk", name: o.name }),
+    query: (params: QueryParams) => {
+      const rec = { params, closed: false };
+      queries.push(rec);
+      return Object.assign(stream(params.options.abortController.signal), { close: () => { rec.closed = true; } });
+    },
+  } as unknown as SdkModule;
+  return { sdk: async () => sdk, queries };
+}
+
+const INIT = { type: "system", subtype: "init", apiKeySource: "none", model: "haiku", tools: [], mcp_servers: [] };
+const OK = { type: "result", subtype: "success", is_error: false, result: "done" };
+
+describe("ClaudeAgentSdkRuntime", () => {
+  it("gives the child only subscriptionEnv's allow-list and calls onInit with the init message", async () => {
+    const { sdk, queries } = fakeSdk(async function* () { yield INIT; yield OK; });
+    const seen: unknown[] = [];
+    const rt = new ClaudeAgentSdkRuntime({
+      sdk, cwd: "/tmp", onInit: (m) => { seen.push(m); },
+      env: { PATH: "/bin", HOME: "/h", ANTHROPIC_API_KEY: "sk-placeholder", ANTHROPIC_BASE_URL: "https://proxy.example", DISCORD_BOT_TOKEN: "d" },
+    });
+    expect(await rt.run(input(), () => {})).toEqual({ text: "done" });
+    expect(queries[0]!.params.options.env).toEqual({ PATH: "/bin", HOME: "/h" });
+    expect(seen).toEqual([INIT]);
+    expect(queries[0]!.closed).toBe(false); // a run that finished needs no close
+  });
+
+  it("an onInit that throws stops the run, aborts the controller and closes the subprocess", async () => {
+    let produced = 0;
+    const { sdk, queries } = fakeSdk(async function* () { yield { ...INIT, apiKeySource: "ANTHROPIC_API_KEY" }; produced++; yield OK; });
+    const rt = new ClaudeAgentSdkRuntime({ sdk, cwd: "/tmp", onInit: (m) => { if (m.apiKeySource !== "none") throw new Error("not on the subscription"); } });
+    await expect(rt.run(input(), () => {})).rejects.toThrow("not on the subscription");
+    expect(produced).toBe(0);
+    expect(queries[0]!.params.options.abortController.signal.aborted).toBe(true);
+    expect(queries[0]!.closed).toBe(true);
+  });
+
+  it("an abort (the orchestrator's timeout) aborts the SDK's controller and closes the subprocess", async () => {
+    const { sdk, queries } = fakeSdk(async function* (signal) {
+      yield INIT;
+      await new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted by user")), { once: true }));
+    });
+    const ac = new AbortController();
+    const p = new ClaudeAgentSdkRuntime({ sdk, cwd: "/tmp" }).run(input({ signal: ac.signal }), () => {});
+    await new Promise((r) => setTimeout(r, 5));
+    ac.abort(new Error("timed out after 120s"));
+    await expect(p).rejects.toThrow("data-analyst was stopped (timed out after 120s)");
+    expect(queries[0]!.params.options.abortController.signal.aborted).toBe(true);
+    expect(queries[0]!.closed).toBe(true);
+  });
+
+  it("a run whose signal is already aborted never starts a process", async () => {
+    const { sdk, queries } = fakeSdk(async function* () { yield OK; });
+    const ac = new AbortController();
+    ac.abort();
+    await expect(new ClaudeAgentSdkRuntime({ sdk, cwd: "/tmp" }).run(input({ signal: ac.signal }), () => {})).rejects.toThrow(/was stopped/);
+    expect(queries).toHaveLength(0);
+  });
+
+  it("an SDK error result closes the subprocess and surfaces the error", async () => {
+    const { sdk, queries } = fakeSdk(async function* () { yield INIT; yield { type: "result", subtype: "error_max_turns", is_error: true, errors: ["max turns"] }; });
+    // the stream ended normally, so no close is needed; the folder turns the error result into a rejection
+    await expect(new ClaudeAgentSdkRuntime({ sdk, cwd: "/tmp" }).run(input(), () => {})).rejects.toThrow("error_max_turns: max turns");
+    expect(queries[0]!.closed).toBe(false);
+    const thrower = fakeSdk(async function* () { yield INIT; throw new Error("CLI crashed"); });
+    await expect(new ClaudeAgentSdkRuntime({ sdk: thrower.sdk, cwd: "/tmp" }).run(input(), () => {})).rejects.toThrow("CLI crashed");
+    expect(thrower.queries[0]!.closed).toBe(true);
+  });
+
+  it("registers only the run's tools and passes maxTurns and the structured schema", async () => {
+    const { sdk, queries } = fakeSdk(async function* () { yield { ...OK, structured_output: { ok: 1 } }; });
+    const tool = fakeTool("metric_trend", signups);
+    const out = await new ClaudeAgentSdkRuntime({ sdk, cwd: "/tmp" }).run(input({ tools: [tool], maxTurns: 4, outputSchema: { type: "object" } }), () => {});
+    expect(out.structured).toEqual({ ok: 1 });
+    const o = queries[0]!.params.options;
+    expect(o.allowedTools).toEqual(["mcp__allevia__metric_trend"]);
+    expect(o.tools).toEqual([]);
+    expect(o.settingSources).toEqual([]);
+    expect(o.maxTurns).toBe(4);
+    expect(o.outputFormat).toEqual({ type: "json_schema", schema: { type: "object" } });
   });
 });

@@ -4,14 +4,21 @@
 // answer checks verify against), (d) emits tool_result with the nodes it touched, and (e) hands the model compact JSON.
 // Tool errors never crash a run: the model gets "error: …" and the work log gets a status line.
 //
+// Write tools (remember, propose_action) run only for agents whose roster lists them, whatever a registry hands out.
+//
 // ClaudeAgentSdkRuntime runs on the founder's Claude subscription through the Agent SDK (settings verified in
-// scripts/spikes/agent-sdk.ts): no user settings, no built-in tools, only our MCP tools, ANTHROPIC_API_KEY removed.
+// scripts/spikes/agent-sdk.ts): no user settings, no built-in tools, only our MCP tools. The child's environment is
+// subscriptionEnv()'s allow-list (sdk-env.ts), and an injected onInit hook sees the SDK's init message first (the wiring
+// passes assertSubscription). A run that is aborted, times out or fails is closed, which kills its CLI subprocess.
 // FakeRuntime follows a script per agent and drives the same invokeTool path, for tests.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import type { SDKSystemMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, ToolResult } from "../../shared/contracts.js";
+import { agentById } from "../../shared/roster.js";
+import { subscriptionEnv } from "./sdk-env.js";
 import type { AlleviaTool, ToolContext } from "./tool.js";
 
 export type Emit = (e: AgentEvent) => void;
@@ -130,12 +137,24 @@ export function forModel(r: ToolResult): string {
 
 export interface ToolCallOutcome { text: string; isError: boolean; result?: ToolResult }
 
+// Tools that change something (a note, an approval card). Flagged on the tool (`writes`) and known by name, so a tool
+// registered without the flag is still treated as one.
+export const WRITE_TOOLS: ReadonlySet<string> = new Set(["remember", "propose_action"]);
+export const isWriteTool = (t: Pick<AlleviaTool, "name" | "writes">): boolean => t.writes === true || WRITE_TOOLS.has(t.name);
+
+// May this agent use this tool? Read tools: yes (the caller already chose the agent's tools). Write tools: only when the
+// agent's roster entry lists them, so text in a tool result or a finding can never talk a desk into a write it doesn't own.
+export function mayUse(agentId: string, tool: Pick<AlleviaTool, "name" | "writes">): boolean {
+  return !isWriteTool(tool) || (agentById(agentId)?.tools.includes(tool.name) ?? false);
+}
+
 // The single path every tool call takes, in both runtimes.
 export async function invokeTool(tool: AlleviaTool, rawArgs: unknown, input: RunInput, emit: Emit, callId: string): Promise<ToolCallOutcome> {
   const agent = input.agentId;
   emit({ type: "tool_call", agent, id: callId, name: tool.name, args: rawArgs ?? {} });
   emit({ type: "agent_status", agent, text: statusLine(tool.name, rawArgs) });
   try {
+    if (!mayUse(agent, tool)) throw new Error(`${tool.name} is not one of ${agent}'s tools`);
     const parsed = z.object(tool.input).safeParse(rawArgs ?? {});
     if (!parsed.success) throw new Error(`bad arguments: ${parsed.error.issues.map((i) => `${i.path.join(".") || "args"} ${i.message}`).join("; ")}`);
     const ctx: ToolContext = { ...input.ctx, agentId: agent };
@@ -157,18 +176,32 @@ export const nextCallId = (agentId: string): string => `${agentId}#${++callSeq}`
 
 // ---------- Claude Agent SDK ----------
 
-type QueryFn = typeof import("@anthropic-ai/claude-agent-sdk").query;
+export type SdkModule = Pick<typeof import("@anthropic-ai/claude-agent-sdk"), "query" | "tool" | "createSdkMcpServer">;
+export type SdkInitMessage = SDKSystemMessage;
 
 export interface SdkRuntimeOpts {
   cwd?: string;                 // default: one empty temp dir per process (no CLAUDE.md, no project settings)
-  env?: NodeJS.ProcessEnv;      // default: process.env; ANTHROPIC_API_KEY is always removed
+  env?: NodeJS.ProcessEnv;      // the parent env to draw from (default process.env); only subscriptionEnv()'s allow-list reaches the child
+  // Called with each system/init message before the run goes on (the wiring passes assertSubscription). Throwing stops
+  // the run: it fails with that error and its subprocess is closed.
+  onInit?: (init: SdkInitMessage) => void | Promise<void>;
+  sdk?: () => Promise<SdkModule>; // default: the real @anthropic-ai/claude-agent-sdk (tests inject a fake)
 }
 
 let scratch: string | undefined;
 const scratchDir = (): string => (scratch ??= mkdtempSync(join(tmpdir(), "allevia-agent-")));
+const loadSdk = async (): Promise<SdkModule> => import("@anthropic-ai/claude-agent-sdk");
 
 export const MCP_SERVER = "allevia";
 export const sdkToolName = (name: string): string => `mcp__${MCP_SERVER}__${name}`;
+
+const isInit = (m: unknown): m is SdkInitMessage =>
+  !!m && typeof m === "object" && (m as { type?: unknown }).type === "system" && (m as { subtype?: unknown }).subtype === "init";
+
+const stopped = (agentId: string, signal: AbortSignal): Error => {
+  const why = signal.reason instanceof Error ? signal.reason.message : typeof signal.reason === "string" ? signal.reason : "";
+  return new Error(`${agentId} was stopped${why && !/aborted/i.test(why) ? ` (${why})` : ""}`);
+};
 
 // Folds SDK stream messages into text/structured output and streamed `text` events. Pure, so it is unit-tested.
 export class SdkMessageFolder {
@@ -219,23 +252,23 @@ export class ClaudeAgentSdkRuntime implements AgentRuntime {
   constructor(private opts: SdkRuntimeOpts = {}) {}
 
   async run(input: RunInput, emit: Emit): Promise<RunOutput> {
-    const sdk = await import("@anthropic-ai/claude-agent-sdk");
-    const query: QueryFn = sdk.query;
+    if (input.signal?.aborted) throw stopped(input.agentId, input.signal); // never spawn a process for a dead run
+    const sdk = await (this.opts.sdk ?? loadSdk)();
     const tools = input.tools.map((t) =>
       sdk.tool(t.name, t.description, t.input, async (args: unknown) => {
         const r = await invokeTool(t, args, input, emit, nextCallId(input.agentId));
         return { content: [{ type: "text" as const, text: r.text }], ...(r.isError ? { isError: true } : {}) };
       }));
-    const env = { ...(this.opts.env ?? process.env) };
-    delete env.ANTHROPIC_API_KEY;
+    // The SDK kills its CLI subprocess when this controller aborts; close() below is the second guarantee.
     const abort = new AbortController();
-    const onAbort = () => abort.abort();
-    if (input.signal?.aborted) abort.abort();
+    const onAbort = () => abort.abort(input.signal?.reason);
     input.signal?.addEventListener("abort", onAbort, { once: true });
 
     const folder = new SdkMessageFolder(input.agentId, !!input.streamText, emit);
+    let q: ReturnType<SdkModule["query"]> | undefined;
+    let finished = false;
     try {
-      const q = query({
+      q = sdk.query({
         prompt: input.prompt,
         options: {
           cwd: this.opts.cwd ?? scratchDir(),
@@ -248,17 +281,25 @@ export class ClaudeAgentSdkRuntime implements AgentRuntime {
           permissionMode: "dontAsk",
           includePartialMessages: !!input.streamText,
           maxTurns: input.maxTurns ?? 10,
-          env,
+          env: subscriptionEnv(this.opts.env ?? process.env),
           abortController: abort,
           ...(input.outputSchema ? { outputFormat: { type: "json_schema" as const, schema: input.outputSchema as Record<string, unknown> } } : {}),
         },
       });
-      for await (const m of q) folder.push(m);
+      for await (const m of q) {
+        if (isInit(m) && this.opts.onInit) await this.opts.onInit(m);
+        folder.push(m);
+      }
+      finished = true;
     } catch (e) {
-      if (input.signal?.aborted) throw new Error(`${input.agentId} was stopped (timeout)`);
+      if (input.signal?.aborted) throw stopped(input.agentId, input.signal);
       throw e;
     } finally {
       input.signal?.removeEventListener("abort", onAbort);
+      if (!finished) {
+        abort.abort();
+        try { q?.close(); } catch { /* already gone */ }
+      }
     }
     return folder.output();
   }
