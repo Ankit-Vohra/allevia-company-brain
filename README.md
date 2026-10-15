@@ -263,7 +263,8 @@ edges nothing refers to; the suite holds both rules (see Tests).
 | `program <tenant> [--read-only]` | The Allevia 90 scorecard |
 | `tell <tenant> "<instruction>"` | "Tell your team": preview a plain-language change, `--apply` to make it |
 | `serve [--public]` | The API and the web app on one port |
-| `discord [--tenant aamdani]` | The Discord bot (needs a bot token in the env file) |
+| `discord [--tenant aamdani]` | The Discord bot (needs a bot token in the env file); with `DISCORD_HUB_GUILD_ID` set it serves every customer on the hub |
+| `discord-hub status \| provision <tenant> \| reinvite <tenant>` | The customer hub on Discord: a read-only check, set a business up, a new join link ([setup](docs/discord-hub-setup.md)) |
 | `mcp --tenant <slug> [--http]` | The read-only MCP server for one tenant |
 | `eval <tenant> [--fake]` | Run the tenant's eval questions, score every turn, write `docs/evals/<date>-<tenant>.md` |
 | `showcase <tenant> [<turnId>]` | Mark a stored turn for public replay, or list the showcase turns |
