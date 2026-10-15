@@ -149,10 +149,10 @@
   .office-page { display: flex; flex-direction: column; height: auto; gap: 14px; padding: 16px clamp(16px, 3vw, 28px) 28px; }
   .office-right { display: contents; overflow: visible; }
   .office-head { order: 1; }
-  .home { order: 2; }
-  .ask-wrap { order: 3; }
-  .suggest { order: 3; }
-  .office-stage { order: 4; flex: none; min-height: 0; }
+  .office-stage { order: 2; flex: none; min-height: 0; }
+  .home { order: 3; }
+  .ask-wrap { order: 4; }
+  .suggest { order: 4; }
   .office-side { order: 5; }
 }
 @media (max-width: 760px) {
