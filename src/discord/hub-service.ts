@@ -4,6 +4,7 @@
 import type { DiscordHome, DiscordInfo } from "../../shared/contracts.js";
 import { loadConfig, type AlleviaConfig } from "../config.js";
 import { getTenant } from "../graph/tenants.js";
+import { checkHub, type Check } from "./hub-check.js";
 import { GraphHubStore } from "./hub-store.js";
 import { provisionCustomer, homeInfo, retryDue, type ProvisionDeps, type ProvisionResult } from "./hub-provision.js";
 import { BOT_PERMISSION_INTEGER, type HubPort, type HubStore } from "./hub-types.js";
@@ -103,5 +104,22 @@ export async function productionHub(opts: { cfg?: AlleviaConfig; log?: (line: st
     hub, store: opts.store ?? new GraphHubStore(), staffRoleId: s.settings.staffRoleId, redact,
     tenant: async (slug) => { const t = await getTenant(slug); return t ? { name: t.name } : null; },
     ...(opts.log ? { log: opts.log } : {}),
+  });
+}
+
+// `discord-hub status`: the read-only checks, built straight from the config (it must work when settings are missing,
+// and it never creates or changes anything).
+export async function hubStatusChecks(over: { cfg?: AlleviaConfig; hub?: HubPort; store?: HubStore } = {}): Promise<Check[]> {
+  const cfg = over.cfg ?? loadConfig();
+  const d = cfg.discord;
+  let hub = over.hub;
+  if (!hub && d.token && d.hubGuildId) {
+    const { REST } = await import("discord.js");
+    const { RestHubPort } = await import("./hub-rest.js");
+    hub = new RestHubPort(new REST({ version: "10" }).setToken(d.token), d.hubGuildId);
+  }
+  return checkHub({
+    settings: { token: !!d.token, appId: !!d.appId, ...(d.hubGuildId ? { guildId: d.hubGuildId } : {}), ...(d.staffRoleId ? { staffRoleId: d.staffRoleId } : {}) },
+    ...(hub ? { hub } : {}), store: over.store ?? new GraphHubStore(), ...(d.appId ? { inviteUrl: hubInviteUrl(d.appId) } : {}),
   });
 }

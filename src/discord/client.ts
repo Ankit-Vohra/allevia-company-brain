@@ -8,8 +8,8 @@
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client, Events, GatewayIntentBits, MessageFlags, MessageType,
   REST, Routes, SlashCommandBuilder, ThreadAutoArchiveDuration,
-  type ButtonInteraction, type ChatInputCommandInteraction, type Interaction, type Message, type MessageCreateOptions,
-  type MessageEditOptions, type SendableChannels, type ThreadChannel,
+  type ButtonInteraction, type ChatInputCommandInteraction, type GuildMember, type Interaction, type Message, type MessageCreateOptions,
+  type MessageEditOptions, type SendableChannels, type ThreadChannel, type APIInteractionGuildMember,
 } from "discord.js";
 import type { AlleviaBot, ButtonPort, ButtonSpec, CommandPort, MessagePort, Outgoing, PostedPort, ThreadPort } from "./bot.js";
 
@@ -57,6 +57,12 @@ export function threadPort(t: ThreadChannel | SendableChannels & { id: string })
 
 // ---------- incoming ----------
 
+// The roles of whoever acted, for the hub (it decides what a person may do from the roles they hold).
+export function roleIdsOf(member: GuildMember | APIInteractionGuildMember | null | undefined): string[] {
+  if (!member) return [];
+  return Array.isArray(member.roles) ? member.roles.map(String) : [...member.roles.cache.keys()];
+}
+
 export function messagePort(m: Message, botUserId: string): MessagePort {
   const inThread = m.channel.isThread();
   const mention = new RegExp(`<@!?${botUserId}>`, "g");
@@ -70,6 +76,8 @@ export function messagePort(m: Message, botUserId: string): MessagePort {
     authorIsOwner: !!m.guild && m.guild.ownerId === m.author.id,
     system: m.system || (m.type !== MessageType.Default && m.type !== MessageType.Reply),
     content: m.content.replace(mention, " ").trim(),
+    memberRoleIds: roleIdsOf(m.member),
+    attachments: m.attachments?.size ?? 0,
     thread: () => (inThread ? threadPort(m.channel as ThreadChannel) : null),
     startThread: async (name) => threadPort(await m.startThread({ name, autoArchiveDuration: ThreadAutoArchiveDuration.OneDay })),
     reply: async (out) => { await m.reply(payload(out)); },
@@ -92,6 +100,7 @@ export function commandPort(i: ChatInputCommandInteraction, channelId: string): 
     threadParentId: inThread ? (ch as ThreadChannel).parentId : null,
     userId: i.user.id,
     isOwner: !!i.guild && i.guild.ownerId === i.user.id,
+    memberRoleIds: roleIdsOf(i.member),
     defer: async () => { if (!i.deferred && !i.replied) await i.deferReply(); },
     respond: (m, opts) => answer(m, !!opts?.ephemeral),
     followUp: async (m, opts) => {
@@ -112,8 +121,11 @@ export function buttonPort(i: ButtonInteraction): ButtonPort {
   return {
     customId: i.customId,
     guildId: i.guildId,
+    channelId: i.channelId,
+    threadParentId: i.channel?.isThread() ? (i.channel as ThreadChannel).parentId : null,
     userId: i.user.id,
     isOwner: !!i.guild && i.guild.ownerId === i.user.id,
+    memberRoleIds: roleIdsOf(i.member),
     defer: async () => { if (!i.deferred && !i.replied) await i.deferUpdate(); },
     reply: async (text, opts) => {
       const p = { content: text, allowedMentions: NO_PINGS, ...(opts?.ephemeral ? { flags: MessageFlags.Ephemeral as const } : {}) };

@@ -17,7 +17,7 @@ export function missingDiscordSettings(cfg: AlleviaConfig): string[] {
 }
 
 // The tenant's IANA time zone (registry entry, else its Business node), for dates in the agents' prompts.
-async function tenantTimeZone(tenant: string, g: GraphHandle): Promise<string | undefined> {
+export async function tenantTimeZone(tenant: string, g: GraphHandle): Promise<string | undefined> {
   try {
     const { listTenants } = await import("../graph/tenants.js");
     const reg = (await listTenants()).find((t) => t.slug === tenant) as { businessId?: string; timeZone?: string } | undefined;
