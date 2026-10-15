@@ -145,7 +145,8 @@ describe("photos in the Studio on Discord", () => {
     approvalId = ids[0]!.replace(/^allevia:studio:approve:/, "").replace(/:A$/, "");
     expect(ids).toEqual([studioButtonId("approve", approvalId, "A"), studioButtonId("change", approvalId, "A")]);
     expect(ids.every((id) => id.length <= 100)).toBe(true); // Discord's custom_id limit
-    expect(text(rest.at(-1)!.first)).toMatch(/Approving uses 1 Studio credit/);
+    expect(text(rest.at(-1)!.first)).toMatch(/Light and colour changes are free/);
+    expect(text(rest.at(-1)!.first)).toMatch(/I will tell you what it costs/);
   });
 
   it("what is stored has no EXIF or location, and the original is in the graph with the thread it lives in", async () => {
@@ -179,11 +180,14 @@ describe("photos in the Studio on Discord", () => {
     expect(made.content).toMatch(/our pick/);
     expect(made.buttons![0]!.customId).toBe(studioButtonId("approve", approvalId, "C"));
     expect(made.files).toHaveLength(1);
-    // what it cannot do is said plainly, and nothing is made
+    // a change to what is IN the photo goes to the AI editor (no longer "not something the team can do yet")
     const before = thread.options().length;
     await w.studio.onReply(message("remove the bin on the left", [], { thread }), thread);
-    expect(thread.texts().at(-1)).toMatch(/Changing what is in the photo is not something the team can do yet/);
-    expect(thread.options()).toHaveLength(before);
+    expect(thread.options()).toHaveLength(before + 1);
+    const gen = thread.options().at(-1)!.first as Exclude<Outgoing, string>;
+    expect(gen.content).toContain("**Option D** (edited with AI");
+    expect(gen.content).toContain("remove the bin on the left");
+    expect(thread.texts().join("\n")).not.toMatch(/not something the team can do yet/);
     // a reply in a thread with no photo
     const lone = new FakeThread(snowflake(), "lone");
     await w.studio.onReply(message("make it warmer", [], { thread: lone }), lone);

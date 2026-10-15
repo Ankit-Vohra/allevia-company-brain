@@ -27,7 +27,7 @@ export const POST_COST_EVIDENCE = "Product design Appendix B.3: a post costs abo
 
 export interface StudioCard {
   originalId: string;
-  variants: Array<{ id: string; label: string; badge: string; note: string; aiEdited: boolean }>;
+  variants: Array<{ id: string; label: string; badge: string; note: string; aiEdited: boolean; credits?: number; request?: string; canRetry?: boolean }>;
   recommended: string;
   altText: string;
   hashtags: string[];
@@ -37,8 +37,8 @@ export interface StudioCard {
   voiceRuleIds: string[];
   // Set when the photo had a person or a plate to blur: said on the card in the owner's words.
   privacy?: { people: boolean; redacted: boolean; note: string };
-  // A plain sentence for the owner that goes with the card (a child kept the photo to a simple clean-up).
-  notice?: string;
+  // Plain sentences for the owner that go with the card (a child kept the photo to a simple clean-up; why there is no AI edit).
+  notices?: string[];
 }
 
 export interface StudioPayload { title: string; body: string; target: string; studio: StudioCard }
@@ -50,7 +50,7 @@ export function recommendVariant(variants: VariantRecord[], fidelity: FidelityRe
 
 export async function proposeStudioDraft(
   g: GraphHandle,
-  o: { original: AssetRecord; variants: VariantRecord[]; fidelity: FidelityResult[]; caption: Caption; ctx: StudioContext; assessment: PhotoAssessment; now: number; privacy?: StudioCard["privacy"]; notice?: string },
+  o: { original: AssetRecord; variants: VariantRecord[]; fidelity: FidelityResult[]; caption: Caption; ctx: StudioContext; assessment: PhotoAssessment; now: number; privacy?: StudioCard["privacy"]; notices?: string[] },
 ): Promise<{ recommendationId: string; approvalId: string; title: string; payload: StudioPayload }> {
   const short = o.original.sha256.slice(0, 12);
   const recId = entityId("Recommendation", `studio ${short}`);
@@ -62,13 +62,18 @@ export async function proposeStudioDraft(
     originalId: o.original.id,
     variants: o.variants.map((v) => {
       const f = o.fidelity.find((x) => x.assetId === v.id);
-      return { id: v.id, label: v.label, badge: f?.badge ?? "unchecked", note: f?.note ?? "", aiEdited: v.aiEdited };
+      const badge = f?.badge ?? "unchecked";
+      return {
+        id: v.id, label: v.label, badge, note: f?.note ?? "", aiEdited: v.aiEdited,
+        ...(v.credits !== undefined ? { credits: v.credits } : {}),
+        ...(v.aiEdited && badge !== "unchanged" && !v.recorded ? { canRetry: true } : {}),
+      };
     }),
     recommended: rec?.id ?? "", altText: o.caption.altText, hashtags: o.caption.hashtags, credits: CREDIT_COSTS.static_post,
     ...(o.ctx.project ? { projectId: o.ctx.project.contentId, ...(o.ctx.project.pageId ? { pageId: o.ctx.project.pageId } : {}) } : {}),
     voiceRuleIds: o.ctx.brand.voiceRules.map((r) => r.id),
     ...(o.privacy ? { privacy: o.privacy } : {}),
-    ...(o.notice ? { notice: o.notice } : {}),
+    ...(o.notices?.length ? { notices: o.notices } : {}),
   };
   const payload: StudioPayload = { title, body, target: "instagram", studio };
   const why = [

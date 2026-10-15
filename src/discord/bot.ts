@@ -78,6 +78,7 @@ export interface ButtonPort {
   isOwner: boolean;
   memberRoleIds?: string[];                     // the user's roles in the guild (hub mode)
   defer?(): Promise<void>;                      // acknowledge before slow work (the card is edited later)
+  thread?(): ThreadPort | null;                 // the thread the card is in, when it is in one (a retry posts its new option there)
   createThread?(name: string): Promise<ThreadPort>; // a new public thread in the channel the card is in (for /continue)
   reply(text: string, opts?: { ephemeral?: boolean }): Promise<void>;
   update(m: Outgoing): Promise<void>;           // edit the card the button is on

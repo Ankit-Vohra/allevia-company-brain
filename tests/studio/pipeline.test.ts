@@ -176,7 +176,8 @@ describe("studio pipeline (integration)", () => {
     expect(r1.caption.caption).toBe("Seven tall windows let the afternoon in.\n\nHarbour House, Bristol");
     expect(r1.caption.edits.join("; ")).toMatch(/hard sell.*negative-parallelism|negative-parallelism.*hard sell|hard sell/);
     expect(r1.caption.altText).toBe(TARA_ANSWER.altText);
-    expect(events.some((e) => e.type === "agent_status" && /No generative edit for this photo yet/.test(e.text))).toBe(true);
+    expect(events.some((e) => e.type === "agent_status" && /AI editor is not switched on here/.test(e.text))).toBe(true);
+    expect(r1.notices).toEqual(["The AI editor isn't switched on here, so I made the simple clean-up only."]);
     expect(r1.context.project).toBeNull();
 
     // record an edit for this photo, and the next run uses it

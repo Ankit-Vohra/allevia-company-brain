@@ -122,16 +122,16 @@ describe("studio stops and privacy (integration)", () => {
     expect(await one<{ s: string }>("MATCH (a:Asset {id:$id}) RETURN a.status AS s", { id: r.original.id })).toEqual({ s: "assessed" });
   }, 60_000);
 
-  it("a 'use' verdict makes the local variant only: a good photo is not sent for a generative edit", async () => {
+  it("a 'use' verdict still gets both options (every photo does), and a quote is said before the AI edit", async () => {
     const { store } = fresh();
-    const vision = new FakeVision({ "content-strategist": { ...noPeople, verdict: "use" }, "fact-checker": { variants: [{ label: "A", sameBuilding: true, structuralChange: false, added: [], removed: [], note: "straightened" }] }, "copy-editor": DEV_ANSWER });
+    const vision = new FakeVision({ "content-strategist": { ...noPeople, verdict: "use" }, "fact-checker": nishaAnswer(false), "copy-editor": DEV_ANSWER });
     const eng = engine();
     const events: AgentEvent[] = [];
     const r = await runStudio(g, { tenant: "kestrel_oak", businessId: BIZ, bytes: await photo(), note: "" }, { store, vision, engine: eng, now }, (e) => events.push(e));
     expect(r.stopped).toBeUndefined();
-    expect(r.variants.map((v) => v.label)).toEqual(["A"]);
-    expect(eng.prompts).toEqual([]);
-    expect(events.some((e) => e.type === "agent_status" && /post it as it is|no generative edit is needed/i.test(e.text))).toBe(true);
+    expect(r.variants.map((v) => v.label)).toEqual(["A", "B"]);
+    expect(eng.prompts).toHaveLength(1);
+    expect(events.some((e) => e.type === "agent_status" && /AI edit costs about 2 Studio credits/.test(e.text))).toBe(true);
     expect(r.approvalId).toMatch(/^approval:studio-/);
   }, 60_000);
 
@@ -244,7 +244,7 @@ describe("studio stops and privacy (integration)", () => {
     const kept = store.get("kestrel_oak", r.original.storageKey)!;
     expect(diff(await region(kept, 0.11, 0.57, 0.1, 0.2), await region(plain.buffer, 0.11, 0.57, 0.1, 0.2))).toBeGreaterThan(20);
     const card = (await studioCard(g, r.approvalId))!;
-    expect(card.payload.studio.notice).toBe(CHILD_NOTICE);
+    expect(card.payload.studio.notices).toEqual([CHILD_NOTICE]);
     expect(card.payload.studio.privacy!.note).toMatch(/child/i);
     // Nisha was shown the blurred copy, never the child
     const nisha = vision.calls.find((c) => c.agent === "fact-checker")!;

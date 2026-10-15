@@ -13,7 +13,7 @@ import { loadStudioSettings } from "./settings.js";
 import { proposeStudioDraft } from "./approve.js";
 import { DEV, writeCaption, type Caption } from "./caption.js";
 import { loadStudioContext, type StudioContext } from "./context.js";
-import type { GenerationEngine } from "./engine.js";
+import { EngineDecline, type GenerationEngine } from "./engine.js";
 import { checkFidelity, NISHA, type FidelityResult } from "./fidelity.js";
 import { blurBoxes, estimateTilt, planCrop, straightenedBase, thumbnail, type CropPlan } from "./image.js";
 import { assetUrl, blockOriginal, intake, keepOriginal, type AssetRecord } from "./intake.js";
@@ -172,24 +172,33 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
   send({ type: "asset", agent: TARA, assetId: a.id, kind: "variant", parentId: original.id, thumb: assetUrl(input.tenant, a.id, 640) });
   stopIfAborted();
 
-  // 5. variant B, generative (prompted from the graph). A photo Tara says to post as it is gets no generative edit: it
-  // would cost a credit and could only risk what is already good.
+  // 5. variant B, generative (prompted from the graph): every photo gets one, quoted first and capped (credits.ts). A photo
+  // with a child in it never goes to the AI edit. When the engine declines (not signed in, a cap, low balance, a failed
+  // job) the owner still gets variant A, and is told why in one plain sentence.
   let b: VariantRecord | null = null;
   if (priv.localOnly) {
     status(TARA, "No AI edit for this photo (it has a child in it): variant A only");
-  } else if (assessment.verdict === "use") {
-    status(TARA, "This photo is good as it is: no generative edit is needed, so you can post it as it is (variant A only straightens and crops)");
   } else {
     const treatment = TREATMENTS["relight-clean-editorial"]!;
     const prompt = await buildEditPrompt(g, ctx, assessment, treatment, now());
     status(TARA, `Variant B: ${treatment.label.toLowerCase()}, prompt built from ${prompt.sources.length} brand and rule nodes`);
     try {
       // the engine is given the blurred copy: a person or a plate never leaves the studio unblurred
-      b = await makeVariantB(g, { store: deps.store, now: now(), engine: deps.engine }, input.tenant, original, kept, base, plan, privacy, treatment, prompt);
+      b = await makeVariantB(g, { store: deps.store, now: now(), engine: deps.engine }, input.tenant, original, kept, base, plan, privacy, treatment, prompt,
+        { onQuote: (q) => status(TARA, `Variant B: the AI edit costs ${q.words}`) });
     } catch (e) {
-      status(TARA, `Variant B skipped: ${(e as Error).message.slice(0, 90)}`);
+      if (e instanceof EngineDecline) {
+        notices.push(e.message);
+        status(TARA, e.message);
+      } else {
+        status(TARA, `Variant B skipped: ${(e as Error).message.slice(0, 90)}`);
+        notices.push("The AI edit didn't work for this photo, so you have the simple clean-up.");
+      }
     }
-    if (!b) status(TARA, "No generative edit for this photo yet: live edits arrive with the Higgsfield API in Phase 2");
+    if (!b && !notices.length) {
+      status(TARA, "No AI edit was made for this photo: the AI editor is not switched on here");
+      notices.push("The AI editor isn't switched on here, so I made the simple clean-up only.");
+    }
   }
   if (b) variants.push(b);
   if (b) send({ type: "asset", agent: TARA, assetId: b.id, kind: "variant", parentId: original.id, thumb: assetUrl(input.tenant, b.id, 640) });
@@ -222,7 +231,7 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
   const card = await proposeStudioDraft(g, {
     original, variants, fidelity, caption, ctx, assessment, now: now(),
     ...(redacted ? { privacy: { people: priv.people, redacted: true, note: privacyNote(priv) } } : {}),
-    ...(priv.minor ? { notice: CHILD_NOTICE } : {}),
+    ...(notices.length ? { notices } : {}),
   });
   send({ type: "proposal", agent: TARA, recommendationId: card.recommendationId, approvalId: card.approvalId, title: card.title, kind: "content_draft" });
 

@@ -135,8 +135,16 @@ export class FakeEngine implements GenerationEngine {
   readonly name = "fake";
   readonly prompts: string[] = [];
   constructor(private make: (input: EditInput) => Promise<Buffer> | Buffer, private opts: { credits?: number } = {}) {}
-  async edit(input: EditInput, prompt: string): Promise<EditResult> {
+  readonly calls: Array<{ input: EditInput; opts: EditOpts }> = [];
+  async quote(): Promise<EngineQuote> {
+    const c = this.opts.credits ?? 0;
+    return { credits: c, words: c > 0 ? `about ${c} Studio credit${c === 1 ? "" : "s"}` : "no Studio credits" };
+  }
+  async edit(input: EditInput, prompt: string, opts?: EditOpts): Promise<EditResult> {
     this.prompts.push(prompt);
+    if (opts) this.calls.push({ input, opts });
+    // like a live engine, say the price before generating
+    if (opts?.onQuote && this.opts.credits !== undefined && this.opts.credits > 0) opts.onQuote({ credits: this.opts.credits, words: `about ${this.opts.credits} Studio credit${this.opts.credits === 1 ? "" : "s"}` });
     return { image: await this.make(input), engine: "fake", model: "fake-edit", prompt, recorded: false, ...(this.opts.credits !== undefined ? { credits: this.opts.credits } : {}) };
   }
 }
