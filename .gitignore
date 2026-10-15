@@ -14,7 +14,7 @@ web/dist/
 # company data pulled at runtime (snapshots, extraction cache, crawls); never committed
 data/
 !data/.gitkeep
-models/
+models
 .cache/
 
 # local tooling

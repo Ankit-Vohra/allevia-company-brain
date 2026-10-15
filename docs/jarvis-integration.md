@@ -75,7 +75,7 @@ claude mcp add allevia --scope project --env ALLEVIA_FALKORDB_URL=redis://127.0.
 ```
 
 **Jarvis on another box (stdio over SSH).** The graph stays on the Allevia machine and nothing listens on the network.
-`allevia-host` is an SSH alias in Jarvis's `~/.ssh/config`:
+`allevia-host` is an SSH alias in Jarvis's ssh config:
 
 ```json
 {
