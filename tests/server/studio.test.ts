@@ -140,6 +140,32 @@ describe("server: studio (integration)", () => {
     expect((await app.request("/api/other/studio/revise", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ approvalId: "x", instruction: "y" }) })).status).toBe(404);
   }, 90_000);
 
+  it("the clip option: a quote without confirm (nothing made), the clip with confirm; 501 when clips are off, 403 in public mode", async () => {
+    const calls: string[] = [];
+    const clip = {
+      offer: async () => { calls.push("offer"); return { ok: true as const, message: "A clip would use about 7.5 Studio credits.", label: "B", variantId: "v", credits: 7.5, words: "about 7.5 Studio credits" }; },
+      make: async () => { calls.push("make"); return { ok: true as const, message: "Here is your clip.", video: Buffer.from("x"), assetId: "asset:clip-1", credits: 7.5, jobId: "j" }; },
+    };
+    const app = h.make({ studio: async () => ({ ...wiring, clip }) });
+    const clipPost = (a: typeof app, body: unknown) => a.request("/api/mini/studio/clip", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const quote = await (await clipPost(app, { approvalId: "approval:x" })).json() as { ok: boolean; credits: number };
+    expect(quote).toMatchObject({ ok: true, credits: 7.5 });
+    expect(calls).toEqual(["offer"]);
+    const made = await (await clipPost(app, { approvalId: "approval:x", confirm: true })).json() as { ok: boolean; url: string; credits: number };
+    expect(made).toMatchObject({ ok: true, credits: 7.5, url: "/api/mini/assets/asset%3Aclip-1" });
+    expect(calls).toEqual(["offer", "make"]);
+    expect((await clipPost(app, {})).status).toBe(400);
+    expect((await clipPost(h.make({ studio: async () => wiring }), { approvalId: "a" })).status).toBe(501);
+    expect((await clipPost(h.make({ studio: async () => ({ ...wiring, clip }), publicMode: true }), { approvalId: "a" })).status).toBe(403);
+    // the revise route answers a "make a reel" ask with the offer, not a charge
+    const events = sseEvents(await (await upload(app, await facadePhoto({ tilt: 1.1 }), "clip me")).text());
+    const proposal = events.find((e): e is Extract<AgentEvent, { type: "proposal" }> => e.type === "proposal")!;
+    const res = await app.request("/api/mini/studio/revise", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ approvalId: proposal.approvalId, instruction: "make a reel from this" }) });
+    const final = sseEvents(await res.text()).find((e) => e.type === "final") as Extract<AgentEvent, { type: "final" }>;
+    expect(final.answer).toMatch(/would use about 7.5 Studio credits/);
+    expect(calls.filter((c) => c === "make")).toHaveLength(1);
+  }, 60_000);
+
   it("the owner's settings: blur people's faces (off by default) and the language, per business, refused in public mode", async () => {
     const app = h.make({ studio: async () => wiring });
     const put = (a: typeof app, body: unknown) => a.request("/api/mini/studio/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });

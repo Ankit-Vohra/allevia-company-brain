@@ -36,7 +36,13 @@ export interface ClipRequest { tenant: string; businessId: string; approvalId: s
 export type ClipOffer = { ok: true; message: string; label: string; variantId: string; credits: number; words: string } | { ok: false; message: string };
 export type ClipMade = { ok: true; message: string; video: Buffer; assetId: string; credits: number; jobId: string } | { ok: false; message: string };
 
-export class ClipService {
+/** What the Discord bot and the API need from the clip service. */
+export interface ClipPort {
+  offer(r: ClipRequest): Promise<ClipOffer>;
+  make(r: ClipRequest): Promise<ClipMade>;
+}
+
+export class ClipService implements ClipPort {
   constructor(private o: { g: GraphHandle | ((tenant: string) => Promise<GraphHandle>); store: AssetStore; engine: HiggsfieldEngine; cap?: number; now?: () => number }) {}
 
   private graph(tenant: string): Promise<GraphHandle> | GraphHandle { return typeof this.o.g === "function" ? this.o.g(tenant) : this.o.g; }

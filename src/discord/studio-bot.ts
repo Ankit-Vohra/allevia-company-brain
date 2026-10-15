@@ -24,6 +24,7 @@ import { reviseVariant, type ReviseResult } from "../studio/revise.js";
 import { generateVariant, type GenerateRequest, type GenerateResult } from "../studio/generate.js";
 import { creditsWords } from "../studio/credits.js";
 import { routeRequest } from "../studio/request.js";
+import type { ClipPort } from "../studio/clip.js";
 import { assessFirstFrame, storeVideo, VideoRejected, type Ffmpeg } from "../studio/video.js";
 import { downloadAttachment, AttachmentRejected, MAX_ATTACHMENTS, pickMedia, type AttachmentRef, type FetchFn } from "./attachments.js";
 import type { ButtonPort, ButtonSpec, MessagePort, ThreadPort } from "./bot.js";
@@ -31,8 +32,8 @@ import { threadName } from "./format.js";
 import { ThrottledEditor, WorkLogState } from "./worklog.js";
 
 const PREFIX = "allevia:studio";
-const BUTTON = new RegExp(`^${PREFIX}:(approve|change|retry):(.+):([A-Z][A-Z0-9]*)$`);
-export const studioButtonId = (verb: "approve" | "change" | "retry", approvalId: string, label: string): string => `${PREFIX}:${verb}:${approvalId}:${label}`;
+const BUTTON = new RegExp(`^${PREFIX}:(approve|change|retry|clip):(.+):([A-Z][A-Z0-9]*)$`);
+export const studioButtonId = (verb: "approve" | "change" | "retry" | "clip", approvalId: string, label: string): string => `${PREFIX}:${verb}:${approvalId}:${label}`;
 export const isStudioButton = (customId: string): boolean => customId.startsWith(`${PREFIX}:`);
 
 const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
@@ -72,8 +73,8 @@ export interface StudioBotDeps {
   studio: Omit<StudioDeps, "now" | "signal">;
   ffmpeg: Ffmpeg;
   gate: StudioGate;
-  /** The clip offer (studio/clip.ts), when video from a still is switched on. */
-  clip?: { offer(o: { tenant: string; businessId: string; approvalId: string }): Promise<{ message: string }> };
+  /** The 5 second clip option (studio/clip.ts), when the live engine is on. */
+  clip?: ClipPort;
   fetch?: FetchFn;
   onDecision?: OnDecision;
   actions?: ActionOpts;
@@ -266,12 +267,13 @@ export class StudioDiscord {
     });
   }
 
-  // "make a clip": a short video from the approved still, priced first (see studio/clip.ts).
+  // "make a clip": a short video from the recommended option, priced first; nothing is spent until the button is pressed.
   private async clip(thread: ThreadPort, approvalId: string): Promise<void> {
     const c = this.d.clip;
     if (!c) return void await thread.send("I can't make video clips here yet. I can make photos: ask for a change, or an ad.");
     const r = await c.offer({ tenant: this.d.tenant, businessId: this.d.businessId, approvalId });
-    await thread.send(r.message);
+    if (!r.ok) return void await thread.send(r.message);
+    await thread.send({ content: clip(r.message, 1900), buttons: [{ customId: studioButtonId("clip", approvalId, r.label), label: `Make the clip (${r.words})`, style: "secondary" }] });
   }
 
   // ----- the buttons -----
@@ -284,9 +286,24 @@ export class StudioDiscord {
       await b.reply("Only people on this business's team can say OK here.", { ephemeral: true });
       return true;
     }
-    const [, verb, approvalId, label] = m as unknown as [string, "approve" | "change" | "retry", string, string];
+    const [, verb, approvalId, label] = m as unknown as [string, "approve" | "change" | "retry" | "clip", string, string];
     if (verb === "change") {
       await b.reply("Tell me what to change in this thread, for example \"make it warmer\", \"a bit darker\", \"make it festive\" or \"a different background\". I will make a new option.", { ephemeral: true });
+      return true;
+    }
+    if (verb === "clip") {
+      const c = this.d.clip;
+      const thread = b.thread?.();
+      if (!c || !thread) return void await b.reply("I can't make a clip here right now.", { ephemeral: true }), true;
+      await b.defer?.();
+      await b.update({ content: `Making a 5 second clip from option ${label}...`, buttons: [] });
+      await this.d.gate.run(async () => {
+        const card = await studioCard(this.d.graph, approvalId);
+        const v = card?.payload.studio.variants.find((x) => x.label === label);
+        const r = await c.make({ tenant: this.d.tenant, businessId: this.d.businessId, approvalId, ...(v ? { variantId: v.id } : {}) });
+        if (!r.ok) return void await thread.send(r.message);
+        await thread.send({ content: clip(r.message, 1900), files: [{ name: `clip-${label.toLowerCase()}.mp4`, data: r.video }] });
+      });
       return true;
     }
     if (verb === "retry") {

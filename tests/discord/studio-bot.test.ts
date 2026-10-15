@@ -294,6 +294,39 @@ describe("videos", () => {
 });
 
 describe("one Studio run at a time", () => {
+  it("'make a clip' is a priced offer with a button; nothing is made until it is pressed, and the clip comes back as a file", async () => {
+    const w = await world("kestrel_oak");
+    const made: string[] = [];
+    const clip = {
+      offer: async () => ({ ok: true as const, message: "I can make a 5 second clip from option B. It would use about 7.5 Studio credits. It is 5 seconds, silent.", label: "B", variantId: "v", credits: 7.5, words: "about 7.5 Studio credits" }),
+      make: async () => { made.push("made"); return { ok: true as const, message: "Here is your 5 second clip from option B. It used about 7.5 Studio credits.", video: Buffer.from("mp4"), assetId: "asset:clip", credits: 7.5, jobId: "j" }; },
+    };
+    const studio = new StudioDiscord({ ...(w.studio as unknown as { d: ConstructorParameters<typeof StudioDiscord>[0] }).d, clip });
+    const m = message("the harbour", [file("photo.jpg")]);
+    await studio.onMedia(m);
+    const thread = m.started[0]!;
+    await studio.onReply(message("can you make a short reel from this", [], { thread }), thread);
+    expect(made).toEqual([]);
+    const offer = thread.sent.at(-1)!.first as Exclude<Outgoing, string>;
+    expect(offer.content).toContain("about 7.5 Studio credits");
+    expect(offer.buttons![0]!.label).toBe("Make the clip (about 7.5 Studio credits)");
+    const approvalId = offer.buttons![0]!.customId.replace(/^allevia:studio:clip:/, "").replace(/:B$/, "");
+    const b = press(studioButtonId("clip", approvalId, "B"), { thread: () => thread });
+    expect(await studio.onButton(b)).toBe(true);
+    expect(made).toEqual(["made"]);
+    const sent = thread.sent.at(-1)!.first as Exclude<Outgoing, string>;
+    expect(sent.content).toContain("It used about 7.5 Studio credits.");
+    expect(sent.files![0]!.name).toBe("clip-b.mp4");
+    // only the team can press it
+    const stranger = press(studioButtonId("clip", approvalId, "B"), { isOwner: false, thread: () => thread });
+    await studio.onButton(stranger);
+    expect(made).toEqual(["made"]);
+    // with no clip service, the ask is answered honestly
+    await w.studio.onReply(message("make a reel", [], { thread }), thread);
+    expect(thread.texts().at(-1)).toMatch(/can't make video clips here yet/);
+    await w.cleanup();
+  });
+
   it("a second photo waits its turn and is told so", async () => {
     const w = await world("kestrel_oak");
     let active = 0;

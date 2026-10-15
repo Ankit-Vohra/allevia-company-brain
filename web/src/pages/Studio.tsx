@@ -83,6 +83,9 @@ export default function StudioPage() {
   const [changeLog, setChangeLog] = useState<string[]>([]);
   const [changeNote, setChangeNote] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [clipOffer, setClipOffer] = useState<{ message: string; words: string; variantId: string } | null>(null);
+  const [clipUrl, setClipUrl] = useState<string | null>(null);
+  const [clipBusy, setClipBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const nav = useNavigate();
 
@@ -192,6 +195,24 @@ export default function StudioPage() {
       setFailure((e as Error).message);
     } finally {
       setChanging(false);
+    }
+  };
+
+  // A 5 second clip: the price first (nothing is made), then the clip only when the owner confirms.
+  const askClip = async (confirm: boolean) => {
+    if (!f.proposal || clipBusy) return;
+    setClipBusy(true); setChangeNote(null); setFailure(null);
+    try {
+      const r = await api.studioClip(tenant.id, { approvalId: f.proposal.approvalId, ...(chosen ? { variantId: chosen } : {}), confirm });
+      if (!confirm) {
+        if (r.ok && r.words && r.variantId) setClipOffer({ message: r.message, words: r.words, variantId: r.variantId });
+        else setChangeNote(r.message);
+      } else if (r.ok && r.url) { setClipUrl(r.url); setClipOffer(null); setChangeNote(r.message); }
+      else setChangeNote(r.message);
+    } catch (e) {
+      setFailure((e as Error).message);
+    } finally {
+      setClipBusy(false);
     }
   };
 
@@ -388,6 +409,17 @@ export default function StudioPage() {
               </form>
               {changing && changeLog.length > 0 && <ol className="worklog" aria-live="polite">{changeLog.map((l, i) => <li key={i}><span>{l}</span></li>)}</ol>}
               {changeNote && !changing && <p className="studio-note" role="status">{changeNote}</p>}
+              <div className="change-clip">
+                {!clipOffer && <button type="button" className="btn btn-quiet btn-sm" disabled={clipBusy || changing || !chosen || getPublicMode()} onClick={() => void askClip(false)}>{clipBusy ? "Checking the price…" : "Make a 5 second clip"}</button>}
+                {clipOffer && (
+                  <>
+                    <p className="studio-note" role="status">{clipOffer.message}</p>
+                    <button type="button" className="btn btn-gold btn-sm" disabled={clipBusy} onClick={() => void askClip(true)}>{clipBusy ? "Making the clip…" : `Make the clip (${clipOffer.words})`}</button>
+                    <button type="button" className="btn btn-ghost btn-sm" disabled={clipBusy} onClick={() => setClipOffer(null)}>No thanks</button>
+                  </>
+                )}
+                {clipUrl && <video className="change-video" src={clipUrl} controls muted playsInline />}
+              </div>
             </section>
           )}
 

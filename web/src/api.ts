@@ -285,6 +285,13 @@ export const api = {
       method: "PUT", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body),
     });
   },
+  /** POST /api/:t/studio/clip: without confirm, the price of a 5 second clip (nothing is made); with confirm, the clip. */
+  async studioClip(t: string, body: { approvalId: string; variantId?: string; confirm?: boolean }): Promise<{ ok: boolean; message: string; words?: string; credits?: number; variantId?: string; url?: string }> {
+    if (mode === "mock") throw new ApiError(STUDIO_LIVE_ONLY, 501);
+    return getJson(`/api/${enc(t)}/studio/clip`, {
+      method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body),
+    });
+  },
   async studioSample(t: string): Promise<{ note: string; caption: string; url: string } | null> {
     if (mode === "mock") return null;
     try {

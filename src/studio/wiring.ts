@@ -9,6 +9,8 @@ import { isTenantSlug } from "../graph/slug.js";
 import { ChainEngine, RecordedEngine, recordingsManifest, type GenerationEngine } from "./engine.js";
 import { CreditLedger, creditCaps } from "./credits.js";
 import { execCli, HiggsfieldEngine } from "./higgsfield.js";
+import type { GraphHandle } from "../graph/client.js";
+import { ClipService, type ClipPort } from "./clip.js";
 import type { StudioDeps } from "./pipeline.js";
 import { AssetStore } from "./store.js";
 import { CachedVision, ClaudeVision, VisionError, type VisionRunner } from "./vision.js";
@@ -24,6 +26,13 @@ export function studioEngine(dataDir: string, o: { live?: boolean; log?: (line: 
   if (!live) return recorded;
   const caps = creditCaps();
   return new ChainEngine([recorded, new HiggsfieldEngine({ cli: execCli(), ledger: new CreditLedger(dataDir), caps, ...(o.log ? { log: o.log } : {}) })]);
+}
+
+// The 5 second clip option, on the same login, ledger and daily cap as the image edits. Absent when the live engine is off.
+export function studioClip(dataDir: string, graphFor: (tenant: string) => Promise<GraphHandle>, o: { log?: (line: string) => void } = {}): ClipPort | undefined {
+  if (/^(recorded|off|none)$/i.test(process.env.ALLEVIA_STUDIO_ENGINE ?? "") || /^(1|true|yes)$/i.test(process.env.ALLEVIA_STUDIO_CACHE_ONLY ?? "")) return undefined;
+  const engine = new HiggsfieldEngine({ cli: execCli(), ledger: new CreditLedger(dataDir), caps: creditCaps(), ...(o.log ? { log: o.log } : {}) });
+  return new ClipService({ g: graphFor, store: new AssetStore(dataDir), engine });
 }
 
 export function productionStudioDeps(dataDir: string, o: { cacheOnly?: boolean; liveEngine?: boolean } = { cacheOnly: /^(1|true|yes)$/i.test(process.env.ALLEVIA_STUDIO_CACHE_ONLY ?? "") }): Omit<StudioDeps, "now" | "signal"> {

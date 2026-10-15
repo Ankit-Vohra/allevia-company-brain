@@ -145,3 +145,5 @@
 .change-row { display: flex; gap: var(--space-xs); }
 .change-row input { flex: 1; min-width: 0; font: inherit; font-size: var(--text-sm); color: var(--color-ink); background: var(--color-paper); border: var(--rule); border-radius: var(--radius-sm); padding: 8px 10px; }
 @media (max-width: 560px) { .change-row { flex-direction: column; } }
+.change-clip { display: grid; gap: var(--space-xs); justify-items: start; }
+.change-video { width: min(100%, 260px); aspect-ratio: 9 / 16; border-radius: var(--radius-md); background: var(--color-ink); }

@@ -38,9 +38,10 @@ export function productionDeps(o: { model?: string; publicMode: boolean; authReq
     },
     embedQuery: async () => (await import("../agent/wiring.js")).localEmbedder(),
     studio: async () => {
-      const { productionStudioDeps, studioSample } = await import("../studio/wiring.js");
+      const { productionStudioDeps, studioClip, studioSample } = await import("../studio/wiring.js");
       const dataDir = loadConfig().dataDir;
-      return { deps: productionStudioDeps(dataDir), sample: (tenant) => studioSample(dataDir, tenant) };
+      const clip = studioClip(dataDir, (slug) => openGraph(slug));
+      return { deps: productionStudioDeps(dataDir), ...(clip ? { clip } : {}), sample: (tenant) => studioSample(dataDir, tenant) };
     },
     ...(o.staticDir ? { staticDir: o.staticDir } : {}),
   };

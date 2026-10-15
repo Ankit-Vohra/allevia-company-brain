@@ -18,6 +18,7 @@ import { ImageRejected, thumbnail } from "../studio/image.js";
 import { assetUrl } from "../studio/intake.js";
 import { CHECKS_NA, latestStudioRun, runStudio, type StudioDeps } from "../studio/pipeline.js";
 import { generateVariant } from "../studio/generate.js";
+import type { ClipPort } from "../studio/clip.js";
 import { reviseVariant } from "../studio/revise.js";
 import { routeRequest } from "../studio/request.js";
 import { creditsWords } from "../studio/credits.js";
@@ -36,8 +37,8 @@ export const STUDIO_UPLOAD_PATH = /^\/api\/[^/]+\/studio\/intake$/;
 
 export interface StudioWiring {
   deps: Omit<StudioDeps, "now" | "signal">;
-  /** The clip offer (studio/clip.ts), when video from a still is switched on. */
-  clip?: { offer(o: { tenant: string; businessId: string; approvalId: string }): Promise<{ message: string }> };
+  /** The 5 second clip option (studio/clip.ts), when the live engine is on. */
+  clip?: ClipPort;
   sample?: (tenant: string) => StudioSample | null;
 }
 
@@ -229,6 +230,33 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
     const r = await approveStudioDraft(g, { approvalId, ...(variantId ? { variantId } : {}), ...(caption !== undefined ? { caption } : {}), now: h.now() },
       (id, edited) => h.decide(g, reg.slug, id, { decision: "approve", ...(edited ? { editedPayload: edited } : {}) }));
     return c.json({ ...r, approval: await readApproval(g, approvalId) });
+  });
+
+  // A 5 second clip from a picture Nisha passed: without confirm it only quotes (nothing is spent); with confirm it makes it.
+  app.post("/api/:t/studio/clip", async (c) => {
+    const { reg } = await h.tenantOf(c);
+    h.refuseInPublicMode();
+    const w = await wiring();
+    if (!w.clip) h.fail(501, "Clips are not switched on here.");
+    let body: { approvalId?: unknown; variantId?: unknown; confirm?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      h.fail(400, "The request body must be JSON.");
+    }
+    const approvalId = typeof body!.approvalId === "string" && body!.approvalId.length <= 200 ? body!.approvalId : "";
+    if (!approvalId) h.fail(400, "Say which card: approvalId.");
+    const variantId = typeof body!.variantId === "string" && body!.variantId.length <= 200 ? body!.variantId : undefined;
+    const ids = { tenant: reg.slug, businessId: reg.businessId, approvalId, ...(variantId ? { variantId } : {}) };
+    if (body!.confirm !== true) return c.json(await w.clip!.offer(ids));
+    if (busy) h.fail(429, "The Studio is already working. Try again in a minute.");
+    busy = true;
+    try {
+      const r = await w.clip!.make(ids);
+      return c.json(r.ok ? { ok: true, message: r.message, assetId: r.assetId, credits: r.credits, url: `/api/${encodeURIComponent(reg.slug)}/assets/${encodeURIComponent(r.assetId)}` } : { ok: false, message: r.message });
+    } finally {
+      busy = false;
+    }
   });
 
   // The owner's Studio and language settings: "Blur people's faces in my content" (off by default) and the language the
