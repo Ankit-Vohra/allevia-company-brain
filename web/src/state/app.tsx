@@ -1,9 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { type ApiMode, api, setSpeed as setApiSpeed } from "../api";
+import { chromeMood, useOfficeClock } from "../lib/daylight";
 import { setFormatTenant } from "../lib/format";
 import type { Tenant } from "../types-ext";
 
-export type ThemeChoice = "system" | "light" | "dark";
+/** Light is the default for everyone. Dark is an explicit choice; "clock" lets the chrome lean with the office's daylight
+ *  (a touch dimmer and warmer in the evening, the night office after dark). */
+export type ThemeChoice = "light" | "dark" | "clock";
 
 interface AppState {
   mode: ApiMode;
@@ -46,27 +49,29 @@ export function AppProvider({ mode, initialTenants, children }: { mode: ApiMode;
   });
   const [theme, setThemeState] = useState<ThemeChoice>(() => {
     const t = params.get("theme") ?? read("allevia.theme");
-    return t === "light" || t === "dark" ? t : "system";
+    return t === "dark" || t === "clock" ? t : "light";
   });
   const [speed, setSpeedState] = useState(() => {
     const s = Number(params.get("speed") ?? 1);
     return s === 4 ? 4 : 1;
   });
-  const prefersDark = useMedia("(prefers-color-scheme: dark)");
   const reducedMotion = useMedia("(prefers-reduced-motion: reduce)");
-  const effectiveTheme = theme === "system" ? (prefersDark ? "dark" : "light") : theme;
+  const clock = useOfficeClock((tenants.find((t) => t.id === tenantId) ?? tenants[0])?.timeZone);
+  const mood = theme === "clock" ? chromeMood(clock.minutes) : theme === "dark" ? "night" : "day";
+  const effectiveTheme = mood === "night" ? "dark" : "light";
 
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === "system") delete root.dataset.theme;
-    else root.dataset.theme = theme;
+    root.dataset.theme = effectiveTheme;
     root.dataset.effectiveTheme = effectiveTheme;
-  }, [theme, effectiveTheme]);
+    if (mood === "dusk") root.dataset.dusk = "1";
+    else delete root.dataset.dusk;
+  }, [effectiveTheme, mood]);
 
   useEffect(() => { setApiSpeed(speed); }, [speed]);
 
   const setTenant = useCallback((id: string) => { setTenantId(id); write("allevia.tenant", id); }, []);
-  const setTheme = useCallback((t: ThemeChoice) => { setThemeState(t); write("allevia.theme", t === "system" ? null : t); }, []);
+  const setTheme = useCallback((t: ThemeChoice) => { setThemeState(t); write("allevia.theme", t === "light" ? null : t); }, []);
   const setSpeed = useCallback((s: number) => { setSpeedState(s); setApiSpeed(s); }, []);
   const refreshTenants = useCallback(async () => { setTenants(await api.tenants()); }, []);
 
