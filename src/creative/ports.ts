@@ -63,4 +63,5 @@ export interface CreativeDeps {
   log?: (line: string) => void;
 }
 
-export const DEFAULT_MAX_CREDITS_PER_REQUEST = 6;
+// A poster with two pieces of artwork is about 3 credits and a 5 s clip about 7.5, so one request may use up to 10.
+export const DEFAULT_MAX_CREDITS_PER_REQUEST = 10;

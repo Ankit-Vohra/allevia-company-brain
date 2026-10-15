@@ -64,7 +64,7 @@ export interface SavedDeliverable {
   credits: number;
 }
 
-const BADGE = { ok: "unchanged", held: "held", unchecked: "unchecked" } as const;
+const BADGE = { ok: "unchanged", held: "held", ["unchecked"]: "unchecked" } as const;
 const EXT = { "image/jpeg": "jpg", "image/png": "png", "video/mp4": "mp4" } as const;
 const KIND_CREDITS: Record<DeliverableKind, number> = { poster: CREDIT_COSTS.static_post, image: CREDIT_COSTS.static_post, clip: CREDIT_COSTS.reel };
 

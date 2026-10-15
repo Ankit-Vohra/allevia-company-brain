@@ -342,7 +342,10 @@ export class StudioDiscord {
     }
     const [, verb, approvalId, label] = m as unknown as [string, "approve" | "change" | "retry" | "clip", string, string];
     if (verb === "change") {
-      await b.reply("Tell me what to change in this thread, for example \"make it warmer\", \"a bit darker\", \"make it festive\" or \"a different background\". I will make a new option.", { ephemeral: true });
+      const made = (await studioCard(this.d.graph, approvalId))?.payload.studio.creative;
+      await b.reply(made
+        ? "Tell me what to change in this thread, for example \"make the headline shorter\", \"a different picture\" or \"use the other layout\". I will make a new one."
+        : "Tell me what to change in this thread, for example \"make it warmer\", \"a bit darker\", \"make it festive\" or \"a different background\". I will make a new option.", { ephemeral: true });
       return true;
     }
     if (verb === "clip") {

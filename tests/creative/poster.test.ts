@@ -126,7 +126,7 @@ describe("makePoster (integration)", () => {
     const r = await makePoster(g, req({ turnId: "t-cap" }), deps({ maxCreditsPerRequest: 6 }));
     expect(engine.generated).toHaveLength(1); // 4 fits, 8 does not
     expect(r.hfCredits).toBe(4);
-    expect(r.notes.join(" ")).toMatch(/1 piece of artwork, not 2/);
+    expect(r.notes.join(" ")).toMatch(/1 picture, not 2/);
     expect(r.saved.options).toHaveLength(2); // the second layout reuses the artwork
     engine.cost = 9;
     const none = await makePoster(g, req({ turnId: "t-cap2" }), deps({ maxCreditsPerRequest: 6 }));

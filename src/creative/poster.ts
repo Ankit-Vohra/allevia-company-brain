@@ -12,10 +12,10 @@ import {
 import { FORMATS, type FormatKey } from "./compose/formats.js";
 import { saveArtwork, saveDeliverable, type OptionToSave, type SaveDeps, type SavedDeliverable } from "./deliverable.js";
 import { loadComposeKit, type ComposeKit } from "./kit.js";
-import { EngineUnavailable, type CreativeDeps, type GeneratedImage, type ImageRequest } from "./ports.js";
+import { makeArtworks } from "./artwork.js";
+import type { CreativeDeps } from "./ports.js";
 
 export const MAX_OPTIONS = 3;
-export const UNKNOWN_QUOTE_CREDITS = 3;   // what a generation is assumed to cost when the engine cannot quote it
 
 export type ArtworkSource = "generate" | "none" | { photoAssetId: string };
 
@@ -92,42 +92,16 @@ export async function makePoster(g: GraphHandle, req: PosterRequest, deps: Creat
   if (req.artwork === "generate") {
     const scenes = (req.scenes?.filter((s) => s.trim()) ?? []);
     const scene = scenes[0] ?? `a calm, warm, uncluttered scene that suits ${req.occasion === "general" ? "the business" : `a ${req.occasion} post`}`;
-    const reqs: Array<{ scene: string; r: ImageRequest }> = Array.from({ length: count }, (_, i) => {
+    const wanted = Array.from({ length: count }, (_, i) => {
       const sc = scenes[i] ?? scene;
       return { scene: sc, r: { prompt: artworkPrompt(kit, { scene: sc, occasion: req.occasion, format: req.format, variation: scenes[i] ? 0 : i }), aspect: FORMATS[req.format].aspect } };
     });
-    const engine = deps.engine;
-    if (!engine) notes.push("I can't make new artwork on this server yet (no image engine is set up), so these use a plain background in your brand colours.");
-    else {
-      const st = await engine.status().catch((e) => ({ ok: false as const, plain: e instanceof Error ? e.message : String(e), reason: "error" as const }));
-      if (!st.ok) notes.push(`I couldn't make artwork just now (${st.plain ?? "the image engine is not available"}), so these use a plain background in your brand colours.`);
-      else {
-        // quote each before any credit is spent; keep only what fits this request's limit
-        const room = deps.maxCreditsPerRequest - (deps.spent?.credits ?? 0);
-        let total = 0;
-        const keep: typeof reqs = [];
-        for (const q of reqs) {
-          const cost = (await engine.quote(q.r).catch(() => null)) ?? UNKNOWN_QUOTE_CREDITS;
-          if (total + cost > room) break;
-          total += cost;
-          keep.push(q);
-        }
-        if (!keep.length) notes.push(`Making artwork would cost more credits than this request is allowed to use (${deps.maxCreditsPerRequest}), so these use a plain background in your brand colours.`);
-        else if (keep.length < reqs.length) notes.push(`I made ${keep.length} piece${keep.length === 1 ? "" : "s"} of artwork, not ${reqs.length}: the rest would go over this request's credit limit.`);
-        const made = await Promise.allSettled(keep.map((q) => engine.generate(q.r)));
-        for (const [i, m] of made.entries()) {
-          if (m.status === "rejected") {
-            const e = m.reason;
-            notes.push(e instanceof EngineUnavailable ? `One piece of artwork wasn't made: ${e.plain}.` : `One piece of artwork failed (${e instanceof Error ? e.message.slice(0, 100) : "unknown error"}).`);
-            continue;
-          }
-          const img: GeneratedImage = m.value;
-          if (img.credits) { hfCredits += img.credits; if (deps.spent) deps.spent.credits += img.credits; }
-          const meta = await sharp(img.image).metadata();
-          const id = await saveArtwork(g, saveDeps, { buffer: await sharp(img.image).jpeg({ quality: 92 }).toBuffer(), engine: img.engine, model: img.model, prompt: img.prompt, ...(img.jobId ? { jobId: img.jobId } : {}), ...(img.credits !== undefined ? { credits: img.credits } : {}), recorded: img.recorded, scene: keep[i]!.scene, w: meta.width ?? 0, h: meta.height ?? 0 });
-          arts.push({ buffer: img.image, id });
-        }
-      }
+    const got = await makeArtworks(deps, wanted, { fallbackSaid: ", so these use a plain background in your brand colours" });
+    notes.push(...got.notes);
+    hfCredits += got.hfCredits;
+    for (const m of got.made) {
+      const id = await saveArtwork(g, saveDeps, { buffer: m.jpeg, engine: m.img.engine, model: m.img.model, prompt: m.img.prompt, ...(m.img.jobId ? { jobId: m.img.jobId } : {}), ...(m.img.credits !== undefined ? { credits: m.img.credits } : {}), recorded: m.img.recorded, scene: m.scene, w: m.w, h: m.h });
+      arts.push({ buffer: m.jpeg, id });
     }
   } else if (typeof req.artwork === "object") {
     const [row] = await g.roQuery<{ key: string | null }>("MATCH (a:Entity:Asset {id:$id}) RETURN a.storageKey AS key", { id: req.artwork.photoAssetId });

@@ -30,7 +30,7 @@ export interface KitDeps { store: AssetStore; tenant: string; businessId: string
 
 const hostOf = (u: string): string | null => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return null; } };
 
-async function businessFacts(g: GraphHandle, ctx: StudioContext): Promise<string[]> {
+export async function businessFacts(g: GraphHandle, ctx: StudioContext): Promise<string[]> {
   const facts = [ctx.business.name, ctx.business.city, ctx.business.country, ctx.business.industry].filter((x): x is string => !!x);
   const pages = await g.roQuery<{ url: string | null }>("MATCH (p:Page) WHERE p.url IS NOT NULL RETURN p.url AS url ORDER BY p.id LIMIT 60").catch(() => []);
   const hosts = [...new Set(pages.map((p) => (p.url ? hostOf(p.url) : null)).filter((h): h is string => !!h))].slice(0, 6);

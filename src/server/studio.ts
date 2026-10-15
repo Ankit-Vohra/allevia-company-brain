@@ -197,6 +197,10 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
     const w = await wiring();
     let bytes = w.deps.store.get(reg.slug, row!.key!);
     if (!bytes) h.fail(404, "That asset's file is missing.");
+    // a clip is served as the video it is (no thumbnail of a video here)
+    if (row!.mime?.startsWith("video/")) {
+      return c.body(new Uint8Array(bytes!), 200, { "Content-Type": row!.mime, "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=86400, immutable" });
+    }
     const width = Number(c.req.query("w") ?? 0);
     if (Number.isFinite(width) && width > 0) bytes = await thumbnail(bytes!, Math.max(64, Math.min(1600, Math.round(width))));
     return c.body(new Uint8Array(bytes!), 200, {
