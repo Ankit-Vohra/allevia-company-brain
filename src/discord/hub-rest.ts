@@ -38,7 +38,7 @@ function messageJson(m: Outgoing): Json {
   return body;
 }
 
-const statusOf = (e: unknown): number | undefined => (e && typeof e === "object" && "status" in e && typeof (e as { status: unknown }).status === "number" ? (e as { status: number }).status : undefined);
+export const statusOf = (e: unknown): number | undefined => (e && typeof e === "object" && "status" in e && typeof (e as { status: unknown }).status === "number" ? (e as { status: number }).status : undefined);
 
 const inviteFrom = (j: Json, channelId: string): InviteInfo => ({
   code: String(j.code), channelId: String(j.channel?.id ?? channelId), uses: Number(j.uses ?? 0), maxUses: Number(j.max_uses ?? 0),

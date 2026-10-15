@@ -19,6 +19,7 @@ import {
   type AreaRecord, type ChannelInfo, type ChannelKind, type HubPort, type HubRecord, type HubStore, type InviteRecord, type Overwrite,
   type PermName, type RoleInfo,
 } from "./hub-types.js";
+import type { DiscordHome } from "../../shared/contracts.js";
 import type { ApprovalDto } from "../server/types.js";
 
 export interface ProvisionDeps {
@@ -310,12 +311,7 @@ export async function retryDue(d: ProvisionDeps): Promise<RetryOutcome[]> {
 
 // ---------- what the owner sees on the web ----------
 
-export interface DiscordHome {
-  enabled: boolean;
-  state?: "invite" | "joined" | "expired" | "later";
-  inviteUrl?: string;
-  openUrl?: string;           // joined: where the team's channel is
-}
+export type { DiscordHome };
 
 export async function homeInfo(slug: string, d: Pick<ProvisionDeps, "store" | "hub" | "now">): Promise<DiscordHome> {
   const now = (d.now ?? Date.now)();
