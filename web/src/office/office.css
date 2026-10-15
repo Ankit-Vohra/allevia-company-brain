@@ -82,3 +82,12 @@
 .bubble.tone-handoff { border-color: var(--color-accent-ink); }
 .bubble.tone-handoff::after { border-color: var(--color-accent-ink); }
 @keyframes bubble-in { from { opacity: 0; } }
+
+/* the Studio's newest photo, pinned on the Content Studio room's wall frame */
+.wall-photo {
+  position: absolute; object-fit: cover; image-rendering: pixelated; pointer-events: none;
+  border: calc(var(--k, 2) * 1px) solid oklch(97% 0.01 85); box-shadow: 0 calc(var(--k, 2) * 1px) 0 oklch(20% 0.02 270 / 0.35);
+  animation: wall-photo-in 420ms var(--ease-out, ease-out) both;
+}
+@keyframes wall-photo-in { from { opacity: 0; transform: translateY(-4px) rotate(-3deg); } }
+@media (prefers-reduced-motion: reduce) { .wall-photo { animation: none; } }

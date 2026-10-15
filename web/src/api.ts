@@ -2,7 +2,20 @@
 // function has a mock twin in ./mock, used with ?mock=1, or when GET /api/health fails (no server, or no database), so the
 // demo still runs offline.
 import type { AgentEvent, AgentId, OnboardEvent } from "@shared/contracts";
-import { ApiError, errorFrom, postSse } from "./lib/sse";
+import { ApiError, errorFrom, postSse, postSseForm } from "./lib/sse";
+
+const STUDIO_LIVE_ONLY = "The Studio needs the live server: the photos, Tara's and Nisha's checks and the edits all run there.";
+
+/** GET /api/:t/studio/latest: the last Studio run's events and where its card stands. */
+export interface StudioLatest {
+  run: null | {
+    assetId: string;
+    at: number;
+    note: string;
+    events: AgentEvent[];
+    approval: { id: string; status: string; result: string | null; contentId: string | null } | null;
+  };
+}
 import type {
   AgentDetail, AgentSummary, Approval, ApprovalDecision, GraphData, NodeDetail, OnboardRequest, Overview, Recommendation,
   SearchHit, SessionDetail, SessionSummary, Tenant,
@@ -122,6 +135,35 @@ export const api = {
   async ask(t: string, body: { question: string; sessionId?: string }, onEvent: (e: AgentEvent) => void, opts: { signal?: AbortSignal; seekMs?: number } = {}): Promise<void> {
     if (mode === "mock") return (await mock()).ask(t, body, onEvent, { speed: getSpeed, signal: opts.signal, seekMs: opts.seekMs });
     return postSse<AgentEvent>(`/api/${enc(t)}/ask`, body, onEvent, opts.signal);
+  },
+
+  // ---- Studio (live server only: the photos, the vision checks and the edits live there) ----
+
+  /** POST /api/:t/studio/intake (multipart), an SSE stream of AgentEvent. */
+  async studioIntake(t: string, photo: Blob, note: string, onEvent: (e: AgentEvent) => void, opts: { signal?: AbortSignal } = {}): Promise<void> {
+    if (mode === "mock") throw new ApiError(STUDIO_LIVE_ONLY, 501);
+    const form = new FormData();
+    form.append("photo", photo, "photo.jpg");
+    if (note.trim()) form.append("note", note.trim());
+    return postSseForm<AgentEvent>(`/api/${enc(t)}/studio/intake`, form, onEvent, opts.signal);
+  },
+  async studioLatest(t: string): Promise<StudioLatest> {
+    if (mode === "mock") return { run: null };
+    return getJson(`/api/${enc(t)}/studio/latest`);
+  },
+  async studioApprove(t: string, body: { approvalId: string; variantId?: string; caption?: string }): Promise<{ contentId: string; status: string; variantId: string; approval: Approval | null }> {
+    if (mode === "mock") throw new ApiError(STUDIO_LIVE_ONLY, 501);
+    return getJson(`/api/${enc(t)}/studio/approve`, {
+      method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body),
+    });
+  },
+  async studioSample(t: string): Promise<{ note: string; caption: string; url: string } | null> {
+    if (mode === "mock") return null;
+    try {
+      return await getJson(`/api/${enc(t)}/studio/sample`);
+    } catch {
+      return null;
+    }
   },
 
   /** POST /api/onboard, an SSE stream of OnboardEvent. */

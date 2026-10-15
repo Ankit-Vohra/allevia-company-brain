@@ -67,6 +67,20 @@ function parseBlock(block: string): SseMessage | null {
   return { event, data: data.join("\n"), id };
 }
 
+/** POST a multipart form (a file upload) and stream back parsed JSON events. */
+export async function postSseForm<T>(url: string, form: FormData, onEvent: (e: T) => void, signal?: AbortSignal): Promise<void> {
+  const res = await fetch(url, { method: "POST", headers: { accept: "text/event-stream" }, body: form, signal });
+  if (!res.ok) throw await errorFrom(res, url);
+  if (!res.body) throw new ApiError(`${url} sent no stream`, res.status);
+  for await (const msg of readSse(res.body, signal)) {
+    try {
+      onEvent(JSON.parse(msg.data) as T);
+    } catch {
+      // a malformed line is skipped rather than ending the stream
+    }
+  }
+}
+
 /** POST a JSON body and stream back parsed JSON events. */
 export async function postSse<T>(
   url: string,
