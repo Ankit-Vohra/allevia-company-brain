@@ -287,6 +287,8 @@ describe("scanGraph (integration)", () => {
     });
     await upsertNode(g, { type: "Task", id: "task:pending-n7", name: "Renew the widget licence", props: { status: "open", title: "Renew the widget licence", issues: ["#12", "app#42"] } });
     await upsertEdge(g, { from: "person:founder", type: "OWNS", to: "task:pending-n7", props: { note: "ordinary note" } });
+    // a vendored pack records the upstream commit it was taken from: a digest, not a secret
+    await upsertNode(g, { type: "Playbook", id: "playbook:demo-pack", name: "Demo pack", props: { sha: "d03c56bb598be770c60b201f94237e5d1a4268a6" } });
   });
   afterAll(async () => {
     await cleanup();
@@ -332,5 +334,11 @@ describe("scanGraph (integration)", () => {
     expect(first).toEqual({ id: "person:founder", iid: 0 });
     await upsertNode(g, { type: "Person", id: "person:founder", name: "Founder", summary: "write to first.person@example.org" });
     expect((await scanGraph(g, { pageSize: 3 })).some((h) => h.id === "person:founder" && h.kind === "email")).toBe(true);
+  });
+
+  it("skips a sha prop only when it holds a digest: anything else in it is scanned", async () => {
+    await upsertNode(g, { type: "Playbook", id: "playbook:demo-bad", name: "Bad pack", props: { sha: "ghp_demoDemoDemoDemo1234567890" } });
+    const hits = await scanGraph(g);
+    expect(hits.filter((h) => h.prop === "sha").map((h) => h.id)).toEqual(["playbook:demo-bad"]);
   });
 });
