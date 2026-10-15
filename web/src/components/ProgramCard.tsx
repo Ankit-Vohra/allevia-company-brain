@@ -2,13 +2,16 @@
 // business is in its first three months. A short summary first; how it is measured and what the team can see sit behind
 // "See the full plan". Every number is the API's (GET /api/:t/program); a starting point the graph did not have is said
 // plainly ("We'll know after your first full week"), never shown as zero.
+import { useState } from "react";
 import { Link } from "react-router";
 import type { CapabilityState, GoalState, ProgramGoal, ProgramScorecard } from "@shared/contracts";
 import { fmtDate, fmtNum, fmtPct } from "../lib/format";
 import { monthWeek } from "../lib/plainwords";
 import { AgentAvatar } from "./bits";
 import { CapabilityLadder } from "./Capabilities";
+import { ConnectSearchConsole } from "./ConnectSearchConsole";
 import { FirstPassCurve } from "./FirstPassCurve";
+import { NumbersUpload } from "./NumbersUpload";
 import { Reveal } from "./Reveal";
 export { Timeline } from "./Timeline";
 import "./program.css";
@@ -38,9 +41,13 @@ interface Props {
   caps?: CapabilityState[];
   loading?: boolean;
   error?: string;
+  /** The business's id and what to do once numbers were added (reload the plan): together they turn on "Add your numbers". */
+  tenantId?: string;
+  onNumbersAdded?: () => void;
 }
 
-export function ProgramCard({ program, caps, loading, error }: Props) {
+export function ProgramCard({ program, caps, loading, error, tenantId, onNumbersAdded }: Props) {
+  const [adding, setAdding] = useState(false);
   if (program === undefined) {
     return (
       <section className="plan is-loading" aria-busy={loading ? "true" : undefined} aria-label="Your growth plan">
@@ -74,6 +81,13 @@ export function ProgramCard({ program, caps, loading, error }: Props) {
       ) : (
         <p className="plan-empty">No goals yet. Your team proposes three, and you say OK.</p>
       )}
+      {tenantId && p.goals.length > 0 && (adding ? (
+        <NumbersUpload tenantId={tenantId} onDone={() => onNumbersAdded?.()} onClose={() => setAdding(false)} />
+      ) : (
+        <button type="button" className="btn btn-quiet btn-sm plan-add" onClick={() => setAdding(true)}>
+          {p.goals.some((g) => g.status === "no_data") ? "Add your numbers to know today" : "Add your latest numbers"}
+        </button>
+      ))}
       <Reveal label="See the full plan" className="plan-more">
         <div className="plan-detail">
           <dl className="plan-facts">
@@ -104,6 +118,7 @@ export function ProgramCard({ program, caps, loading, error }: Props) {
             <h3 className="plan-h">What your team can see</h3>
             <CapabilityLadder caps={ladder} />
           </div>
+          {tenantId && <ConnectSearchConsole tenantId={tenantId} onChanged={() => onNumbersAdded?.()} />}
         </div>
       </Reveal>
     </section>

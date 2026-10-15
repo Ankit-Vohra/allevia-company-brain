@@ -9,7 +9,12 @@ import { loadConfig } from "../config.js";
 import { verifyToken } from "../auth/tokens.js";
 import { closeAll, openGraph } from "../graph/client.js";
 import { listTenants } from "../graph/tenants.js";
+import { realGoogleClient } from "../connectors/google/client.js";
+import { startSchedule } from "../connectors/google/schedule.js";
+import { googleSettings } from "../connectors/google/settings.js";
+import { FileTokenStore } from "../connectors/google/store.js";
 import { createApp, type ServerDeps } from "./app.js";
+import type { GoogleWiring } from "./routes/connectors.js";
 
 export const WEB_DIST = fileURLToPath(new URL("../../web/dist/", import.meta.url));
 
@@ -21,6 +26,17 @@ export interface ServeOpts {
   authRequired?: boolean; // default ALLEVIA_AUTH (config): every business needs its owner link; see src/auth
   staticDir?: string | null; // null: API only
   over?: Partial<ServerDeps>;
+}
+
+// The Google connectors from the server's config: always built, "not switched on yet" until the founder has set the Google
+// client and the connector key (docs/connectors-setup.md). Nothing is called until then.
+export function productionGoogle(): GoogleWiring {
+  const cfg = loadConfig();
+  const settings = googleSettings(cfg.google);
+  return {
+    deps: { settings, store: new FileTokenStore(cfg.dataDir, settings.connectorKey), client: realGoogleClient(settings), now: () => Date.now() },
+    webBaseUrl: cfg.webBaseUrl,
+  };
 }
 
 export function productionDeps(o: { model?: string; publicMode: boolean; authRequired?: boolean; staticDir?: string }): ServerDeps {
@@ -43,6 +59,7 @@ export function productionDeps(o: { model?: string; publicMode: boolean; authReq
       const clip = studioClip(dataDir, (slug) => openGraph(slug));
       return { deps: productionStudioDeps(dataDir), ...(clip ? { clip } : {}), sample: (tenant) => studioSample(dataDir, tenant) };
     },
+    google: async () => productionGoogle(),
     ...(o.staticDir ? { staticDir: o.staticDir } : {}),
   };
 }
@@ -80,7 +97,12 @@ export async function startServer(opts: ServeOpts = {}): Promise<{ server: Serve
   const url = `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}`;
   for (const w of exposureWarnings({ host, publicMode, authRequired, hubEnabled: !!hub })) console.error(`WARNING: ${w}`);
   console.error(`Allevia on ${url}${publicMode ? " (public read-only mode)" : ""}${authRequired ? " (owner links required)" : ""}${staticDir ? "" : " (API only: build the web app with `cd web && npm run build`)"}`);
-  return { server, url, close: () => { stopRetry?.(); return new Promise<void>((r) => server.close(() => r())); } };
+  // the daily Search Console read, for every business that connected it (only when Google is set up, never in public mode)
+  const google = productionGoogle();
+  const stopSchedule = !publicMode && google.deps.settings.configured && !opts.over?.google
+    ? startSchedule({ google: google.deps, tenants: () => listTenants(), openGraph: (slug) => openGraph(slug) })
+    : () => undefined;
+  return { server, url, close: () => { stopRetry?.(); stopSchedule(); return new Promise<void>((r) => server.close(() => r())); } };
 }
 
 // Resolves on SIGINT/SIGTERM after the server has stopped taking requests.

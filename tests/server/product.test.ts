@@ -11,6 +11,7 @@ import type { DecisionDto } from "../../src/server/types.js";
 import { templateFor } from "../../src/onboard/templates.js";
 import { baselinesWrite, checkpointWrite, programAndGoalsWrite, programGoals } from "../../src/program/program.js";
 import { ensureAgentNode } from "../../src/actions/shared.js";
+import { setActionTarget } from "../../src/actions/target.js";
 import { SEED_NOW } from "../fixtures/seed-graph.js";
 import { AGENTS } from "../../shared/roster.js";
 import { harness, post, TENANT, type Harness } from "./harness.js";
@@ -122,19 +123,37 @@ describe("server: product endpoints (integration)", () => {
     expect((await req(h.app, "DELETE", "/api/mini/learning/rule%3Anope")).status).toBe(404);
   });
 
-  it("approvals: a GitHub issue is a dry run unless actions are live (then the injected gh runs)", async () => {
-    const dry = await json<DecisionDto>(await post(h.app, "/api/mini/approvals/approval%3Ap-issue", { decision: "approve" }));
-    expect(dry).toMatchObject({ status: "approved", action: { kind: "github_issue", status: "dry_run", result: expect.stringMatching(/^Dry run: would open a GitHub issue on .+ titled "Fix the sitemap"/) } });
-    const [a] = await h.g.roQuery<{ s: string }>("MATCH (:Approval {id:'approval:p-issue'})-[:RESULTED_IN]->(x:Action) RETURN x.status AS s");
-    expect(a!.s).toBe("dry_run");
+  it("approvals: a fix lands in the business's own tasks by default; with GitHub opted in it is a dry run unless actions are live", async () => {
+    // the default for a customer's business ("mini" is the founder's in these tests, so it is a customer's for a moment): a
+    // task inside the app, nothing outside touched, even without ALLEVIA_ACTIONS_LIVE
+    const founders = process.env.ALLEVIA_ACTION_TENANTS;
+    delete process.env.ALLEVIA_ACTION_TENANTS;
+    let tasked: DecisionDto;
+    try {
+      tasked = await json<DecisionDto>(await post(h.app, "/api/mini/approvals/approval%3Ap-issue", { decision: "approve" }));
+    } finally {
+      if (founders !== undefined) process.env.ALLEVIA_ACTION_TENANTS = founders;
+    }
+    expect(tasked).toMatchObject({ status: "executed", action: { kind: "github_issue", status: "done", result: expect.stringMatching(/^Added to your tasks: “Fix the sitemap”/) } });
+    const [t] = await h.g.roQuery<{ kind: string; status: string }>("MATCH (:Approval {id:'approval:p-issue'})-[:RESULTED_IN]->(:Action)-[:RESULTED_IN]->(t:Task) RETURN t.kind AS kind, t.status AS status");
+    expect(t).toEqual({ kind: "fix", status: "open" });
+
+    // opted in to its own repo (not the server's)
+    await setActionTarget(h.g, { target: "github", repo: "acme-co/site" }, { now: SEED_NOW, serverRepo: "acme/site" });
+    await upsertNode(h.g, { type: "Approval", id: "approval:p-dry", name: "github_issue: Dry one", props: {
+      status: "pending", kind: "github_issue", title: "Dry one", payload: JSON.stringify({ title: "Dry one", body: "Hold." }) } }, SEED_NOW);
+    const dry = await json<DecisionDto>(await post(h.app, "/api/mini/approvals/approval%3Ap-dry", { decision: "approve" }));
+    expect(dry).toMatchObject({ status: "approved", action: { kind: "github_issue", status: "dry_run", result: expect.stringMatching(/^Dry run: would open a GitHub issue on acme-co\/site titled "Dry one"/) } });
 
     await upsertNode(h.g, { type: "Approval", id: "approval:p-live", name: "github_issue: Live one", props: {
       status: "pending", kind: "github_issue", title: "Live one", payload: JSON.stringify({ title: "Live one", body: "Go." }) } }, SEED_NOW);
     const calls: string[][] = [];
-    const live = h.make({ actions: { live: true, gh: async (args) => { calls.push(args); return "https://github.com/acme/site/issues/7\n"; }, config: { githubActionRepo: "acme/site" } } });
+    const live = h.make({ actions: { live: true, gh: async (args) => { calls.push(args); return "https://github.com/acme-co/site/issues/7\n"; }, config: { githubActionRepo: "acme/site" } } });
     const done = await json<DecisionDto>(await post(live, "/api/mini/approvals/approval%3Ap-live", { decision: "approve" }));
-    expect(done).toMatchObject({ status: "executed", action: { status: "done", url: "https://github.com/acme/site/issues/7" } });
-    expect(calls[0]!.slice(0, 4)).toEqual(["issue", "create", "--repo", "acme/site"]);
+    expect(done).toMatchObject({ status: "executed", action: { status: "done", url: "https://github.com/acme-co/site/issues/7" } });
+    expect(calls[0]!.slice(0, 4)).toEqual(["issue", "create", "--repo", "acme-co/site"]);
+    // back to "chose nothing", as the rest of this file expects of the founder's own business
+    await upsertNode(h.g, { type: "Business", id: TENANT.businessId, name: "Aamdani", props: { actionTarget: null, actionRepo: null, actionOperator: null } }, SEED_NOW + 1000);
   });
 
   it("insights and brief runs; GET /brief serves the Document the brief run wrote, goal pulse included", async () => {

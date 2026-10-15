@@ -17,7 +17,7 @@
 //   use: the real executors, with GitHub issues and Discord posts as a dry run unless ALLEVIA_ACTIONS_LIVE=1. The
 //   answer is the card plus `learned` (the learned-rule AgentEvents, in the JSON) and `action`.
 // Focused route files: routes/program.ts (program, capabilities, learning), routes/team.ts (agents, directives),
-// routes/goals.ts (the owner says OK to the suggested goals), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/graph-work.ts (the Brain page's "what breaks if something stops").
+// routes/goals.ts (the owner says OK to the suggested goals), routes/numbers.ts (the owner adds a spreadsheet of their numbers), routes/actions.ts (where an approved fix lands: tasks, or the business's own GitHub repo), routes/connectors.ts (connect Search Console), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/graph-work.ts (the Brain page's "what breaks if something stops").
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
@@ -37,7 +37,10 @@ import type { LlmRunner } from "../ingest/llm.js";
 import { DecisionError, decide, type ActionOpts, type OnDecision } from "./approvals.js";
 import { PRIVATE_MESSAGE, authorize, clearSession, presentedTokens, requestView, scopesOf, setSession, type AuthDeps } from "./auth.js";
 import { HttpError, readBody, type RouteCtx } from "./http.js";
+import { registerActionRoutes } from "./routes/actions.js";
+import { registerConnectorRoutes, type GoogleWiring } from "./routes/connectors.js";
 import { registerGoalRoutes } from "./routes/goals.js";
+import { NUMBERS_UPLOAD_PATH, registerNumbersRoutes } from "./routes/numbers.js";
 import { registerProgramRoutes } from "./routes/program.js";
 import { registerTeamRoutes } from "./routes/team.js";
 import { LinkTooSoon, type HubService } from "../discord/hub-service.js";
@@ -108,6 +111,7 @@ export interface ServerDeps {
   discordHub?: () => Promise<HubService | null>;
   loadPlans?: () => Promise<PlansModule | null>;    // null: pricing data is not installed (501)
   studio?: () => Promise<StudioWiring | null>;      // the Studio's assets, vision and engine; absent: 501
+  google?: () => Promise<GoogleWiring | null>;      // the Google connectors (Search Console): settings, token store, client; absent: "not switched on yet"
   now?: () => number;
   heartbeatMs?: number;     // SSE keepalive comment interval; 0 turns it off (default 15 s)
   replaySpeed?: number;     // public-mode replay pacing; 1 = about real time, 0 = instant (default 1)
@@ -229,12 +233,12 @@ export function createApp(deps: ServerDeps): Hono {
   const embedQuery = () => (embedder ??= (deps.embedQuery?.() ?? Promise.resolve(undefined)).catch(() => undefined));
 
   // A registered tenant's graph, or a 404.
-  async function tenantOf(c: Context): Promise<{ reg: RegistryTenant; g: GraphHandle }> {
-    const slug = c.req.param("t") ?? "";
+  async function tenantBySlug(slug: string): Promise<{ reg: RegistryTenant; g: GraphHandle }> {
     const reg = isTenantSlug(slug) ? (await registry()).find((t) => t.slug === slug) : undefined;
     if (!reg) throw new HttpError(404, "No such business.");
     return { reg, g: await deps.openGraph(slug) };
   }
+  const tenantOf = (c: Context): Promise<{ reg: RegistryTenant; g: GraphHandle }> => tenantBySlug(c.req.param("t") ?? "");
 
   async function tenantDto(reg: RegistryTenant, g?: GraphHandle): Promise<TenantDto> {
     let biz: reads.BusinessProps = {};
@@ -293,9 +297,9 @@ export function createApp(deps: ServerDeps): Hono {
     if (reg?.demo === true) return requestView.run({ publicView: true }, next);
     throw new HttpError(401, PRIVATE_MESSAGE); // the same answer for a business that exists and one that does not
   });
-  // 64 KB everywhere except the Studio's photo upload, which sets its own limit (studio.ts)
+  // 64 KB everywhere except the Studio's photo upload (studio.ts) and the spreadsheet upload (routes/numbers.ts), which set their own limits
   const smallBodies = bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: "The request body is too large." }, 413) });
-  app.use("/api/*", (c, next) => (c.req.method === "POST" && STUDIO_UPLOAD_PATH.test(c.req.path) ? next() : smallBodies(c, next)));
+  app.use("/api/*", (c, next) => (c.req.method === "POST" && (STUDIO_UPLOAD_PATH.test(c.req.path) || NUMBERS_UPLOAD_PATH.test(c.req.path)) ? next() : smallBodies(c, next)));
   app.use("/api/*", async (c, next) => {
     await next();
     if (!c.res.headers.get("cache-control")) c.header("Cache-Control", "no-store");
@@ -558,10 +562,13 @@ export function createApp(deps: ServerDeps): Hono {
     return c.json(data);
   });
 
-  const routeCtx: RouteCtx = { tenantOf, refuseInPublicMode, get publicMode() { return isPublic(); }, now, log };
+  const routeCtx: RouteCtx = { tenantOf, tenantBySlug, refuseInPublicMode, get publicMode() { return isPublic(); }, now, log };
   registerTeamRoutes(app, routeCtx, deps.directiveLlm !== undefined ? { directiveLlm: deps.directiveLlm } : {});
   registerProgramRoutes(app, routeCtx);
   registerGoalRoutes(app, routeCtx);
+  registerNumbersRoutes(app, routeCtx);
+  registerActionRoutes(app, routeCtx);
+  registerConnectorRoutes(app, routeCtx, { ...(deps.google ? { google: deps.google } : {}) });
   registerWorkRoutes(app, routeCtx);
   registerGraphWorkRoutes(app, routeCtx);
   registerUsageRoutes(app, routeCtx, { actionsLive: () => deps.actions?.live ?? loadConfig().actionsLive });

@@ -6,8 +6,10 @@
 //              holds half a day).
 //   window     one reading whose window spans about the period (25-30 days for a month, 4-9 for a week), reported
 //              after its window closed.
-// Simulated and baseline Observations never count, and the newest complete period must have ended within
-// MAX_AGE_DAYS of today.
+// An additive metric (not in NON_ADDITIVE_METRICS) can also be read from readings of other lengths that tile the period
+// exactly: four weekly rows are a 28-day month, a weekly row is a 7-day week. That is how a spreadsheet of weekly numbers
+// answers a monthly goal. Simulated and baseline Observations never count, and the newest complete period must have
+// ended within MAX_AGE_DAYS of today.
 import type { GraphHandle } from "../graph/client.js";
 import { addDays, dayMs, dayOf, DAY_MS, shortDate } from "../insights/text.js";
 import { PERIOD_DAYS, type GoalPeriod, type MetricSource } from "../onboard/templates.js";
@@ -15,6 +17,12 @@ import { PERIOD_DAYS, type GoalPeriod, type MetricSource } from "../onboard/temp
 type Read = Pick<GraphHandle, "roQuery">;
 
 export const MAX_AGE_DAYS = 14;
+
+// Metrics whose readings are a level or a distinct count (followers, the people reached): days do not add up to a week
+// and weeks do not add up to a month, so they only ever count as one reading that spans the period.
+export const NON_ADDITIVE_METRICS: ReadonlySet<string> = new Set([
+  "account_reach", "account_views", "followers", "following", "media_count", "non_follower_share_pct", "accounts_engaged",
+]);
 
 export interface Reading {
   value: number;
@@ -71,7 +79,7 @@ export async function readSource(g: Read, source: MetricSource, o: ReadOpts): Pr
       const s = span(ws, we);
       return s >= days - 3 && s <= days + 2 && complete(r, we, o.today) && we > oldest && (!o.until || we <= o.until);
     });
-    if (!fits.length) return null;
+    if (!fits.length) return NON_ADDITIVE_METRICS.has(source.metric) ? null : cover(rows, source, { days, subjectId, today: o.today, oldest, ...(o.until ? { until: o.until } : {}) });
     const latestEnd = fits.map((r) => dayOf(r.we)!).sort().at(-1)!;
     const pick = fits.filter((r) => dayOf(r.we) === latestEnd).reduce((a, b) => (better(b, a) ? b : a));
     const ws = dayOf(pick.ws)!;
@@ -101,6 +109,55 @@ export async function readSource(g: Read, source: MetricSource, o: ReadOpts): Pr
       value: used.reduce((s, r) => s + r.value!, 0), windowStart: start, windowEnd: end, asOf: dayOf(top.asOf) ?? end, src: top.src ?? "",
       conf: weakest(used), obsIds: used.map((r) => r.id).sort(), source, subjectId,
       evidence: `Sum of ${days} daily ${humanMetric(source.metric)} readings, ${shortDate(start)} to ${shortDate(end)}.`,
+    };
+  }
+  return NON_ADDITIVE_METRICS.has(source.metric) ? null : cover(rows, source, { days, subjectId, today: o.today, oldest, ...(o.until ? { until: o.until } : {}) });
+}
+
+// The newest period of `days` days that readings of any length tile exactly (no gap, no overlap): the readings are
+// complete (reported after their window closed), the best one per window is used, and longer readings are preferred
+// to many short ones. null when no period is covered.
+function cover(rows: Row[], source: MetricSource, o: { days: number; subjectId: string; today: string; oldest: string; until?: string }): Reading | null {
+  interface Span { row: Row; ws: string; we: string; len: number }
+  const spans = new Map<string, Span[]>(); // by window end
+  const bestAt = new Map<string, Span>();   // one reading per exact window
+  for (const r of rows) {
+    const ws = dayOf(r.ws), we = dayOf(r.we);
+    if (!ws || !we || ws > we || !complete(r, we, o.today)) continue;
+    const len = span(ws, we) + 1;
+    if (len > o.days) continue;
+    const key = `${ws}|${we}`;
+    const have = bestAt.get(key);
+    if (!have || better(r, have.row)) bestAt.set(key, { row: r, ws, we, len });
+  }
+  for (const s of bestAt.values()) (spans.get(s.we) ?? spans.set(s.we, []).get(s.we)!).push(s);
+  for (const list of spans.values()) list.sort((a, b) => b.len - a.len || (a.ws < b.ws ? -1 : 1));
+  const dead = new Set<string>();
+  const tile = (end: string, left: number): Span[] | null => {
+    if (left === 0) return [];
+    const key = `${end}|${left}`;
+    if (dead.has(key)) return null;
+    for (const s of spans.get(end) ?? []) {
+      if (s.len > left) continue;
+      const rest = tile(addDays(s.ws, -1), left - s.len);
+      if (rest) return [s, ...rest];
+    }
+    dead.add(key);
+    return null;
+  };
+  const ends = [...spans.keys()].filter((d) => d > o.oldest && (!o.until || d <= o.until)).sort().reverse();
+  for (const end of ends) {
+    const used = tile(end, o.days);
+    if (!used) continue;
+    const rowsUsed = used.map((s) => s.row);
+    const start = used.at(-1)!.ws;
+    const top = newest(rowsUsed);
+    return {
+      value: rowsUsed.reduce((sum, r) => sum + r.value!, 0), windowStart: start, windowEnd: end, asOf: dayOf(top.asOf) ?? end, src: top.src ?? "",
+      conf: weakest(rowsUsed), obsIds: rowsUsed.map((r) => r.id).sort(), source, subjectId: o.subjectId,
+      evidence: used.length === 1
+        ? `${humanMetric(source.metric)} reported for ${shortDate(start)} to ${shortDate(end)}.`
+        : `Sum of ${used.length} ${humanMetric(source.metric)} readings covering ${shortDate(start)} to ${shortDate(end)}.`,
     };
   }
   return null;

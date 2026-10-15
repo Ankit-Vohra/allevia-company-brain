@@ -30,6 +30,9 @@ export interface TenantRef { slug: string; name: string; businessId: string }
 
 export interface RouteCtx {
   tenantOf: (c: Context) => Promise<{ reg: TenantRef; g: GraphHandle }>;
+  // A registered tenant by slug, for a route whose path has no tenant in it (the Google redirect back, where the tenant
+  // comes from the signed state): a 404 for anything not in the registry.
+  tenantBySlug?: (slug: string) => Promise<{ reg: TenantRef; g: GraphHandle }>;
   refuseInPublicMode: () => void;
   publicMode: boolean;
   now: () => number;

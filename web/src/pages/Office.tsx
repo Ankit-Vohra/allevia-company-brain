@@ -314,7 +314,7 @@ export function OfficePage() {
 
       <aside className="office-side" aria-label="Your growth plan and today's note">
         <div className="panel plan-panel">
-          <ProgramCard program={program.data} caps={caps.data} loading={program.loading} error={program.error} />
+          <ProgramCard program={program.data} caps={caps.data} loading={program.loading} error={program.error} tenantId={tenant.id} onNumbersAdded={() => { program.reload(); caps.reload(); }} />
         </div>
         <div className="panel note-panel">
           <Reveal label="Today's note from Meera" tone="row">

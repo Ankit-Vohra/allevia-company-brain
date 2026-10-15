@@ -1,6 +1,9 @@
 // Executors (spec §9): what happens when the owner approves a card. Each writes one Action {kind, status, result, at},
 // Approval -RESULTED_IN-> Action, Action -AFFECTS-> its target, and Action -RESULTED_IN-> whatever it made.
-//   github_issue   `gh issue create` on config.githubActionRepo with the label allevia-action (created if missing).
+//   github_issue   where the business's action target says (target.ts). By default a Task {kind:'fix'} inside the app, with no
+//                  outside system touched. A business that opted in gets `gh issue create` on ITS OWN repo with the label
+//                  allevia-action (created if missing); never on ALLEVIA_ACTION_REPO (config.githubActionRepo), which is
+//                  Allevia's own tracker and is only used to refuse that.
 //   content_draft  a Content {status:'draft', format} PRODUCED by the agent, its markdown under
 //                  <dataDir>/drafts/<tenant>/ (gitignored), USES_RULE for every learned or brand rule applied. Never
 //                  publishes anything.
@@ -27,6 +30,7 @@ import { isoDate } from "../util/time.js";
 import { clip, oneLine } from "../insights/text.js";
 import { activeRules, applyRules, DETERMINISTIC_OPS, markRulesApplied, type ActiveRule } from "./learning.js";
 import { ensureAgentNode, existingIds, findBusinessId, type Payload } from "./shared.js";
+import { getActionTarget } from "./target.js";
 
 export type GhRunner = (args: string[]) => Promise<string>;
 export interface HttpResponse { ok: boolean; status: number; text(): Promise<string> }
@@ -82,9 +86,10 @@ export const actionIdFor = (approvalId: string): string => `action:${approvalId.
 
 // The GitHub repo and the Discord channel in the env file are the founder's: they belong to the founder's own businesses
 // (tenant-config.ts) and to any business named in ALLEVIA_ACTION_TENANTS. A business a customer onboarded has no connector
-// of its own yet, so its approved cards file and post nowhere (a connector passed in deps.config is used as given).
-// Otherwise a customer's approved card would be filed on, or posted into, an account that is not theirs.
-function usesFoundersAccounts(tenant: string): boolean {
+// of its own yet, so its approved cards do not use them: a fix lands in its own tasks (target.ts), a post is skipped (a
+// connector passed in deps.config is used as given). Otherwise a customer's approved card would be filed on, or posted
+// into, an account that is not theirs.
+export function usesFoundersAccounts(tenant: string): boolean {
   return Object.hasOwn(TENANT_CONFIGS, tenant) || loadConfig().actionTenants.includes(tenant);
 }
 
@@ -100,9 +105,31 @@ async function firstEvidence(g: GraphHandle, recId: string | undefined): Promise
 
 // ---------- github_issue ----------
 
+// The default target: the approved fix becomes an open Task in the business's own graph (the app lists it; Discord already
+// showed the card). Safe in a dry run too: it touches nothing outside the graph.
+async function appTask(g: GraphHandle, input: ExecInput, reason?: string): Promise<Outcome> {
+  const p = input.payload;
+  const taskId = entityId("Task", `fix ${input.approvalId.replace(/^approval:/, "")}`);
+  await upsertNode(g, {
+    type: "Task", id: taskId, name: clip(p.title, 160),
+    summary: clip(oneLine(p.body), 300),
+    props: { kind: "fix", status: "open", origin: "allevia", approval: input.approvalId, body: clip(p.body, 4000), ...(input.agent ? { by: input.agent } : {}) },
+  }, input.now);
+  return {
+    status: "done", produced: [taskId],
+    result: `Added to your tasks: “${clip(p.title, 160)}”. ${reason ? `${reason} ` : ""}Nothing was sent to GitHub or anywhere outside Allevia.`,
+  };
+}
+
 async function githubIssue(g: GraphHandle, input: ExecInput, deps: ExecutorDeps): Promise<Outcome> {
-  const repo = deps.config?.githubActionRepo ?? (usesFoundersAccounts(deps.tenant) ? loadConfig().githubActionRepo : undefined);
-  if (!repo) return { status: "skipped", result: "No GitHub repository is connected for this business, so nothing was filed.", produced: [] };
+  // Where this business's approved fix goes (target.ts): its own choice, else the founder's tracker for the founder's own
+  // businesses, else a task in the app. A connector passed in deps.config is used as given, except Allevia's own repo for a
+  // business that is not the founder's.
+  const target = await getActionTarget(g, deps.tenant, {
+    serverRepo: loadConfig().githubActionRepo, founders: usesFoundersAccounts(deps.tenant), ...(deps.config?.githubActionRepo ? { connectorRepo: deps.config.githubActionRepo } : {}),
+  });
+  if (target.kind === "app") return appTask(g, input, target.reason);
+  const repo = target.repo;
   const gh = deps.gh ?? defaultGh;
   const p = input.payload;
   const body = `${p.body}\n\n---\nProposed by Allevia (${agentName(input.agent)}) and approved by the owner. Approval: ${input.approvalId}.`;

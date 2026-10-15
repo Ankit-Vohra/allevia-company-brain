@@ -24,6 +24,10 @@ export interface AlleviaConfig {
   actionTenants: string[]; // businesses besides the founder's own (tenant-config.ts) that may use the env file's GitHub repo and Discord channel
   port: number;
   webBaseUrl: string; // where the web app is reached, for links from Discord (default http://127.0.0.1:<port>)
+  // The OAuth app a business connects its Google accounts through (docs/connectors-setup.md). redirectUri must be exactly
+  // what is registered in the Google Cloud console; connectorKey seals the stored tokens (>= 32 characters).
+  // enabled: ALLEVIA_SEARCH_CONSOLE=1; off by default (the connector is built against a fake and parked for now).
+  google: { enabled: boolean; clientId?: string; clientSecret?: string; redirectUri: string; connectorKey?: string };
 }
 
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -59,6 +63,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
   };
   const port = Number(get("PORT") ?? 8787);
   if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error(`PORT must be a TCP port, got "${get("PORT")}"`);
+  const webBaseUrl = (get("ALLEVIA_WEB_URL") ?? `http://127.0.0.1:${port}`).replace(/\/+$/, "");
   return {
     falkordbUrl: get("ALLEVIA_FALKORDB_URL") ?? "redis://127.0.0.1:6390",
     model: get("ALLEVIA_MODEL") ?? "sonnet",
@@ -88,6 +93,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
     actionsLive: (get("ALLEVIA_ACTIONS_LIVE") ?? "") === "1",
     actionTenants: (get("ALLEVIA_ACTION_TENANTS") ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     port,
-    webBaseUrl: (get("ALLEVIA_WEB_URL") ?? `http://127.0.0.1:${port}`).replace(/\/+$/, ""),
+    webBaseUrl,
+    google: {
+      enabled: (get("ALLEVIA_SEARCH_CONSOLE") ?? "") === "1",
+      clientId: get("ALLEVIA_GOOGLE_CLIENT_ID"),
+      clientSecret: get("ALLEVIA_GOOGLE_CLIENT_SECRET"),
+      redirectUri: get("ALLEVIA_GOOGLE_REDIRECT_URI") ?? `${webBaseUrl}/api/connectors/google/callback`,
+      connectorKey: get("ALLEVIA_CONNECTOR_KEY"),
+    },
   };
 }

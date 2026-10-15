@@ -54,15 +54,16 @@ const recordingHttp = (): HttpFn & { calls: Array<{ url: string; body: string }>
 const deps = (tenant: string, over: Partial<ExecutorDeps> = {}): ExecutorDeps => ({ tenant, config: { dataDir }, ...over });
 
 describe("a customer's approved card does not leave through the founder's accounts", () => {
-  it("github_issue: not filed on the founder's repo, live or dry, and the result does not name it", async () => {
+  it("github_issue: not filed on the founder's repo, live or dry, and the result does not name it: it becomes a task in the customer's own app", async () => {
     for (const dryRun of [false, true]) {
       const gh = recordingGh();
       const payload = { title: `Customer roof ${dryRun}`, body: "customer secret plan" };
       const a = await executeApproval(g, { approvalId: await card("github_issue", payload), kind: "github_issue", payload, now: SEED_NOW }, deps("customer_x", { gh, dryRun }));
       expect(gh.calls, `dryRun ${dryRun}`).toEqual([]);
-      expect(a.status).toBe("skipped");
-      expect(a.result).toMatch(/no GitHub repository is connected/i);
+      expect(a.status).toBe("done"); // a task in the business's own graph (src/actions/target.ts), nothing outside it
+      expect(a.result).toMatch(/^Added to your tasks/);
       expect(a.result).not.toContain(FOUNDER_REPO);
+      expect(a.url).toBeUndefined();
     }
   });
 
@@ -100,7 +101,7 @@ describe("a customer's approved card does not leave through the founder's accoun
       const a = await executeApproval(g, { approvalId: await card("github_issue", issue), kind: "github_issue", payload: issue, now: SEED_NOW }, deps("partner_y", { gh }));
       expect(a.status).toBe("done");
       const b = await executeApproval(g, { approvalId: await card("github_issue", issue), kind: "github_issue", payload: issue, now: SEED_NOW }, deps("customer_x", { gh }));
-      expect(b.status).toBe("skipped");
+      expect(b.result).toMatch(/^Added to your tasks/); // not the founder's repo: a task in its own app
       expect(gh.calls).toHaveLength(1);
     } finally {
       delete process.env.ALLEVIA_ACTION_TENANTS;
