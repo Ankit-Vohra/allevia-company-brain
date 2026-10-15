@@ -66,6 +66,10 @@ describe("the prompt lists skills by name and when, never the body", () => {
     expect(p).not.toContain("Keep captions under 125 characters");
     expect(planSystemPrompt({ now: NOW, tenant: "t" })).not.toContain("Skills:");
   });
+
+  it("keeps the owner's own week with the Chief, with time estimates (live trial: handing it on made it slower and lost them)", () => {
+    expect(planSystemPrompt({ now: NOW, tenant: "t" })).toMatch(/"what do I do this week"[^\n]*plan only "chief-of-staff"[^\n]*what-do-i-do-this-week skill[^\n]*time estimate/);
+  });
 });
 
 describe("toolsFor gives use_skill only to an agent that has skills", () => {
@@ -171,6 +175,15 @@ describe("a turn that opens a skill", () => {
     expect(work.tools.map((t) => t.name)).not.toContain("use_skill");
     expect(s.events.some((e) => e.type === "skill_used")).toBe(false);
     expect(out.skills).toEqual([]);
+  });
+
+  it("a skill the plan names is to be opened first; one it does not name is only listed", async () => {
+    const named = setup({ ...scripts(), "chief-of-staff:plan": { structured: { steps: [{ agent: "content-strategist", task: "Write the post with the instagram-post skill" }], rationale: "content" } } }, { skills: CATALOG });
+    await named.run();
+    expect(named.runtime.runs.find((r) => r.phase === "work")!.prompt).toMatch(/Your plan names your skill instagram-post: open it with use_skill in your first round/);
+    const plain = setup(scripts(), { skills: CATALOG });
+    await plain.run();
+    expect(plain.runtime.runs.find((r) => r.phase === "work")!.prompt).not.toMatch(/Your plan names your skill/);
   });
 
   it("the Chief may open its planning skill while planning", async () => {

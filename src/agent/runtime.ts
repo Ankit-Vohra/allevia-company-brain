@@ -215,6 +215,11 @@ const loadSdk = async (): Promise<SdkModule> => import("@anthropic-ai/claude-age
 export const MCP_SERVER = "allevia";
 export const sdkToolName = (name: string): string => `mcp__${MCP_SERVER}__${name}`;
 
+/** How the tools named in a prompt are actually called through the Agent SDK. */
+export function toolNameNote(tools: Pick<AlleviaTool, "name">[]): string {
+  return `How to call your tools: each one named in these instructions is called by its full name, ${sdkToolName("<name>")} (for example ${tools.slice(0, 3).map((t) => sdkToolName(t.name)).join(", ")}). If a call ever says "No such tool available", call it again by its full name; never answer as if your tools were unavailable.`;
+}
+
 const isInit = (m: unknown): m is SdkInitMessage =>
   !!m && typeof m === "object" && (m as { type?: unknown }).type === "system" && (m as { subtype?: unknown }).subtype === "init";
 
@@ -297,7 +302,10 @@ export class ClaudeAgentSdkRuntime implements AgentRuntime {
         options: {
           cwd: this.opts.cwd ?? scratchDir(),
           model: input.model,
-          systemPrompt: input.system,
+          // The prompts name tools by their short names ("search", "use_skill"); through the SDK they are only callable as
+          // mcp__allevia__<name>. A model that called the short name got "No such tool available" and, more than once
+          // (live trial 2026-10-15), gave up and answered from memory saying it "couldn't re-check the records".
+          systemPrompt: input.tools.length ? `${input.system}\n\n${toolNameNote(input.tools)}` : input.system,
           settingSources: [],
           mcpServers: tools.length ? { [MCP_SERVER]: sdk.createSdkMcpServer({ name: MCP_SERVER, version: "0.1.0", tools }) } : {},
           allowedTools: input.tools.map((t) => sdkToolName(t.name)),

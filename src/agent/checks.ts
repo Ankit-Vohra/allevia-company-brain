@@ -77,6 +77,8 @@ const IGNORED: RegExp[] = [
   /\b\d{1,3}\s?[–-]\s?\d{1,3}\s?(?:s|sec|secs|seconds)\b/g,                           // script timecodes: 0–3s, 3-8 s
   /\b[Rr]eel\b[^\n.]{0,60}?\(\s?(?:about |around |~)?\d{1,3}\s?(?:s|sec|secs|seconds)\s?\)/g, // Reel: "title" (about 25 seconds)
   /\b(?:[Tt]op|[Bb]ottom)\s+\d{1,3}\b/g,                                               // top 3
+  /\b(?:about|around|roughly|under|over|~|approx\.?)\s+\d{1,3}\s?(?:minutes?|mins?|hours?|hrs?)\b/gi,   // time estimates: about 10 minutes
+  /\(\s?\d{1,3}\s?(?:minutes?|mins?|hours?|hrs?)\s?\)/gi,                                 // (10 minutes)
   /^[ \t]*(?:[-*+][ \t]+)?\d+[.)](?=\s)/gm,                                            // list ordinals: "1." "2)"
 ];
 

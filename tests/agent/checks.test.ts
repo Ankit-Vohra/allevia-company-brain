@@ -32,6 +32,9 @@ describe("findNumbers", () => {
   it("ignores ISO dates, '5 Oct', 'Oct 5', 'October 5, 2026' and 'Oct 2026'", () => {
     expect(raws("Up on 2026-10-05, again 5 Oct and Oct 5, also October 5, 2026 and Oct 2026: 55 signups")).toEqual(["55"]);
   });
+  it("ignores the answer's own time estimates, but not a measured duration", () => {
+    expect(raws("1. Decide the ad (about 10 minutes).\n2. Reply (15 minutes). Page took 45 minutes to load: 41 signups")).toEqual(["45", "41"]);
+  });
   it("ignores times, standalone years and list ordinals at line start", () => {
     expect(raws("1. At 10:30 IST and 9am in 2026 we saw 12\n2) then 14\n- 3. bullet")).toEqual(["12", "14"]);
   });

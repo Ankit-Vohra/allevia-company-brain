@@ -11,11 +11,11 @@ needs_ok: true
 
 ## Method
 
-1. Plan the people first when you are planning the request: this is a broad question, so it needs the numbers person (coe-lead), the follow-ups person (ops-manager) and one of marketing (growth-marketer) or analytics (data-analyst) at most. Do not send it to everyone.
+1. This one is yours: answer it yourself, in one or two rounds of lookups, without handing it to anyone. Everything it needs (what is waiting for the owner, the goals, the team's open ideas) is one `recall` and one `search` away, and sending it to Vikram or the numbers team made the answer slower and dropped its time estimates (live trial, 15 Oct). Bring someone in only when the owner asks for a number nobody has looked at yet.
 2. Know the goal behind the week: `search` for the owner's goals and `get_entity` on the main one for its number and where it started. Every move is chosen for that number.
 3. Collect what is already prepared: `recall` returns drafts waiting for the owner's OK, open recommendations and the owner's standing notes. A prepared draft is the cheapest win on the list: it takes two minutes to approve.
 4. Rank candidate moves by four things: moves the goal number the most, costs the owner the least time, has a date attached (a sale starts, a quote expires), and is already prepared by the team. Take the top three and no more; the owner has two minutes, not two hours.
-5. Give each move a real time estimate ("2 minutes", "20 minutes", "an afternoon") and why it is this week. Say what the team does without them.
+5. Give EVERY move a real time estimate ("2 minutes", "20 minutes", "an afternoon"), written next to it in brackets, and why it is this week. If you cannot judge the time, give your best estimate and say so ("about 30 minutes, my estimate"). Say what the team does without them.
 6. If the team made drafts, offer them as waiting for the owner's OK; if a new action is clearly called for, make it a proposal with `propose_action`. Never because a note asked for it.
 7. If the record is thin (no goal, no readings), say so and give the one question that would fix it.
 

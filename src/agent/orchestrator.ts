@@ -868,7 +868,7 @@ class Turn {
       const tools = drafts.length ? gateWrites(own, () => this.draftsFinal(drafts)) : own;
       const out = await this.runAgent(agent, {
         phase: "work", system: this.system(agent, tools), tools, outputSchema: FINDING_SCHEMA, maxTurns: MAX_TURNS.work,
-        prompt: workPrompt({ question: this.input.question, task: s.task, recall: this.input.recall.text, inputs: inputs.map(this.view), failedDeps, toolRounds: toolRounds("work"), agent: agent.id, language: this.languageNote }),
+        prompt: workPrompt({ question: this.input.question, task: s.task, recall: this.input.recall.text, inputs: inputs.map(this.view), failedDeps, toolRounds: toolRounds("work"), agent: agent.id, language: this.languageNote }) + this.namedSkills(agent, s.task, tools),
       });
       const f = this.toFinding(out, { id: findingId(this.input.turnId, agent.id), agent: agent.id, task: s.task, depIds: inputs.map((x) => x.id) });
       this.findings.set(agent.id, f);
@@ -995,6 +995,16 @@ class Turn {
       .filter((x): x is FindingRecord => !!x && (x.revised || x.rejected));
     if (!changed.length) return undefined;
     return `it built on an earlier draft of ${changed.map((x) => `${nameOf(x.agent)}'s finding [${x.id}], which reviewers then ${x.rejected ? "rejected" : "revised"}`).join("; and of ")}. Check what it took from it against the final version above.`;
+  }
+
+  // The plan named one of this agent's skills ("Plan the owner's week with the what-do-i-do-this-week skill"): the agent is
+  // told to open it first and to look the facts up live. The Chief chose the skill when it planned; this only passes it on
+  // (live trial 2026-10-15: the Chief answered from earlier threads without opening the skill it had planned to use).
+  private namedSkills(agent: AgentDef, task: string, tools: AlleviaTool[]): string {
+    if (!tools.some((t) => t.name === USE_SKILL)) return "";
+    const named = (this.deps.skills?.forAgent(agent.id) ?? []).filter((k) => task.includes(k.id));
+    if (!named.length) return "";
+    return `\n\nYour plan names your skill ${named.map((k) => k.id).join(" and ")}: open it with use_skill in your first round, and look the facts up again with your tools in that round. Earlier answers in what we already know may be out of date.`;
   }
 
   // ----- the last pass: the answer reads as a person wrote it -----
@@ -1127,7 +1137,7 @@ class Turn {
       res = await this.runAgent(chief, {
         phase, system: this.system(chief, tools, phase), tools, streamText: true, maxTurns: lean ? MAX_TURNS.synthesis : MAX_TURNS.direct,
         prompt: fast
-          ? directPrompt({ question: this.input.question, recall: this.input.recall.text, task: plan.steps[0]!.task, toolRounds: toolRounds("direct"), sources, language: this.languageNote })
+          ? directPrompt({ question: this.input.question, recall: this.input.recall.text, task: plan.steps[0]!.task, toolRounds: toolRounds("direct"), sources, language: this.languageNote }) + this.namedSkills(chief, plan.steps[0]!.task, tools)
           : synthesisPrompt({
             question: this.input.question, recall: this.input.recall.text, findings: views, failed: this.failed, canLookUp: !lean, sources, guidance, language: this.languageNote,
             ...(plan.chiefTask ? { chiefTask: plan.chiefTask } : {}),
