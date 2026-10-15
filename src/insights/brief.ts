@@ -219,7 +219,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   const date = isoDate(now);
   const id = entityId("Document", `brief ${tenant} ${date}`);
   const biz = await findBusinessId(g, tenant);
-  const [bizRow] = biz ? await g.roQuery<{ name: string }>("MATCH (b:Business {id:$id}) RETURN b.name AS name", { id: biz }) : [];
+  const [bizRow] = biz ? await g.roQuery<{ name: string }>("MATCH (b:Entity:Business {id:$id}) RETURN b.name AS name", { id: biz }) : [];
 
   let since: number;
   if (opts.since !== undefined) since = typeof opts.since === "number" ? opts.since : Date.parse(opts.since);
@@ -323,13 +323,13 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
     asOf: date,
   }, now);
   await upsertEdge(g, { from: agent, type: "PRODUCED", to: id }, now);
-  const had = await g.roQuery<{ id: string }>("MATCH (:Document {id:$id})-[m:MENTIONS]->(x:Entity) WHERE m.until IS NULL RETURN x.id AS id", { id });
+  const had = await g.roQuery<{ id: string }>("MATCH (:Entity:Document {id:$id})-[m:MENTIONS]->(x:Entity) WHERE m.until IS NULL RETURN x.id AS id", { id });
   for (const m of mentions) if (present.has(m)) await upsertEdge(g, { from: id, type: "MENTIONS", to: m }, now);
   for (const h of had) if (!mentions.includes(h.id)) await closeEdge(g, id, "MENTIONS", h.id, now, "not in this brief");
 
   // Goal status is part of the pulse: a change is written back (Goal.status is TRACKED, so the old one is a Version).
   const stored = await g.roQuery<{ id: string; name: string; status: string | null }>(
-    "MATCH (gl:Goal) WHERE gl.id IN $ids RETURN gl.id AS id, gl.name AS name, gl.status AS status", { ids: goals.map((x) => x.id) });
+    "MATCH (gl:Entity:Goal) WHERE gl.id IN $ids RETURN gl.id AS id, gl.name AS name, gl.status AS status", { ids: goals.map((x) => x.id) });
   for (const p of goals) {
     const s = stored.find((x) => x.id === p.id);
     if (s && p.status !== "no_data" && s.status !== p.status) await upsertNode(g, { type: "Goal", id: p.id, name: s.name, props: { status: p.status } }, now);

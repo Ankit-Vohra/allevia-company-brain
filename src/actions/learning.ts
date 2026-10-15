@@ -246,7 +246,8 @@ export async function activeRules(g: Read, scope: { agentId?: string; channelId?
   }));
   if (opts.brand !== false && ids.length) {
     const brand = await g.roQuery<{ id: string; text: string | null; name: string | null; specific: boolean }>(
-      `MATCH (r:BrandRule)-[a:APPLIES_TO]->(t:Entity) WHERE a.until IS NULL AND t.id IN $ids AND coalesce(r.status, 'active') = 'active'
+      `MATCH (t:Entity) WHERE t.id IN $ids WITH t
+       MATCH (r:BrandRule)-[a:APPLIES_TO]->(t) WHERE a.until IS NULL AND coalesce(r.status, 'active') = 'active'
        RETURN r.id AS id, r.text AS text, r.name AS name, max(CASE WHEN t.id = $biz THEN 0 ELSE 1 END) = 1 AS specific
        ORDER BY specific DESC, id LIMIT 8`, { ids, biz: scope.businessId ?? "" });
     for (const r of brand) out.push({ id: r.id, kind: "brand", text: r.text ?? r.name ?? r.id, op: "instruction", confidence: 1, appliedCount: 0 });
@@ -323,7 +324,7 @@ export async function learnFromEdit(g: GraphHandle, input: LearnInput, deps: Lea
   const out: LearnedRule[] = [];
   for (const s of specs) {
     const [old] = await g.roQuery<{ confidence: number | null; status: string | null; n: number | null; applied: number | null }>(
-      "MATCH (r:Rule {id:$id}) RETURN r.confidence AS confidence, r.status AS status, r.learnedCount AS n, r.appliedCount AS applied", { id: s.id });
+      "MATCH (r:Entity:Rule {id:$id}) RETURN r.confidence AS confidence, r.status AS status, r.learnedCount AS n, r.appliedCount AS applied", { id: s.id });
     const confidence = old ? Math.min(0.95, Math.round(((old.confidence ?? s.confidence) + 0.1) * 100) / 100) : s.confidence;
     await upsertNode(g, {
       type: "Rule", id: s.id, name: s.text,

@@ -27,16 +27,17 @@ interface InstructionRow { agent: string; id: string; text: string | null; at: n
 // crashed on OPTIONAL MATCH + collect after a WITH … WHERE aggregation, so this keeps to simple patterns.
 async function readInstructions(g: GraphHandle): Promise<InstructionRow[]> {
   const rows = await g.roQuery<InstructionRow>(
-    `MATCH (m:Memory)-[r:ABOUT]->(a:Agent)
-     WHERE a.id IN $ids AND r.until IS NULL AND m.kind = 'instruction' AND coalesce(m.status, 'active') = 'active'
+    `MATCH (a:Entity:Agent) WHERE a.id IN $ids WITH a
+     MATCH (m:Memory)-[r:ABOUT]->(a)
+     WHERE r.until IS NULL AND m.kind = 'instruction' AND coalesce(m.status, 'active') = 'active'
      RETURN a.id AS agent, m.id AS id, coalesce(m.text, m.summary, m.name) AS text, m.at AS at, m.channel AS channel, m.channelName AS channelName`,
     { ids: AGENTS.map((a) => agentNodeId(a.id)) });
   if (!rows.length) return [];
   const ids = [...new Set(rows.map((r) => r.id))];
   const [superseded, channels] = await Promise.all([
-    g.roQuery<{ id: string }>("UNWIND $ids AS id MATCH (:Memory)-[s:SUPERSEDES]->(m:Memory {id:id}) WHERE s.until IS NULL RETURN DISTINCT m.id AS id", { ids }),
+    g.roQuery<{ id: string }>("UNWIND $ids AS id MATCH (:Memory)-[s:SUPERSEDES]->(m:Entity:Memory {id:id}) WHERE s.until IS NULL RETURN DISTINCT m.id AS id", { ids }),
     g.roQuery<{ id: string; ch: string; name: string | null }>(
-      "UNWIND $ids AS id MATCH (m:Memory {id:id})-[r:ABOUT]->(c:Channel) WHERE r.until IS NULL RETURN m.id AS id, c.id AS ch, c.name AS name ORDER BY ch", { ids }),
+      "UNWIND $ids AS id MATCH (m:Entity:Memory {id:id})-[r:ABOUT]->(c:Channel) WHERE r.until IS NULL RETURN m.id AS id, c.id AS ch, c.name AS name ORDER BY ch", { ids }),
   ]);
   const gone = new Set(superseded.map((s) => s.id));
   const chOf = new Map<string, { id: string; name: string }>();
@@ -55,7 +56,7 @@ const channelOf = (r: InstructionRow): { id: string; name: string } | undefined 
 export async function listAgentsWithSettings(g: GraphHandle): Promise<AgentSettings[]> {
   const [rows, notes] = await Promise.all([
     g.roQuery<{ id: string; enabled: boolean | null; mode: string | null; autonomy: number | null; note: string | null }>(
-      "UNWIND $ids AS id MATCH (a:Agent {id:id}) RETURN a.id AS id, a.enabled AS enabled, a.mode AS mode, a.autonomy AS autonomy, a.statusNote AS note",
+      "UNWIND $ids AS id MATCH (a:Entity:Agent {id:id}) RETURN a.id AS id, a.enabled AS enabled, a.mode AS mode, a.autonomy AS autonomy, a.statusNote AS note",
       { ids: AGENTS.map((a) => agentNodeId(a.id)) }),
     readInstructions(g),
   ]);
@@ -117,7 +118,7 @@ export async function setAgentSettings(g: GraphHandle, agentId: string, change: 
   const now = opts.now ?? Date.now();
   const id = agentNodeId(agentId);
   let [row] = await g.roQuery<{ enabled: boolean | null; mode: string | null; autonomy: number | null }>(
-    "MATCH (a:Agent {id:$id}) RETURN a.enabled AS enabled, a.mode AS mode, a.autonomy AS autonomy", { id });
+    "MATCH (a:Entity:Agent {id:$id}) RETURN a.enabled AS enabled, a.mode AS mode, a.autonomy AS autonomy", { id });
   if (!row) {
     await ensureRoster(g, {}, now);
     row = { enabled: null, mode: null, autonomy: null };

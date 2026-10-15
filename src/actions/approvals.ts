@@ -79,7 +79,7 @@ interface Row { p: Record<string, unknown>; rec: string | null; recBy: string | 
 
 async function readRow(g: Read, id: string): Promise<Row | null> {
   const [r] = await g.roQuery<Row>(
-    `MATCH (a:Approval {id:$id})
+    `MATCH (a:Entity:Approval {id:$id})
      OPTIONAL MATCH (rec:Recommendation)-[pp:PROPOSES]->(a) WHERE pp.until IS NULL
      OPTIONAL MATCH (ag:Agent)-[pr:PRODUCED]->(rec) WHERE pr.until IS NULL
      OPTIONAL MATCH (a)-[ri:RESULTED_IN]->(act:Action) WHERE ri.until IS NULL
@@ -152,7 +152,7 @@ export async function decideApproval(g: GraphHandle, input: DecideInput, deps: D
   // Claim the card. Only the first decision gets a row back; a second one (or a racing one) sees it decided.
   const token = randomBytes(8).toString("hex");
   const claimed = await g.query<{ mine: boolean }>(
-    "MATCH (a:Approval {id:$id}) WHERE a.decisionToken IS NULL AND a.decidedAt IS NULL SET a.decisionToken = $token RETURN a.decisionToken = $token AS mine",
+    "MATCH (a:Entity:Approval {id:$id}) WHERE a.decisionToken IS NULL AND a.decidedAt IS NULL SET a.decisionToken = $token RETURN a.decisionToken = $token AS mine",
     { id: input.approvalId, token });
   if (!claimed[0]?.mine) {
     const action = before.actionId ? await actionOf(g, before.actionId) : null;
@@ -163,7 +163,7 @@ export async function decideApproval(g: GraphHandle, input: DecideInput, deps: D
     return await decideClaimed(g, input, deps, row, before, now);
   } catch (e) {
     // Nothing decided yet (the first write failed): release the card so the owner can try again.
-    await g.query("MATCH (a:Approval {id:$id}) WHERE a.decisionToken = $token AND a.decidedAt IS NULL SET a.decisionToken = null",
+    await g.query("MATCH (a:Entity:Approval {id:$id}) WHERE a.decisionToken = $token AND a.decidedAt IS NULL SET a.decisionToken = null",
       { id: input.approvalId, token }).catch(() => undefined);
     throw e;
   }
@@ -190,7 +190,7 @@ async function decideClaimed(g: GraphHandle, input: DecideInput, deps: DecideDep
   }, now);
   await upsertEdge(g, { from: input.approvalId, type: input.decision === "approve" ? "APPROVED_BY" : "REJECTED_BY", to: actor }, now);
   if (before.recommendationId) {
-    const [rec] = await g.roQuery<{ name: string }>("MATCH (r:Recommendation {id:$id}) RETURN r.name AS name", { id: before.recommendationId });
+    const [rec] = await g.roQuery<{ name: string }>("MATCH (r:Entity:Recommendation {id:$id}) RETURN r.name AS name", { id: before.recommendationId });
     if (rec) await upsertNode(g, { type: "Recommendation", id: before.recommendationId, name: rec.name, props: { status: input.decision === "approve" ? "approved" : "dismissed" } }, now);
   }
 
@@ -217,7 +217,7 @@ async function decideClaimed(g: GraphHandle, input: DecideInput, deps: DecideDep
 }
 
 async function actionOf(g: Read, id: string): Promise<ActionView | null> {
-  const [a] = await g.roQuery<{ p: Record<string, unknown> }>("MATCH (a:Action {id:$id}) RETURN properties(a) AS p", { id });
+  const [a] = await g.roQuery<{ p: Record<string, unknown> }>("MATCH (a:Entity:Action {id:$id}) RETURN properties(a) AS p", { id });
   if (!a) return null;
   const p = a.p;
   return {
@@ -228,7 +228,7 @@ async function actionOf(g: Read, id: string): Promise<ActionView | null> {
 
 async function defaultActor(g: Read): Promise<string> {
   const [p] = await g.roQuery<{ id: string }>(
-    "MATCH (p:Person) WHERE p.id = 'person:founder' OR p.role IN ['founder', 'owner'] RETURN p.id AS id ORDER BY CASE WHEN p.id = 'person:founder' THEN 0 ELSE 1 END, id LIMIT 1");
+    "MATCH (p:Entity:Person) WHERE p.id = 'person:founder' OR p.role IN ['founder', 'owner'] RETURN p.id AS id ORDER BY CASE WHEN p.id = 'person:founder' THEN 0 ELSE 1 END, id LIMIT 1");
   return p?.id ?? "person:owner";
 }
 

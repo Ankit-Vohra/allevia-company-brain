@@ -258,7 +258,7 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
       for (const a of old) if (kinds.has(a.kind) && !current.has(a.id)) stats.edgesClosed += await retrying(() => closeEdge(g, businessId, "OWNS", a.id, now(), "no longer on the website"));
       if (voice) {
         const rules = await retrying(() => g.query<{ id: string }>(
-          "MATCH (r:BrandRule {origin:'website'})-[x:APPLIES_TO]->(:Entity {id:$b}) WHERE x.until IS NULL RETURN r.id AS id", { b: businessId }));
+          "MATCH (b:Entity {id:$b}) WITH b MATCH (r:BrandRule {origin:'website'})-[x:APPLIES_TO]->(b) WHERE x.until IS NULL RETURN r.id AS id", { b: businessId }));
         for (const r of rules) if (!current.has(r.id)) stats.edgesClosed += await retrying(() => closeEdge(g, r.id, "APPLIES_TO", businessId, now(), "no longer how the website reads"));
       }
       log(`[onboard] brand: ${kit.palette.map((c) => `${c.hex} ${c.role}`).join(", ")}; fonts ${kit.fonts.map((f) => f.family).join(", ")}; logo ${kit.logo ? kit.logo.source : "none"}`);

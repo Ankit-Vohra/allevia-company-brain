@@ -69,7 +69,7 @@ interface Existing { status: string | null; whyTemplate: string | null; summary:
 
 async function readExisting(g: GraphHandle, recId: string): Promise<Existing | null> {
   const [r] = await g.roQuery<Existing>(
-    `MATCH (r:Recommendation {id:$id})
+    `MATCH (r:Entity:Recommendation {id:$id})
      OPTIONAL MATCH (r)-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL
      WITH r, a ORDER BY coalesce(a.createdAt, 0) DESC, a.id
      RETURN r.status AS status, r.whyTemplate AS whyTemplate, r.summary AS summary,
@@ -103,7 +103,7 @@ export async function writeRecommendation(g: GraphHandle, c: Candidate, opts: Wr
   // Evidence: the ids that exist now; an edge to evidence that no longer backs the finding is closed (kept as history).
   const evidence = [...(await existingIds(g, c.evidence))].sort((a, b) => c.evidence.indexOf(a) - c.evidence.indexOf(b));
   const had = await g.roQuery<{ id: string }>(
-    "MATCH (:Recommendation {id:$id})-[e:EVIDENCED_BY]->(x:Entity) WHERE e.until IS NULL RETURN x.id AS id", { id: recId });
+    "MATCH (:Entity:Recommendation {id:$id})-[e:EVIDENCED_BY]->(x:Entity) WHERE e.until IS NULL RETURN x.id AS id", { id: recId });
   for (const to of evidence) await upsertEdge(g, { from: recId, type: "EVIDENCED_BY", to, asOf }, now);
   for (const h of had) if (!evidence.includes(h.id)) await closeEdge(g, recId, "EVIDENCED_BY", h.id, now, "no longer evidence");
 
@@ -125,7 +125,7 @@ export async function writeRecommendation(g: GraphHandle, c: Candidate, opts: Wr
   const decided = old?.approvals.find((a) => a.status !== "pending");
   if (decided && !pending) return { ...out, approvalId: decided.id, approvalCreated: false };
   const approvalId = pending?.id ?? insightApprovalId(c.key);
-  const [card] = await g.roQuery<{ name: string }>("MATCH (a:Approval {id:$id}) RETURN a.name AS name", { id: approvalId });
+  const [card] = await g.roQuery<{ name: string }>("MATCH (a:Entity:Approval {id:$id}) RETURN a.name AS name", { id: approvalId });
   await upsertNode(g, {
     type: "Approval", id: approvalId, name: card?.name ?? `${action.kind}: ${payload.title}`,
     props: {

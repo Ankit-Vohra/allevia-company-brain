@@ -197,7 +197,7 @@ export async function assessPhoto(
 }
 
 export async function recordAssessment(g: GraphHandle, assetId: string, a: PhotoAssessment, now: number): Promise<void> {
-  const [row] = await g.roQuery<{ name: string }>("MATCH (x:Asset {id:$id}) RETURN x.name AS name", { id: assetId });
+  const [row] = await g.roQuery<{ name: string }>("MATCH (x:Entity:Asset {id:$id}) RETURN x.name AS name", { id: assetId });
   await upsertNode(g, {
     type: "Asset", id: assetId, name: row?.name ?? assetId,
     props: { assessment: JSON.stringify(a), verdict: a.verdict, subjectKind: a.subjectKind, subject: a.subject },

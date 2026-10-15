@@ -57,7 +57,7 @@ const toMs = (v: unknown): number | null => {
 export async function findBusiness(g: GraphHandle, given?: string): Promise<string | null> {
   const own = given ?? (g.name.startsWith("allevia_") ? tenantBusinessId(g.name.slice("allevia_".length)) : undefined);
   if (own) {
-    const rows = await g.roQuery<{ id: string }>("MATCH (b:Business {id:$id}) RETURN b.id AS id", { id: own });
+    const rows = await g.roQuery<{ id: string }>("MATCH (b:Entity:Business {id:$id}) RETURN b.id AS id", { id: own });
     if (rows[0]) return rows[0].id;
     if (given) return null;
   }
@@ -83,7 +83,7 @@ async function readFacts(g: GraphHandle, businessId?: string): Promise<LadderFac
        RETURN metric, subject, simulated, reported, src, max(asOf) AS newest`),
     // separate plain counts (FalkorDB has crashed on long OPTIONAL MATCH … WITH chains)
     n("MATCH (:Page)-[f:FAILS|PASSES]->(:Rule) WHERE f.until IS NULL RETURN count(f) AS c"),
-    n("MATCH (:Page)-[r:PART_OF]->(:Channel {id:'channel:website'}) WHERE r.until IS NULL RETURN count(r) AS c"),
+    n("MATCH (:Page)-[r:PART_OF]->(:Entity:Channel {id:'channel:website'}) WHERE r.until IS NULL RETURN count(r) AS c"),
     n("MATCH (b:BrandAsset) RETURN count(b) AS c"),
     n("MATCH (a:Asset) WHERE a.kind = 'original' RETURN count(a) AS c"),
     g.roQuery<{ id: string }>(
@@ -92,7 +92,7 @@ async function readFacts(g: GraphHandle, businessId?: string): Promise<LadderFac
   ]);
   const srcIds = [...new Set(obs.map((o) => o.src).filter((s): s is string => !!s))];
   const docs = srcIds.length ? await g.roQuery<{ id: string; kind: string | null }>(
-    "UNWIND $ids AS id MATCH (d:Document {id:id}) RETURN d.id AS id, d.kind AS kind", { ids: srcIds }) : [];
+    "UNWIND $ids AS id MATCH (d:Entity:Document {id:id}) RETURN d.id AS id, d.kind AS kind", { ids: srcIds }) : [];
   return {
     businessId: biz,
     sources: new Map(src.map((s) => [s.id, {

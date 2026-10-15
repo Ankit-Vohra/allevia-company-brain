@@ -4,6 +4,7 @@
 import { describe, it, expect } from "vitest";
 import { blankLiterals, nanRisks, unsafeSorts } from "../../src/graph/safety.js";
 import { readSource, sourceFiles, stringLiterals } from "../helpers/ts-strings.js";
+import { idAnchorsWithoutEntity, unguardedEdgeAggregates } from "../helpers/cypher-lint.js";
 
 // Strings that mention ORDER BY but are not queries (prompts, error text). Keep this empty unless one really is not.
 const NOT_CYPHER = new Set<string>([]);
@@ -12,6 +13,28 @@ const NOT_CYPHER_TEXT = [/^Read-only Cypher, only when no other tool fits/];
 const SKIP_FILES = new Set(["src/graph/safety.ts"]); // the analyzer's own messages and examples
 
 interface Found { where: string; text: string }
+
+// Files another branch is rewriting at the same time (the agent, the ingest pipeline and the librarian). Their id anchors
+// and edge aggregates are brought in line by the follow-up that lands with those branches; until then they are only held
+// to the count below, which can fall but not rise. Delete DEFERRED (and the ratchets) once they are clean.
+const DEFERRED = [/^src\/agent\//, /^src\/ingest\/pipeline\.ts:/, /^src\/ingest\/librarian\.ts:/];
+const DEFERRED_ANCHORS_MAX = 15;
+const DEFERRED_EDGE_AGGREGATES_MAX = 9;
+
+// Every query-looking literal, not only the ones that sort.
+function allCypher(): Found[] {
+  const out: Found[] = [];
+  for (const file of sourceFiles("src")) {
+    if (SKIP_FILES.has(file)) continue;
+    for (const lit of stringLiterals(readSource(file))) {
+      if (!/(?<![\w.])(MATCH|MERGE)\b/.test(lit.text) || !/\b(RETURN|SET|DELETE|CREATE|WITH|YIELD)\b/.test(lit.text)) continue;
+      if (NOT_CYPHER_TEXT.some((re) => re.test(lit.text))) continue;
+      out.push({ where: `${file}:${lit.line}`, text: lit.text });
+    }
+  }
+  return out;
+}
+const deferred = (f: Found): boolean => DEFERRED.some((re) => re.test(f.where));
 
 function cypherWithSort(): Found[] {
   const out: Found[] = [];
@@ -57,6 +80,30 @@ describe("every Cypher string in src/", () => {
       }
     }
     expect(bad).toEqual([]);
+  });
+
+  describe("index and parallel-edge rules (tests/helpers/cypher-lint.ts)", () => {
+    const all = allCypher();
+
+    it("was found (the scan is not silently empty)", () => {
+      expect(all.length).toBeGreaterThan(250);
+    });
+
+    it("looks every node up by id with the Entity label, so the Entity.id index is used and not a label scan", () => {
+      const bad = all.filter((f) => !deferred(f)).flatMap((f) => idAnchorsWithoutEntity(f.text).map((b) => `${f.where}  ${b}`));
+      expect(bad).toEqual([]);
+    });
+
+    it("binds and uses the edge under every count, sum and collect, so parallel edges are not collapsed (FalkorDB 6.0.2)", () => {
+      const bad = all.filter((f) => !deferred(f)).flatMap((f) => unguardedEdgeAggregates(f.text).map((b) => `${f.where}  ${b}`));
+      expect(bad).toEqual([]);
+    });
+
+    it("keeps the deferred files from getting worse", () => {
+      const d = all.filter(deferred);
+      expect(d.filter((f) => idAnchorsWithoutEntity(f.text).length).length).toBeLessThanOrEqual(DEFERRED_ANCHORS_MAX);
+      expect(d.filter((f) => unguardedEdgeAggregates(f.text).length).length).toBeLessThanOrEqual(DEFERRED_EDGE_AGGREGATES_MAX);
+    });
   });
 
   it("never skips the GraphHandle guard (the `unchecked` option is for crash experiments on a throwaway server)", () => {

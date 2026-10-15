@@ -31,7 +31,7 @@ const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim
 
 export async function loadStudioContext(g: GraphHandle, businessId: string, note = ""): Promise<StudioContext> {
   const [biz] = await g.roQuery<Record<string, unknown>>(
-    "MATCH (b:Business {id:$id}) RETURN b.name AS name, b.industry AS industry, b.city AS city, b.country AS country, b.designStyle AS designStyle",
+    "MATCH (b:Entity:Business {id:$id}) RETURN b.name AS name, b.industry AS industry, b.city AS city, b.country AS country, b.designStyle AS designStyle",
     { id: businessId });
   const business: StudioContext["business"] = { id: businessId, name: str(biz?.name) ?? businessId };
   for (const k of ["industry", "city", "country", "designStyle"] as const) { const v = str(biz?.[k]); if (v) business[k] = v; }
@@ -62,7 +62,7 @@ export async function loadStudioContext(g: GraphHandle, businessId: string, note
   ];
 
   const people = await g.roQuery<{ id: string; name: string | null; summary: string | null; role: string | null }>(
-    "MATCH (p:Person)-[m:MEMBER_OF]->(:Business {id:$id}) WHERE m.until IS NULL RETURN p.id AS id, p.name AS name, p.summary AS summary, p.role AS role ORDER BY p.id LIMIT 50",
+    "MATCH (p:Person)-[m:MEMBER_OF]->(:Entity:Business {id:$id}) WHERE m.until IS NULL RETURN p.id AS id, p.name AS name, p.summary AS summary, p.role AS role ORDER BY p.id LIMIT 50",
     { id: businessId });
   const o = people.find((p) => OWNER_WORDS.test(`${p.role ?? ""} ${p.summary ?? ""}`));
   const owner = o ? { id: o.id, name: o.name ?? o.id } : null;

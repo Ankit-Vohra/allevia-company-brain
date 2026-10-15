@@ -10,7 +10,7 @@
 // coverageState ("…not indexed", "Excluded…"), statusCode (>= 400).
 import type { ActionKind } from "../../shared/contracts.js";
 import type { GraphHandle } from "../graph/client.js";
-import type { EntityType } from "../graph/schema.js";
+import { typeOfLabels, type EntityType } from "../graph/schema.js";
 import { DAY_MS, addDays, cap1, clip, dayMs, dayOf, fmt, humanise, list, median, money, pageLabel, pct, plural, round, shortDate, times } from "./text.js";
 
 export type Area = "seo" | "content" | "funnel" | "ads" | "knowledge" | "tech";
@@ -105,7 +105,7 @@ const first = (m: Map<string, Latest> | undefined, keys: readonly string[]): Lat
   return undefined;
 };
 
-const typeOf = (labels: string[]): string => labels.find((l) => l !== "Entity") ?? "Entity";
+const typeOf = (labels: string[]): string => typeOfLabels(labels) ?? "Entity"; // not labels.find: Searchable can come before the type
 const uniq = <T>(xs: T[]): T[] => [...new Set(xs)];
 const cap = (x: number, hi = 1): number => Math.max(0, Math.min(hi, x));
 
@@ -181,7 +181,7 @@ const seoLowCtr: Detector = {
     const ranks = new Map<string, { page: string; path: string | null; url: string | null }>();
     if (queries.length) {
       const rows = await ro<{ q: string; page: string; path: string | null; url: string | null }>(g,
-        `MATCH (p:Page)-[r:RANKS_FOR]->(q:Query) WHERE q.id IN $ids AND r.until IS NULL
+        `MATCH (p:Page)-[r:RANKS_FOR]->(q:Entity:Query) WHERE q.id IN $ids AND r.until IS NULL
          RETURN q.id AS q, p.id AS page, p.path AS path, p.url AS url ORDER BY q, coalesce(r.position, 1000), page`, { ids: queries });
       for (const r of rows) if (!ranks.has(r.q)) ranks.set(r.q, r);
     }

@@ -104,7 +104,7 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
     const { reg, g } = await h.tenantOf(c);
     const id = c.req.param("id");
     const [row] = await g.roQuery<{ key: string | null; mime: string | null }>(
-      "MATCH (a:Asset {id:$id}) RETURN a.storageKey AS key, a.mime AS mime LIMIT 1", { id });
+      "MATCH (a:Entity:Asset {id:$id}) RETURN a.storageKey AS key, a.mime AS mime LIMIT 1", { id });
     if (!row?.key) h.fail(404, "No such asset.");
     const w = await wiring();
     let bytes = w.deps.store.get(reg.slug, row!.key!);
@@ -124,7 +124,7 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
     const approvalId = [...run.events].reverse().find((e): e is Extract<AgentEvent, { type: "proposal" }> => e.type === "proposal")?.approvalId;
     const card = approvalId ? await readApproval(g, approvalId) : null;
     const [content] = approvalId
-      ? await g.roQuery<{ id: string }>("MATCH (:Approval {id:$id})-[:RESULTED_IN]->(:Action)-[:RESULTED_IN]->(c:Content) RETURN c.id AS id LIMIT 1", { id: approvalId })
+      ? await g.roQuery<{ id: string }>("MATCH (:Entity:Approval {id:$id})-[:RESULTED_IN]->(:Action)-[:RESULTED_IN]->(c:Content) RETURN c.id AS id LIMIT 1", { id: approvalId })
       : [];
     return c.json({ run: { ...run, approval: card ? { id: card.id, status: card.status, result: card.result ?? null, contentId: content?.id ?? null } : null } });
   });
@@ -171,7 +171,7 @@ export function studioDecisionHook(openGraph: (slug: string) => Promise<GraphHan
       const card = await studioCard(g, approval.id);
       // the executor may already have written the draft; the Studio's part is missing until it USES_ASSET a variant
       const [done] = card ? await g.roQuery<{ c: number }>(
-        "MATCH (:Approval {id:$id})-[:RESULTED_IN]->(:Action)-[:RESULTED_IN]->(:Content)-[u:USES_ASSET]->(:Asset) RETURN count(u) AS c", { id: approval.id }) : [];
+        "MATCH (:Entity:Approval {id:$id})-[r1:RESULTED_IN]->(:Action)-[r2:RESULTED_IN]->(:Content)-[u:USES_ASSET]->(:Asset) WHERE ID(r1) >= 0 AND ID(r2) >= 0 RETURN count(u) AS c", { id: approval.id }) : [];
       if (card && !done?.c) {
         const v = card.payload.studio.variants.find((x) => x.id === card.payload.studio.recommended);
         if (v?.badge === "unchanged") {

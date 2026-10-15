@@ -17,7 +17,10 @@ services:
     restart: unless-stopped
     environment:
       REDIS_ARGS: "--appendonly yes --appendfsync everysec"
-      FALKORDB_ARGS: "THREAD_COUNT 4 MAX_QUEUED_QUERIES 500"
+      # Module load arguments (they survive a restart; GRAPH.CONFIG SET does not). The numbers and why are in
+      # src/graph/server-config.ts, which tests/graph/server-config.test.ts holds this line to; `npm run cli -- db:check`
+      # compares a running server with them. A running server needs `docker compose up -d falkordb` to pick them up.
+      FALKORDB_ARGS: "THREAD_COUNT 4 MAX_QUEUED_QUERIES 500 TIMEOUT_DEFAULT 15000 TIMEOUT_MAX 120000 QUERY_MEM_CAPACITY 536870912 CACHE_SIZE 256 RESULTSET_SIZE 10000"
     volumes:
       - falkordb-data:/var/lib/falkordb/data
     ports:

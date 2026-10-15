@@ -84,7 +84,7 @@ const agentName = (rosterId: string | undefined) => (rosterId ? agentById(roster
 async function firstEvidence(g: GraphHandle, recId: string | undefined): Promise<string | undefined> {
   if (!recId) return undefined;
   const [r] = await g.roQuery<{ id: string }>(
-    "MATCH (:Recommendation {id:$id})-[e:EVIDENCED_BY]->(x:Entity) WHERE e.until IS NULL RETURN x.id AS id ORDER BY e.since, id LIMIT 1", { id: recId });
+    "MATCH (:Entity:Recommendation {id:$id})-[e:EVIDENCED_BY]->(x:Entity) WHERE e.until IS NULL RETURN x.id AS id ORDER BY e.since, id LIMIT 1", { id: recId });
   return r?.id;
 }
 
@@ -135,7 +135,7 @@ async function contentDraft(g: GraphHandle, input: ExecInput, deps: ExecutorDeps
   const agentId = await ensureAgentNode(g, agent, input.now);
   const format = str(p.format) ?? "post";
   const channelId = str(p.channelId) && (await existingIds(g, [str(p.channelId)!])).has(str(p.channelId)!) ? str(p.channelId) : undefined;
-  const [ch] = channelId ? await g.roQuery<{ name: string }>("MATCH (c:Channel {id:$id}) RETURN c.name AS name", { id: channelId }) : [];
+  const [ch] = channelId ? await g.roQuery<{ name: string }>("MATCH (c:Entity:Channel {id:$id}) RETURN c.name AS name", { id: channelId }) : [];
   const biz = await findBusinessId(g, deps.tenant);
   const rules = await activeRules(g, { agentId, channelId, businessId: biz });
   const first = applyRules({ title: p.title, body: p.body }, rules);
@@ -169,7 +169,7 @@ async function contentDraft(g: GraphHandle, input: ExecInput, deps: ExecutorDeps
   const rulesApplied = await markRulesApplied(g, contentId, used, input.now);
   if (input.recommendationId) {
     const goals = await g.roQuery<{ id: string }>(
-      "MATCH (:Recommendation {id:$id})-[a:ADVANCES]->(gl:Goal) WHERE a.until IS NULL RETURN gl.id AS id", { id: input.recommendationId });
+      "MATCH (:Entity:Recommendation {id:$id})-[a:ADVANCES]->(gl:Goal) WHERE a.until IS NULL RETURN gl.id AS id", { id: input.recommendationId });
     for (const gl of goals) await upsertEdge(g, { from: contentId, type: "ADVANCES", to: gl.id }, input.now);
   }
   const learned = rulesApplied.filter((id) => rules.some((r) => r.id === id && r.kind === "learned") || preApplied.includes(id));
@@ -185,7 +185,7 @@ async function pauseAd(g: GraphHandle, input: ExecInput): Promise<Outcome> {
   const id = str(input.payload.campaignId) ?? str(input.payload.targetId);
   if (!id) return { status: "failed", result: "No campaign id in the payload.", produced: [] };
   const [c] = await g.roQuery<{ name: string; status: string | null; simulated: boolean | null }>(
-    "MATCH (c:Campaign {id:$id}) RETURN c.name AS name, c.status AS status, c.simulated AS simulated", { id });
+    "MATCH (c:Entity:Campaign {id:$id}) RETURN c.name AS name, c.status AS status, c.simulated AS simulated", { id });
   if (!c) return { status: "failed", result: `Campaign ${id} is not in the graph.`, produced: [] };
   if (c.simulated !== true) {
     return { status: "skipped", result: `"${c.name}" is a real campaign and no ad account is connected; pause it in the ads manager.`, produced: [], affects: [id] };
@@ -228,7 +228,7 @@ async function discordPost(input: ExecInput, deps: ExecutorDeps): Promise<Outcom
 
 async function readAction(g: GraphHandle, id: string): Promise<ActionView | null> {
   const [a] = await g.roQuery<{ p: Record<string, unknown>; affects: string[]; produced: string[] }>(
-    `MATCH (a:Action {id:$id})
+    `MATCH (a:Entity:Action {id:$id})
      OPTIONAL MATCH (a)-[f:AFFECTS]->(t:Entity) WHERE f.until IS NULL
      WITH a, collect(DISTINCT t.id) AS affects
      OPTIONAL MATCH (a)-[r:RESULTED_IN]->(x:Entity) WHERE r.until IS NULL

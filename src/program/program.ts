@@ -43,7 +43,7 @@ export interface ProgramRow {
 // The program the business is currently ENROLLED_IN, or null.
 export async function currentProgram(g: Read, businessId: string): Promise<ProgramRow | null> {
   const [r] = await g.roQuery<{ id: string; kind: string | null; status: string | null; startAt: number | null; startDate: string | null; endDate: string | null; gs: string | null; tk: string | null }>(
-    `MATCH (:Business {id:$b})-[e:ENROLLED_IN]->(p:Program) WHERE e.until IS NULL
+    `MATCH (:Entity:Business {id:$b})-[e:ENROLLED_IN]->(p:Program) WHERE e.until IS NULL
      RETURN p.id AS id, p.kind AS kind, p.status AS status, p.startAt AS startAt, p.startDate AS startDate, p.endDate AS endDate,
             p.guaranteeState AS gs, p.templateKey AS tk LIMIT 1`, { b: businessId });
   if (!r || typeof r.startAt !== "number") return null;
@@ -74,7 +74,8 @@ const numOrNull = (v: unknown): number | null => (typeof v === "number" && Numbe
 // The program's goals, primary first.
 export async function programGoals(g: Read, program: string): Promise<GoalRow[]> {
   const rows = await g.roQuery<{ p: Record<string, unknown>; owner: string | null }>(
-    `MATCH (gl:Goal)-[pp:PART_OF]->(:Program {id:$p}) WHERE pp.until IS NULL AND NOT coalesce(gl.status, '') IN ['retired', 'superseded']
+    `MATCH (pr:Entity:Program {id:$p}) WITH pr
+     MATCH (gl:Goal)-[pp:PART_OF]->(pr) WHERE pp.until IS NULL AND NOT coalesce(gl.status, '') IN ['retired', 'superseded']
      OPTIONAL MATCH (a:Agent)-[o:OWNS]->(gl) WHERE o.until IS NULL
      WITH gl, collect(a.rosterId)[0] AS owner
      RETURN properties(gl) AS p, owner ORDER BY coalesce(gl.priority, 99), gl.id`, { p: program });
@@ -210,7 +211,7 @@ export async function baselinesWrite(g: GraphHandle, o: { goals: GoalRow[]; busi
   }
   // A source document that is not in the graph: the edge would fail; the observation's src prop still names it.
   if (docs.size) {
-    const present = new Set((await g.roQuery<{ id: string }>("UNWIND $ids AS id MATCH (d:Document {id:id}) RETURN d.id AS id", { ids: [...docs] })).map((r) => r.id));
+    const present = new Set((await g.roQuery<{ id: string }>("UNWIND $ids AS id MATCH (d:Entity:Document {id:id}) RETURN d.id AS id", { ids: [...docs] })).map((r) => r.id));
     w.edges = w.edges.filter((e) => e.type !== "SOURCED_FROM" || present.has(e.to));
   }
   return { write: w, results };
@@ -228,7 +229,7 @@ export async function measureGoals(g: GraphHandle, o: { program: string; busines
     const r = await readGoal(g, gl.sources, { businessId: o.businessId, period: gl.period, today: o.today });
     if (!r) continue;
     const input = readingObservation(gl.id, gl.metricKey, gl.unit, r);
-    const [have] = await g.roQuery<{ v: number | null }>("MATCH (x:Observation {id:$id}) RETURN x.value AS v", { id: observationId(input) });
+    const [have] = await g.roQuery<{ v: number | null }>("MATCH (x:Entity:Observation {id:$id}) RETURN x.value AS v", { id: observationId(input) });
     if (have && have.v === r.value) continue;
     obs.push(input);
     out.push(r);
@@ -246,7 +247,7 @@ export interface CheckpointRow { id: string; day: number; at: number | null; dat
 
 export async function programCheckpoints(g: Read, program: string): Promise<CheckpointRow[]> {
   return g.roQuery<CheckpointRow>(
-    `MATCH (c:Checkpoint)-[pp:PART_OF]->(:Program {id:$p}) WHERE pp.until IS NULL
+    `MATCH (c:Checkpoint)-[pp:PART_OF]->(:Entity:Program {id:$p}) WHERE pp.until IS NULL
      RETURN c.id AS id, c.day AS day, c.at AS at, c.date AS date, c.summary AS summary ORDER BY c.day, c.id`, { p: program });
 }
 
@@ -263,7 +264,7 @@ const CHECKPOINT_TEXT: Record<CheckpointDay, string> = {
 export async function checkpointWrite(g: GraphHandle, o: { program: string; day: CheckpointDay; date: string; now: number; goals: GoalRow[] }): Promise<GraphWrite> {
   const id = checkpointId(o.program, o.day);
   const w: GraphWrite = { nodes: [], edges: [], observations: [] };
-  if ((await g.roQuery<{ id: string }>("MATCH (c:Checkpoint {id:$id}) RETURN c.id AS id", { id })).length) return w;
+  if ((await g.roQuery<{ id: string }>("MATCH (c:Entity:Checkpoint {id:$id}) RETURN c.id AS id", { id })).length) return w;
   w.nodes.push({ type: "Checkpoint", id, name: `Allevia 90, day ${o.day}`, summary: CHECKPOINT_TEXT[o.day], asOf: o.date, props: { day: o.day, at: o.now, date: o.date } });
   w.edges.push({ from: id, type: "PART_OF", to: o.program });
   const m = await learningMetrics(g, o.now);
@@ -273,9 +274,10 @@ export async function checkpointWrite(g: GraphHandle, o: { program: string; day:
   w.observations.push({ ...base, metric: "allevia.deliverables_approved", value: m.deliverablesApproved, unit: "count" });
   for (const gl of o.goals) {
     const [r] = o.day === 0
-      ? await g.roQuery<{ id: string }>("MATCH (x:Observation {id:$id}) RETURN x.id AS id", { id: baselineObsId(gl.metricKey, gl.id) })
+      ? await g.roQuery<{ id: string }>("MATCH (x:Entity:Observation {id:$id}) RETURN x.id AS id", { id: baselineObsId(gl.metricKey, gl.id) })
       : await g.roQuery<{ id: string }>(
-        `MATCH (x:Observation)-[m:MEASURES]->(:Goal {id:$g}) WHERE m.until IS NULL AND coalesce(x.baseline, false) = false AND x.windowEnd <= $d
+        `MATCH (gl:Entity:Goal {id:$g}) WITH gl
+         MATCH (x:Observation)-[m:MEASURES]->(gl) WHERE m.until IS NULL AND coalesce(x.baseline, false) = false AND x.windowEnd <= $d
          RETURN x.id AS id ORDER BY x.windowEnd DESC, x.id LIMIT 1`, { g: gl.id, d: o.date });
     if (r) w.edges.push({ from: r.id, type: "MEASURES", to: id });
   }
