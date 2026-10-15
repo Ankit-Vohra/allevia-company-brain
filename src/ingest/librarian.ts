@@ -9,8 +9,9 @@
 //    memory's KNOWS_ABOUT for Allevia's own staff) are never touched, and Allevia's reserved actors get none.
 // 2. `rank` (PageRank over the SEARCHABLE types, current edges) and `community` (label propagation over MENTIONS and
 //    LINKS_TO) as node props for the UI. These are raw writes, so noteGraphWrite follows them.
-// 3. Orphans: WCC singletons among searchable knowledge (actors, the Business and the pipeline's own ingest Events left
-//    out), where authorship and KNOWS_ABOUT do not count as links: "knowledge nobody links to".
+// 3. Orphans: WCC singletons among searchable knowledge, where authorship and KNOWS_ABOUT do not count as links:
+//    "knowledge nobody links to". Actors, the Business, the pipeline's own ingest Events and anything an Observation
+//    measures or cites are left out.
 // Contradicted functional facts (a Task's owner, a superseded Decision) are closed by upsertEdge's functional rule as
 // the sources are written; the librarian adds no second mechanism for that.
 import type { GraphHandle } from "../graph/client.js";
@@ -177,8 +178,18 @@ export async function runLibrarian(g: GraphHandle, opts: LibrarianOptions = {}):
   const comps = await components(g, ["Entity"], ORPHAN_RELS, { timeoutMs });
   const size = new Map<number, number>();
   for (const c of comps) size.set(c.componentId, (size.get(c.componentId) ?? 0) + 1);
-  const orphans = comps.filter((c) => size.get(c.componentId) === 1).map((c) => c.id)
-    .filter((id) => !isIngestEvent(id) && !NOT_ORPHANS.has(typeFromId(id)!)).sort();
+  const singletons = comps.filter((c) => size.get(c.componentId) === 1).map((c) => c.id)
+    .filter((id) => !isIngestEvent(id) && !NOT_ORPHANS.has(typeFromId(id)!));
+  // Observations are not searchable, so the components above cannot see them: a snapshot whose numbers are in the
+  // graph, or a thing that is measured, is in use, not an orphan.
+  const used = new Set<string>();
+  for (let i = 0; i < singletons.length; i += MAX_PAGE) {
+    const rows = await g.roQuery<{ id: string }>(
+      "MATCH (n:Entity)<-[r:SOURCED_FROM|MEASURES]-(:Observation) WHERE n.id IN $ids AND r.until IS NULL RETURN DISTINCT n.id AS id",
+      { ids: singletons.slice(i, i + MAX_PAGE) });
+    for (const r of rows) used.add(r.id);
+  }
+  const orphans = singletons.filter((id) => !used.has(id)).sort();
   const byType: Record<string, number> = {};
   for (const id of orphans) { const t = typeFromId(id) ?? "?"; byType[t] = (byType[t] ?? 0) + 1; }
   log(`[librarian] ${orphans.length} orphans`);

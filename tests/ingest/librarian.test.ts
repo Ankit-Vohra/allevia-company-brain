@@ -27,6 +27,8 @@ const nodes: NodeInput[] = [
   { type: "Task", id: "task:t1", name: "Plan reels" },
   { type: "System", id: "system:lonely", name: "Lonely tool" },
   { type: "Event", id: "event:ingest-run-1", name: "Ingest run", props: { kind: "ingest" } },
+  // a snapshot document whose only links are the numbers it sourced: used, so not an orphan
+  { type: "Document", id: "document:snap", name: "ops snapshot" },
 ];
 
 const authored = (from: string, to: string, commits: number, firstAt: number, lastAt: number): EdgeInput =>
@@ -64,7 +66,10 @@ describe("runLibrarian (integration)", () => {
   beforeAll(async () => {
     ({ g, cleanup } = await testGraph());
     await ensureIndexes(g);
-    const s = await writeBatch(g, { nodes, edges }, NOW - 100 * DAY);
+    const s = await writeBatch(g, {
+      nodes, edges,
+      observations: [{ subject: "channel:instagram", metric: "followers", value: 10, asOf: "2026-10-14", src: "document:snap" }],
+    }, NOW - 100 * DAY);
     expect(s.errors).toEqual([]);
     // what agent memory writes for Allevia's own staff: the librarian must not touch it
     await g.query("MATCH (a:Entity {id:'agent:allevia-chief'}), (x:Entity {id:'system:gsc'}) CREATE (a)-[:KNOWS_ABOUT {weight: 5, since: 1, recordedAt: 1}]->(x)");
