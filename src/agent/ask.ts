@@ -9,6 +9,7 @@ import { openGraph, type GraphHandle } from "../graph/client.js";
 import { capabilityModes } from "../capabilities/ladder.js";
 import type { CapabilityModeInfo } from "../capabilities/modes.js";
 import { loadTeamSettings } from "../settings/team.js";
+import { loadLanguagePreference } from "./language.js";
 import { checkTurn, extractCitations } from "./checks.js";
 import { getSession, newSessionId, newTurnId, recallBrief, saveTurn, startSession } from "./memory.js";
 import { runTurn, type TurnOutcome } from "./orchestrator.js";
@@ -99,6 +100,10 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
     let team: TeamSettings | undefined;
     try { team = await loadTeamSettings(g); } catch (e) { out({ type: "error", message: `Could not read the team settings, so the whole team is on: ${message(e)}` }); }
 
+    // The business's own language setting (best-effort): absent, the answer follows the question's language.
+    let language: string | undefined;
+    try { language = await loadLanguagePreference(g); } catch { language = undefined; }
+
     outcome = await runTurn(
       { tenant: input.tenant, question, sessionId, turnId, asker, recall },
       {
@@ -106,7 +111,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
         ...(deps.model ? { model: deps.model } : {}), ...(deps.agentTimeoutMs ? { agentTimeoutMs: deps.agentTimeoutMs } : {}),
         ...(deps.embedQuery ? { embedQuery: deps.embedQuery } : {}), ...(deps.readOnly !== undefined ? { readOnly: deps.readOnly } : {}),
         ...(deps.timeZone ? { timeZone: deps.timeZone } : {}), ...(deps.signal ? { signal: deps.signal } : {}),
-        ...(capabilities ? { capabilities } : {}), ...(team ? { team } : {}),
+        ...(capabilities ? { capabilities } : {}), ...(team ? { team } : {}), ...(language ? { language } : {}),
       },
       out);
     if (deps.signal?.aborted) failure = STOPPED_MESSAGE;
