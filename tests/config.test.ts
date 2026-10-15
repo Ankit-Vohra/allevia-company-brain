@@ -38,6 +38,7 @@ describe("loadConfig", () => {
     expect(c.githubActionRepo).toBe("Ankit-Vohra/allevia");
     expect(c.publicMode).toBe(false);
     expect(c.port).toBe(8787);
+    expect(c.webBaseUrl).toBe("http://127.0.0.1:8787");
     expect(c.discord.token).toBeUndefined();
     expect(c.avsIg).toEqual({ token: undefined, userId: undefined });
   });
@@ -58,6 +59,8 @@ describe("loadConfig", () => {
       ALLEVIA_FALKORDB_URL: "redis://example:1" });
     expect(c.model).toBe("haiku");
     expect(c.port).toBe(1234);
+    expect(c.webBaseUrl).toBe("http://127.0.0.1:1234");
+    expect(loadConfig({ ALLEVIA_ENV_FILE: envFile, ALLEVIA_WEB_URL: "https://allevia.example/" }).webBaseUrl).toBe("https://allevia.example");
     expect(c.publicMode).toBe(false);
     expect(c.falkordbUrl).toBe("redis://example:1");
     expect(loadConfig({ ALLEVIA_ENV_FILE: envFile, ALLEVIA_OPS_SSH_VIA: "other-box" }).opsSsh.via).toBe("other-box");

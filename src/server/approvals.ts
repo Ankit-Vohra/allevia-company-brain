@@ -5,7 +5,8 @@
 import type { GraphHandle } from "../graph/client.js";
 import { upsertNode } from "../graph/upsert.js";
 import { serial } from "../agent/tools/common.js";
-import type { ApprovalPayload, ApprovalStatus } from "./types.js";
+import { approval as readApproval } from "./reads.js";
+import type { ApprovalDto, ApprovalPayload, ApprovalStatus } from "./types.js";
 
 export class DecisionError extends Error {
   constructor(readonly status: 404 | 409, message: string) {
@@ -35,4 +36,28 @@ export async function decideApproval(
     }, now);
     return { status, decidedAt: now, decisionMs };
   });
+}
+
+// Called after a decision is recorded (ServerDeps.onDecision: executors and the learning loop plug in here).
+export type OnDecision = (tenant: string, approval: ApprovalDto) => Promise<void> | void;
+
+// The whole decision as every surface makes it (the API's POST /api/:t/approvals/:id, Discord's Approve/Reject
+// buttons): record it, then run the onDecision hook. The hook's failure is logged, never the owner's problem: the
+// decision stands. Returns the card as it stands afterwards.
+export async function decideAndNotify(
+  g: GraphHandle, tenant: string, id: string, d: Decision,
+  o: { now?: number; onDecision?: OnDecision; log?: (line: string) => void } = {},
+): Promise<ApprovalDto> {
+  const before = await readApproval(g, id);
+  if (!before) throw new DecisionError(404, "No such approval.");
+  await decideApproval(g, id, d, before.payload, o.now ?? Date.now());
+  const after = (await readApproval(g, id))!;
+  if (o.onDecision) {
+    try {
+      await o.onDecision(tenant, after);
+    } catch (e) {
+      (o.log ?? ((l: string) => console.error(l)))(`[approvals] onDecision for ${id} failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return (await readApproval(g, id)) ?? after;
 }
