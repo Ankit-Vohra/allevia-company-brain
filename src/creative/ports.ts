@@ -10,6 +10,7 @@ import type { VisionRunner } from "../studio/vision.js";
 import type { PosterFormat } from "./compose/formats.js";
 import type { ResearchRunner } from "./research.js";
 import type { ReelVideo } from "./reel/render.js";
+import type { HtmlRenderer } from "./design/render.js";
 
 export interface ImageRequest {
   prompt: string;
@@ -67,6 +68,8 @@ export interface CreativeDeps {
   // Set by the orchestrator for each turn: credits already spent by this request, so the cap is per request.
   spent?: { credits: number };
   log?: (line: string) => void;
+  // The page renderer for posters (headless Chromium); absent: the process's shared one.
+  renderer?: HtmlRenderer;
 }
 
 // A poster with two pieces of artwork is about 3 credits and a 5 s clip about 7.5, so one request may use up to 10.

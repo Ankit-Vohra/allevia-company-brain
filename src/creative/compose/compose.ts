@@ -43,7 +43,7 @@ export interface Rect { x: number; y: number; w: number; h: number }
 
 export interface PlacedText { role: string; text: string; shown: string; box: Rect; size: number; font: string; color: string; lines: string[] }
 export interface PosterManifest {
-  format: FormatKey; layout: LayoutKey; width: number; height: number;
+  format: FormatKey; layout: string; width: number; height: number;
   texts: PlacedText[];
   logo: { kind: "file" | "wordmark"; box: Rect; plate: boolean; plateColor?: string; scale: number; sourceW: number; soft: boolean; inHeadline?: boolean };
   artwork: boolean;

@@ -40,6 +40,7 @@ export interface ComposeKit {
   notes: string[];                 // honest remarks for the owner: no logo file, a fallback font, a small logo
   logoRow: BrandAssetRow | null;
   logoBytes: Buffer | null;
+  colours: string[];               // every brand colour on record (roles first, then palette and guide swatches), for the design system
 }
 
 export interface KitDeps { store: AssetStore; tenant: string; businessId: string; fetchMissingFonts?: boolean; fetch?: BrandFetch; now: number }
@@ -105,11 +106,13 @@ export async function loadComposeKit(g: GraphHandle, businessId: string, deps: K
   if (!logoRow) notes.push("I don't have a logo file for you yet, so the poster shows your name in your brand font. Send your logo in your team's channel and I'll use it on every poster.");
   else if (logoRow.needsBetter) notes.push(`Your logo file is ${logoRow.w ? `small or soft (${logoRow.w} px wide)` : "small or soft"}: it may look a little soft on a poster. A bigger file, an SVG or a PDF logo would fix that.`);
   if (!logoBytes) logoBytes = null;
+  let fromLogoFile = false;
   // no brand colours on record but a logo file: the poster takes its colours from the logo (said so), never another brand's
   if (palette.source === "default" && logoBytes) {
     const fromLogo = await logoPalette(logoBytes).catch(() => null);
     if (fromLogo) {
       palette = fromLogo;
+      fromLogoFile = true;
       notes.push("I have no exact brand colours on record, so the poster uses the colours of your logo. Tell me your colour codes to use them instead.");
     }
   } else if (palette.source === "default") notes.push("I have no brand colours on record, so the poster uses neutral warm colours. Tell me your colour codes to use them instead.");
@@ -118,8 +121,10 @@ export async function loadComposeKit(g: GraphHandle, businessId: string, deps: K
     businessName: ctx.business.name, palette, heading, body,
     logo: logoBytes && logoRow ? { bytes: logoBytes, w: logoRow.w ?? 0, h: logoRow.h ?? 0 } : null,
   };
+  const colours = [...new Set([ctx.brand.ids.length ? ctx.brand.paper : undefined, ctx.brand.ink, ctx.brand.accent, ctx.brand.neutral, ...extra]
+    .filter((c): c is string => !!c && HEX6.test(c)).map((c) => c.toLowerCase()))];
   return {
-    brand, ctx, facts: await businessFacts(g, ctx), notes, logoRow, logoBytes,
+    brand, ctx, facts: await businessFacts(g, ctx), notes, logoRow, logoBytes, colours: colours.length && !fromLogoFile ? colours : [palette.paper, palette.dark, palette.accent],
     ids: { ...(logoRow && logoBytes ? { logo: logoRow.id } : {}), fonts: [...new Set(fontIds)], colours: ctx.brand.ids.filter((id) => /colour/.test(id)), rules: ctx.brand.ids.filter((id) => /^brand-rule:/.test(id)) },
   };
 }

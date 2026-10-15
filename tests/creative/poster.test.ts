@@ -16,6 +16,7 @@ import { AssetStore } from "../../src/studio/store.js";
 import { sha256Hex } from "../../src/studio/image.js";
 import { upsertNode } from "../../src/graph/upsert.js";
 import { testGraph } from "../helpers/graph.js";
+import { closeSharedRenderer } from "../../src/creative/design/render.js";
 import { BIZ, FakeCreativeEngine, fakeVisionFor, NOW, nishaReads, seedKit, TENANT } from "./helpers.js";
 
 describe("makePoster (integration)", () => {
@@ -34,6 +35,7 @@ describe("makePoster (integration)", () => {
     await seedKit(g, store);
   }, 60_000);
   afterAll(async () => {
+    await closeSharedRenderer();
     await cleanup();
     await closeAll();
     rmSync(dir, { recursive: true, force: true });
@@ -47,14 +49,22 @@ describe("makePoster (integration)", () => {
   });
   const one = async <T>(cypher: string, params?: Record<string, unknown>) => (await g.roQuery<T>(cypher, params))[0]!;
 
+  it("an offer leads with the offer itself, and a layout that needs no picture spends nothing on one", async () => {
+    engine = new FakeCreativeEngine();
+    const r = await makePoster(g, req({ turnId: "t-offer-first" }), deps());
+    expect(r.layouts[0]).toBe("offer-card");
+    expect(new Set(r.layouts).size).toBe(2);
+    expect(engine.generated.length).toBeLessThanOrEqual(1);
+  }, 60_000);
+
   it("makes two options with different layouts and artwork, the real logo, checked, with lineage and a card", async () => {
     engine = new FakeCreativeEngine();
-    const r = await makePoster(g, req(), deps());
+    const r = await makePoster(g, req({ layouts: ["photo-full-bleed", "split-panel"] }), deps());
     expect(r.saved.options).toHaveLength(2);
     expect(new Set(r.layouts).size).toBe(2); // different layouts
-    expect(r.layouts[0]).toBe("badge-offer"); // an offer leads with a badge
     expect(engine.generated).toHaveLength(2);
-    expect(engine.generated[0]!.prompt).toMatch(/no text, no letters/);
+    expect(engine.generated[0]!.prompt).toMatch(/no letters, numbers/);
+    expect(engine.generated[0]!.prompt).toMatch(/Bristol/); // the business's own place, not a stock scene
     expect(engine.generated[0]!.prompt).toContain("warm lamps");
     expect(engine.generated[0]!.prompt).not.toBe(engine.generated[1]!.prompt); // different artwork
     expect(r.hfCredits).toBe(3);
@@ -106,7 +116,8 @@ describe("makePoster (integration)", () => {
     expect(r.saved.options.every((o) => !o.aiEdited)).toBe(true);
     expect(r.notes.join(" ")).toMatch(/no image engine/i);
     expect(r.notes.join(" ")).toMatch(/plain background in your brand colours/);
-    expect(r.layouts).toEqual(["type-only", "split"]);
+    // only layouts that need no picture: nothing stands in for a photo that was not made
+    expect(r.layouts.every((l) => ["offer-card", "big-type", "date-announcement", "quote-card", "hiring-card"].includes(l))).toBe(true);
   }, 60_000);
 
   it("says why in plain words when the engine, credits or CLI is unavailable, and spends nothing", async () => {
@@ -123,18 +134,18 @@ describe("makePoster (integration)", () => {
   it("refuses to go over the request's credit limit: quotes first, keeps what fits, and says so", async () => {
     engine = new FakeCreativeEngine();
     engine.cost = 4;
-    const r = await makePoster(g, req({ turnId: "t-cap" }), deps({ maxCreditsPerRequest: 6 }));
+    const r = await makePoster(g, req({ turnId: "t-cap", layouts: ["photo-full-bleed", "split-panel"] }), deps({ maxCreditsPerRequest: 6 }));
     expect(engine.generated).toHaveLength(1); // 4 fits, 8 does not
     expect(r.hfCredits).toBe(4);
     expect(r.notes.join(" ")).toMatch(/1 picture, not 2/);
     expect(r.saved.options).toHaveLength(2); // the second layout reuses the artwork
     engine.cost = 9;
-    const none = await makePoster(g, req({ turnId: "t-cap2" }), deps({ maxCreditsPerRequest: 6 }));
+    const none = await makePoster(g, req({ turnId: "t-cap2", layouts: ["photo-full-bleed", "split-panel"] }), deps({ maxCreditsPerRequest: 6 }));
     expect(none.generated).toBe(0);
     expect(none.notes.join(" ")).toMatch(/more credits than this request is allowed/);
     // a request that already spent its credits cannot spend more
     engine.cost = 1.5;
-    const spent = await makePoster(g, req({ turnId: "t-cap3" }), deps({ spent: { credits: 6 } }));
+    const spent = await makePoster(g, req({ turnId: "t-cap3", layouts: ["photo-full-bleed", "split-panel"] }), deps({ spent: { credits: 6 } }));
     expect(spent.generated).toBe(0);
   }, 60_000);
 

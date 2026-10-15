@@ -13,7 +13,7 @@ interface FkFont {
   layout(text: string, features?: string[]): FkRun; hasGlyphForCodePoint(cp: number): boolean;
 }
 
-export interface LoadedFont { family: string; sha: string; font: FkFont }
+export interface LoadedFont { family: string; sha: string; font: FkFont; bytes?: Buffer }
 
 const cache = new Map<string, LoadedFont>();
 
@@ -26,7 +26,7 @@ export function loadFont(bytes: Buffer): LoadedFont | null {
     const f = fontkit.create(bytes) as unknown as FkFont | { fonts: FkFont[] };
     const font = "fonts" in f ? f.fonts[0] : f;
     if (!font || !font.unitsPerEm) return null;
-    const loaded = { family: font.familyName, sha, font };
+    const loaded = { family: font.familyName, sha, font, bytes };
     cache.set(sha, loaded);
     return loaded;
   } catch {
