@@ -43,7 +43,8 @@ function toTable(rows: RawRow[], extra: { sheet?: string; otherSheets?: string[]
 export function readTable(bytes: Uint8Array, filename: string): Table {
   if (bytes.length === 0) throw new UploadError("There is nothing in this file. Add a row for each day or week, with the date and your numbers.", "empty");
   if (bytes.length > MAX_FILE_BYTES) throw new UploadError("That file is too big: send one under 20 MB. A row per day or week is plenty.", "too_big");
-  if (isZip(bytes) || isOle(bytes) || /\.xlsx?$/i.test(filename)) {
+  // by what the file is, not what it is called: a CSV saved as "numbers.xls" is still text (a real .xls is told by its header)
+  if (isZip(bytes) || isOle(bytes)) {
     const { sheets, allNames } = readXlsx(bytes);
     // the first sheet that has a header and a row of data under it
     for (const s of sheets) {

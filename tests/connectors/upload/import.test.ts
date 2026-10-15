@@ -105,9 +105,9 @@ describe("spreadsheet upload (integration)", () => {
   });
 
   it("stores provenance: a Document for the file, every number sourced from it, uploaded, with the real dates", async () => {
-    const [d] = await q<{ id: string; kind: string; status: string; rows: number; first: string; last: string; name: string }>(
-      "MATCH (d:Document {kind:'upload'}) RETURN d.id AS id, d.kind AS kind, d.status AS status, d.rows AS rows, d.firstDate AS first, d.lastDate AS last, d.name AS name");
-    expect(d).toMatchObject({ kind: "upload", status: "active", rows: 14, first: "2026-07-06", last: "2026-10-11", name: "Numbers you uploaded: Kestrel numbers.csv" });
+    const [d] = await q<{ id: string; kind: string; mode: string; status: string; rows: number; first: string; last: string; name: string }>(
+      "MATCH (d:Document {kind:'upload'}) RETURN d.id AS id, d.kind AS kind, d.accessMode AS mode, d.status AS status, d.rows AS rows, d.firstDate AS first, d.lastDate AS last, d.name AS name");
+    expect(d).toMatchObject({ kind: "upload", mode: "upload", status: "active", rows: 14, first: "2026-07-06", last: "2026-10-11", name: "Numbers you uploaded: Kestrel numbers.csv" });
     const obs = await q<{ id: string; ws: string; we: string; asOf: string; conf: number; src: string; unit: string }>(
       `MATCH (o:Observation {metric:'enquiries'})-[m:MEASURES]->(b:Business {id:$b}), (o)-[s:SOURCED_FROM]->(doc:Document {id:$d})
        WHERE m.until IS NULL AND s.until IS NULL RETURN o.id AS id, o.windowStart AS ws, o.windowEnd AS we, o.asOf AS asOf, o.conf AS conf, o.src AS src, o.unit AS unit ORDER BY o.windowEnd, o.id`,

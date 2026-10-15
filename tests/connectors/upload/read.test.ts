@@ -41,6 +41,11 @@ describe("CSV", () => {
     expect(readTable(buf, "x.txt").rows[0]).toEqual(["2026-10-05", "3"]);
   });
 
+  it("goes by what the file is, not what it is called: a CSV saved as .xls is still text", () => {
+    expect(readTable(Buffer.from("Date,Orders\n2026-10-05,3\n"), "numbers.xls").rows).toEqual([["2026-10-05", "3"]]);
+    expect(readTable(Buffer.from("Date,Orders\n2026-10-05,3\n"), "numbers.xlsx").rows).toEqual([["2026-10-05", "3"]]);
+  });
+
   it("says plainly when there is nothing to read", () => {
     expect(fail(() => csv("")).message).toMatch(/nothing in this file/i);
     expect(fail(() => csv("Date,Orders\n")).message).toMatch(/no rows/i);

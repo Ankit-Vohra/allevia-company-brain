@@ -186,7 +186,7 @@ async function run({ g, businessId, fileName, bytes, plan, now }: ImportInput): 
     type: "Document", id: documentId, name: `Numbers you uploaded: ${name}`.slice(0, 160),
     summary: `Numbers from ${name}: ${list(metricsUsed.map((k) => labels.get(k)!.toLowerCase()))}, ${shortDate(series.from!)} to ${longDate(series.to!)}.`.slice(0, 400),
     props: {
-      kind: "upload", filename: name, rows: series.rowCount, firstDate: series.from!, lastDate: series.to!, uploadedAt: now, hash, status: "active",
+      kind: "upload", accessMode: "upload", filename: name, rows: series.rowCount, firstDate: series.from!, lastDate: series.to!, uploadedAt: now, hash, status: "active",
       metrics: metricsUsed, ...(table.sheet ? { sheet: redact(table.sheet).text.slice(0, 60) } : {}),
     },
     asOf: today,
