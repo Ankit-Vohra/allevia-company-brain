@@ -532,4 +532,49 @@ export function drawLampGlow(c: Ctx, d: DeskSpot, pal: OfficePalette) {
   c.fillRect(cx - 30, cy - 30, 60, 60);
 }
 
+// ---------------------------------------------------------------- Sara's shelf: one book per learned rule
+
+const SHELVES = 3;              // the bookshelf's shelves (drawFloorItem "bookshelf")
+const LEARNED_SHELVES = 2;      // the top two hold what the team learned; the bottom one keeps its reference books
+const BOOK_PITCH = 3;           // a 2-px spine and a 1-px gap
+
+/** Where each learned book stands on the Library's bookshelf (logical px), oldest first, and how many fit. */
+export function learnedSlots(r: Rect, n: number): { slots: Rect[]; capacity: number } {
+  const sh = Math.floor((r.h - 2) / SHELVES);
+  const perShelf = Math.floor((r.w - 3) / BOOK_PITCH);
+  const capacity = perShelf * LEARNED_SHELVES;
+  const slots: Rect[] = [];
+  for (let i = 0; i < Math.min(n, capacity); i++) {
+    const s = Math.floor(i / perShelf), k = i % perShelf;
+    slots.push({ x: r.x + 2 + k * BOOK_PITCH, y: r.y + 1 + s * sh, w: 2, h: sh - 1 });
+  }
+  return { slots, capacity };
+}
+
+/** The top shelves, re-stocked each frame: a spine in the hue of the desk that follows the rule, a gold band (learned
+ *  from you), taller the surer the team is. An empty shelf keeps a bookend, waiting for the first edit. */
+export function drawLearnedShelf(c: Ctx, r: Rect, books: { hue: number; confidence: number }[], pal: OfficePalette, lit?: number) {
+  const sh = Math.floor((r.h - 2) / SHELVES);
+  for (let s = 0; s < LEARNED_SHELVES; s++) R(c, r.x + 1, r.y + 1 + s * sh, r.w - 2, sh - 1, pal.woodDark);
+  const { slots } = learnedSlots(r, books.length);
+  slots.forEach((slot, i) => {
+    const b = books[i]!;
+    const h = Math.min(sh - 2, sh - 4 + (b.confidence >= 0.6 ? 1 : 0) + (b.confidence >= 0.8 ? 1 : 0));
+    const top = slot.y + slot.h - h;
+    R(c, slot.x, top, 2, h, oklch(pal.dark ? 0.62 : 0.5, 0.12, b.hue));
+    R(c, slot.x, top + 1, 2, 1, i === lit ? pal.goldLight : pal.gold);
+    P(c, slot.x + 1, top + h - 1, oklch(pal.dark ? 0.5 : 0.4, 0.1, b.hue));
+    if (i === lit) R(c, slot.x, top - 1, 2, 1, pal.goldLight);
+  });
+  // a bookend after the last book on its shelf (or at the start of an empty shelf)
+  const perShelf = Math.floor((r.w - 3) / BOOK_PITCH);
+  const n = slots.length;
+  if (n < perShelf * LEARNED_SHELVES) {
+    const s = Math.floor(n / perShelf), k = n % perShelf;
+    const x = r.x + 2 + k * BOOK_PITCH, base = r.y + s * sh + sh - 1;
+    R(c, x, base - 3, 1, 3, pal.ink2);
+    R(c, x, base - 1, 2, 1, pal.ink2);
+  }
+}
+
 export { hueOf, FACE };

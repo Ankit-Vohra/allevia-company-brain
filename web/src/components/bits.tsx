@@ -37,6 +37,8 @@ export function ChecksBadges({ checks, compact }: { checks: TurnChecks; compact?
     { ok: checks.numbersGrounded, good: "Numbers grounded", bad: "Unverified number", detail: checks.ungroundedNumbers.join(", ") },
     { ok: checks.simulatedDisclosed, good: "Simulated data disclosed", bad: "Simulated data not disclosed" },
     { ok: checks.freshnessDisclosed, good: "Dates stated", bad: "Freshness not stated" },
+    // absent on turns saved before the capability ladder: unknown, so not claimed either way
+    ...(checks.modeDisclosed === undefined ? [] : [{ ok: checks.modeDisclosed, good: "Data source stated", bad: "Data source not stated" }]),
   ];
   const shown = compact ? items.filter((i, idx) => !i.ok || idx < 2) : items;
   return (

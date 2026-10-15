@@ -64,29 +64,6 @@ function Sketch({ id, symbol }: { id: SoonId; symbol: string }) {
       </svg>
     );
   }
-  if (id === "team") {
-    return (
-      <svg viewBox="0 0 480 300" className="sketch">
-        {[0, 1, 2, 3, 4, 5].map((i) => {
-          const x = 24 + (i % 3) * 148, y = 22 + Math.floor(i / 3) * 84;
-          return (
-            <g key={i} transform={`translate(${x} ${y})`}>
-              <rect className="sk-frame" width="136" height="70" rx="6" />
-              <circle className="sk-ink" cx="24" cy="24" r="11" />
-              <path className="sk-faint" d="M42 20h56M42 32h38M14 52h60" />
-              <rect className={i === 1 ? "sk-gold-fill" : "sk-ink"} x="96" y="45" width="28" height="14" rx="7" />
-              <circle className="sk-knob" cx={i === 1 ? 117 : i === 4 ? 103 : 117} cy="52" r="5" />
-            </g>
-          );
-        })}
-        <rect className="sk-frame" x="24" y="200" width="432" height="76" rx="6" />
-        <text className="sk-text sk-quote" x="40" y="226">“Never quote prices on Instagram.”</text>
-        <path className="sk-add" d="M40 246h170" />
-        <path className="sk-del" d="M40 262h120" />
-        <rect className="sk-gold-fill" x="372" y="240" width="70" height="24" rx="4" />
-      </svg>
-    );
-  }
   if (id === "plan") {
     return (
       <svg viewBox="0 0 480 300" className="sketch">

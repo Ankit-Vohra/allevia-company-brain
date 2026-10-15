@@ -10,10 +10,11 @@ const ApprovalsPage = lazy(() => import("./pages/Approvals"));
 const OnboardPage = lazy(() => import("./pages/Onboard"));
 const SoonPage = lazy(() => import("./pages/Soon"));
 const StudioPage = lazy(() => import("./pages/Studio"));
+const TeamPage = lazy(() => import("./pages/Team"));
 
 const TITLES: Record<string, string> = {
   "/": "Office", "/ask": "Ask", "/brain": "Brain", "/insights": "Insights", "/approvals": "Approvals", "/onboard": "Add a business",
-  "/studio": "Studio", "/team": "Tell your team", "/plan": "Plan and usage", "/program": "Your 90 days",
+  "/studio": "Studio", "/team": "Your team", "/plan": "Plan and usage", "/program": "Your 90 days",
 };
 
 export function App() {
@@ -38,7 +39,7 @@ export function App() {
             <Route path="/approvals" element={<ApprovalsPage />} />
             <Route path="/onboard" element={<OnboardPage />} />
             <Route path="/studio" element={<StudioPage />} />
-            <Route path="/team" element={<SoonPage id="team" />} />
+            <Route path="/team" element={<TeamPage />} />
             <Route path="/plan" element={<SoonPage id="plan" />} />
             <Route path="/program" element={<SoonPage id="program" />} />
             <Route path="*" element={<NotFound />} />
