@@ -33,6 +33,7 @@ export interface FetchOpts {
   resolver?: Resolver;      // default dns.lookup (tests inject one)
   userAgent?: string;
   accept?: string;
+  headers?: Record<string, string>; // extra request headers (lower-case names); cannot replace the user agent
 }
 
 export interface FetchResult {
@@ -102,6 +103,7 @@ function requestOnce(u: URL, o: Required<Pick<FetchOpts, "maxBytes">> & FetchOpt
         accept: o.accept ?? "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "accept-language": "en",
         "accept-encoding": "gzip, deflate, br",
+        ...Object.fromEntries(Object.entries(o.headers ?? {}).filter(([k]) => !["user-agent", "accept-encoding", "host", "cookie", "authorization"].includes(k.toLowerCase()))),
       },
       lookup: guardedLookup(o.resolver, allowPrivate),
       signal,

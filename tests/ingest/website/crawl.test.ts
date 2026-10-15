@@ -116,4 +116,48 @@ describe("crawlSite (fixture site)", () => {
     expect(Date.now() - t0).toBeGreaterThanOrEqual(150 * (small.requests - 1));
     expect(site.requests.length - before).toBeGreaterThanOrEqual(small.requests);
   }, 60_000);
+
+  it("keeps a heavy page styled: images cannot crowd out its stylesheet, and router prefetches are refused", async () => {
+    const imgs = Array.from({ length: 200 }, (_, i) => `<img src="/photo.png?n=${i}" alt="p${i}">`).join("");
+    const heavy = await startSite({
+      "/": (send) => send(200, { "content-type": "text/html" }, `<!doctype html><html lang="en"><head><title>Heavy</title></head><body>
+        <script>fetch("/prefetch-me", { headers: { "Next-Router-Prefetch": "1" } }).catch(() => {});</script>
+        <h1>Heavy home</h1><p>${"Plenty of words here. ".repeat(30)}</p>${imgs}
+        <script>setTimeout(() => { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "/style.css"; document.head.append(l); }, 150);</script>
+        </body></html>`),
+    });
+    try {
+      const r = await crawlSite(`${heavy.origin}/`, { allowHosts: [`127.0.0.1:${heavy.port}`], minDelayMs: 0, maxPages: 1, maxLinkChecks: 0 });
+      const styles = r.pages[0]!.styles!;
+      expect(styles.some((s) => s.kind === "text" && s.role === "heading" && s.font?.includes("Cormorant Garamond"))).toBe(true);
+      expect(styles.some((s) => s.kind === "bg" && s.color === "rgb(251, 248, 243)")).toBe(true);
+      expect(heavy.requests.some((q) => q.path === "/prefetch-me")).toBe(false);
+      expect(heavy.requests.filter((q) => q.path === "/photo.png").length).toBeLessThanOrEqual(80);
+    } finally {
+      await heavy.close();
+    }
+  }, 60_000);
+
+  it("refuses a page's reload loop and forwards a framework's data-fetch headers", async () => {
+    const app = await startSite({
+      "/": (send) => send(200, { "content-type": "text/html" }, `<!doctype html><html lang="en"><head><title>App</title></head><body>
+        <h1>App home</h1><h2 id="data">pending</h2><p>${"Plenty of words here. ".repeat(30)}</p>
+        <script>
+          window.name = String(Number(window.name || 0) + 1);
+          document.title = "Loads " + window.name;
+          fetch("/data?_rsc=1", { headers: { RSC: "1", "Next-Router-State-Tree": "%5B%22%22%5D" } })
+            .then((r) => { document.getElementById("data").textContent = "data " + r.status; })
+            .finally(() => setTimeout(() => location.reload(), 30));
+        </script></body></html>`),
+    });
+    try {
+      const r = await crawlSite(`${app.origin}/`, { allowHosts: [`127.0.0.1:${app.port}`], minDelayMs: 0, maxPages: 1, maxLinkChecks: 0 });
+      const home = r.pages[0]!;
+      expect(home.title).toBe("Loads 1");
+      expect(home.h2).toEqual(["data 200"]);
+      expect(app.requests.filter((q) => q.path === "/").length).toBe(1);
+    } finally {
+      await app.close();
+    }
+  }, 60_000);
 });

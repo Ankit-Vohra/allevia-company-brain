@@ -26,6 +26,10 @@ export async function startSite(extra: Record<string, (send: (status: number, he
       res.end(req.method === "HEAD" ? undefined : body);
     };
     if (extra[path]) return extra[path]!(send);
+    if (path === "/data") {
+      return req.headers.rsc === "1" && req.headers["next-router-state-tree"]
+        ? send(200, { "content-type": "text/x-component" }, "0:[]") : send(400, { "content-type": "text/plain" }, "needs RSC headers");
+    }
     if (path === "/missing") return send(404, { "content-type": "text/html" }, "<h1>Not found</h1>");
     if (path === "/redirect-private") return send(302, { location: "http://169.254.169.254/latest/meta-data/" });
     if (path === "/redirect-local") return send(302, { location: `http://localhost:${new URL(origin).port}/about` });

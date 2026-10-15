@@ -13,7 +13,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
-import { chromium, type Browser, type BrowserContext, type Route } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright";
 import { BlockedUrlError, Pacer, USER_AGENT, checkUrl, guardedFetch, type FetchOpts, type FetchResult, type Resolver } from "./fetch.js";
 import { allowAll, disallowAll, parseRobots, parseSitemap, type Robots } from "./robots.js";
 import { CAPTURE_SCRIPT, STYLE_SCRIPT, fromCapture, type Captured, type PageData, type StyleSample } from "./page.js";
@@ -58,8 +58,12 @@ const DEFAULTS = {
 const MAX_CRAWL_DELAY_MS = 10_000;
 const MAX_SITEMAPS = 5;
 const MAX_QUEUE = 2_000;
-const MAX_ASSETS_PER_PAGE = 150;
+// Per page and per resource type: a page with hundreds of images must not crowd out its stylesheets.
+const ASSET_CAPS: Record<string, number> = { stylesheet: 40, script: 150, font: 30, image: 80, xhr: 60, fetch: 60 };
 const MAX_ASSET_CACHE_BYTES = 80 * 1024 * 1024;
+// Request headers a page's own scripts set that change what the server answers (Next.js RSC fetches answer HTML
+// without them, and the app then hard-reloads). Nothing that identifies a user is forwarded.
+const FORWARD_HEADERS = ["accept", "rsc", "next-router-state-tree", "next-url", "x-requested-with"];
 const BROWSER_TYPES = new Set(["stylesheet", "script", "xhr", "fetch", "image", "font"]);
 const DROP_HEADERS = new Set(["content-encoding", "content-length", "transfer-encoding", "connection", "keep-alive", "set-cookie", "alt-svc"]);
 
@@ -134,17 +138,29 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
   let ctx: BrowserContext | undefined;
   const docs = new Map<string, FetchResult>();
   let heavy = false;
-  let assetCount = 0;
+  let assetCounts = new Map<string, Set<string>>();
+  let tally = new Map<string, number>(); // per page: "served:script", "refused:media", "failed:stylesheet: <reason>"
+  const note = (k: string) => tally.set(k, (tally.get(k) ?? 0) + 1);
+  const assetErrors = new Map<string, string>();
   const assets = new Map<string, Promise<FetchResult | null>>();
   let cachedBytes = 0;
-  const assetSem = new Semaphore(6);
-  const asset = (url: string): Promise<FetchResult | null> => {
-    const hit = assets.get(url);
+  // Two pools: what the page needs to render (styles, scripts, fonts, data) never waits behind large images.
+  const criticalSem = new Semaphore(6);
+  const imageSem = new Semaphore(4);
+  const asset = (url: string, type: string, headers: Record<string, string>): Promise<FetchResult | null> => {
+    const key = Object.keys(headers).length ? `${url}\n${JSON.stringify(headers)}` : url;
+    const hit = assets.get(key);
     if (hit) return hit;
-    const p = assetSem.run(() => guardedFetch(url, { ...base, maxBytes: o.maxAssetBytes, timeoutMs: 15_000, accept: "*/*" }))
-      .then((r) => (r.truncated ? null : r), () => null);
+    const p = (type === "image" ? imageSem : criticalSem).run(() => guardedFetch(url, { ...base, maxBytes: o.maxAssetBytes, timeoutMs: 15_000, accept: "*/*", headers }))
+      .then((r) => {
+        if (r.truncated) assetErrors.set(url, `over ${o.maxAssetBytes} bytes`);
+        return r.truncated ? null : r;
+      }, (e: unknown) => {
+        assetErrors.set(url, msg(e));
+        return null;
+      });
     if (cachedBytes < MAX_ASSET_CACHE_BYTES) {
-      assets.set(url, p);
+      assets.set(key, p);
       void p.then((r) => { cachedBytes += r?.body.length ?? 0; });
     }
     return p;
@@ -154,17 +170,44 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
       const req = route.request();
       const url = req.url();
       if (req.isNavigationRequest()) {
-        const d = req.frame().parentFrame() === null ? docs.get(url) : undefined;
-        if (d) return await route.fulfill({ status: d.status, headers: passHeaders(d.headers), body: d.body });
-        return await route.abort("blockedbyclient");
+        const main = req.frame().parentFrame() === null;
+        const d = main ? docs.get(url) : undefined;
+        if (d) {
+          docs.delete(url); // served once per page view: a reload, or a loop of them, is refused
+          return await route.fulfill({ status: d.status, headers: passHeaders(d.headers), body: d.body });
+        }
+        note("refused:navigation");
+        // 204 No Content cancels a main-frame navigation and leaves the page as it is (an abort would replace it with
+        // the browser's error page); frames are simply blocked
+        return main ? await route.fulfill({ status: 204, body: "" }) : await route.abort("blockedbyclient");
       }
       const type = req.resourceType();
-      if (req.method() !== "GET" || !BROWSER_TYPES.has(type) || (!heavy && (type === "image" || type === "font"))
-        || !/^https?:/i.test(url) || ++assetCount > MAX_ASSETS_PER_PAGE) {
+      const h = req.headers();
+      // a framework prefetching other routes (Next.js router, speculation rules) is page-like traffic the pacer never
+      // sees, and nothing the current page needs
+      const prefetch = !!h["next-router-prefetch"] || /prefetch|prerender/i.test(`${h["purpose"] ?? ""} ${h["sec-purpose"] ?? ""}`);
+      const refuse = req.method() !== "GET" ? req.method()
+        : !BROWSER_TYPES.has(type) || (!heavy && (type === "image" || type === "font")) || !/^https?:/i.test(url) ? type
+        : prefetch ? "prefetch" : undefined;
+      if (refuse) {
+        note(`refused:${refuse}`);
         return await route.abort("blockedbyclient");
       }
-      const r = await asset(url);
-      if (!r) return await route.abort("failed");
+      // capped by distinct URLs: a script asked for twice (preload, then the tag) is one script
+      const seenOfType = assetCounts.get(type) ?? new Set<string>();
+      assetCounts.set(type, seenOfType);
+      if (!seenOfType.has(url) && seenOfType.size >= (ASSET_CAPS[type] ?? 0)) {
+        note(`capped:${type}`);
+        return await route.abort("blockedbyclient");
+      }
+      seenOfType.add(url);
+      const fwd = type === "xhr" || type === "fetch" ? Object.fromEntries(FORWARD_HEADERS.flatMap((k) => (h[k] ? [[k, h[k]!]] : []))) : {};
+      const r = await asset(url, type, fwd);
+      if (!r) {
+        note(`failed:${type}${type === "stylesheet" || type === "script" ? ` ${assetErrors.get(url) ?? ""}` : ""}`);
+        return await route.abort("failed");
+      }
+      note(`served:${type}`);
       return await route.fulfill({ status: r.status, headers: passHeaders(r.headers), body: r.body });
     } catch {
       await route.abort("failed").catch(() => {});
@@ -185,7 +228,8 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
     docs.clear();
     docs.set(doc.finalUrl, doc);
     heavy = brand;
-    assetCount = 0;
+    assetCounts = new Map();
+    tally = new Map();
     const page = await ctx.newPage();
     const t0 = performance.now();
     const left = () => Math.max(1_000, deadline - Date.now());
@@ -199,15 +243,19 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
       await page.waitForLoadState("load", { timeout: left() }).catch(() => {});
       const loadMs = Math.round(performance.now() - t0);
       if (brand) await page.waitForLoadState("networkidle", { timeout: Math.min(2_500, left()) }).catch(() => {});
+      const unloaded = brand ? await stylesReady(page, Math.min(4_000, left())) : 0;
       if (home && o.screenshotDir) {
         mkdirSync(o.screenshotDir, { recursive: true });
         screenshots.desktop = join(o.screenshotDir, "home-desktop.png");
         await page.screenshot({ path: screenshots.desktop, timeout: left() }).catch((e) => { delete screenshots.desktop; log(`[crawl] desktop screenshot failed: ${msg(e)}`); });
       }
-      const styles = brand ? ((await page.evaluate(STYLE_SCRIPT)) as StyleSample[]) : undefined;
+      // computed styles of a page whose stylesheets never arrived are the browser's defaults, not the brand's
+      if (unloaded) log(`[crawl] ${doc.finalUrl}: ${unloaded} stylesheet(s) did not load; its styles are not sampled`);
+      const styles = brand && !unloaded ? ((await page.evaluate(STYLE_SCRIPT)) as StyleSample[]) : undefined;
       const cap = (await page.evaluate(CAPTURE_SCRIPT)) as Captured;
       return { cap, styles, loadMs };
     } finally {
+      log(`[crawl] assets for ${doc.finalUrl}: ${[...tally].sort().map(([k, n]) => `${k} ${n}`).join(", ") || "none"}`);
       await page.close().catch(() => {});
     }
   };
@@ -219,13 +267,17 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
       docs.clear();
       docs.set(doc.finalUrl, doc);
       heavy = true;
-      assetCount = 0;
+      assetCounts = new Map();
+      tally = new Map();
       const p = await m.newPage();
       await p.goto(doc.finalUrl, { waitUntil: "load", timeout: o.pageTimeoutMs });
       await p.waitForLoadState("networkidle", { timeout: 2_500 }).catch(() => {});
+      const unloaded = await stylesReady(p, 4_000);
+      if (unloaded) log(`[crawl] mobile screenshot: ${unloaded} stylesheet(s) did not load`);
       const path = join(o.screenshotDir, "home-mobile.png");
       await p.screenshot({ path });
       screenshots.mobile = path;
+      log(`[crawl] assets for the mobile screenshot: ${[...tally].sort().map(([k, n]) => `${k} ${n}`).join(", ") || "none"}`);
     } catch (e) {
       log(`[crawl] mobile screenshot failed: ${msg(e)}`);
     } finally {
@@ -382,3 +434,20 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
   };
 }
 
+// Waits (up to timeoutMs) until every stylesheet <link> on the page has loaded and web fonts are ready; returns how
+// many stylesheets still have not loaded.
+const READY_SCRIPT = (timeoutMs: number) => String.raw`(async () => {
+  const pending = () => [...document.querySelectorAll("link[rel~='stylesheet' i]")].filter((l) => !l.disabled && !l.sheet).length;
+  const end = Date.now() + ${Math.max(0, Math.round(timeoutMs))};
+  while (pending() && Date.now() < end) await new Promise((r) => setTimeout(r, 100));
+  await Promise.race([document.fonts ? document.fonts.ready : null, new Promise((r) => setTimeout(r, Math.max(0, Math.min(2000, end - Date.now()))))]);
+  return pending();
+})()`;
+
+async function stylesReady(page: Page, timeoutMs: number): Promise<number> {
+  try {
+    return Number(await page.evaluate(READY_SCRIPT(timeoutMs))) || 0;
+  } catch {
+    return 0;
+  }
+}
