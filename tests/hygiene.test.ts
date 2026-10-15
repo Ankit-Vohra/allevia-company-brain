@@ -133,7 +133,9 @@ function readText(path: string): string | undefined {
 
 const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: REPO, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).split("\0").filter(Boolean);
 const LOCKFILE = "package-lock.json"; // integrity hashes are not text
-const scanned = tracked.filter((p) => p !== LOCKFILE);
+// any package-lock.json (root, web/, …): integrity hashes look like secrets but are not text
+const isLockfile = (p: string): boolean => p === LOCKFILE || p.endsWith("/" + LOCKFILE);
+const scanned = tracked.filter((p) => !isLockfile(p));
 
 // ---------- the scanner itself ----------
 
