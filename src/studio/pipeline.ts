@@ -121,7 +121,7 @@ export async function runStudio(g: GraphHandle, input: StudioInput, deps: Studio
   status(TARA, `Variant B: ${treatment.label.toLowerCase()}, prompt built from ${prompt.sources.length} brand and rule nodes`);
   let b: VariantRecord | null = null;
   try {
-    b = await makeVariantB(g, { store: deps.store, now: now(), engine: deps.engine }, input.tenant, original, got.normalized.buffer, plan, privacy, treatment, prompt);
+    b = await makeVariantB(g, { store: deps.store, now: now(), engine: deps.engine }, input.tenant, original, got.normalized.buffer, base, plan, privacy, treatment, prompt);
   } catch (e) {
     status(TARA, `Variant B skipped: ${(e as Error).message.slice(0, 90)}`);
   }

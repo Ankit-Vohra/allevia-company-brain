@@ -180,7 +180,9 @@ describe("studio pipeline (integration)", () => {
     expect(r1.context.project).toBeNull();
 
     // record an edit for this photo, and the next run uses it
-    writeFileSync(join(recDir, "b.jpg"), await sharp({ create: { width: r1.original.w, height: r1.original.h, channels: 3, background: "#d8cfc2" } }).jpeg().toBuffer());
+    // an engine that reframes: the relit photo on a taller canvas (more sky), as image models return it
+    const relit = await sharp(photo).modulate({ brightness: 1.3 }).extend({ top: 160, background: "#c9c2b8" }).jpeg().toBuffer();
+    writeFileSync(join(recDir, "b.jpg"), relit);
     writeFileSync(join(recDir, "manifest.json"), JSON.stringify({ recordings: [{
       key: recordingKey(r1.original.sha256, "relight-clean-editorial"), file: "b.jpg", engine: "higgsfield", model: "test-edit-model",
       prompt: "the prompt it was made with", jobId: "job-test-1", credits: 2, createdAt: "2026-10-15T08:00:00Z",

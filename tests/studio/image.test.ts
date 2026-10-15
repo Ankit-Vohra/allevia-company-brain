@@ -3,7 +3,7 @@
 import { describe, it, expect } from "vitest";
 import sharp from "sharp";
 import {
-  dhash, estimateTilt, gradeTowards, hamming, normalizeUpload, planCrop, renderVariantA, similarity, straightenedBase,
+  dhash, estimateTilt, gradeTowards, hamming, normalizeUpload, planCrop, registerToFrame, renderVariantA, similarity, straightenedBase,
   ImageRejected,
 } from "../../src/studio/image.js";
 
@@ -103,6 +103,22 @@ describe("studio image utilities", () => {
     expect(a.treatment).toMatch(/straighten/);
     const s = await similarity(base, a.buffer);
     expect(s.structure).toBeGreaterThan(0.8);
+  });
+
+  it("registerToFrame finds the frame inside a reframed, relit edit; a featureless edit does not match", async () => {
+    const frame = await sharp(await facade()).extract({ left: 300, top: 60, width: 320, height: 400 }).jpeg().toBuffer();
+    // the "edit": the whole facade relit, on a square canvas (more sky), scaled up 1.5x; the frame holds the facade's end, so
+    // the window rhythm cannot fool the search by one bay
+    const edit = await sharp(await facade()).modulate({ brightness: 1.25 }).extend({ top: 160, background: "#dcd6cc" }).resize(960).jpeg().toBuffer();
+    const r = await registerToFrame(edit, frame);
+    expect(r.score).toBeGreaterThan(0.6);
+    expect(r.rect.left).toBeGreaterThan(420);
+    expect(r.rect.left).toBeLessThan(480);
+    expect(r.rect.top).toBeGreaterThan(220); // sharp extends after resizing: 60 × 1.5 + 160 = 250
+    expect(r.rect.top).toBeLessThan(280);
+    expect(r.rect.w / 480).toBeCloseTo(1, 1);
+    const flat = await sharp({ create: { width: 600, height: 600, channels: 3, background: "#d8cfc2" } }).jpeg().toBuffer();
+    expect((await registerToFrame(flat, frame)).score).toBeLessThan(0.4);
   });
 
   it("gradeTowards computes gains that move a cool, dark mean toward the warm paper tone", () => {

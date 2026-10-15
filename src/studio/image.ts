@@ -251,6 +251,122 @@ export async function straightenedBase(buffer: Buffer, plan: CropPlan, blurBoxes
   return img.jpeg({ quality: 92 }).toBuffer();
 }
 
+// ---------- lining a generative edit back up with the frame ----------
+
+// Edge map (Sobel magnitude of a blurred greyscale copy) at exactly w×h: what registration compares, because a relight
+// changes brightness and colour but not where the edges are.
+async function edgeMap(buffer: Buffer, w: number, h: number): Promise<Float32Array> {
+  const px = await sharp(buffer).greyscale().resize(w, h, { fit: "fill" }).blur(0.7).raw().toBuffer();
+  const out = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const a = (dx: number, dy: number) => px[(y + dy) * w + x + dx]!;
+      const gx = a(1, -1) + 2 * a(1, 0) + a(1, 1) - a(-1, -1) - 2 * a(-1, 0) - a(-1, 1);
+      const gy = a(-1, 1) + 2 * a(0, 1) + a(1, 1) - a(-1, -1) - 2 * a(0, -1) - a(1, -1);
+      out[y * w + x] = Math.hypot(gx, gy);
+    }
+  }
+  return out;
+}
+
+// Normalised cross-correlation of template T (tw×th) with image I (iw wide) at (x, y).
+function ncc(I: Float32Array, iw: number, T: Float32Array, tw: number, th: number, x: number, y: number, tMean: number, tStd: number): number {
+  let s = 0, ss = 0, st = 0;
+  const n = tw * th;
+  for (let j = 0; j < th; j++) {
+    const row = (y + j) * iw + x;
+    for (let i = 0; i < tw; i++) {
+      const v = I[row + i]!;
+      s += v; ss += v * v; st += v * T[j * tw + i]!;
+    }
+  }
+  const mean = s / n;
+  const std = Math.sqrt(Math.max(1e-9, ss / n - mean * mean));
+  return (st / n - mean * tMean) / (std * tStd);
+}
+
+const stats = (T: Float32Array) => {
+  let s = 0, ss = 0;
+  for (const v of T) { s += v; ss += v * v; }
+  const m = s / T.length;
+  return { mean: m, std: Math.sqrt(Math.max(1e-9, ss / T.length - m * m)) };
+};
+
+// Where the frame sits inside a generative edit. Image models reframe (a square canvas, more sky) and often straighten
+// on their own, so the edit cannot be cropped by the plan's numbers. This searches scale and position (coarse at 128 px,
+// then fine at 256 px), on the edit as returned and, when the plan rotated the photo, on the edit rotated the same way,
+// and returns the best window in the edit's pixels with its correlation (1 = the same edges).
+export async function registerToFrame(edit: Buffer, frame: Buffer, rotate = 0): Promise<{ image: Buffer; rect: Rect; score: number }> {
+  const fm = await sharp(frame).metadata();
+  const aspect = fm.width! / fm.height!;
+  const candidates = [await sharp(edit).toBuffer()];
+  if (rotate) candidates.push(await sharp(edit).rotate(rotate, { background: "#808080" }).png().toBuffer());
+  let best: { image: Buffer; rect: Rect; score: number } | undefined;
+  for (const img of candidates) {
+    const m = await sharp(img).metadata();
+    const W0 = m.width!, H0 = m.height!;
+    const search = async (W: number, widths: number[], around?: { x: number; y: number; r: number }) => {
+      const H = Math.round((W * H0) / W0);
+      const I = await edgeMap(img, W, H);
+      let top: { tw: number; th: number; x: number; y: number; score: number } | undefined;
+      for (const tw of widths) {
+        const th = Math.round(tw / aspect);
+        if (tw < 16 || tw > W || th > H) continue;
+        const T = await edgeMap(frame, tw, th);
+        const { mean, std } = stats(T);
+        const x0 = around ? Math.max(0, around.x - around.r) : 0, x1 = around ? Math.min(W - tw, around.x + around.r) : W - tw;
+        const y0 = around ? Math.max(0, around.y - around.r) : 0, y1 = around ? Math.min(H - th, around.y + around.r) : H - th;
+        for (let y = y0; y <= y1; y++) {
+          for (let x = x0; x <= x1; x++) {
+            const sc = ncc(I, W, T, tw, th, x, y, mean, std);
+            if (!top || sc > top.score) top = { tw, th, x, y, score: sc };
+          }
+        }
+      }
+      return top;
+    };
+    const coarseWidths: number[] = [];
+    for (let tw = 40; tw <= 128; tw += 3) coarseWidths.push(tw);
+    const c = await search(128, coarseWidths);
+    if (!c) continue;
+    const fine = await search(256, [-4, -3, -2, -1, 0, 1, 2, 3, 4].map((d) => c.tw * 2 + d), { x: c.x * 2, y: c.y * 2, r: 4 });
+    const f = fine ?? { ...c, tw: c.tw * 2, th: c.th * 2, x: c.x * 2, y: c.y * 2 };
+    const k = W0 / 256;
+    const rect = {
+      left: Math.max(0, Math.round(f.x * k)), top: Math.max(0, Math.round(f.y * k)),
+      w: Math.min(W0, Math.round(f.tw * k)), h: Math.min(H0, Math.round(f.th * k)),
+    };
+    rect.w = Math.min(rect.w, W0 - rect.left);
+    rect.h = Math.min(rect.h, H0 - rect.top);
+    if (!best || f.score > best.score) best = { image: img, rect, score: Math.round(f.score * 1000) / 1000 };
+  }
+  if (!best) throw new Error("the edit is too small to line up with the frame");
+  return best;
+}
+
+// Blurs boxes given in 0..1 coordinates of the image (privacy boxes carried into a frame).
+export async function blurBoxes(buffer: Buffer, boxes: Array<{ x: number; y: number; w: number; h: number }>): Promise<Buffer> {
+  if (!boxes.length) return buffer;
+  const m = await sharp(buffer).metadata();
+  const patches: OverlayOptions[] = [];
+  for (const b of boxes) {
+    const x0 = Math.max(0, Math.floor(b.x * m.width!)), y0 = Math.max(0, Math.floor(b.y * m.height!));
+    const x1 = Math.min(m.width!, Math.ceil((b.x + b.w) * m.width!)), y1 = Math.min(m.height!, Math.ceil((b.y + b.h) * m.height!));
+    if (x1 - x0 < 2 || y1 - y0 < 2) continue;
+    const patch = await sharp(buffer).extract({ left: x0, top: y0, width: x1 - x0, height: y1 - y0 }).blur(Math.max(6, Math.min(x1 - x0, y1 - y0) / 4)).toBuffer();
+    patches.push({ input: patch, left: x0, top: y0 });
+  }
+  return patches.length ? sharp(buffer).composite(patches).jpeg({ quality: 92 }).toBuffer() : buffer;
+}
+
+// The privacy boxes of the source photo, as 0..1 boxes of the plan's crop (only the ones that reach into it).
+export function boxesInFrame(plan: CropPlan, boxes: Array<Pick<AssessmentOverlay, "x" | "y" | "w" | "h">>): Array<{ x: number; y: number; w: number; h: number }> {
+  return boxes.map((b) => mapBox(plan, b)).map((r) => ({
+    x: (r.left - plan.crop.left) / plan.crop.w, y: (r.top - plan.crop.top) / plan.crop.h, w: r.w / plan.crop.w, h: r.h / plan.crop.h,
+  })).filter((r) => r.x < 1 && r.y < 1 && r.x + r.w > 0 && r.y + r.h > 0)
+    .map((r) => ({ x: Math.max(0, r.x), y: Math.max(0, r.y), w: Math.min(1, r.x + r.w) - Math.max(0, r.x), h: Math.min(1, r.y + r.h) - Math.max(0, r.y) }));
+}
+
 // ---------- variant A: the local grade ----------
 
 const hexRgb = (hex: string): [number, number, number] => {

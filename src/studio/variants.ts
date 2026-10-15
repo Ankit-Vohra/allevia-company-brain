@@ -11,7 +11,7 @@ import { entityId } from "../util/ids.js";
 import { TARA } from "./assess.js";
 import type { GenerationEngine } from "./engine.js";
 import type { AssessmentOverlay } from "../../shared/contracts.js";
-import { dhash, POST_SIZE, renderVariantA, sha256Hex, straightenedBase, type CropPlan } from "./image.js";
+import { blurBoxes, boxesInFrame, dhash, POST_SIZE, registerToFrame, renderVariantA, sha256Hex, type CropPlan } from "./image.js";
 import type { AssetRecord } from "./intake.js";
 import type { EditPrompt, EditTreatment } from "./prompt.js";
 import type { AssetStore } from "./store.js";
@@ -28,6 +28,9 @@ export interface VariantRecord extends AssetRecord {
   jobId?: string;
   buffer: Buffer;
 }
+
+// Below this edge correlation the edit is not recognisably the same frame: it is held back rather than guessed at.
+export const REGISTRATION_FLOOR = 0.4;
 
 const variantId = (originalSha: string, label: string, sha: string) => entityId("Asset", `${originalSha.slice(0, 16)}-${label.toLowerCase()}-${sha.slice(0, 8)}`);
 
@@ -72,22 +75,23 @@ export async function makeVariantA(
 // null when the engine has nothing for this photo (RecordedEngine without a recording): no variant B, and the caller
 // says so instead of inventing one.
 export async function makeVariantB(
-  g: GraphHandle, deps: { store: AssetStore; now: number; engine: GenerationEngine }, tenant: string, original: AssetRecord, originalBuffer: Buffer,
+  g: GraphHandle, deps: { store: AssetStore; now: number; engine: GenerationEngine }, tenant: string, original: AssetRecord, originalBuffer: Buffer, base: Buffer,
   plan: CropPlan, privacy: AssessmentOverlay[], treatment: EditTreatment, prompt: EditPrompt,
 ): Promise<VariantRecord | null> {
   const res = await deps.engine.edit({ image: originalBuffer, mime: "image/jpeg", originalSha256: original.sha256 }, prompt.prompt, { treatment: treatment.key, aspect: "same" });
   if (!res) return null;
-  const meta = await sharp(res.image).metadata();
-  const drift = meta.width && meta.height ? Math.abs(meta.width / meta.height / (original.w / original.h) - 1) : 1;
-  if (drift > 0.04) throw new Error(`the edit came back ${meta.width}×${meta.height}, not the photo's shape; it cannot be checked against the original`);
-  const full = await sharp(res.image).resize(original.w, original.h, { fit: "fill" }).jpeg({ quality: 95 }).toBuffer();
-  const frame = await straightenedBase(full, plan, privacy);
+  // Image models reframe and straighten on their own: find the frame inside the edit rather than trusting its geometry.
+  const editMeta = await sharp(res.image).metadata();
+  const reg = await registerToFrame(res.image, base, plan.rotate);
+  if (reg.score < REGISTRATION_FLOOR) throw new Error(`the edit could not be lined up with the photo (match ${reg.score.toFixed(2)}), so it cannot be checked`);
+  const crop = await sharp(reg.image).extract({ left: reg.rect.left, top: reg.rect.top, width: reg.rect.w, height: reg.rect.h }).jpeg({ quality: 95 }).toBuffer();
+  const frame = await blurBoxes(crop, boxesInFrame(plan, privacy));
   const buffer = await sharp(frame).resize(POST_SIZE.w, POST_SIZE.h, { fit: "cover", kernel: "lanczos3" }).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
   const rec = await saveVariant(g, deps.store, tenant, original, buffer, {
     label: "B", name: `Variant B: ${treatment.label} (${res.engine === "higgsfield" ? "Higgsfield" : res.engine}, AI-edited)`,
     treatment: `${treatment.label}${res.model ? ` · ${res.model}` : ""}`, step: "generative-edit", aiEdited: true, engine: res.engine,
     extra: {
-      treatmentKey: treatment.key, model: res.model, recorded: res.recorded, prompt: res.prompt.slice(0, 4000),
+      treatmentKey: treatment.key, registration: reg.score, editSize: `${editMeta.width}x${editMeta.height}`,model: res.model, recorded: res.recorded, prompt: res.prompt.slice(0, 4000),
       graphPrompt: prompt.prompt.slice(0, 4000), promptSources: prompt.sources.slice(0, 40),
       ...(res.jobId ? { hfJobId: res.jobId } : {}), ...(res.credits !== undefined ? { hfCredits: res.credits } : {}),
       ...(res.createdAt ? { generatedAt: res.createdAt } : {}),

@@ -64,13 +64,14 @@ export async function buildEditPrompt(
       ...FIDELITY_DEFAULTS, ...fidelity.map((r) => r.text ?? "").filter(Boolean),
     ].join(" "),
     scope: `${treatment.scope}.`,
+    // The palette and the tone, not the website's typography: an image model has no use for fonts.
     style: [
-      b.visualStyle ? clip(b.visualStyle, 220) : "",
       palette ? `Grade toward the brand palette (${palette}): earthy and muted, never bright or saturated.` : "",
+      b.tone ? `The mood of the brand: ${clip(b.tone, 160)}` : "",
     ].filter(Boolean).join(" "),
     audience: audiences.length
       ? `For ${audiences.map((x) => x.name).filter(Boolean).join(", ")}${needs.length ? `, who want ${needs.map((n) => n.name).filter(Boolean).join(", ")}` : ""}.`
-      : `For people considering ${ctx.business.industry ?? "the business"}${ctx.business.city ? ` in ${ctx.business.city}` : ""}.`,
+      : `For people looking for ${ctx.business.industry ? `${/^[aeiou]/i.test(ctx.business.industry) ? "an" : "a"} ${ctx.business.industry}` : "a business like this"}${ctx.business.city ? ` in ${ctx.business.city}` : ""}.`,
     season: season.length ? `In season: ${season.map((e) => e.name).filter(Boolean).join(", ")}.` : "No seasonal cue.",
     format: "Keep the input's framing and aspect ratio exactly; do not straighten, crop, extend or reframe (the studio straightens and crops it to a 4:5 feed post afterwards).",
     negatives: "No text, letters, numbers, logos, watermarks or borders. No added or removed structures, people or objects. No HDR halos, lens flare, fake sunset or oversharpening.",
