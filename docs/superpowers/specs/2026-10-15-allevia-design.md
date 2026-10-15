@@ -49,7 +49,7 @@ First businesses:
 |---|---|
 | Graph shapes what the agent does | Every tool is a graph query or algorithm. The agent cannot answer without walking the graph, and the answer's path is checked against it (§7.4). |
 | Track 3 Company Brain: docs, tickets and chats in one graph | Vault docs, decisions, PENDING, GitHub issues and Allevia's own threads all live in one graph per business (§5) |
-| Who owns what, who knows what | `OWNS` from PENDING owners, assignees and the registry. `KNOWS_ABOUT` from git authorship of the vault (`agent:<name>:` commits) and from authored decisions (§5.3) |
+| Who owns what, who knows what | `OWNS` from PENDING owners and assignees (the registry states no ownership; it gives `USES`, who uses which system). `KNOWS_ABOUT` from git authorship of the vault (`agent:<name>:` commits) and from authored decisions (§5.3) |
 | Tracing decisions to their source | `Decision -BASED_ON-> Observation/Document`, `Person -DECIDED-> Decision`, quotes with dates. The `trace_decision` tool and the lit path (§7) |
 | Keeping knowledge current | Bi-temporal edges (`since/until` plus `recordedAt/retiredAt`), `Version` history on changing entities, idempotent re-sync, a librarian that closes contradicted facts (§5.4, §6.6) |
 | Answers with clear sources | Every claim cites a node. The server checks that each citation was actually read in this turn and that every number appears in a tool result (§7.4) |
