@@ -567,7 +567,11 @@ const funnelBiggestDrop: Detector = {
       const from = steps[best.i]!, to = steps[best.i + 1]!;
       const top = steps[0]!, bottom = steps[steps.length - 1]!;
       const subj = from.name ?? from.id;
-      const fn = humanise(prefix.replace(/_funnel$/, "_funnel")).toLowerCase();
+      // "seeker_signup_funnel" on the Seekers audience reads "signup funnel", not "Seekers seeker signup funnel".
+      const parts = prefix.split("_");
+      const lead = subj.toLowerCase().split(/\s+/)[0] ?? "";
+      if (parts.length > 2 && (lead === parts[0] || lead === `${parts[0]}s`)) parts.shift();
+      const fn = humanise(parts.join("_")).toLowerCase();
       const lower = (s: string) => (/^[A-Z][a-z]/.test(s) ? s[0]!.toLowerCase() + s.slice(1) : s);
       const fromL = lower(humanise(step(from))), toL = lower(humanise(step(to)));
       const dropPct = round(best.drop * 100, 1);

@@ -143,10 +143,14 @@ function goalLine(p: GoalPulse): string {
 
 // ---------- 2. since the last brief ----------
 
-async function changesSince(g: Read, since: number): Promise<{ count: number; changes: Change[] }> {
+async function changesSince(g: Read, since: number, now: number): Promise<{ count: number; changes: Change[] }> {
+  const today = isoDate(now);
   const [c] = await g.roQuery<{ n: number }>(
     "MATCH (o:Observation) WHERE o.createdAt >= $since AND NOT o.metric STARTS WITH 'allevia.' AND coalesce(o.baseline, false) = false RETURN count(o) AS n", { since });
-  const rows = await g.roQuery<{ id: string; metric: string; value: number; unit: string | null; subject: string; name: string | null; prev: number | null; simulated: boolean | null }>(
+  const rows = await g.roQuery<{
+    id: string; metric: string; value: number; unit: string | null; subject: string; name: string | null; prev: number | null; simulated: boolean | null;
+    oS: string | null; oE: string | null; pS: string | null; pE: string | null;
+  }>(
     `MATCH (o:Observation)-[m:MEASURES]->(s:Entity)
      WHERE o.createdAt >= $since AND m.until IS NULL AND NOT o.metric STARTS WITH 'allevia.' AND coalesce(o.baseline, false) = false
      WITH o, s ORDER BY coalesce(o.windowEnd, o.asOf) DESC LIMIT 500
@@ -154,10 +158,18 @@ async function changesSince(g: Read, since: number): Promise<{ count: number; ch
      WHERE p.metric = o.metric AND pm.until IS NULL AND coalesce(p.baseline, false) = false AND coalesce(p.windowEnd, p.asOf) < coalesce(o.windowEnd, o.asOf)
      WITH o, s, p ORDER BY coalesce(p.windowEnd, p.asOf) DESC
      WITH o, s, collect(p)[0] AS p
-     RETURN o.id AS id, o.metric AS metric, o.value AS value, o.unit AS unit, s.id AS subject, s.name AS name, p.value AS prev, o.simulated AS simulated`, { since });
+     RETURN o.id AS id, o.metric AS metric, o.value AS value, o.unit AS unit, s.id AS subject, s.name AS name, p.value AS prev, o.simulated AS simulated,
+            o.windowStart AS oS, coalesce(o.windowEnd, o.asOf) AS oE, p.windowStart AS pS, coalesce(p.windowEnd, p.asOf) AS pE`, { since });
+  // Only like for like: a 7-day count is never compared with a 30-day one. Tiny bases (under 10) are noise.
+  const span = (a: string | null, b: string | null): number => {
+    const x = dayOf(a), y = dayOf(b);
+    return x && y ? Math.round((dayMs(y) - dayMs(x)) / DAY_MS) : -1;
+  };
   const changes = rows
-    .filter((r) => r.prev !== null && r.prev !== undefined && r.simulated !== true && typeof r.value === "number" && r.prev !== 0 && r.value !== r.prev)
-    .map((r) => ({ r, rel: Math.abs((r.value - r.prev!) / r.prev!) }))
+    .filter((r) => r.prev !== null && r.prev !== undefined && r.simulated !== true && typeof r.value === "number" && Math.abs(r.prev) >= 10 && r.value !== r.prev)
+    .filter((r) => span(r.oS, r.oE) === span(r.pS, r.pE))
+    .filter((r) => !(r.oS && (dayOf(r.oE) ?? "") >= today))             // a window still open today is a partial count
+    .map((r) => ({ r, rel: Math.abs((r.value - r.prev!) / r.prev!) * (span(r.oS, r.oE) === 0 ? 0.5 : 1) })) // day-to-day jitter ranks lower
     .sort((a, b) => b.rel - a.rel || a.r.id.localeCompare(b.r.id))
     .slice(0, 2)
     .map(({ r }): Change => ({ obsId: r.id, subject: r.subject, name: r.name ?? r.subject, metric: r.metric, from: r.prev!, to: r.value, unit: r.unit }));
@@ -197,7 +209,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
 
   const goals = await goalPulse(g, now, biz);
   const kpi = await learningMetrics(g, now);
-  const { count: newObservations, changes } = await changesSince(g, since);
+  const { count: newObservations, changes } = await changesSince(g, since, now);
   const closed = await closedSince(g, since);
   const learned = await g.roQuery<{ id: string; text: string }>(
     "MATCH (r:Rule) WHERE r.kind = 'learned' AND r.createdAt >= $since RETURN r.id AS id, coalesce(r.text, r.name) AS text ORDER BY r.createdAt, id LIMIT 5", { since });
