@@ -11,7 +11,7 @@
 // vector index and crowd real entities out of top-k. Use vectorPropFor(type) instead of hard-coding the name.
 import type { GraphHandle } from "./client.js";
 import { SEARCHABLE_LABEL, type EntityType } from "./schema.js";
-import { ensureConstraints, migrateBeforeIndexes } from "./migrate.js";
+import { ensureConstraints, migrateBeforeIndexes, type ConstraintReport } from "./migrate.js";
 
 export const VECTOR_DIM = 384;
 export const ENTITY_VECTOR_PROP = "embedding";
@@ -72,15 +72,21 @@ const already = (e: unknown) => /already indexed|already exists/i.test(String((e
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+export interface SchemaReport { labelled: number; metricKeys: number; legacyDropped: number; constraints: ConstraintReport }
+
+// The whole schema of a tenant graph, in the order it has to be made: the data is brought up to date first (the labels
+// and keys the indexes cover), the indexes follow, and the constraints last (UNIQUE needs the Entity.id index).
+export async function ensureSchema(g: GraphHandle): Promise<SchemaReport> {
+  const migrated = await migrateBeforeIndexes(g);
+  await createIndexes(g, wantedIndexes());
+  const legacyDropped = KEEP_LEGACY_ENTITY_SEARCH ? 0 : await dropLegacyEntityIndexes(g);
+  return { labelled: migrated.searchable, metricKeys: migrated.metricKeys, legacyDropped, constraints: await ensureConstraints(g) };
+}
+
+// With no `specs` this is ensureSchema (what tenant creation and every ingest call); with a list, only those indexes.
 export async function ensureIndexes(g: GraphHandle, specs?: IndexSpec[]): Promise<void> {
-  // Whole schema: the data is brought up to date first (labels and keys the indexes cover), the indexes follow, and the
-  // constraints last (UNIQUE needs the Entity.id index). With an explicit list only those indexes are made.
-  if (!specs) await migrateBeforeIndexes(g);
-  await createIndexes(g, specs ?? wantedIndexes());
-  if (!specs) {
-    if (!KEEP_LEGACY_ENTITY_SEARCH) await dropLegacyEntityIndexes(g);
-    await ensureConstraints(g);
-  }
+  if (specs) await createIndexes(g, specs);
+  else await ensureSchema(g);
 }
 
 async function createIndexes(g: GraphHandle, specs: IndexSpec[]): Promise<void> {

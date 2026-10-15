@@ -1,7 +1,10 @@
-// `db:check`: is FalkorDB reachable, which graphs exist, which tenants are registered (with node/edge counts).
+// `db:check`: is FalkorDB reachable, does it run with the settings the code assumes, which graphs exist, which tenants are
+// registered (with node/edge counts). `db:migrate`: bring tenant graphs up to the current schema.
 // `db:unmerge`: undo one of the librarian's merges (src/ingest/merge.ts).
 import { loadConfig } from "../config.js";
-import { listGraphs, openGraph, openGraphByName } from "../graph/client.js";
+import { connect, listGraphs, openGraph, openGraphByName } from "../graph/client.js";
+import { ensureSchema } from "../graph/indexes.js";
+import { configDrift, readServerConfig } from "../graph/server-config.js";
 import { unmerge } from "../ingest/merge.js";
 import { listTenants } from "../graph/tenants.js";
 import type { Command } from "./_command.js";
@@ -22,6 +25,10 @@ export const commands: Command[] = [
         return 1;
       }
       console.log(`FalkorDB at ${url}: ok (${Date.now() - t0} ms)`);
+      const drift = configDrift(await readServerConfig(await connect()));
+      console.log(drift.length
+        ? `Server settings differ from docker-compose.yml: ${drift.map((d) => `${d.name} ${d.have ?? "unset"} (want ${d.want})`).join(", ")}. Restart it with: docker compose up -d falkordb`
+        : "Server settings: as docker-compose.yml");
       const shown = graphs.filter((g) => !g.startsWith("allevia_test_")).sort();
       const tests = graphs.length - shown.length;
       console.log(`Graphs (${graphs.length}): ${shown.join(", ") || "none"}${tests ? ` + ${tests} test graph(s)` : ""}`);
@@ -51,6 +58,29 @@ export const commands: Command[] = [
       const into = await unmerge(await openGraph(tenant), id);
       console.log(into ? `${id} is its own node again (it had been merged into ${into}); the librarian will leave the pair apart.` : `${id} was not merged into anything.`);
       return into ? 0 : 1;
+    },
+  },
+  {
+    name: "db:migrate",
+    usage: "db:migrate [tenant…]",
+    summary: "Bring tenant graphs up to the current schema (indexes, Searchable label, metricKey, Entity.id constraints)",
+    async run(args) {
+      const tenants = await listTenants();
+      const want = args.filter((a) => !a.startsWith("-"));
+      const chosen = want.length ? tenants.filter((t) => want.includes(t.slug)) : tenants;
+      const unknown = want.filter((w) => !tenants.some((t) => t.slug === w));
+      if (unknown.length) { console.error(`No such tenant: ${unknown.join(", ")}`); return 1; }
+      if (!chosen.length) { console.log("No tenants registered."); return 0; }
+      let failed = 0;
+      for (const t of chosen) {
+        const t0 = Date.now();
+        const r = await ensureSchema(await openGraphByName(t.graph));
+        const c = r.constraints;
+        console.log(`${t.slug.padEnd(16)} ${t.graph}: ${r.labelled} labelled Searchable, ${r.metricKeys} metricKeys, ${c.merged} duplicate nodes merged, ` +
+          `constraints ${Object.entries(c.status).map(([k, v]) => `${k} ${v}`).join(", ") || "none"} (${Date.now() - t0} ms)`);
+        for (const p of c.problems) { console.log(`  needs a person: ${p}`); failed++; }
+      }
+      return failed ? 1 : 0;
     },
   },
 ];
