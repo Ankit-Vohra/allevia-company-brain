@@ -10,6 +10,7 @@ import { decideApproval, listApprovals, type Decision } from "../actions/approva
 import type { Payload } from "../actions/shared.js";
 import { writeBrief } from "../insights/brief.js";
 import { runInsights } from "../insights/recommend.js";
+import { refreshGoalReadings } from "../program/scorecard.js";
 import { pct } from "../insights/text.js";
 import type { Command } from "./_command.js";
 
@@ -72,6 +73,7 @@ export const commands: Command[] = [
       const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { since: { type: "string" }, llm: { type: "boolean" }, json: { type: "boolean" } } });
       const g = await tenantGraph(positionals[0]);
       if (!g) { if (!positionals[0]) console.error("Usage: npm run cli -- brief <tenant> [--since 2026-10-14]"); return 2; }
+      await refreshGoalReadings(g); // Allevia 90 goals read their newest complete period first
       const b = await writeBrief(positionals[0]!, { graph: g, llm: !!values.llm, ...(values.since ? { since: values.since } : {}) });
       if (values.json) console.log(JSON.stringify(b, null, 2));
       else console.log(`${b.text}\n\n(saved as ${b.id})`);

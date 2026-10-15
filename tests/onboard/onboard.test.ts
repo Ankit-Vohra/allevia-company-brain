@@ -63,14 +63,14 @@ describe("onboard (fixture site, fake LLM, test graph)", () => {
   it("streams the stages in order, page events during the crawl, nodes as the graph grows, then done", () => {
     expect(events.filter((e) => e.type === "error")).toEqual([]);
     const stages = events.flatMap((e) => (e.type === "stage" ? [e.stage] : []));
-    expect(stages).toEqual(["crawl", "brand", "seo", "understand", "playbooks", "index", "done"]);
+    expect(stages).toEqual(["crawl", "brand", "seo", "understand", "profile", "playbooks", "goals", "baseline", "index", "capabilities", "done"]);
     const idx = (pred: (e: OnboardEvent) => boolean) => events.findIndex(pred);
     const crawlAt = idx((e) => e.type === "stage" && e.stage === "crawl");
     const brandAt = idx((e) => e.type === "stage" && e.stage === "brand");
     const pageAts = events.map((e, i) => (e.type === "page" ? i : -1)).filter((i) => i >= 0);
     expect(pageAts.length).toBe(first.pages);
     expect(pageAts.every((i) => i > crawlAt && i < brandAt)).toBe(true);
-    for (const s of ["crawl", "brand", "seo", "understand", "playbooks"]) {
+    for (const s of ["crawl", "brand", "seo", "understand", "profile", "playbooks", "goals", "baseline", "capabilities"]) {
       const from = idx((e) => e.type === "stage" && e.stage === s);
       expect(events.slice(from + 1).some((e) => e.type === "nodes"), s).toBe(true);
     }
@@ -116,6 +116,20 @@ describe("onboard (fixture site, fake LLM, test graph)", () => {
     const missing = await q<{ c: number }>("MATCH (n:Product) WHERE n.embedding IS NULL RETURN count(n) AS c");
     expect(missing[0]!.c).toBe(0);
     expect((await q<{ c: number }>("MATCH (c:Chunk) WHERE c.textEmbedding IS NULL RETURN count(c) AS c"))[0]!.c).toBe(0);
+  });
+
+  it("v2: country defaults from the site, the studio template's goals with unknown baselines, the program and its Day-0 checkpoint", async () => {
+    const [b] = await q("MATCH (b:Business) WHERE b.templateKey IS NOT NULL RETURN b.currency AS currency, b.locale AS locale, b.timeZone AS tz, b.templateKey AS tk");
+    expect(b).toEqual({ currency: "GBP", locale: "en-GB", tz: "Europe/London", tk: "architecture_studio" });
+    const goals = await q<{ name: string; baseline: number | null; conf: string }>(
+      "MATCH (:Business)-[:PURSUES]->(gl:Goal)-[:PART_OF]->(:Program) RETURN gl.name AS name, gl.baseline AS baseline, gl.baselineConf AS conf ORDER BY gl.priority");
+    expect(goals).toEqual([
+      { name: "Qualified enquiries per month", baseline: null, conf: "unknown" },
+      { name: "Instagram reach", baseline: null, conf: "unknown" },
+      { name: "Search clicks", baseline: null, conf: "unknown" },
+    ]);
+    expect(await q("MATCH (c:Checkpoint {day:0})-[:PART_OF]->(:Program {kind:'allevia90'}) RETURN c.id")).toHaveLength(1);
+    expect(first.capabilities?.map((c) => c.key)).toContain("search_console");
   });
 
   it("re-runs as a no-op: no new nodes or edges, the LLM is not asked again, the same counts", async () => {

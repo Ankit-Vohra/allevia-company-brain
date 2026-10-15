@@ -14,6 +14,7 @@ export interface TenantConfig {
   domain?: string;
   industry?: string;            // picks playbook benchmark templates ("jobs", "architecture")
   city?: string;
+  country?: string;             // sets currency, locale and time zone defaults (onboard/region.ts)
   description?: string;         // one phrase for the extraction prompt; defaults to `industry`
   founderNames: string[];       // how documents name the founder; extraction resolves these to person:founder
   sources: SourceName[];        // what `ingest <tenant>` runs when --sources is not given
@@ -29,6 +30,7 @@ export const TENANT_CONFIGS: Readonly<Record<string, TenantConfig>> = {
     domain: "aamdani.ai",
     industry: "jobs",
     city: "Raipur",
+    country: "India",
     description: "a Hindi-first, hyperlocal blue-collar jobs marketplace",
     founderNames: ["Ankit", "the founder"],
     sources: ["brain", "ops", "playbooks", "simads", "github"],
@@ -40,6 +42,7 @@ export const TENANT_CONFIGS: Readonly<Record<string, TenantConfig>> = {
     name: "AVS Atelier",
     domain: "avsatelier.in",
     industry: "architecture",
+    country: "India",
     description: "an architecture and interior design studio",
     founderNames: ["the founder"],
     sources: ["playbooks", "simads"],

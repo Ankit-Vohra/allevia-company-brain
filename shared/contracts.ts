@@ -133,3 +133,65 @@ export interface DirectivePreview {
   notes: string[];            // why something was left out ("the Chief of Staff can't be switched off")
   parser: "rules" | "rules+llm";
 }
+
+// ---------- Allevia 90 (product design §3.3, §8) ----------
+
+export type GoalState = "achieved" | "on_track" | "at_risk" | "off_track" | "no_data";
+
+export interface ProgramGoal {
+  id: string;
+  name: string;
+  metricKey: string;
+  unit: string | null;
+  period: "week" | "month";   // week: the last 7 complete days; month: the last 28
+  owner: { id: AgentId; name: string } | null;
+  baseline: number | null;    // Day 0, from real Observations; null when there was no data (baselineConf 'unknown')
+  baselineConf: "measured" | "reported" | "unknown";
+  baselineAt: string | null;  // the last day of the baseline's period
+  target: number | null;
+  targetBasis: "baseline" | "template" | null; // baseline × (1 + lift), or the template's floor when there is no baseline
+  current: number | null;     // the newest complete period
+  currentAt: string | null;
+  progress: number | null;    // 0 at the baseline, 1 at the target
+  status: GoalState;
+  dueAt: string | null;
+}
+
+export interface ProgramCheckpoint { day: 0 | 30 | 60 | 90; dueDate: string; status: "done" | "due" | "upcoming"; id?: string; at?: string; summary?: string }
+
+// The first-pass rate over the 30 days up to each day since the program started (null on a day with no decision yet).
+export interface FirstPassPoint { date: string; rate: number | null; decided: number; firstPass: number }
+
+// GET /api/:t/program: the "Your 90 days: Day N" card. Every number comes from the graph.
+export interface ProgramScorecard {
+  id: string;
+  kind: string;
+  status: string;             // active | graduated
+  day: number;                // 0 on the start date, in the business's time zone
+  daysLeft: number;
+  startDate: string;
+  endDate: string;
+  today: string;
+  timeZone?: string;
+  templateKey?: string;
+  checkpoints: ProgramCheckpoint[];
+  firstPass: { rate: number | null; decided30d: number; firstPass30d: number; series: FirstPassPoint[] };
+  learnedRules: { active: number; learnedSinceStart: number; retired: number; recent: Array<{ id: string; text: string; learnedAt: string | null }> };
+  goals: ProgramGoal[];
+  capabilities: { byMode: Record<AccessMode, number>; items: Array<Pick<CapabilityState, "key" | "name" | "accessMode" | "status">> };
+  deliverables: { approved: number; approvedSinceStart: number; editedSinceStart: number; rejectedSinceStart: number; pending: number };
+}
+
+// GET /api/:t/learning: what the team learned from the owner's edits, newest first.
+export interface LearnedRuleDto {
+  id: string;
+  text: string;
+  op: string;
+  status: "active" | "retired";
+  confidence: number;
+  appliedCount: number;
+  learnedAt: string | null;
+  retiredAt: string | null;
+  fromApprovalIds: string[];
+  agents: AgentId[];          // the desks it applies to (none: everyone)
+}

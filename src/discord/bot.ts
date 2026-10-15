@@ -17,7 +17,7 @@ import type { AgentEvent, TurnChecks } from "../../shared/contracts.js";
 import { agentById } from "../../shared/roster.js";
 import type { AskInput, AskResult } from "../agent/ask.js";
 import type { GraphHandle } from "../graph/client.js";
-import { DecisionError, decideAndNotify, type OnDecision } from "../server/approvals.js";
+import { DecisionError, decideAndNotify, type ActionOpts, type OnDecision } from "../server/approvals.js";
 import { approvals as listApprovals, latestBrief } from "../server/reads.js";
 import type { ApprovalDto } from "../server/types.js";
 import { pathViewUrl, renderAnswer, renderCitations, splitMessage, threadName } from "./format.js";
@@ -80,6 +80,7 @@ export interface BotDeps {
   graph: GraphHandle;
   ask: (input: AskInput, emit: (e: AgentEvent) => void) => Promise<AskResult>;
   onDecision?: OnDecision;                      // the API's hook (ServerDeps.onDecision), run after each decision
+  actions?: ActionOpts;                         // the API's executor settings (ServerDeps.actions): same actions either way
   now?: () => number;
   workLogIntervalMs?: number;                   // default 1,500
   maxLive?: number;                             // turns at once across threads (default 2)
@@ -214,7 +215,7 @@ export class AlleviaBot {
     try {
       await b.defer?.();
       const after = await decideAndNotify(this.d.graph, this.d.tenant, id, { decision }, {
-        now: this.now(), log: (l) => this.log(l), ...(this.d.onDecision ? { onDecision: this.d.onDecision } : {}),
+        now: this.now(), log: (l) => this.log(l), ...(this.d.onDecision ? { onDecision: this.d.onDecision } : {}), ...(this.d.actions ? { actions: this.d.actions } : {}),
       });
       const verdict = after.status === "rejected" ? "❌ Rejected by the owner" : `✅ Approved by the owner${after.status === "edited" ? " (edited)" : ""}`;
       await b.update({ content: `${approvalCard(after, { buttons: false }).content}\n${verdict}${after.result ? ` · ${clip(after.result, 200)}` : ""}`, buttons: [] });

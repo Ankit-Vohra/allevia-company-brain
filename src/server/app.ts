@@ -7,7 +7,13 @@
 // - Errors are JSON {error}; an unexpected failure is logged here and the client gets a plain sentence, no stack.
 // - CORS answers only the Vite dev origin; in production the web app is served from this same origin.
 // - Public mode (ALLEVIA_PUBLIC_MODE=1, spec §11.3): every write is refused, threads show only showcase turns, and
-//   /ask replays a stored showcase turn (Turn.showcase = true) instead of running the model.
+//   /ask replays a stored showcase turn (Turn.showcase = true) instead of running the model. GETs that bring the graph
+//   up to date as they read (program, capabilities) compute the same answer read-only.
+// - Approvals (POST /api/:t/approvals/:id) go through decide() in approvals.ts, the same function Discord's buttons
+//   use: the real executors, with GitHub issues and Discord posts as a dry run unless ALLEVIA_ACTIONS_LIVE=1. The
+//   answer is the card plus `learned` (the learned-rule AgentEvents, in the JSON) and `action`.
+// Focused route files: routes/program.ts (program, capabilities, learning), routes/team.ts (agents, directives),
+// routes/work.ts (insights and brief runs).
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
@@ -20,8 +26,12 @@ import type { AgentEvent, OnboardEvent } from "../../shared/contracts.js";
 import { ask, type AskDeps } from "../agent/ask.js";
 import type { ToolContext } from "../agent/tool.js";
 import type { GraphHandle } from "../graph/client.js";
-import { upsertNode, type Prim } from "../graph/upsert.js";
-import { DecisionError, decideAndNotify, type OnDecision } from "./approvals.js";
+import type { LlmRunner } from "../ingest/llm.js";
+import { DecisionError, decide, type ActionOpts, type OnDecision } from "./approvals.js";
+import { HttpError, readBody, type RouteCtx } from "./http.js";
+import { registerProgramRoutes } from "./routes/program.js";
+import { registerTeamRoutes } from "./routes/team.js";
+import { registerWorkRoutes } from "./routes/work.js";
 import * as reads from "./reads.js";
 import { sse } from "./sse.js";
 import type { TenantDto } from "./types.js";
@@ -69,6 +79,11 @@ export interface ServerDeps {
   // Called after an approval decision is recorded (executors and the learning loop plug in here). Its failure is
   // logged, never the owner's problem: the decision stands.
   onDecision?: OnDecision;
+  // How approved actions run (approvals.ts ActionOpts): default the real executors, GitHub/Discord dry-run unless
+  // ALLEVIA_ACTIONS_LIVE=1. Tests inject a dataDir for drafts and fakes for gh and HTTP.
+  actions?: ActionOpts;
+  // The model "Tell your team" uses for what its rules can't parse: undefined = haiku on the subscription, null = rules only.
+  directiveLlm?: LlmRunner | null;
   loadOnboard?: () => Promise<OnboardFn | null>;   // null: onboarding is not installed (501)
   loadPlans?: () => Promise<PlansModule | null>;    // null: pricing data is not installed (501)
   now?: () => number;
@@ -86,11 +101,7 @@ const PUBLIC_REFUSAL = "This is the public read-only demo of Allevia: approvals,
 const LIVE_CHAT_OFF =
   "Live chat needs the owner's model access, which this public demo does not have. Pick one of the recorded threads to watch the team work.";
 
-export class HttpError extends Error {
-  constructor(readonly status: 400 | 403 | 404 | 409 | 413 | 429 | 500 | 501 | 503, message: string) {
-    super(message);
-  }
-}
+export { HttpError };
 
 const TENANT_SLUG = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
 
@@ -117,21 +128,6 @@ const OnboardBody = z.object({
   industry: z.string().trim().max(120).optional(),
   vertical: z.string().trim().max(120).optional(),
 });
-
-async function readBody<T>(c: Context, schema: z.ZodType<T>): Promise<T> {
-  let raw: unknown;
-  try {
-    raw = await c.req.json();
-  } catch {
-    throw new HttpError(400, "The request body must be JSON.");
-  }
-  const r = schema.safeParse(raw);
-  if (!r.success) {
-    const issue = r.error.issues[0];
-    throw new HttpError(400, `Bad request: ${issue ? `${issue.path.join(".") || "body"} ${issue.message}` : "invalid body"}.`);
-  }
-  return r.data;
-}
 
 const validTimeZone = (tz: string | undefined): string | undefined => {
   if (!tz) return undefined;
@@ -216,7 +212,7 @@ export function createApp(deps: ServerDeps): Hono {
   app.use("*", secureHeaders({ crossOriginResourcePolicy: "same-origin", xFrameOptions: "DENY" }));
   app.use("/api/*", cors({
     origin: (origin) => (origins.includes(origin) ? origin : null),
-    allowMethods: ["GET", "POST", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["content-type", "accept"],
     maxAge: 600,
   }));
@@ -284,25 +280,15 @@ export function createApp(deps: ServerDeps): Hono {
     return sse<OnboardEvent>(c, { heartbeatMs, log }, async (send, signal) => {
       try {
         let done = false;
-        await run(input, (e) => { if (e.type === "done") done = true; send(e); }, signal);
+        // onboarding v2 stores the region itself (its profile stage), so nothing more to write here
+        await run(input, (e) => send(e), signal);
         cache = undefined; // a new tenant may be in the registry now
-        if (done) await storeRegion(input).catch((e) => log(`[onboard] region not stored: ${(e as Error).message}`));
       } finally {
         onboarding = false;
       }
     });
   });
 
-  // Country, currency, locale and time zone on the Business node, so the team reports in the owner's terms even when
-  // the onboarding module does not store them itself.
-  async function storeRegion(input: OnboardStart): Promise<void> {
-    const reg = (await registry()).find((t) => t.slug === input.slug);
-    if (!reg) return;
-    const props: Record<string, Prim> = {};
-    for (const k of ["country", "currency", "locale", "timeZone"] as const) if (input[k]) props[k] = input[k]!;
-    if (!Object.keys(props).length) return;
-    await upsertNode(await deps.openGraph(reg.slug), { type: "Business", id: reg.businessId, name: reg.name, props }, now());
-  }
 
   // ---- tenant routes ----
   app.get("/api/:t/overview", async (c) => {
@@ -370,10 +356,10 @@ export function createApp(deps: ServerDeps): Hono {
     return c.json(data);
   });
 
-  app.get("/api/:t/agents", async (c) => {
-    const { g } = await tenantOf(c);
-    return c.json(await reads.agentSummaries(g));
-  });
+  const routeCtx: RouteCtx = { tenantOf, refuseInPublicMode, publicMode: deps.publicMode, now, log };
+  registerTeamRoutes(app, routeCtx, deps.directiveLlm !== undefined ? { directiveLlm: deps.directiveLlm } : {});
+  registerProgramRoutes(app, routeCtx);
+  registerWorkRoutes(app, routeCtx);
 
   app.get("/api/:t/agents/:id", async (c) => {
     const { g } = await tenantOf(c);
@@ -396,7 +382,9 @@ export function createApp(deps: ServerDeps): Hono {
     const { reg, g } = await tenantOf(c);
     refuseInPublicMode();
     const body = await readBody(c, DecisionBody);
-    return c.json(await decideAndNotify(g, reg.slug, c.req.param("id"), body, { now: now(), log, ...(deps.onDecision ? { onDecision: deps.onDecision } : {}) }));
+    return c.json(await decide(g, reg.slug, c.req.param("id"), body, {
+      now: now(), log, ...(deps.onDecision ? { onDecision: deps.onDecision } : {}), ...(deps.actions ? { actions: deps.actions } : {}),
+    }));
   });
 
   app.post("/api/:t/ask", async (c) => {
