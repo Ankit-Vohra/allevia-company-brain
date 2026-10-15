@@ -9,6 +9,7 @@ import { AGENTS } from "@shared/roster";
 import { api } from "../api";
 import { AgentDrawer } from "../components/AgentDrawer";
 import { BriefPanel } from "../components/BriefPanel";
+import { DiscordHomeCard } from "../components/DiscordCard";
 import { AgentAvatar, agentDef, deptOf, fmtMs } from "../components/bits";
 import { ClockChip } from "../components/ClockChip";
 import { Icon } from "../components/Icon";
@@ -308,6 +309,7 @@ export function OfficePage() {
             )}
           </div>
         </section>
+        <DiscordHomeCard />
 
       <aside className="office-side" aria-label="Your growth plan and today's note">
         <div className="panel plan-panel">

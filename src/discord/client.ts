@@ -6,10 +6,10 @@
 // Developer Portal). If Discord refuses MessageContent, the bot starts without it and says so: slash commands and
 // messages that @mention the bot still work.
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client, Events, GatewayIntentBits, MessageFlags, MessageType,
+  ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client, Events, GatewayIntentBits, MessageFlags, MessageType,
   REST, Routes, SlashCommandBuilder, ThreadAutoArchiveDuration,
-  type ButtonInteraction, type ChatInputCommandInteraction, type Interaction, type Message, type MessageCreateOptions,
-  type MessageEditOptions, type SendableChannels, type ThreadChannel,
+  type ButtonInteraction, type ChatInputCommandInteraction, type GuildMember, type Interaction, type Message, type MessageCreateOptions,
+  type MessageEditOptions, type SendableChannels, type ThreadChannel, type APIInteractionGuildMember,
 } from "discord.js";
 import type { AlleviaBot, ButtonPort, ButtonSpec, CommandPort, MessagePort, Outgoing, PostedPort, ThreadPort } from "./bot.js";
 
@@ -29,6 +29,12 @@ export const SLASH_COMMANDS = [
   new SlashCommandBuilder().setName("approvals").setDescription("Proposals waiting for the owner's approval"),
 ].map((c) => c.toJSON());
 
+// The hub adds /continue: carry a conversation from the web app on here.
+export const HUB_SLASH_COMMANDS = [
+  ...SLASH_COMMANDS,
+  new SlashCommandBuilder().setName("continue").setDescription("Carry on a conversation from the web app here").toJSON(),
+];
+
 export function redactor(token: string | undefined): (s: string) => string {
   return (s) => (token ? s.split(token).join("[token]") : s);
 }
@@ -46,7 +52,10 @@ function components(buttons: ButtonSpec[] | undefined) {
 
 function payload(m: Outgoing): MessageCreateOptions & MessageEditOptions {
   if (typeof m === "string") return { content: m, allowedMentions: NO_PINGS };
-  return { content: m.content, components: components(m.buttons), allowedMentions: NO_PINGS };
+  return {
+    content: m.content, components: components(m.buttons), allowedMentions: NO_PINGS,
+    ...(m.files?.length ? { files: m.files.map((f) => new AttachmentBuilder(f.data, { name: f.name })) } : {}),
+  };
 }
 
 const posted = (msg: Message): PostedPort => ({ id: msg.id, edit: async (m) => { await msg.edit(payload(m)); } });
@@ -56,6 +65,12 @@ export function threadPort(t: ThreadChannel | SendableChannels & { id: string })
 }
 
 // ---------- incoming ----------
+
+// The roles of whoever acted, for the hub (it decides what a person may do from the roles they hold).
+export function roleIdsOf(member: GuildMember | APIInteractionGuildMember | null | undefined): string[] {
+  if (!member) return [];
+  return Array.isArray(member.roles) ? member.roles.map(String) : [...member.roles.cache.keys()];
+}
 
 export function messagePort(m: Message, botUserId: string): MessagePort {
   const inThread = m.channel.isThread();
@@ -70,6 +85,9 @@ export function messagePort(m: Message, botUserId: string): MessagePort {
     authorIsOwner: !!m.guild && m.guild.ownerId === m.author.id,
     system: m.system || (m.type !== MessageType.Default && m.type !== MessageType.Reply),
     content: m.content.replace(mention, " ").trim(),
+    memberRoleIds: roleIdsOf(m.member),
+    attachments: m.attachments?.size ?? 0,
+    files: m.attachments ? [...m.attachments.values()].map((a) => ({ url: a.url, name: a.name, size: a.size, contentType: a.contentType ?? null })) : [],
     thread: () => (inThread ? threadPort(m.channel as ThreadChannel) : null),
     startThread: async (name) => threadPort(await m.startThread({ name, autoArchiveDuration: ThreadAutoArchiveDuration.OneDay })),
     reply: async (out) => { await m.reply(payload(out)); },
@@ -92,6 +110,7 @@ export function commandPort(i: ChatInputCommandInteraction, channelId: string): 
     threadParentId: inThread ? (ch as ThreadChannel).parentId : null,
     userId: i.user.id,
     isOwner: !!i.guild && i.guild.ownerId === i.user.id,
+    memberRoleIds: roleIdsOf(i.member),
     defer: async () => { if (!i.deferred && !i.replied) await i.deferReply(); },
     respond: (m, opts) => answer(m, !!opts?.ephemeral),
     followUp: async (m, opts) => {
@@ -112,9 +131,18 @@ export function buttonPort(i: ButtonInteraction): ButtonPort {
   return {
     customId: i.customId,
     guildId: i.guildId,
+    channelId: i.channelId,
+    threadParentId: i.channel?.isThread() ? (i.channel as ThreadChannel).parentId : null,
     userId: i.user.id,
     isOwner: !!i.guild && i.guild.ownerId === i.user.id,
+    memberRoleIds: roleIdsOf(i.member),
     defer: async () => { if (!i.deferred && !i.replied) await i.deferUpdate(); },
+    createThread: async (name) => {
+      const ch = i.channel;
+      const parent = ch?.isThread() ? (ch as ThreadChannel).parent : ch;
+      if (!parent || parent.type !== ChannelType.GuildText) throw new Error("I can't open threads in this channel.");
+      return threadPort(await parent.threads.create({ name, autoArchiveDuration: ThreadAutoArchiveDuration.OneDay, type: ChannelType.PublicThread }));
+    },
     reply: async (text, opts) => {
       const p = { content: text, allowedMentions: NO_PINGS, ...(opts?.ephemeral ? { flags: MessageFlags.Ephemeral as const } : {}) };
       if (i.deferred || i.replied) await i.followUp(p);
@@ -138,8 +166,8 @@ export async function botGuilds(rest: REST): Promise<string[]> {
   return guilds.map((g) => g.id);
 }
 
-export async function registerCommands(rest: REST, s: DiscordSettings): Promise<void> {
-  await rest.put(Routes.applicationGuildCommands(s.appId, s.guildId), { body: SLASH_COMMANDS });
+export async function registerCommands(rest: REST, s: DiscordSettings, commands: typeof SLASH_COMMANDS = SLASH_COMMANDS): Promise<void> {
+  await rest.put(Routes.applicationGuildCommands(s.appId, s.guildId), { body: commands });
 }
 
 const DISALLOWED_INTENTS = /disallowed intents|4014/i;

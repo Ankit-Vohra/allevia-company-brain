@@ -18,16 +18,18 @@ import { agentById } from "../../shared/roster.js";
 import type { AskInput, AskResult } from "../agent/ask.js";
 import type { GraphHandle } from "../graph/client.js";
 import { DecisionError, decideAndNotify, type ActionOpts, type OnDecision } from "../server/approvals.js";
-import { approvals as listApprovals, latestBrief } from "../server/reads.js";
+import { approvals as listApprovals, latestBrief, sessionDetail } from "../server/reads.js";
 import type { ApprovalDto } from "../server/types.js";
+import type { AttachmentRef } from "./attachments.js";
 import { pathViewUrl, renderAnswer, renderCitations, splitMessage, threadName } from "./format.js";
-import { findThreadSession, openThreadSession } from "./sessions.js";
+import { findThreadSession, linkSessionThread, openThreadSession, recentUnlinkedSessions } from "./sessions.js";
 import { ThrottledEditor, WorkLogState } from "./worklog.js";
 
 // ---------- ports ----------
 
 export interface ButtonSpec { customId: string; label: string; style: "success" | "danger" | "secondary" }
-export type Outgoing = string | { content: string; buttons?: ButtonSpec[] };
+export interface OutFile { name: string; data: Buffer }
+export type Outgoing = string | { content: string; buttons?: ButtonSpec[]; files?: OutFile[] };
 
 export interface PostedPort { id: string; edit(m: Outgoing): Promise<void> }
 export interface ThreadPort { id: string; send(m: Outgoing): Promise<PostedPort> }
@@ -42,6 +44,9 @@ export interface MessagePort {
   authorIsOwner: boolean;         // the server owner
   system: boolean;                // a system message (thread created, pins, joins…)
   content: string;                // the bot's own mention removed
+  memberRoleIds?: string[];       // the author's roles in the guild (hub mode)
+  attachments?: number;           // how many files came with it (hub mode: the support copy)
+  files?: AttachmentRef[];        // those files (hub mode: photos and videos for the Studio)
   thread(): ThreadPort | null;    // the thread it was posted in
   startThread(name: string): Promise<ThreadPort>;
   reply(m: Outgoing): Promise<void>;
@@ -55,6 +60,7 @@ export interface CommandPort {
   threadParentId: string | null;
   userId: string;
   isOwner: boolean;
+  memberRoleIds?: string[];                     // the user's roles in the guild (hub mode)
   defer(): Promise<void>;
   respond(m: Outgoing, opts?: { ephemeral?: boolean }): Promise<void>;
   followUp(m: Outgoing, opts?: { ephemeral?: boolean }): Promise<PostedPort>;
@@ -65,9 +71,13 @@ export interface CommandPort {
 export interface ButtonPort {
   customId: string;
   guildId: string | null;
+  channelId?: string;                           // the channel the card is in (hub mode: how the business is found)
+  threadParentId?: string | null;               // its parent channel, when the card is in a thread
   userId: string;
   isOwner: boolean;
+  memberRoleIds?: string[];                     // the user's roles in the guild (hub mode)
   defer?(): Promise<void>;                      // acknowledge before slow work (the card is edited later)
+  createThread?(name: string): Promise<ThreadPort>; // a new public thread in the channel the card is in (for /continue)
   reply(text: string, opts?: { ephemeral?: boolean }): Promise<void>;
   update(m: Outgoing): Promise<void>;           // edit the card the button is on
 }
@@ -84,6 +94,7 @@ export interface BotDeps {
   now?: () => number;
   workLogIntervalMs?: number;                   // default 1,500
   maxLive?: number;                             // turns at once across threads (default 2)
+  shared?: { live: number };                    // hub mode: one count of running turns across every business's bot
   log?: (line: string) => void;
 }
 
@@ -105,6 +116,7 @@ const quote = (s: string): string => s.split("\n").map((l) => `> ${l}`).join("\n
 
 export const buttonId = (decision: "approve" | "reject", approvalId: string): string => `${BUTTON_PREFIX}:${decision}:${approvalId}`;
 const BUTTON = new RegExp(`^${BUTTON_PREFIX}:(approve|reject):(.+)$`);
+const CONTINUE = new RegExp(`^${BUTTON_PREFIX}:continue:(.+)$`);
 
 export function approvalCard(a: ApprovalDto, opts: { buttons?: boolean } = {}): { content: string; buttons: ButtonSpec[] } {
   const who = agentById(a.by)?.name ?? a.by;
@@ -128,7 +140,8 @@ export function approvalCard(a: ApprovalDto, opts: { buttons?: boolean } = {}): 
 // ---------- the bot ----------
 
 export class AlleviaBot {
-  private live = 0;
+  private own = { live: 0 };
+  private get gate(): { live: number } { return this.d.shared ?? this.own; }
   private queues = new Map<string, Promise<void>>();
   private sessions = new Map<string, string>();
 
@@ -162,6 +175,7 @@ export class AlleviaBot {
       case "ask": return this.askCommand(c);
       case "brief": return this.briefCommand(c);
       case "approvals": return this.approvalsCommand(c);
+      case "continue": return this.continueCommand(c);
       default: return c.respond("I don't know that command.", { ephemeral: true });
     }
   }
@@ -203,9 +217,56 @@ export class AlleviaBot {
     for (const a of shown) await c.followUp(approvalCard(a));
   }
 
+  // One conversation, two doors: a thread started in the web app can be carried on here. /continue offers the newest few
+  // (as buttons); pressing one opens a Discord thread tied to the same conversation, with a recap, and replies there
+  // continue it. The same works the other way with no help: a Discord thread is in the web app's history, and the web
+  // continues it with its session id.
+  private async continueCommand(c: CommandPort): Promise<void> {
+    if (c.channelId !== this.d.channelId && c.threadParentId !== this.d.channelId) return c.respond(`Use /continue in <#${this.d.channelId}>.`, { ephemeral: true });
+    await c.defer();
+    const rows = await recentUnlinkedSessions(this.d.graph, 5);
+    if (!rows.length) return c.respond("Nothing from the web app is waiting to be carried on here. Ask something in the web app first, then use /continue.");
+    await c.respond({
+      content: "Pick a conversation from the web app to carry on here:",
+      buttons: rows.map((r) => ({ customId: `${BUTTON_PREFIX}:continue:${r.id}`, label: clip(r.title, 70), style: "secondary" as const })),
+    });
+  }
+
+  private async continueButton(b: ButtonPort, sessionId: string): Promise<void> {
+    if (!b.createThread) return b.reply("I can't open a thread here. Use /continue in the Allevia channel.", { ephemeral: true });
+    try {
+      await b.defer?.();
+      const detail = await sessionDetail(this.d.graph, sessionId, { showcaseOnly: false });
+      if (!detail) return b.reply("That conversation no longer exists.", { ephemeral: true });
+      const [open] = await this.d.graph.roQuery<{ tid: string | null }>("MATCH (s:Entity:Session {id:$id}) RETURN s.discordThreadId AS tid LIMIT 1", { id: sessionId });
+      if (open?.tid) return b.reply(`That conversation is already open in <#${open.tid}>.`, { ephemeral: true });
+      const thread = await b.createThread(threadName(detail.title));
+      const link = await linkSessionThread(this.d.graph, sessionId, thread.id, this.now());
+      if (!link) return b.reply("That conversation no longer exists.", { ephemeral: true });
+      if (!link.linked) return b.reply(`That conversation is already open in <#${link.threadId}>.`, { ephemeral: true });
+      this.sessions.set(thread.id, sessionId);
+      const last = detail.turns.at(-1);
+      await thread.send(clip([
+        `**Carrying on from the web app:** ${detail.title}`,
+        ...(last ? [`Last question: ${clip(last.question, 300)}`, quote(clip(renderCitations(last.answer, new Map()), 900))] : []),
+        "Reply here and your team carries on from where you left off. The web app shows the same conversation.",
+      ].join("\n"), 1900));
+      await b.update({ content: `Carrying on in <#${thread.id}>.`, buttons: [] });
+    } catch (e) {
+      this.log(`continue ${sessionId} failed: ${message(e)}`);
+      return b.reply("I couldn't open that conversation here. Try again, or carry on in the web app.", { ephemeral: true });
+    }
+  }
+
   // ----- buttons -----
 
   async onButton(b: ButtonPort): Promise<void> {
+    const cont = CONTINUE.exec(b.customId);
+    if (cont) {
+      if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
+      if (!b.isOwner) return b.reply("Only the owner can carry a conversation on here.", { ephemeral: true });
+      return this.continueButton(b, cont[1]!);
+    }
     const m = BUTTON.exec(b.customId);
     if (!m) return;
     if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
@@ -259,11 +320,11 @@ export class AlleviaBot {
   }
 
   private async runTurn(thread: ThreadPort, question: string, asker: string, sessionId: string): Promise<void> {
-    if (this.live >= (this.d.maxLive ?? 2)) {
+    if (this.gate.live >= (this.d.maxLive ?? 2)) {
       await thread.send("The team is already working on other questions. Ask again in a minute.");
       return;
     }
-    this.live++;
+    this.gate.live++;
     const t0 = Date.now();
     try {
       const state = new WorkLogState();
@@ -293,7 +354,7 @@ export class AlleviaBot {
       for (const p of parts) await thread.send(p);
       this.log(`thread ${thread.id}: ${result?.ok ? "answered" : "failed"} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     } finally {
-      this.live--;
+      this.gate.live--;
     }
   }
 

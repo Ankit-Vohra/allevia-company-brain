@@ -62,11 +62,23 @@ export type ActionKind = "github_issue" | "content_draft" | "pause_ad" | "discor
 export type OnboardStage =
   | "crawl" | "brand" | "seo" | "understand" | "playbooks" | "index" | "done"
   | "profile" | "goals" | "baseline" | "capabilities";
+// Where the owner joins their team on Discord. Only present when the Discord hub is set up on this server.
+// inviteUrl: a single-use join link; later: the area is not ready yet ("We'll send your Discord link shortly").
+export interface DiscordInfo { inviteUrl?: string; later?: boolean }
+
+// GET /api/:t/discord (the Home page): enabled false when this server has no Discord hub.
+export interface DiscordHome {
+  enabled: boolean;
+  state?: "invite" | "joined" | "expired" | "later";
+  inviteUrl?: string;       // invite: the single-use link
+  openUrl?: string;         // joined: the team's channel
+}
+
 export type OnboardEvent =
   | { type: "stage"; stage: OnboardStage; text: string }
   | { type: "page"; url: string; title: string }
   | { type: "nodes"; nodes: NodeRef[]; edges: EdgeRef[] }                             // graph grows live
-  | { type: "done"; tenant: string; counts: Record<string, number> }
+  | { type: "done"; tenant: string; counts: Record<string, number>; discord?: DiscordInfo }
   | { type: "error"; message: string };
 
 // ---------- capability ladder and team settings (product design §2.3, §2.4, §8) ----------

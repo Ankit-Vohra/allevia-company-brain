@@ -198,6 +198,7 @@ export interface SaveTurnInput {
   question: string;
   answer: string;
   asker: string;
+  source?: string;                  // which door the question came through ("web", "discord", "cli", "mcp") (a thread can be continued from either)
   at: number;                       // epoch ms the turn started
   ms?: number;                      // how long it took
   status?: "ok" | "failed";
@@ -237,6 +238,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
     question: t.question, answer: t.answer, at: t.at, status: t.status ?? "ok", sessionId: t.sessionId, asker: t.asker,
     agents: t.agents, citations: t.citations, checks: JSON.stringify(t.checks ?? null), events: JSON.stringify(compactEvents(t.events)),
   };
+  if (t.source) turnProps.source = t.source;
   if (t.ms !== undefined) turnProps.ms = t.ms;
   if (t.error) turnProps.error = t.error;
   const nodes: NodeInput[] = [{ type: "Turn", id: t.turnId, name: clip(oneLine(t.question), 120) || t.turnId, summary: clip(t.answer, 600), props: turnProps }];

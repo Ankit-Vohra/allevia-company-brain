@@ -16,7 +16,7 @@ export interface StudioLatest {
     approval: { id: string; status: string; result: string | null; contentId: string | null } | null;
   };
 }
-import type { AgentMode, CapabilityState, DirectivePreview, LearnedRuleDto, ProgramScorecard } from "@shared/contracts";
+import type { AgentMode, CapabilityState, DirectivePreview, DiscordHome, LearnedRuleDto, ProgramScorecard } from "@shared/contracts";
 import type {
   AgentDetail, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, GoalSetup, GraphData, LearningFeed, LiveTurn, NodeDetail,
   OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Tenant, TurnEventsPage, Usage,
@@ -136,6 +136,15 @@ export const api = {
   },
   async agent(t: string, id: AgentId): Promise<AgentDetail> {
     return mode === "mock" ? (await mock()).agent(t, id) : getJson(`/api/${enc(t)}/agents/${enc(id)}`);
+  },
+  /** Where this business joins its team on Discord. `enabled: false` when the server has no Discord hub (and always in the mock). */
+  async discord(t: string): Promise<DiscordHome> {
+    return mode === "mock" ? { enabled: false } : getJson(`/api/${enc(t)}/discord`);
+  },
+  /** A fresh single-use join link; the old one stops working. */
+  async discordNewLink(t: string): Promise<DiscordHome> {
+    if (mode === "mock") return { enabled: false };
+    return sendJson(`/api/${enc(t)}/discord/invite`, "POST", {});
   },
   async recommendations(t: string): Promise<Recommendation[]> {
     return mode === "mock" ? (await mock()).recommendations(t) : getJson(`/api/${enc(t)}/recommendations`);

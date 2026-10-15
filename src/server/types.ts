@@ -39,6 +39,7 @@ export interface TurnRecordDto {
   answer: string;
   at: string;
   ms: number;
+  source?: Channel;             // the door it came through: "web" or "discord" (a thread can be continued from either)
   agents: AgentId[];
   citations: string[];
   checks: TurnChecks;

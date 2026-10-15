@@ -11,7 +11,9 @@ export interface AlleviaConfig {
   extractModel: string;
   dataDir: string;
   brainPath: string;
-  discord: { token?: string; appId?: string; guildId?: string; channelId?: string };
+  // guildId/channelId: the old single-channel demo server. hubGuildId/staffRoleId: the customer hub (hub mode is on
+  // when DISCORD_HUB_GUILD_ID is set); the token and application id are the one shared bot's, for both.
+  discord: { token?: string; appId?: string; guildId?: string; channelId?: string; hubGuildId?: string; staffRoleId?: string };
   avsIg: { token?: string; userId?: string };
   // `via` is the ssh alias the box is actually reached through (EC2 Instance Connect); host/user/keyPath describe it.
   opsSsh: { host: string; user: string; keyPath: string; remoteDir: string; via: string };
@@ -66,6 +68,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
       appId: get("DISCORD_APPLICATION_ID"),
       guildId: get("DISCORD_GUILD_ID"),
       channelId: get("DISCORD_CHANNEL_ID"),
+      hubGuildId: get("DISCORD_HUB_GUILD_ID"),
+      staffRoleId: get("DISCORD_STAFF_ROLE_ID"),
     },
     avsIg: { token: get("AVS_IG_LOGIN_ACCESS_TOKEN"), userId: get("AVS_IG_USER_ID") },
     opsSsh: {

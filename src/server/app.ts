@@ -37,6 +37,7 @@ import { HttpError, readBody, type RouteCtx } from "./http.js";
 import { registerGoalRoutes } from "./routes/goals.js";
 import { registerProgramRoutes } from "./routes/program.js";
 import { registerTeamRoutes } from "./routes/team.js";
+import { LinkTooSoon, type HubService } from "../discord/hub-service.js";
 import { registerUsageRoutes } from "./routes/usage.js";
 import { registerWorkRoutes } from "./routes/work.js";
 import * as reads from "./reads.js";
@@ -94,6 +95,9 @@ export interface ServerDeps {
   // The model "Tell your team" uses for what its rules can't parse: undefined = haiku on the subscription, null = rules only.
   directiveLlm?: LlmRunner | null;
   loadOnboard?: () => Promise<OnboardFn | null>;   // null: onboarding is not installed (501)
+  // The Discord hub (one shared server for every customer): after onboarding succeeds the business's area is set up there
+  // and the owner gets a join link. null or absent: no hub on this server, and nothing Discord shows anywhere.
+  discordHub?: () => Promise<HubService | null>;
   loadPlans?: () => Promise<PlansModule | null>;    // null: pricing data is not installed (501)
   studio?: () => Promise<StudioWiring | null>;      // the Studio's assets, vision and engine; absent: 501
   now?: () => number;
@@ -193,6 +197,11 @@ export function createApp(deps: ServerDeps): Hono {
     }
     return cache.list;
   };
+
+  // The hub is looked at lazily: a server with no hub never loads any of it.
+  let hubLoad: Promise<HubService | null> | undefined;
+  const discordHub = (): Promise<HubService | null> =>
+    (hubLoad ??= (deps.discordHub?.() ?? Promise.resolve(null)).catch((e) => { log(`[api] the Discord hub could not start: ${e instanceof Error ? e.message : String(e)}`); return null; }));
 
   let embedder: Promise<ToolContext["embedQuery"] | undefined> | undefined;
   const embedQuery = () => (embedder ??= (deps.embedQuery?.() ?? Promise.resolve(undefined)).catch(() => undefined));
@@ -295,16 +304,41 @@ export function createApp(deps: ServerDeps): Hono {
     onboarding = true;
     return sse<OnboardEvent>(c, { heartbeatMs, log }, async (send, signal) => {
       try {
-        let done = false;
+        const hub = await discordHub();
+        // With a hub, the "done" event waits until the business's Discord area is set up, so it can carry the join link.
+        // Provisioning never fails onboarding: when it cannot finish, `done` says "later" and the retry loop finishes it.
+        let held: Extract<OnboardEvent, { type: "done" }> | undefined;
         // onboarding v2 stores the region itself (its profile stage), so nothing more to write here
-        await run(input, (e) => send(e), signal);
+        await run(input, (e) => { if (e.type === "done" && hub) held = e; else send(e); }, signal);
         cache = undefined; // a new tenant may be in the registry now
+        if (held && hub) send({ ...held, discord: await hub.afterOnboarding(held.tenant) });
       } finally {
         onboarding = false;
       }
     });
   });
 
+
+  // ---- Discord: where the owner joins their team (the Home page and the onboarding "done" screen read this) ----
+  app.get("/api/:t/discord", async (c) => {
+    const { reg } = await tenantOf(c);
+    const hub = deps.publicMode ? null : await discordHub();
+    return c.json(hub ? await hub.home(reg.slug) : { enabled: false });
+  });
+
+  app.post("/api/:t/discord/invite", async (c) => {
+    refuseInPublicMode();
+    const { reg } = await tenantOf(c);
+    const hub = await discordHub();
+    if (!hub) throw new HttpError(501, "Discord is not set up on this server yet.");
+    try {
+      return c.json(await hub.newLink(reg.slug));
+    } catch (e) {
+      if (e instanceof LinkTooSoon) throw new HttpError(429, e.message);
+      log(`[api] new Discord link for ${reg.slug}: ${e instanceof Error ? e.message : String(e)}`);
+      throw new HttpError(503, "We could not make a new Discord link just now. Try again in a minute.");
+    }
+  });
 
   // ---- tenant routes ----
   app.get("/api/:t/overview", async (c) => {

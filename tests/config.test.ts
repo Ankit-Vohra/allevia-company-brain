@@ -17,6 +17,8 @@ describe("loadConfig", () => {
       "export ALLEVIA_EXTRACT_MODEL='sonnet'",
       'DISCORD_BOT_TOKEN="tok-from-file # not a comment"',
       "DISCORD_GUILD_ID=123 # trailing comment",
+      "DISCORD_HUB_GUILD_ID=555000111",
+      "DISCORD_STAFF_ROLE_ID=555000222",
       "ALLEVIA_BRAIN_PATH=~/brain-test",
       "ALLEVIA_PUBLIC_MODE=true",
       "PORT=9999",
@@ -40,6 +42,7 @@ describe("loadConfig", () => {
     expect(c.port).toBe(8787);
     expect(c.webBaseUrl).toBe("http://127.0.0.1:8787");
     expect(c.discord.token).toBeUndefined();
+    expect(c.discord.hubGuildId).toBeUndefined();
     expect(c.avsIg).toEqual({ token: undefined, userId: undefined });
   });
 
@@ -49,6 +52,8 @@ describe("loadConfig", () => {
     expect(c.extractModel).toBe("sonnet");
     expect(c.discord.token === "tok-from-file # not a comment").toBe(true); // never print token values
     expect(c.discord.guildId).toBe("123");
+    expect(c.discord.hubGuildId).toBe("555000111"); // the hub's own names; the old demo server keeps DISCORD_GUILD_ID
+    expect(c.discord.staffRoleId).toBe("555000222");
     expect(c.brainPath).toBe(join(homedir(), "brain-test"));
     expect(c.publicMode).toBe(true);
     expect(c.port).toBe(9999);
