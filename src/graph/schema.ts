@@ -197,7 +197,11 @@ export const NODE_META_PROPS = [
   "id", "name", "summary", "src", "asOf", "simulated", "createdAt", "updatedAt", "stateSince", "embedding", "textEmbedding",
   "rev", "_mergeToken",
 ] as const;
-export const EDGE_META_PROPS = ["since", "until", "recordedAt", "retiredAt", "src", "asOf", "conf", "closedCost", "closeReason"] as const;
+// asOfMs: the edge's asOf as epoch ms, written by upsertEdge so a statement can compare source dates; retiredAsOfMs:
+// the date of the source that ended the edge (see edges.ts).
+export const EDGE_META_PROPS = [
+  "since", "until", "recordedAt", "retiredAt", "src", "asOf", "asOfMs", "retiredAsOfMs", "conf", "closedCost", "closeReason",
+] as const;
 
 // Closed edges also get `closedCost = CLOSED_EDGE_COST`. FalkorDB's algo.SPpaths cannot filter on edge properties,
 // but it can cap a summed cost (costProp/maxCost, missing cost = 0), which makes it skip closed edges during the search.

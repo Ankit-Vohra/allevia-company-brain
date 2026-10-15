@@ -1,7 +1,7 @@
 // Tenant registry. `allevia_meta` holds one (:Tenant) node per business; each business gets its own graph
 // `allevia_<slug>` with the standard indexes and a Business node (businessId(slug)) as the root of its world.
 // ALLEVIA_META_GRAPH (or opts.metaGraph) points the registry elsewhere, which is how tests stay off the real one.
-import { graphName, openGraph, openGraphByName } from "./client.js";
+import { MAX_PAGE, graphName, openGraph, openGraphByName } from "./client.js";
 import { ensureIndexes } from "./indexes.js";
 import { ONTOLOGY_VERSION } from "./schema.js";
 import { upsertNode, type Prim } from "./upsert.js";
@@ -34,11 +34,18 @@ function toTenant(p: Record<string, unknown>): Tenant {
   return t;
 }
 
+// Paged by slug (a result holds at most RESULTSET_SIZE rows; the rest would vanish silently).
 export async function listTenants(opts?: TenantOpts): Promise<Tenant[]> {
   const meta = await openGraphByName(metaName(opts));
   try {
-    const rows = await meta.roQuery<{ p: Record<string, unknown> }>("MATCH (t:Tenant) RETURN properties(t) AS p ORDER BY t.slug");
-    return rows.map((r) => toTenant(r.p));
+    const out: Tenant[] = [];
+    for (let after = ""; ;) {
+      const rows = await meta.roQuery<{ p: Record<string, unknown> }>(
+        "MATCH (t:Tenant) WHERE t.slug > $after RETURN properties(t) AS p ORDER BY t.slug LIMIT $limit", { after, limit: MAX_PAGE });
+      for (const r of rows) out.push(toTenant(r.p));
+      if (rows.length < MAX_PAGE) return out;
+      after = out[out.length - 1]!.slug;
+    }
   } catch (e) {
     if (/empty key/i.test((e as Error).message)) return []; // registry not created yet
     throw e;
