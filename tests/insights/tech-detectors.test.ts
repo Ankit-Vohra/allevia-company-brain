@@ -147,7 +147,8 @@ describe("the App Store and releases (Imran)", () => {
 
   it("release health: new errors since the newest build, and crash-free sessions falling after it", async () => {
     const [c] = await run("tech.release_health");
-    expect(c).toMatchObject({ key: "tech.release_health:event:ios-build-88", agent: "qa-release", title: "Since the app build of 8 Oct: 3 new app errors appeared" });
+    expect(c!["key"]).toBe(["tech.release_health", "event", "ios-build-88"].join(":"));
+    expect(c).toMatchObject({ agent: "qa-release", title: "Since the app build of 8 Oct: 3 new app errors appeared" });
     expect(c!.numbers).toEqual({ new_errors_since: 3 });
     const fell = (await run("tech.release_health", { releaseDropPoints: 0.9 }))[0]!;
     expect(fell.title).toBe("Since the app build of 8 Oct: sessions without a crash fell from 99.7% to 98.7% and 3 new app errors appeared");
