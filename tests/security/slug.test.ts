@@ -13,6 +13,7 @@ import { CRAFTED_SLUGS } from "./crafted.js";
 import { AssetStore } from "../../src/studio/store.js";
 import { studioSample } from "../../src/studio/wiring.js";
 import { tenantGraph } from "../../src/agent/wiring.js";
+import { freeSlug, slugFor } from "../../src/server/app.js";
 import { testGraphName } from "../helpers/graph.js";
 
 describe("tenant slugs", () => {
@@ -90,5 +91,32 @@ describe("folders and files built from a slug", () => {
   it("the demo sample lookup refuses a crafted slug", () => {
     for (const [, slug] of CRAFTED_SLUGS) expect(studioSample("/nonexistent", slug)).toBeNull();
     expect(studioSample("/nonexistent", "meta")).toBeNull();
+  });
+});
+
+describe("a slug made from a business's name or website", () => {
+  it("is always a valid slug, whatever the name says", () => {
+    const names = [
+      "../../etc/passwd", "Kestrel & Oak", "Robert'); DROP TABLE x;--", "x' }) MATCH (n) DETACH DELETE n //", "META", "Meta", "meta", "Health", "Operator", "auth",
+      "\u202eevil", "\u0000", "   ", "", "___", "a".repeat(200), "Caf\u00e9 \u00dcber", "\u5317\u4eac\u5496\u5561", "tenants", "ALLEVIA_META", "allevia meta",
+    ];
+    for (const n of names) {
+      const slug = slugFor(n, "https://www.example.com/");
+      expect(isTenantSlug(slug), JSON.stringify(n)).toBe(true);
+      expect(() => graphName(slug)).not.toThrow();
+    }
+    for (const reserved of ["Meta", "meta", "Operator", "Health"]) expect(slugFor(reserved, "x.example")).toMatch(/_co$/);
+    for (const url of ["", "not a url", "https://../", "https://xn--e1afmkfd.xn--p1ai/", "http://[::1]/", "https://meta.example/"]) {
+      expect(isTenantSlug(slugFor("", url)), url).toBe(true);
+    }
+  });
+
+  it("the next free id stays a slug, and never the same as one that is taken", () => {
+    const taken = new Set(["shop", "shop_2", "shop_3"]);
+    expect(freeSlug("shop", taken)).toBe("shop_4");
+    const long = "a".repeat(MAX_SLUG_LENGTH);
+    const free = freeSlug(long, new Set([long]));
+    expect(isTenantSlug(free)).toBe(true);
+    expect(free.length).toBeLessThanOrEqual(MAX_SLUG_LENGTH);
   });
 });
