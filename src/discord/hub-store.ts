@@ -16,7 +16,7 @@ import {
 } from "./hub-types.js";
 
 const CHANNEL_PROP: Record<ChannelKind, string> = {
-  "your-team": "yourTeamId", approvals: "approvalsId", "todays-note": "todaysNoteId", support: "supportId",
+  "your-team": "yourTeamId", studio: "studioId", approvals: "approvalsId", "todays-note": "todaysNoteId", support: "supportId",
 };
 
 type Props = Record<string, unknown>;
@@ -78,13 +78,16 @@ export class GraphHubStore implements HubStore {
   async getHub(guildId: string): Promise<HubRecord | null> {
     const g = await this.graph();
     const [r] = await g.roQuery<{ p: Props }>("MATCH (h:DiscordHub {guildId:$guildId}) RETURN properties(h) AS p", { guildId });
-    return r ? { guildId, ...(str(r.p.supportInboxId) ? { supportInboxId: str(r.p.supportInboxId)! } : {}), updatedAt: num(r.p.updatedAt) } : null;
+    return r ? {
+      guildId, ...(str(r.p.staffCategoryId) ? { staffCategoryId: str(r.p.staffCategoryId)! } : {}),
+      ...(str(r.p.supportInboxId) ? { supportInboxId: str(r.p.supportInboxId)! } : {}), updatedAt: num(r.p.updatedAt),
+    } : null;
   }
 
   async saveHub(rec: HubRecord): Promise<void> {
     const g = await this.graph();
-    await g.query("MERGE (h:DiscordHub {guildId:$guildId}) SET h.supportInboxId = $inbox, h.updatedAt = $now",
-      { guildId: rec.guildId, inbox: rec.supportInboxId ?? null, now: rec.updatedAt });
+    await g.query("MERGE (h:DiscordHub {guildId:$guildId}) SET h.supportInboxId = $inbox, h.staffCategoryId = $cat, h.updatedAt = $now",
+      { guildId: rec.guildId, inbox: rec.supportInboxId ?? null, cat: rec.staffCategoryId ?? null, now: rec.updatedAt });
   }
 
   async getArea(slug: string): Promise<AreaRecord | null> {

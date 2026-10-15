@@ -1,7 +1,7 @@
 // `discord-hub status`: is everything the hub needs in place? Read-only: it only reads from Discord and from the
 // registry, never creates or changes anything, and it never prints a token. The answer is a plain pass / fail list;
 // each failure says what to do about it.
-import { BOT_PERMISSIONS, PERM, roleNameFor, statusOf, type HubPort, type HubStore, type PermName } from "./hub-types.js";
+import { BOT_PERMISSIONS, CHANNEL_KINDS, PERM, roleNameFor, statusOf, type ChannelKind, type HubPort, type HubStore, type PermName } from "./hub-types.js";
 
 export interface Check { ok: boolean; label: string; fix?: string }
 
@@ -90,4 +90,52 @@ export async function checkHub(d: CheckDeps): Promise<Check[]> {
 
 export function formatChecks(checks: Check[]): string {
   return checks.map((c) => `${c.ok ? "PASS" : "FAIL"}  ${c.label}${c.fix ? `\n      ${c.fix}` : ""}`).join("\n");
+}
+
+// ---------- discord-hub list ----------
+
+export interface CompanyRow {
+  slug: string;
+  name: string;
+  status: "ready" | "pending";
+  roleHere: boolean;
+  inOrder: boolean;           // the channels sit in the order your-team, studio, approvals, todays-note, support
+  channels: Array<{ kind: ChannelKind; id: string; here: boolean }>;
+  join: "invite" | "joined" | "expired" | "none";
+  error?: string;
+}
+
+// Every company on the hub with its channels, checked against Discord. Read-only.
+export async function listCompanies(d: { hub: HubPort; store: HubStore; now?: () => number }): Promise<CompanyRow[]> {
+  const now = (d.now ?? Date.now)();
+  const [areas, channels, roles] = await Promise.all([d.store.listAreas(), d.hub.listChannels(), d.hub.listRoles()]);
+  const rows: CompanyRow[] = [];
+  for (const a of areas) {
+    const invites = await d.store.invites(a.slug);
+    const mine = CHANNEL_KINDS.filter((k) => a.channels[k]).map((k) => ({ kind: k, id: a.channels[k]!, here: channels.some((c) => c.id === a.channels[k]) }));
+    const order = mine.filter((c) => c.here).map((c) => channels.find((x) => x.id === c.id)!).sort((x, y) => x.position - y.position || (x.id < y.id ? -1 : 1)).map((c) => c.id);
+    rows.push({
+      slug: a.slug, name: a.businessName, status: a.status, roleHere: !!a.roleId && roles.some((r) => r.id === a.roleId),
+      inOrder: order.join() === mine.filter((c) => c.here).map((c) => c.id).join(), channels: mine,
+      join: invites.some((i) => i.status === "used") ? "joined" : invites.some((i) => i.status === "open" && i.expiresAt > now) ? "invite" : invites.length ? "expired" : "none",
+      ...(a.lastError ? { error: a.lastError } : {}),
+    });
+  }
+  return rows;
+}
+
+const JOIN_WORDS = { invite: "link sent, nobody has joined yet", joined: "joined", expired: "the link ran out", none: "no link yet" } as const;
+
+export function formatCompanies(rows: CompanyRow[]): string {
+  if (!rows.length) return "No company is set up on the hub yet.";
+  return rows.map((r) => [
+    `${r.name} (${r.slug}): ${r.status === "ready" ? "ready" : "waiting to be set up"}; ${JOIN_WORDS[r.join]}`,
+    ...CHANNEL_KINDS.map((k) => {
+      const c = r.channels.find((x) => x.kind === k);
+      return `    #${k}  ${!c ? "missing: run provision" : c.here ? "ok" : "gone from Discord: run provision"}`;
+    }),
+    ...(r.roleHere ? [] : ["    the customer role is missing: run provision"]),
+    ...(r.channels.length && !r.inOrder ? ["    the channels are out of order: run provision"] : []),
+    ...(r.error ? [`    last problem: ${r.error}`] : []),
+  ].join("\n")).join("\n\n");
 }

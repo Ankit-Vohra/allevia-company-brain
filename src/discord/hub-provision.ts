@@ -15,7 +15,7 @@ import { graphName } from "../graph/client.js";
 import { approvalCard } from "./bot.js";
 import { renderCitations, splitMessage } from "./format.js";
 import {
-  CHANNEL_KINDS, INBOX_NAME, INVITE_MAX_AGE_SECONDS, categoryNameFor, roleNameFor, sameOverwrites,
+  CHANNEL_KINDS, INBOX_NAME, INVITE_MAX_AGE_SECONDS, STAFF_CATEGORY_NAME, categoryNameFor, roleNameFor, sameOverwrites,
   type AreaRecord, type ChannelInfo, type ChannelKind, type HubPort, type HubRecord, type HubStore, type InviteRecord, type Overwrite,
   type PermName, type RoleInfo,
 } from "./hub-types.js";
@@ -68,7 +68,9 @@ export function areaOverwrites(kind: ChannelKind | "category", w: Who): Overwrit
   const staffRead: Overwrite = { id: w.staff, type: "role", allow: READ, deny: [] };
   switch (kind) {
     case "category": return [everyone, { id: w.role, type: "role", allow: READ, deny: [] }, staffRead, bot];
-    case "your-team": return [everyone, { id: w.role, type: "role", allow: WRITE, deny: NO_NEW_THREADS_OR_PINGS }, staffRead, bot];
+    case "your-team":
+    case "studio":
+      return [everyone, { id: w.role, type: "role", allow: WRITE, deny: NO_NEW_THREADS_OR_PINGS }, staffRead, bot];
     case "approvals":
     case "todays-note":
       return [everyone, { id: w.role, type: "role", allow: READ, deny: ["SendMessages", "SendMessagesInThreads", ...NO_NEW_THREADS_OR_PINGS] }, staffRead, bot];
@@ -85,9 +87,10 @@ export function inboxOverwrites(guildId: string, staffRoleId: string, botId: str
   ];
 }
 
-const CHANNEL_NAME: Record<ChannelKind, string> = { "your-team": "your-team", approvals: "approvals", "todays-note": "todays-note", support: "support" };
+const CHANNEL_NAME: Record<ChannelKind, string> = { "your-team": "your-team", studio: "studio", approvals: "approvals", "todays-note": "todays-note", support: "support" };
 const CHANNEL_TOPIC: Record<ChannelKind, string> = {
   "your-team": "Ask your team anything, in your own words. Each question opens a thread and your team answers there.",
+  studio: "Drop photos and videos here. Your team turns a photo into post options for your OK.",
   approvals: "Things waiting for your OK. Tap Approve or Reject. Nothing goes out until you say so.",
   "todays-note": "One short note each morning on how the business is doing.",
   support: "Talk to a real person at Allevia. Your team of assistants does not read this channel.",
@@ -99,6 +102,7 @@ export function welcomeText(businessName: string, ids: Record<ChannelKind, strin
     `**Welcome, ${businessName}.** This is your space with your Allevia team.`,
     "",
     `<#${ids["your-team"]}> Ask anything in your own words. Each question gets its own thread, and your team answers there.`,
+    `<#${ids.studio}> Drop a photo or a video. Your team makes post options from a photo, and you pick one.`,
     `<#${ids.approvals}> Things waiting for your OK. Tap Approve or Reject. Nothing goes out until you say so.`,
     `<#${ids["todays-note"]}> One short note each morning on how the business is doing.`,
     `<#${ids.support}> Talk to a real person at Allevia. Your team of assistants does not read this channel.`,
@@ -109,7 +113,8 @@ export function welcomeText(businessName: string, ids: Record<ChannelKind, strin
 
 // ---------- the hub itself ----------
 
-// The staff-only #support-inbox, created once and repaired when it goes missing. Fails clearly when the staff role is wrong.
+// The "Allevia Staff" category at the top of the server, with the staff-only #support-inbox in it. Created once and
+// repaired when it goes missing, out of place or open to the wrong people. Fails clearly when the staff role is wrong.
 export async function ensureHubInfra(d: ProvisionDeps, snap?: { roles: RoleInfo[]; channels: ChannelInfo[] }): Promise<HubRecord> {
   const { hub, store } = d;
   const now = (d.now ?? Date.now)();
@@ -120,18 +125,44 @@ export async function ensureHubInfra(d: ProvisionDeps, snap?: { roles: RoleInfo[
   const botId = await hub.botUserId();
   const want = inboxOverwrites(hub.guildId, d.staffRoleId, botId);
   const rec = await store.getHub(hub.guildId);
-  let inbox = rec?.supportInboxId ? channels.find((c) => c.id === rec.supportInboxId && c.kind === "text") : undefined;
-  if (!inbox) inbox = channels.find((c) => c.kind === "text" && c.name === INBOX_NAME && c.parentId === null && sameOverwrites(c.overwrites, want));
-  if (!inbox) {
-    inbox = await hub.createChannel({ name: INBOX_NAME, kind: "text", topic: "What customers write in #support, with a link to each message. Staff only.", overwrites: want });
-    channels.push(inbox);
-  } else if (!sameOverwrites(inbox.overwrites, want)) {
-    await hub.editChannel(inbox.id, { overwrites: want });
-    inbox.overwrites = want;
+
+  // the category
+  let cat = rec?.staffCategoryId ? channels.find((c) => c.id === rec.staffCategoryId && c.kind === "category") : undefined;
+  if (!cat) cat = channels.find((c) => c.kind === "category" && c.name === STAFF_CATEGORY_NAME && sameOverwrites(c.overwrites, want));
+  if (!cat) {
+    cat = await hub.createChannel({ name: STAFF_CATEGORY_NAME, kind: "category", position: 0, overwrites: want });
+    channels.push(cat);
+  } else {
+    if (!sameOverwrites(cat.overwrites, want)) { await hub.editChannel(cat.id, { overwrites: want }); cat.overwrites = want; }
+    if (cat.name !== STAFF_CATEGORY_NAME) await hub.editChannel(cat.id, { name: STAFF_CATEGORY_NAME });
   }
-  const out: HubRecord = { guildId: hub.guildId, supportInboxId: inbox.id, updatedAt: now };
-  if (rec?.supportInboxId !== inbox.id) await store.saveHub(out);
-  return rec?.supportInboxId === inbox.id ? rec : out;
+  // at the top: first among the server's categories
+  const first = channels.filter((c) => c.kind === "category").sort((a, b) => a.position - b.position || (a.id < b.id ? -1 : 1))[0];
+  if (first && first.id !== cat.id) {
+    await hub.editChannel(cat.id, { position: 0 });
+    for (const c of channels) if (c.kind === "category" && c.id !== cat.id && c.position <= cat.position) c.position += 1;
+    cat.position = 0;
+  }
+
+  // the inbox, inside it
+  let inbox = rec?.supportInboxId ? channels.find((c) => c.id === rec.supportInboxId && c.kind === "text") : undefined;
+  if (!inbox) inbox = channels.find((c) => c.kind === "text" && c.name === INBOX_NAME && sameOverwrites(c.overwrites, want));
+  if (!inbox) {
+    inbox = await hub.createChannel({ name: INBOX_NAME, kind: "text", parentId: cat.id, topic: "What customers write in #support, with a link to each message. Staff only.", overwrites: want });
+    channels.push(inbox);
+  } else {
+    const patch: { parentId?: string; overwrites?: Overwrite[] } = {};
+    if (inbox.parentId !== cat.id) patch.parentId = cat.id;
+    if (!sameOverwrites(inbox.overwrites, want)) patch.overwrites = want;
+    if (Object.keys(patch).length) {
+      await hub.editChannel(inbox.id, patch);
+      if (patch.parentId) inbox.parentId = patch.parentId;
+      if (patch.overwrites) inbox.overwrites = want;
+    }
+  }
+  const out: HubRecord = { guildId: hub.guildId, staffCategoryId: cat.id, supportInboxId: inbox.id, updatedAt: now };
+  if (rec?.supportInboxId !== inbox.id || rec?.staffCategoryId !== cat.id) await store.saveHub(out);
+  return rec?.supportInboxId === inbox.id && rec?.staffCategoryId === cat.id ? rec : out;
 }
 
 // ---------- one customer ----------
@@ -192,7 +223,7 @@ export async function provisionCustomer(slug: string, d: ProvisionDeps, opts: Pr
     }
     await store.saveArea(slug, base, { categoryId: category.id }, now());
 
-    // 3. the four channels
+    // 3. the five channels, always in the same order
     const ids: Partial<Record<ChannelKind, string>> = {};
     for (const kind of CHANNEL_KINDS) {
       const want = areaOverwrites(kind, who);
@@ -200,7 +231,7 @@ export async function provisionCustomer(slug: string, d: ProvisionDeps, opts: Pr
       let ch = (area.channels[kind] ? channels.find((c) => c.id === area.channels[kind] && c.kind === "text") : undefined)
         ?? channels.find((c) => c.kind === "text" && c.name === name && c.parentId === category!.id && !claimedElsewhere.has(c.id));
       if (!ch) {
-        ch = await hub.createChannel({ name, kind: "text", parentId: category.id, topic: CHANNEL_TOPIC[kind], overwrites: want });
+        ch = await hub.createChannel({ name, kind: "text", parentId: category.id, topic: CHANNEL_TOPIC[kind], position: CHANNEL_KINDS.indexOf(kind), overwrites: want });
         channels.push(ch);
         did(`created #${name}`);
       } else {
@@ -217,6 +248,14 @@ export async function provisionCustomer(slug: string, d: ProvisionDeps, opts: Pr
       ids[kind] = ch.id;
       // save as we go: a stop after this line never loses the channel
       await store.saveArea(slug, base, { channels: { [kind]: ch.id } }, now());
+    }
+    // the order: your-team, studio, approvals, todays-note, support (put back when someone drags them about)
+    const mine = CHANNEL_KINDS.map((k) => channels.find((c) => c.id === ids[k])!);
+    const actual = [...mine].sort((a, b) => a.position - b.position || (a.id < b.id ? -1 : 1)).map((c) => c.id);
+    if (actual.join() !== mine.map((c) => c.id).join()) {
+      for (const [i, c] of mine.entries()) await hub.editChannel(c.id, { position: i });
+      mine.forEach((c, i) => { c.position = i; });
+      did("put the channels back in order");
     }
     await store.setChannels(slug, hub.guildId, ids);
     const all = ids as Record<ChannelKind, string>;

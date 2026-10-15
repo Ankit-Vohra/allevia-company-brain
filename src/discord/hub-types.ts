@@ -67,10 +67,11 @@ export interface ChannelInfo {
   name: string;
   kind: "category" | "text" | "other";
   parentId: string | null;
+  position: number;           // the order among its siblings (a company's channels, or the server's categories)
   topic: string | null;
   overwrites: Overwrite[];
 }
-export interface ChannelSpec { name: string; kind: "category" | "text"; parentId?: string; topic?: string; overwrites: Overwrite[] }
+export interface ChannelSpec { name: string; kind: "category" | "text"; parentId?: string; topic?: string; position?: number; overwrites: Overwrite[] }
 export interface InviteInfo { code: string; channelId: string; uses: number; maxUses: number; expiresAt: number | null }
 export interface InviteSpec { maxUses: number; maxAgeSeconds: number }
 
@@ -87,7 +88,7 @@ export interface HubPort {
   createRole(name: string): Promise<RoleInfo>;
   listChannels(): Promise<ChannelInfo[]>;
   createChannel(spec: ChannelSpec): Promise<ChannelInfo>;
-  editChannel(id: string, patch: { name?: string; topic?: string; parentId?: string; overwrites?: Overwrite[] }): Promise<void>;
+  editChannel(id: string, patch: { name?: string; topic?: string; parentId?: string; position?: number; overwrites?: Overwrite[] }): Promise<void>;
   sendMessage(channelId: string, m: Outgoing): Promise<{ id: string }>;
   editMessage(channelId: string, messageId: string, m: Outgoing): Promise<void>;
   messageExists(channelId: string, messageId: string): Promise<boolean>;
@@ -100,7 +101,8 @@ export interface HubPort {
 
 // ---------- the mapping (allevia_meta) ----------
 
-export const CHANNEL_KINDS = ["your-team", "approvals", "todays-note", "support"] as const;
+// In the order a company always sees them.
+export const CHANNEL_KINDS = ["your-team", "studio", "approvals", "todays-note", "support"] as const;
 export type ChannelKind = (typeof CHANNEL_KINDS)[number];
 
 export interface AreaRecord {
@@ -151,7 +153,7 @@ export interface PostRecord {
   postedAt: number;
 }
 
-export interface HubRecord { guildId: string; supportInboxId?: string; updatedAt: number }
+export interface HubRecord { guildId: string; staffCategoryId?: string; supportInboxId?: string; updatedAt: number }
 
 export interface ChannelRef { slug: string; kind: ChannelKind; guildId: string; channelId: string }
 
@@ -181,6 +183,7 @@ export interface HubStore {
 
 export const roleNameFor = (slug: string): string => `customer-${slug}`;
 export const INBOX_NAME = "support-inbox";
+export const STAFF_CATEGORY_NAME = "Allevia Staff";
 export const INVITE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
 // A business name as a Discord category name: no control characters or line breaks, at most 100 characters.

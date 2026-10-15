@@ -1,5 +1,5 @@
 // What the owner is told about Discord, in plain words (docs/owner-words.md), as pure functions the cards render.
-import type { DiscordHome, DiscordInfo } from "../../../shared/contracts";
+import type { DiscordHome, DiscordInfo } from "../../../shared/contracts.js";
 
 export interface DiscordView { state: "invite" | "joined" | "expired" | "later"; inviteUrl?: string; openUrl?: string }
 

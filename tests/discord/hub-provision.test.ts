@@ -4,6 +4,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ApprovalDto } from "../../src/server/types.js";
 import { GraphHubStore } from "../../src/discord/hub-store.js";
+import { formatCompanies, listCompanies } from "../../src/discord/hub-check.js";
 import {
   MAX_ATTEMPTS, ProvisionBusy, areaOverwrites, ensureHubInfra, homeInfo, provisionCustomer, retryDue, syncArea, welcomeText,
   type ProvisionDeps, type TenantSource,
@@ -52,7 +53,9 @@ describe.each(["memory", "graph"] as const)("provisionCustomer (%s store)", (kin
     const cat = hub.byName("Aamdani")!;
     expect(cat.kind).toBe("category");
     const inside = hub.channelsIn(cat.id);
-    expect(inside.map((c) => c.name).sort()).toEqual(["approvals", "support", "todays-note", "your-team"]);
+    expect(inside.map((c) => c.name).sort()).toEqual(["approvals", "studio", "support", "todays-note", "your-team"]);
+    // always in the same order, with a one-line topic each
+    expect([...inside].sort((a, b) => a.position - b.position).map((c) => c.name)).toEqual(["your-team", "studio", "approvals", "todays-note", "support"]);
     for (const c of inside) expect(c.topic).toBeTruthy();
     expect(res.area.status).toBe("ready");
     expect(res.area.roleId).toBe(role.id);
@@ -123,7 +126,7 @@ describe.each(["memory", "graph"] as const)("provisionCustomer (%s store)", (kin
     expect(a.categoryId).not.toBe(b.categoryId);
     for (const id of Object.values(b.channels)) expect(r.hub.canView(id, { roles: [a.roleId!] })).toBe(false);
     for (const id of Object.values(a.channels)) expect(r.hub.canView(id, { roles: [b.roleId!] })).toBe(false);
-    expect(new Set([...Object.values(a.channels), ...Object.values(b.channels)]).size).toBe(8);
+    expect(new Set([...Object.values(a.channels), ...Object.values(b.channels)]).size).toBe(10);
   });
 
   it("is idempotent: running again changes nothing and creates nothing", async () => {
@@ -203,7 +206,7 @@ describe.each(["memory", "graph"] as const)("a run that stops half way (%s store
     expect(res.area.lastError).toBeUndefined();
     expect(res.area.nextAttemptAt).toBeUndefined();
     const names = [...r.hub.channels.values()].map((c) => c.name).sort();
-    expect(names).toEqual(["Aamdani", "approvals", "support", "support-inbox", "todays-note", "your-team"]);
+    expect(names).toEqual(["Aamdani", "Allevia Staff", "approvals", "studio", "support", "support-inbox", "todays-note", "your-team"]);
     expect([...r.hub.roles.values()].filter((x) => x.name === "customer-aamdani")).toHaveLength(1);
   });
 
@@ -226,7 +229,7 @@ describe.each(["memory", "graph"] as const)("a run that stops half way (%s store
     const one = await provisionCustomer("twin_one", r.deps);
     const two = await provisionCustomer("twin_two", r.deps);
     expect(one.area.categoryId).not.toBe(two.area.categoryId);
-    expect([...r.hub.channels.values()].filter((c) => c.kind === "category")).toHaveLength(2);
+    expect([...r.hub.channels.values()].filter((c) => c.kind === "category")).toHaveLength(3); // two companies and Allevia Staff
     expect(r.hub.canView(two.area.channels.support!, { roles: [one.area.roleId!] })).toBe(false);
   });
 
@@ -274,6 +277,86 @@ describe.each(["memory", "graph"] as const)("the join link (%s store)", (kind) =
     expect(res.inviteUrl).toBeTruthy();
     expect(r.hub.invites.size).toBe(1);
     expect(await homeInfo("aamdani", r.deps)).toMatchObject({ enabled: true, state: "invite", inviteUrl: res.inviteUrl });
+  });
+});
+
+describe.each(["memory", "graph"] as const)("grouped channels and a stable order (%s store)", (kind) => {
+  it("puts #support-inbox in an Allevia Staff category at the top, and keeps it there", async () => {
+    const r = rig(kind);
+    await provisionCustomer("aamdani", r.deps);
+    await provisionCustomer("avs_atelier", r.deps);
+    const staff = r.hub.byName("Allevia Staff")!;
+    const inbox = r.hub.byName("support-inbox")!;
+    expect(inbox.parentId).toBe(staff.id);
+    const cats = [...r.hub.channels.values()].filter((c) => c.kind === "category").sort((a, b) => a.position - b.position);
+    expect(cats.map((c) => c.name)).toEqual(["Allevia Staff", "Aamdani", "AVS Atelier"]);
+    // customers never see it; staff do
+    const a = (await r.store.getArea("aamdani"))!;
+    expect(r.hub.canView(staff.id, { roles: [a.roleId!] })).toBe(false);
+    expect(r.hub.canView(inbox.id, { roles: [a.roleId!] })).toBe(false);
+    expect(r.hub.canView(inbox.id, { roles: [r.staff] })).toBe(true);
+    // someone drags another company above it: the next run puts it back on top
+    const avs = r.hub.byName("AVS Atelier")!;
+    await r.hub.editChannel(avs.id, { position: 0 });
+    expect([...r.hub.channels.values()].filter((c) => c.kind === "category").sort((x, y) => x.position - y.position)[0]!.name).toBe("AVS Atelier");
+    await provisionCustomer("aamdani", r.deps);
+    expect([...r.hub.channels.values()].filter((c) => c.kind === "category").sort((x, y) => x.position - y.position)[0]!.name).toBe("Allevia Staff");
+  });
+
+  it("repairs the order of a company's channels, and moves an old root-level inbox into the staff category", async () => {
+    const r = rig(kind);
+    const first = await provisionCustomer("aamdani", r.deps);
+    const order = () => r.hub.channelsIn(first.area.categoryId!).sort((a, b) => a.position - b.position).map((c) => c.name);
+    expect(order()).toEqual(["your-team", "studio", "approvals", "todays-note", "support"]);
+    await r.hub.editChannel(first.area.channels.support!, { position: 0 });
+    await r.hub.editChannel(first.area.channels.studio!, { position: 4 });
+    expect(order()).not.toEqual(["your-team", "studio", "approvals", "todays-note", "support"]);
+    const res = await provisionCustomer("aamdani", r.deps);
+    expect(order()).toEqual(["your-team", "studio", "approvals", "todays-note", "support"]);
+    expect(res.actions).toContain("put the channels back in order");
+    // already in order: nothing to do
+    expect((await provisionCustomer("aamdani", r.deps)).actions).not.toContain("put the channels back in order");
+    // an inbox that was made at the top level before the staff category existed is moved in, not duplicated
+    const inbox = r.hub.byName("support-inbox")!;
+    await r.hub.editChannel(inbox.id, { parentId: undefined });
+    r.hub.channels.get(inbox.id)!.parentId = null;
+    await provisionCustomer("aamdani", r.deps);
+    expect([...r.hub.channels.values()].filter((c) => c.name === "support-inbox")).toHaveLength(1);
+    expect(r.hub.byName("support-inbox")!.parentId).toBe(r.hub.byName("Allevia Staff")!.id);
+  });
+
+  it("each channel's topic says in one line what it is for", async () => {
+    const r = rig(kind);
+    const res = await provisionCustomer("aamdani", r.deps);
+    const topics = Object.fromEntries(Object.entries(res.area.channels).map(([k, id]) => [k, r.hub.channels.get(id!)!.topic!]));
+    expect(topics.studio).toMatch(/photos and videos/i);
+    expect(topics["your-team"]).toMatch(/ask your team anything/i);
+    for (const t of Object.values(topics)) { expect(t.length).toBeLessThan(140); expect(t).not.toMatch(/\n/); }
+  });
+
+  it("a business set up before #studio existed gets it added on the next run, in its place", async () => {
+    const r = rig(kind);
+    const first = await provisionCustomer("aamdani", r.deps);
+    r.hub.channels.delete(first.area.channels.studio!); // as if this company was made before the Studio channel existed
+    const res = await provisionCustomer("aamdani", r.deps);
+    expect(res.actions).toContain("created #studio");
+    expect(r.hub.channelsIn(first.area.categoryId!).sort((a, b) => a.position - b.position).map((c) => c.name)).toEqual(["your-team", "studio", "approvals", "todays-note", "support"]);
+  });
+
+  it("discord-hub list shows every company with its channels and says what is wrong", async () => {
+    const r = rig(kind);
+    await provisionCustomer("aamdani", r.deps);
+    const avs = await provisionCustomer("avs_atelier", r.deps);
+    r.hub.channels.delete(avs.area.channels.approvals!);
+    const rows = await listCompanies({ hub: r.hub, store: r.store, now: r.deps.now });
+    expect(rows.map((x) => x.name)).toEqual(["Aamdani", "AVS Atelier"]);
+    expect(rows[0]).toMatchObject({ status: "ready", roleHere: true, inOrder: true, join: "invite" });
+    expect(rows[0]!.channels.map((c) => c.kind)).toEqual(["your-team", "studio", "approvals", "todays-note", "support"]);
+    const text = formatCompanies(rows);
+    expect(text).toContain("Aamdani (aamdani): ready; link sent, nobody has joined yet");
+    expect(text).toContain("#approvals  gone from Discord: run provision");
+    expect(text).toContain("#studio  ok");
+    expect(formatCompanies([])).toBe("No company is set up on the hub yet.");
   });
 });
 
@@ -357,7 +440,7 @@ describe("queued retries", () => {
 
 describe("welcome and channel rules are in plain words", () => {
   it("names no machinery", () => {
-    const text = welcomeText("Aamdani", { "your-team": "1", approvals: "2", "todays-note": "3", support: "4" });
+    const text = welcomeText("Aamdani", { "your-team": "1", studio: "5", approvals: "2", "todays-note": "3", support: "4" });
     expect(text).not.toMatch(/agent|orchestr|graph|baseline|approval card/i);
     expect(text).toMatch(/Today's note|One short note each morning/);
   });

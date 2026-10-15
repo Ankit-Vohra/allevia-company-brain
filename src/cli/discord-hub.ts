@@ -1,11 +1,12 @@
 // `discord-hub`: staff tools for the customer hub on Discord (docs/discord-hub-setup.md).
 //   discord-hub status               read-only: is the bot in the hub with the permissions and switches it needs? PASS / FAIL list
+//   discord-hub list                 read-only: every company on the hub with its channels, checked against Discord
 //   discord-hub provision <tenant>   set the business's area up (or repair it; safe to run again) and print its join link
 //   discord-hub reinvite <tenant>    a fresh single-use join link (the old one stops working)
 // Secrets come from ~/.config/allevia/allevia.env and are never printed.
 import type { Command } from "./_command.js";
 
-const USAGE = "discord-hub status | provision <tenant> | reinvite <tenant>";
+const USAGE = "discord-hub status | list | provision <tenant> | reinvite <tenant>";
 
 async function service() {
   const { loadConfig } = await import("../config.js");
@@ -27,7 +28,7 @@ export const commands: Command[] = [
   {
     name: "discord-hub",
     usage: USAGE,
-    summary: "Customer hub on Discord: status (read-only check), provision a business, send a new join link",
+    summary: "Customer hub on Discord: status and list (read-only), provision a business, send a new join link",
     async run(args) {
       const [sub, tenant] = args;
       if (sub === "status") {
@@ -38,6 +39,13 @@ export const commands: Command[] = [
         const failed = checks.filter((c) => !c.ok).length;
         console.log(failed ? `${failed} thing${failed === 1 ? "" : "s"} to fix before customers can join.` : "Everything the hub needs is in place.");
         return failed ? 1 : 0;
+      }
+      if (sub === "list") {
+        const svc = await service();
+        if (!svc) return 1;
+        const { listCompanies, formatCompanies } = await import("../discord/hub-check.js");
+        console.log(formatCompanies(await listCompanies({ hub: svc.deps.hub, store: svc.deps.store })));
+        return 0;
       }
       if (sub === "provision" || sub === "reinvite") {
         if (!tenant) { console.error(`Usage: discord-hub ${sub} <tenant>`); return 2; }

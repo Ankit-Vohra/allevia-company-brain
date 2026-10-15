@@ -100,7 +100,7 @@ export class RestHubPort implements HubPort {
   private channelFrom(j: Json): ChannelInfo {
     return {
       id: String(j.id), name: String(j.name ?? ""), kind: j.type === CATEGORY ? "category" : j.type === TEXT ? "text" : "other",
-      parentId: j.parent_id ? String(j.parent_id) : null, topic: typeof j.topic === "string" ? j.topic : null,
+      parentId: j.parent_id ? String(j.parent_id) : null, position: Number(j.position ?? 0), topic: typeof j.topic === "string" ? j.topic : null,
       overwrites: Array.isArray(j.permission_overwrites) ? j.permission_overwrites.map(overwriteFrom) : [],
     };
   }
@@ -113,14 +113,16 @@ export class RestHubPort implements HubPort {
     const body: Json = {
       name: spec.name, type: spec.kind === "category" ? CATEGORY : TEXT, permission_overwrites: spec.overwrites.map(overwriteJson),
       ...(spec.parentId ? { parent_id: spec.parentId } : {}), ...(spec.topic ? { topic: spec.topic } : {}),
+      ...(spec.position !== undefined ? { position: spec.position } : {}),
     };
     return this.channelFrom((await this.rest.post(Routes.guildChannels(this.guildId), { body })) as Json);
   }
 
-  async editChannel(id: string, patch: { name?: string; topic?: string; parentId?: string; overwrites?: Overwrite[] }): Promise<void> {
+  async editChannel(id: string, patch: { name?: string; topic?: string; parentId?: string; position?: number; overwrites?: Overwrite[] }): Promise<void> {
     const body: Json = {
       ...(patch.name !== undefined ? { name: patch.name } : {}), ...(patch.topic !== undefined ? { topic: patch.topic } : {}),
       ...(patch.parentId !== undefined ? { parent_id: patch.parentId } : {}),
+      ...(patch.position !== undefined ? { position: patch.position } : {}),
       ...(patch.overwrites ? { permission_overwrites: patch.overwrites.map(overwriteJson) } : {}),
     };
     await this.rest.patch(Routes.channel(id), { body });

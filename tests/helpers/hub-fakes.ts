@@ -62,17 +62,30 @@ export class FakeHub implements HubPort {
   async listChannels() { this.guildOnly("listChannels"); return copy([...this.channels.values()]); }
   async createChannel(spec: ChannelSpec) {
     this.guildOnly("createChannel", spec.name);
-    const c: ChannelInfo = { id: snowflake(), name: spec.name, kind: spec.kind, parentId: spec.parentId ?? null, topic: spec.topic ?? null, overwrites: copy(spec.overwrites) };
+    const siblings = this.siblings(spec.kind, spec.parentId ?? null);
+    const c: ChannelInfo = { id: snowflake(), name: spec.name, kind: spec.kind, parentId: spec.parentId ?? null, position: siblings.length, topic: spec.topic ?? null, overwrites: copy(spec.overwrites) };
     this.channels.set(c.id, c);
-    return copy(c);
+    if (spec.position !== undefined) this.move(c, spec.position);
+    return copy(this.channels.get(c.id)!);
   }
-  async editChannel(id: string, patch: { name?: string; topic?: string; parentId?: string; overwrites?: Overwrite[] }) {
+  /** Channels that are ordered against each other: the same kind under the same parent. */
+  private siblings(kind: string, parentId: string | null): ChannelInfo[] {
+    return [...this.channels.values()].filter((c) => c.kind === kind && c.parentId === parentId).sort((a, b) => a.position - b.position || (a.id < b.id ? -1 : 1));
+  }
+  /** Discord's rule: putting a channel at a position shifts its siblings, and positions are renumbered 0..n-1. */
+  private move(c: ChannelInfo, position: number): void {
+    const rest = this.siblings(c.kind, c.parentId).filter((x) => x.id !== c.id);
+    rest.splice(Math.max(0, Math.min(position, rest.length)), 0, c);
+    rest.forEach((x, i) => { x.position = i; });
+  }
+  async editChannel(id: string, patch: { name?: string; topic?: string; parentId?: string; position?: number; overwrites?: Overwrite[] }) {
     this.guildOnly("editChannel", id);
     const c = this.channels.get(id);
     if (!c) throw Object.assign(new Error("Unknown Channel"), { status: 404 });
     if (patch.name !== undefined) c.name = patch.name;
     if (patch.topic !== undefined) c.topic = patch.topic;
-    if (patch.parentId !== undefined) c.parentId = patch.parentId;
+    if (patch.parentId !== undefined) { c.parentId = patch.parentId; c.position = this.siblings(c.kind, c.parentId).length; }
+    if (patch.position !== undefined) this.move(c, patch.position);
     if (patch.overwrites) c.overwrites = copy(patch.overwrites);
   }
   async sendMessage(channelId: string, m: Outgoing) {
