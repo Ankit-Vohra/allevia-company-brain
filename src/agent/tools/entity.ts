@@ -10,7 +10,9 @@ import {
   parseAsOf, requireNode, ro, typeOf, type Brief, type EdgeRow, type NodeRow,
 } from "./common.js";
 
-const GROUP_CAP = 10;
+const GROUP_CAP = 10;    // items listed per relationship group (the count is always complete)
+const ITEM_CAP = 80;     // neighbour items over all groups
+const METRIC_CAP = 10;
 const asOfInput = z.string().optional().describe("ISO date: see the graph as it was then, e.g. 2026-10-01");
 
 // Neighbour types hidden by default (counted instead). An entity of a bookkeeping type still sees its own kind.
@@ -23,17 +25,23 @@ const PROPS = "[k IN keys(n) WHERE NOT k IN ['embedding', 'textEmbedding'] | [k,
 // ---------- get_entity ----------
 
 interface ObsRow { o: NodeRow; e: EdgeRow; metric: string; value: number; unit: string | null; ws: string | null; we: string | null; at: string | null }
+interface GroupRow { dir: "in" | "out"; rel: string; c: number; items: Array<{ e: EdgeRow; m: NodeRow }> }
 
 async function runGetEntity(args: { id: string; asOf?: string }, ctx: ToolContext) {
   const asOf = parseAsOf(args.asOf);
   const target = await requireNode(ctx, args.id);
   const type = typeOf(target);
   const p = { id: target.id, asOf, hidden: hiddenFor(type), asOfDate: asOf === undefined ? null : toIso(asOf) };
-  const [[node], nbrs, hiddenRows, [vc], obs, [ver]] = await Promise.all([
+  // Grouped on the server: a hub with thousands of MENTIONS must not crowd OWNS out of a row limit, and counts are
+  // complete. Observations: the newest per metric, chosen per metric (one dense daily series cannot hide the rest).
+  const [[node], groups, hiddenRows, [vc], obs, [ver]] = await Promise.all([
     ro<{ kv: Array<[string, unknown]> }>(ctx, `MATCH (n:Entity {id:$id}) RETURN ${PROPS}`, p),
-    ro<{ e: EdgeRow; m: NodeRow }>(ctx,
+    ro<GroupRow>(ctx,
       `MATCH (n:Entity {id:$id})-[r]-(m:Entity) WHERE ${edgeAt("r", asOf)} AND type(r) <> 'HAD_VERSION'
-       AND NOT any(l IN labels(m) WHERE l IN $hidden) RETURN ${EDGE("r")} AS e, ${NODE("m")} AS m ORDER BY type(r), m.name LIMIT 300`, p),
+       AND NOT any(l IN labels(m) WHERE l IN $hidden)
+       WITH CASE WHEN startNode(r).id = $id THEN 'out' ELSE 'in' END AS dir, type(r) AS rel, r, m ORDER BY m.name, m.id
+       WITH dir, rel, count(*) AS c, collect({e: ${EDGE("r")}, m: ${NODE("m")}})[0..$cap] AS items
+       RETURN dir, rel, c, items ORDER BY rel, dir LIMIT 100`, { ...p, cap: GROUP_CAP }),
     ro<{ type: string; c: number }>(ctx,
       `MATCH (n:Entity {id:$id})-[r]-(m:Entity) WHERE ${edgeAt("r", asOf)} AND any(l IN labels(m) WHERE l IN $hidden)
        RETURN [l IN labels(m) WHERE l <> 'Entity'][0] AS type, count(DISTINCT m) AS c`, p),
@@ -41,8 +49,11 @@ async function runGetEntity(args: { id: string; asOf?: string }, ctx: ToolContex
     ro<ObsRow>(ctx,
       `MATCH (o:Observation)-[r:MEASURES]->(:Entity {id:$id}) WITH o, r, coalesce(o.windowEnd, o.asOf) AS at
        WHERE $asOfDate IS NULL OR at <= $asOfDate
-       RETURN ${NODE("o")} AS o, ${EDGE("r")} AS e, o.metric AS metric, o.value AS value, o.unit AS unit, o.windowStart AS ws, o.windowEnd AS we, at
-       ORDER BY at DESC LIMIT 200`, p),
+       WITH toLower(o.metric) AS key, collect({o: ${NODE("o")}, e: ${EDGE("r")}, metric: o.metric, value: o.value, unit: o.unit,
+         ws: o.windowStart, we: o.windowEnd, at: at}) AS all
+       WITH key, reduce(b = null, x IN all | CASE WHEN b IS NULL OR x.at > b.at OR (x.at = b.at AND x.o.id > b.o.id) THEN x ELSE b END) AS x
+       RETURN x.o AS o, x.e AS e, x.metric AS metric, x.value AS value, x.unit AS unit, x.ws AS ws, x.we AS we, x.at AS at
+       ORDER BY at DESC, metric LIMIT $metrics`, { ...p, metrics: METRIC_CAP }),
     asOf === undefined ? Promise.resolve([]) : ro<{ id: string; props: string }>(ctx,
       "MATCH (:Entity {id:$id})-[:HAD_VERSION]->(v:Version) WHERE v.since <= $asOf AND v.until > $asOf RETURN v.id AS id, v.props AS props ORDER BY v.until LIMIT 1", p),
   ]);
@@ -60,20 +71,18 @@ async function runGetEntity(args: { id: string; asOf?: string }, ctx: ToolContex
   const props = compactProps(kv.filter(([k]) => k !== "id" && k !== "name"));
 
   const neighbors: Record<string, { count: number; items: Brief[] }> = {};
-  for (const { e, m } of nbrs) {
-    const key = `${e.from === target.id ? "out" : "in"}:${e.type}`;
-    const group = (neighbors[key] ??= { count: 0, items: [] });
-    group.count++;
-    if (group.items.length < GROUP_CAP) {
-      group.items.push(brief(m));
+  let listed = 0;
+  for (const grp of groups) {
+    const items = grp.items.slice(0, Math.max(0, ITEM_CAP - listed));
+    listed += items.length;
+    neighbors[`${grp.dir}:${grp.rel}`] = { count: grp.c, items: items.map(({ m }) => brief(m)) };
+    for (const { e, m } of items) {
       col.node(m);
       col.edge(e);
     }
   }
 
-  const latest = new Map<string, ObsRow>();
-  for (const o of obs) if (!latest.has(o.metric) && latest.size < 10) latest.set(o.metric, o);
-  const observations = [...latest.values()].map((o) => {
+  const observations = obs.map((o) => {
     col.node(o.o);
     col.edge(o.e);
     return {
@@ -92,7 +101,7 @@ async function runGetEntity(args: { id: string; asOf?: string }, ctx: ToolContex
 export const getEntity = defineTool({
   name: "get_entity",
   description:
-    "Everything about one node by id: its properties, current neighbours grouped by relationship (in:/out:), how many past versions it has, and its latest numbers (one per metric). Pass asOf to see relationships and properties as they were on a date. Example: {\"id\":\"task:fix-ig-token\",\"asOf\":\"2026-10-01\"}",
+    "Everything about one node by id: its properties, current neighbours grouped by relationship (in:/out:, full count, first 10 listed), how many past versions it has, and its latest numbers (one per metric). Pass asOf to see relationships and properties as they were on a date. Example: {\"id\":\"task:fix-ig-token\",\"asOf\":\"2026-10-01\"}",
   input: { id: z.string().min(1).describe("Entity id, e.g. decision:007-pause-daily-stories"), asOf: asOfInput },
   run: runGetEntity,
 });
@@ -159,6 +168,8 @@ export const neighbors = defineTool({
 // ---------- history ----------
 
 interface Ev { ms: number; at: string; event: "created" | "changed" | "linked" | "unlinked"; [k: string]: unknown }
+interface Refs { nodes: NodeRow[]; edges: EdgeRow[] }
+const EVENT_CAP = 50;
 
 function pick(json: string | null | undefined, keys: string[]): Record<string, unknown> {
   try {
@@ -187,39 +198,39 @@ async function runHistory(args: { id: string }, ctx: ToolContext) {
     `MATCH (:Entity {id:$id})-[r]-(m:Entity) WHERE r.until IS NULL AND type(r) IN $types RETURN ${EDGE("r")} AS e, ${NODE("m")} AS m LIMIT 50`,
     { ...p, types }) : [];
 
+  // Each event keeps the node and edge it is about; only the events shown contribute them to the result.
   const col = new Collector();
   col.node(target);
-  const events: Ev[] = [];
+  const events: Array<Ev & { refs: Refs }> = [];
   const at = (ms: number) => ({ ms, at: toIso(ms) });
-  if (typeof node?.createdAt === "number") events.push({ ...at(node.createdAt), event: "created" });
+  if (typeof node?.createdAt === "number") events.push({ ...at(node.createdAt), event: "created", refs: { nodes: [], edges: [] } });
   const current = JSON.stringify(Object.fromEntries(node?.kv ?? []));
   versions.forEach((v, i) => {
-    col.node(v.v);
-    col.edge(v.e);
     const changed = v.changed ?? [];
     events.push({
       ...at(v.until), event: "changed", changed, before: pick(v.props, changed),
       after: pick(i + 1 < versions.length ? versions[i + 1]!.props : current, changed), version: v.v.id,
+      refs: { nodes: [v.v], edges: [v.e] },
     });
   });
-  const edgeEvent = (e: EdgeRow, m: NodeRow) => ({ rel: e.type, dir: e.from === target.id ? "out" : "in", other: brief(m) });
+  const edgeEvent = (e: EdgeRow, m: NodeRow) => ({ rel: e.type, dir: e.from === target.id ? "out" : "in", other: brief(m), refs: { nodes: [m], edges: [e] } });
   for (const { e, m, reason } of closed) {
-    col.node(m);
-    col.edge(e);
     if (typeof e.since === "number") events.push({ ...at(e.since), event: "linked", ...edgeEvent(e, m) });
     events.push({ ...at(e.until!), event: "unlinked", ...edgeEvent(e, m), ...(reason ? { reason } : {}) });
   }
   for (const { e, m } of successors) {
-    col.node(m);
-    col.edge(e);
     if (typeof e.since === "number") events.push({ ...at(e.since), event: "linked", ...edgeEvent(e, m) });
   }
   events.sort((a, b) => a.ms - b.ms);
-  const shown = events.slice(-50).map(({ ms: _ms, ...rest }) => rest);
+  const shown = events.slice(-EVENT_CAP).map(({ ms: _ms, refs, ...rest }) => {
+    refs.nodes.forEach((n) => col.node(n));
+    refs.edges.forEach((e) => col.edge(e));
+    return rest;
+  });
   return col.result(ctx, {
     id: target.id, type: typeOf(target), name: target.name ?? target.id, versions: versions.length, closedRelationships: closed.length,
     events: shown,
-  }, events.length > 50 ? `Showing the latest 50 of ${events.length} events.` : events.length <= 1 ? "No recorded changes." : undefined);
+  }, events.length > EVENT_CAP ? `Showing the latest ${EVENT_CAP} of ${events.length} events.` : events.length <= 1 ? "No recorded changes." : undefined);
 }
 
 export const history = defineTool({

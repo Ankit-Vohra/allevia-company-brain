@@ -89,4 +89,40 @@ describe("get_entity, neighbors, history (integration)", () => {
     expect(r.edges).toEqual(expect.arrayContaining([expect.objectContaining({ from: "person:founder", type: "OWNS", until: Date.parse("2026-10-05") })]));
     expect(r.nodes.some((n: { label: string }) => n.label === "Version")).toBe(true);
   });
+
+  describe("a busy entity (hundreds of neighbours and observations)", () => {
+    beforeAll(async () => {
+      await g.query("CREATE (:Entity:System {id:'system:hub', name:'Hub', createdAt: 0})");
+      await g.query(`MATCH (h:Entity {id:'system:hub'}) UNWIND range(1, 320) AS i
+        CREATE (:Entity:Document {id:'document:bulk-'+toString(i), name:'Bulk '+toString(i)})-[:MENTIONS {since: 0}]->(h)`);
+      await g.query(`MATCH (h:Entity {id:'system:hub'}) UNWIND range(1, 60) AS i
+        CREATE (:Entity:Document {id:'document:old-'+toString(i), name:'Old '+toString(i)})-[:MENTIONS {since: i * 1000, until: i * 1000 + 500}]->(h)`);
+      await g.query("MATCH (h:Entity {id:'system:hub'}), (t:Entity {id:'team:tech'}) CREATE (t)-[:OWNS {since: 0}]->(h)");
+      const day = (i: number) => new Date(Date.UTC(2026, 3, 1) + i * 86_400_000).toISOString().slice(0, 10);
+      const rows = Array.from({ length: 210 }, (_, i) => ({ id: `obs:sessions:system:hub:${day(i)}`, at: day(i), v: i }));
+      await g.query(`MATCH (h:Entity {id:'system:hub'}) UNWIND $rows AS r
+        CREATE (:Entity:Observation {id: r.id, name: r.id, metric: 'sessions', value: r.v, windowEnd: r.at, asOf: r.at})-[:MEASURES {since: 0}]->(h)`, { rows });
+      await g.query(`MATCH (h:Entity {id:'system:hub'})
+        CREATE (:Entity:Observation {id: 'obs:uptime:system:hub:2025-01-01', name: 'uptime', metric: 'uptime', value: 99.9, asOf: '2025-01-01'})-[:MEASURES {since: 0}]->(h)`);
+    });
+
+    it("get_entity: every relationship group counted in full, each listed briefly; every metric's latest number", async () => {
+      const r = await call(getEntity, { id: "system:hub" }, makeCtx(g));
+      expect(r.data.neighbors["in:MENTIONS"].count).toBe(320);
+      expect(r.data.neighbors["in:MENTIONS"].items).toHaveLength(10);
+      expect(r.data.neighbors["in:OWNS"]).toEqual({ count: 1, items: [{ id: "team:tech", type: "Team", name: "Tech team" }] });
+      const byMetric = Object.fromEntries(r.data.observations.map((o: { metric: string; value: number }) => [o.metric, o.value]));
+      expect(byMetric).toEqual({ sessions: 209, uptime: 99.9 });
+      expect(r.nodes.length).toBeLessThanOrEqual(100);
+    });
+
+    it("history: only the events shown bring their nodes and edges", async () => {
+      const r = await call(history, { id: "system:hub" }, makeCtx(g));
+      expect(r.data.events).toHaveLength(50);
+      expect(r.note).toMatch(/latest 50 of/);
+      expect(r.nodes.length).toBeLessThanOrEqual(51);
+      const shown = new Set(r.data.events.map((e: { other?: { id: string } }) => e.other?.id).filter(Boolean));
+      for (const n of r.nodes) if (n.id !== "system:hub") expect(shown.has(n.id), n.id).toBe(true);
+    });
+  });
 });

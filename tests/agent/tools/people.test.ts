@@ -27,6 +27,7 @@ describe("who_owns, who_knows (integration)", () => {
     expect(sys.data.entity.id).toBe("system:ig-connector");
     expect(sys.data.owners.map((o: { id: string }) => o.id)).toEqual(["team:tech"]);
     expect(sys.data.teamMembers["team:tech"].map((m: { id: string }) => m.id)).toEqual(["agent:jarvis"]);
+    expect(ids(sys.sources)).toEqual(expect.arrayContaining(["document:systems-notes", "document:runbook"])); // the OWNS edge's src
     const page = await call(whoOwns, { id: "page:www.aamdani.ai/jobs" }, makeCtx(g));
     expect(page.data.owners).toEqual([]);
     expect(page.data.ownedVia).toEqual([{ id: "team:tech", type: "Team", name: "Tech team", via: { id: "channel:website", type: "Channel", name: "Website" } }]);

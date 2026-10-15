@@ -63,7 +63,7 @@ describe("content_performance, seo_report, ad_report (integration)", () => {
     expect(by["campaign:meta-seekers"]).toMatchObject({ spend: 2000, signups: 40, cpa: 50, flag: "cpa_low" });
     expect(by["campaign:meta-retarget"]).toMatchObject({ cpa: 150, cpaVsMedian: 1 });
     expect(by["campaign:meta-retarget"].flag).toBeUndefined();
-    expect(r.data).toMatchObject({ medianCpa: 150, totals: { spend: 6500, signups: 60, cpa: 108.33 }, simulated: true });
+    expect(r.data).toMatchObject({ medianCpa: 150, totals: { spend: 6500, signups: 60, cpa: 108.33, currency: "INR" }, simulated: true });
     expect(r.nodes.filter((n: { simulated?: boolean }) => n.simulated).length).toBeGreaterThan(3);
     expect(ids(r.nodes)).toContain("channel:meta-ads");
     expect(ids(r.sources)).toContain("document:meta-ads-sim");

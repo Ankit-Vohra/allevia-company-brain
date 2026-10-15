@@ -134,7 +134,7 @@ export async function seedMini(g: GraphHandle): Promise<void> {
   await edge("system:ig-connector", "BLOCKS", "task:schedule-reels");
   await edge("system:legacy-poster", "DEPENDS_ON", "system:ig-connector");
   await closeEdge(g, "system:legacy-poster", "DEPENDS_ON", "system:ig-connector", D("2026-09-01"), "retired");
-  await edge("team:tech", "OWNS", "system:ig-connector");
+  await edge("team:tech", "OWNS", "system:ig-connector", { src: "document:runbook" });
   await edge("team:tech", "OWNS", "system:reel-publisher");
   await node({ type: "Event", id: "event:ig-api-outage", name: "Instagram API outage", props: { kind: "outage", at: "2026-10-03" } });
   await edge("event:ig-api-outage", "AFFECTS", "system:ig-connector");
@@ -248,6 +248,7 @@ export async function seedMini(g: GraphHandle): Promise<void> {
       const base = { subject: id, windowStart: day, windowEnd: day, asOf: day, src: "document:meta-ads-sim", simulated: true };
       await obs({ ...base, metric: "spend", value: spend[i]!, unit: "INR" });
       await obs({ ...base, metric: "signups", value: signups[i]!, unit: "count" });
+      await obs({ ...base, metric: "conversions", value: signups[i]!, unit: "count" }); // simads writes both, same value
       await obs({ ...base, metric: "impressions", value: spend[i]! * 10, unit: "count" });
       await obs({ ...base, metric: "clicks", value: spend[i]! / 10, unit: "count" });
     }
