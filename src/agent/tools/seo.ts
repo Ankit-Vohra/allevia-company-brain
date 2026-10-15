@@ -141,7 +141,7 @@ async function runSeo(args: { limit?: number }, ctx: ToolContext) {
 export const seoReport = defineTool({
   name: "seo_report",
   description:
-    "Website/SEO problems worst first: pages with the rules they fail (severity, evidence, how to fix), their latest Search Console and GA4 numbers (clicks, impressions, CTR %, position, sessions), low-CTR flags and the queries they rank for; plus a summary by severity and rule. Example: {\"limit\":5}",
+    "Answer 'how is our SEO / website doing': pages worst first with the rules they fail (severity, evidence, how to fix), their latest Search Console and GA4 numbers (clicks, impressions, CTR %, position, sessions), low-CTR flags and the queries they rank for; plus a whole-site summary by severity and rule. Example: {\"limit\":5}",
   input: { limit: z.number().int().optional().describe("Pages to return, default 10, max 25") },
   run: runSeo,
 });

@@ -40,6 +40,23 @@ describe("tool registry", () => {
     }
   });
 
+  it("each owner question names one tool: a description that opens by answering it", () => {
+    const routes: Array<[string, string, string]> = [
+      ["why did we pause stories?", "trace_decision", "why did we"],
+      ["what breaks if the Instagram token expires?", "impact_of", "what breaks if .*expires"],
+      ["which hooks work?", "content_performance", "which hooks.* work"],
+      ["how is our SEO?", "seo_report", "how is our SEO"],
+    ];
+    for (const [question, tool, phrase] of routes) {
+      const opens = new RegExp(`^Answer '[^']*${phrase}`, "i");
+      expect(ALL_TOOLS.filter((t) => opens.test(t.description)).map((t) => t.name), question).toEqual([tool]);
+    }
+    // The nearest neighbours send the model on: search to trace_decision, playbook to content_performance.
+    expect(ALL_TOOLS.find((t) => t.name === "search")!.description).toMatch(/trace_decision/);
+    expect(ALL_TOOLS.find((t) => t.name === "playbook")!.description).toMatch(/content_performance/);
+    expect(ALL_TOOLS.find((t) => t.name === "impact_of")!.description).toMatch(/token.*System/);
+  });
+
   it("inputs convert to JSON Schema (what MCP and the Agent SDK send to the model)", () => {
     for (const t of ALL_TOOLS) expect(() => z.toJSONSchema(z.object(t.input)), t.name).not.toThrow();
   });

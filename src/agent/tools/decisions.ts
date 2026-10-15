@@ -101,7 +101,7 @@ async function runTrace(args: { id?: string; query?: string }, ctx: ToolContext)
 export const traceDecision = defineTool({
   name: "trace_decision",
   description:
-    "Answer 'why did we…': a Decision's evidence (numbers and documents, each with its sources), who decided, what it affects, what it replaced and what replaced it. Pass id, or query to find the decision; a non-decision id traces the latest decision affecting it. Example: {\"query\":\"pause daily stories\"}",
+    "Answer 'why did we…' (why we paused, stopped, chose or changed something): the Decision, its evidence (numbers and documents, each with sources), who decided, what it affects, what it replaced and what replaced it. Pass id, or query to find the decision; a non-decision id traces the latest decision affecting it. Example: {\"query\":\"pause daily stories\"}",
   input: {
     id: z.string().optional().describe("Decision id (or an entity a decision affects)"),
     query: z.string().optional().describe("Words to find the decision when you lack its id"),

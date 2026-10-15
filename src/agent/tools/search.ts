@@ -121,7 +121,7 @@ async function run(args: { query: string; types?: string[]; limit?: number }, ct
 export const search = defineTool({
   name: "search",
   description:
-    "Find entities and documents by meaning or words; start here when you lack an id. Returns ranked hits {id, type, name, summary or snippet from the source document} fused from full-text and vector search. Turns, versions and observations are excluded unless named in types. Example: {\"query\":\"why did we pause daily stories\",\"types\":[\"Decision\",\"Document\"],\"limit\":5}",
+    "Find entities and documents by meaning or words; start here when you lack an id. Returns ranked hits {id, type, name, summary or snippet from the source document} from full-text and vector search. Turns, versions and observations only when named in types. For 'why did we…' questions use trace_decision. Example: {\"query\":\"instagram token refresh\",\"types\":[\"System\",\"Task\",\"Document\"],\"limit\":5}",
   input: {
     query: z.string().min(1).describe("What to look for, in plain words"),
     types: z.array(z.enum(ENTITY_TYPES)).optional().describe("Only these node types"),

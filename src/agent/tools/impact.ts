@@ -111,7 +111,7 @@ async function runImpact(args: { id: string; depth?: number; asOf?: string }, ct
 export const impactOf = defineTool({
   name: "impact_of",
   description:
-    "What breaks or changes if this node fails or changes: things that DEPEND_ON it and things it AFFECTS or BLOCKS, followed up to depth hops (current edges), listed by hop with the edge that pulls each in; plus how central the node is in that impact subgraph (betweenness). Example: {\"id\":\"system:ig-connector\",\"depth\":3}",
+    "Answer 'what breaks if X fails, expires or goes down': what DEPENDS_ON X and what X AFFECTS or BLOCKS, up to depth hops over current edges, by hop with the edge that pulls each in, plus X's betweenness there. X is what fails; a token or login fails with the System that uses it, so search for that System first. Example: {\"id\":\"system:ig-connector\",\"depth\":3}",
   input: {
     id: z.string().min(1),
     depth: z.number().int().optional().describe("Hops to follow, 1 to 4, default 3"),

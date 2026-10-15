@@ -104,7 +104,7 @@ async function runContent(args: { channel?: string; days?: number; limit?: numbe
 export const contentPerformance = defineTool({
   name: "content_performance",
   description:
-    "Which posts and reels did best and why: each item's latest views/reach/watch/skip/shares/saves, its hook rule and audience, and its outlier multiple (views ÷ median views), best first; plus hooks ranked by median multiple. Filter by channel and by days since publishing. Example: {\"channel\":\"instagram\",\"days\":60,\"limit\":5}",
+    "Answer 'which hooks, posts or reels work': each item's latest views, reach, watch, skips, shares and saves, its hook rule and audience, and its outlier multiple (views ÷ median), best first; plus hooks ranked by median multiple. Filter by channel and days since publishing. Example: {\"channel\":\"instagram\",\"days\":60,\"limit\":5}",
   input: {
     channel: z.string().optional().describe("Channel id or name, e.g. instagram"),
     days: z.number().int().optional().describe("Only content published in the last N days"),
