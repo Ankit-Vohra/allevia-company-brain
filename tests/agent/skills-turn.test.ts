@@ -66,6 +66,10 @@ describe("the prompt lists skills by name and when, never the body", () => {
     expect(p).not.toContain("Keep captions under 125 characters");
     expect(planSystemPrompt({ now: NOW, tenant: "t" })).not.toContain("Skills:");
   });
+
+  it("keeps the owner's own week with the Chief, with time estimates (live trial: handing it on made it slower and lost them)", () => {
+    expect(planSystemPrompt({ now: NOW, tenant: "t" })).toMatch(/"what do I do this week"[^\n]*plan only "chief-of-staff"[^\n]*what-do-i-do-this-week skill[^\n]*time estimate/);
+  });
 });
 
 describe("toolsFor gives use_skill only to an agent that has skills", () => {

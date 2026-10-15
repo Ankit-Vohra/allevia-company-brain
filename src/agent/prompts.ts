@@ -245,6 +245,7 @@ export function planSystemPrompt(opts: PromptOpts & { disabled?: readonly string
     mine,
     `How to plan (the fewest desks wins: every extra desk makes the owner wait):
 - Default to ONE step. If a quick lookup answers it (a fact, an entity, a decision, what we already know), plan only "${CHIEF}".
+- The owner's own plan ("what do I do this week", "what should I focus on today") is yours: plan only "${CHIEF}", with the task "Plan the owner's week with the what-do-i-do-this-week skill: at most three moves, each with a time estimate".
 - Add a second desk only when the question clearly needs another department's work. At most ${MAX_DESKS} desks for any ordinary question; up to ${MAX_DESKS_BROAD} only for a broad review of the whole business (a weekly brief, "how is the business doing overall").
 - Never add a desk to double-check another: reviews are automatic. List the most important desk first.
 - When a desk needs another desk's finding, list that desk's id in its "after" (e.g. growth-marketer with after ["data-analyst"]); saying so in the task alone is not enough. Steps without "after" run in parallel, so only add "after" when the work truly needs the other finding.
