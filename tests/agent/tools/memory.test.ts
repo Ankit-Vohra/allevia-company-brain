@@ -43,6 +43,17 @@ describe("recall, remember (integration)", () => {
     expect(types.has("EVIDENCED_BY") && types.has("PROPOSES")).toBe(true);
   });
 
+  // Eval 2026-10-15 (memory-ig-token): the Chief repeated a citation from an earlier answer, but recall had returned only
+  // the answer's text, so the id was "copied from text" and failed the citation check. An earlier turn now brings back
+  // the entities it CITED (edges exist only for citations verified when it was saved).
+  it("recall: each earlier turn brings back what it cited, so repeating one of its citations is grounded", async () => {
+    const r = await call(recall, { query: "daily stories" }, makeCtx(g));
+    const t = r.data.turns.find((x: { id: string }) => x.id === "turn:t-001");
+    expect(t.cited).toEqual(["document:adr-007"]);
+    expect(ids(r.nodes)).toContain("document:adr-007");
+    expect(r.edges).toEqual(expect.arrayContaining([expect.objectContaining({ from: "turn:t-001", type: "CITED", to: "document:adr-007" })]));
+  });
+
   it("recall: by query, and input errors", async () => {
     const r = await call(recall, { query: "daily stories" }, makeCtx(g));
     expect(r.data.turns.map((t: { id: string }) => t.id)).toContain("turn:t-001");

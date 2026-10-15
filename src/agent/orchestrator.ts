@@ -395,6 +395,9 @@ export class AnswerStream {
   // The answer, if it was written in full and its path drawn (show_path called after it).
   sealedAnswer(): string | undefined { return this.sealed ? this.parts.join("").trim() || undefined : undefined; }
 
+  // Has the Chief written an answer yet (as much as sealing needs)?
+  written(): boolean { return this.parts.join("").trim().length >= MIN_ANSWER_CHARS; }
+
   finish(finalText: string): string {
     const streamed = this.parts.join("").trim();
     if (streamed) return streamed;
@@ -402,6 +405,22 @@ export class AnswerStream {
     if (text) this.out({ type: "text", agent: CHIEF, delta: text });
     return text;
   }
+}
+
+// The Chief sometimes draws the path before writing the answer, then (having drafted it in its head) writes only "see
+// the answer above" (eval 2026-10-15, memory-ig-token). So while nothing has been written, show_path's result tells it
+// the owner has seen no answer yet. What it writes after the path is then the answer (AnswerStream seals only after one).
+export const PATH_FIRST_NOTE =
+  "The path is drawn, but the owner has seen no answer yet: nothing you drafted or planned was shown. Write the full answer now, once, with its [[id]] citations. Don't call show_path again.";
+
+export function notePathFirst(tools: AlleviaTool[], written: () => boolean): AlleviaTool[] {
+  return tools.map((t) => (t.name !== "show_path" ? t : {
+    ...t,
+    async run(args, ctx) {
+      const r = await t.run(args, ctx);
+      return written() ? r : { ...r, note: r.note ? `${r.note} ${PATH_FIRST_NOTE}` : PATH_FIRST_NOTE };
+    },
+  }));
 }
 
 // ---------- the turn ----------
@@ -897,9 +916,9 @@ class Turn {
     const lean = !fast && findings.length > 0; // the desks looked things up: the Chief writes at once
     const phase: RunPhase = fast ? "direct" : "synthesis";
     const own = this.tools(chief, phase, lean);
-    const tools = held ? gateWrites(own, () => held.hold.opened(held.abort)) : own;
     const out = held ? held.hold.emit : this.emit;
     const stream = new AnswerStream(out);
+    const tools = notePathFirst(held ? gateWrites(own, () => held.hold.opened(held.abort)) : own, () => stream.written());
     // A held draft treats the findings still under review as final: it is only shown if their reviews come back ok.
     const views = findings.map(this.view).map((v) => (held ? { ...v, draft: undefined } : v));
     // Data-source modes: on the fast path every capability that isn't live (the Chief looks up for itself); from
