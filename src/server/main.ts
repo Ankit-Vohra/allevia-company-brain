@@ -31,6 +31,11 @@ export function productionDeps(o: { model?: string; publicMode: boolean; staticD
       return createAskDeps({ tenant, ...(o.model ? { model: o.model } : {}) });
     },
     embedQuery: async () => (await import("../agent/wiring.js")).localEmbedder(),
+    studio: async () => {
+      const { productionStudioDeps, studioSample } = await import("../studio/wiring.js");
+      const dataDir = loadConfig().dataDir;
+      return { deps: productionStudioDeps(dataDir), sample: (tenant) => studioSample(dataDir, tenant) };
+    },
     ...(o.staticDir ? { staticDir: o.staticDir } : {}),
   };
 }

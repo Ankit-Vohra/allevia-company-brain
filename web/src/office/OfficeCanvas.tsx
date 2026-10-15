@@ -57,6 +57,9 @@ function pointAt(f: Flight, k: number): Pt {
   return f.path[f.path.length - 1]!;
 }
 
+// The picture frame on the Content Studio room's wall, where the Studio pins the newest photo.
+const studioFrame = (L: OfficeLayout) => L.rooms.find((r) => r.dept.id === "content")?.wall.find((w) => w.kind === "frame")?.rect;
+
 const ease = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
 
 export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed, compact, maxHeight, selected, onSelect }: OfficeCanvasProps) {
@@ -107,6 +110,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
   const celebrateAt = useRef(0);
   const processed = useRef({ key: "", n: 0 });
   const [transients, setTransients] = useState<Record<string, Transient>>({});
+  const [wallPhoto, setWallPhoto] = useState<{ src: string; kind: string } | null>(null);
 
   // turn new events into transient animations
   useEffect(() => {
@@ -120,6 +124,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
       doneAt.current = {};
       celebrateAt.current = 0;
       setTransients({});
+      setWallPhoto(null);
     }
     const start = processed.current.n;
     const fresh = list.slice(start);
@@ -130,6 +135,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
     const L = live.current.layout;
     const sp = Math.sqrt(Math.max(1, live.current.speed));
     const nextTransients: Record<string, Transient> = {};
+    let nextPhoto: { src: string; kind: string } | undefined;
     const fly = (from: AgentId, to: AgentId, kind: Flight["kind"]) => {
       if (catchUp || live.current.reducedMotion) { if (kind === "finding") delivered.current++; return; }
       const path = L.route(from, to);
@@ -149,6 +155,14 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
         const d = author ? L.desks[author] : undefined;
         if (d && !catchUp) effects.current.push({ kind: e.verdict === "ok" ? "badge-ok" : "badge-bad", x: d.notes.x + 2, y: d.notes.y - 6, t0: now, dur: 2400 / sp });
         if (!catchUp) nextTransients[e.agent] = { text: `${e.verdict === "ok" ? "✓" : "✗"} ${author ? agentName(author) + ": " : ""}${e.note}`, tone: e.verdict === "ok" ? "ok" : "bad", until: Date.now() + 3200 / sp };
+      } else if (e.type === "asset") {
+        // the Content Studio room: the newest photo goes up on its wall frame
+        if (e.thumb) nextPhoto = { src: e.thumb.replace(/\?w=\d+$/, "?w=96"), kind: e.kind };
+        const fr = studioFrame(L);
+        if (fr && !catchUp && !live.current.reducedMotion) effects.current.push({ kind: "sparkle", x: fr.x + fr.w / 2, y: fr.y + fr.h / 2, t0: now, dur: 900 });
+        if (!catchUp) nextTransients[e.agent] = { text: e.kind === "original" ? "New photo in: having a look" : "A variant is ready for Nisha", tone: "done", until: Date.now() + 2600 / sp };
+      } else if (e.type === "assessment") {
+        if (!catchUp) nextTransients[e.agent] = { text: `${e.verdict[0]!.toUpperCase()}${e.verdict.slice(1)} it · ${e.overlays.length} boxes marked`, tone: "ok", until: Date.now() + 2600 / sp };
       } else if (e.type === "agent_done") {
         doneAt.current[e.agent] = now;
       } else if (e.type === "final") {
@@ -158,6 +172,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
       }
     }
     if (Object.keys(nextTransients).length) setTransients((t) => ({ ...t, ...nextTransients }));
+    if (nextPhoto) setWallPhoto(nextPhoto);
   }, [events, runKey]);
 
   // expire transient bubbles
@@ -376,6 +391,21 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
                 </button>
               );
             })}
+            {wallPhoto && (() => {
+              const fr = studioFrame(layout);
+              if (!fr) return null;
+              const w = 22, h = 17; // logical px: a little larger than the frame it hangs in, like a pinned print
+              return (
+                <img
+                  key={wallPhoto.src}
+                  className={`wall-photo is-${wallPhoto.kind}`}
+                  src={wallPhoto.src}
+                  alt=""
+                  aria-hidden="true"
+                  style={{ left: (fr.x + fr.w / 2 - w / 2) * k, top: (fr.y - 3) * k, width: w * k, height: h * k }}
+                />
+              );
+            })()}
             {!compact &&
               bubbles.map((b) => {
                 const d = layout.desks[b.agent];

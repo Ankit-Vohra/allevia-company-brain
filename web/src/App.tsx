@@ -9,6 +9,7 @@ const InsightsPage = lazy(() => import("./pages/Insights"));
 const ApprovalsPage = lazy(() => import("./pages/Approvals"));
 const OnboardPage = lazy(() => import("./pages/Onboard"));
 const SoonPage = lazy(() => import("./pages/Soon"));
+const StudioPage = lazy(() => import("./pages/Studio"));
 
 const TITLES: Record<string, string> = {
   "/": "Office", "/ask": "Ask", "/brain": "Brain", "/insights": "Insights", "/approvals": "Approvals", "/onboard": "Add a business",
@@ -36,7 +37,7 @@ export function App() {
             <Route path="/insights" element={<InsightsPage />} />
             <Route path="/approvals" element={<ApprovalsPage />} />
             <Route path="/onboard" element={<OnboardPage />} />
-            <Route path="/studio" element={<SoonPage id="studio" />} />
+            <Route path="/studio" element={<StudioPage />} />
             <Route path="/team" element={<SoonPage id="team" />} />
             <Route path="/plan" element={<SoonPage id="plan" />} />
             <Route path="/program" element={<SoonPage id="program" />} />
