@@ -56,9 +56,14 @@ running), give the owner a team instead of a tool, and make every answer carry i
 - **One-tap approvals.** Anything that would change the outside world becomes an approval card: a GitHub issue, a
   content draft, a (simulated) ad pause, a Discord post. Approve, edit or reject, from the web or Discord. GitHub
   issues and Discord posts are dry runs unless `ALLEVIA_ACTIONS_LIVE=1`; drafts are never published.
-- **Insights without model guesswork.** 14 deterministic Cypher detectors (SEO, content, funnel, simulated ads,
-  knowledge gaps) produce findings with evidence ids and numbers from the graph; the morning brief is a goal pulse
-  built from them ([`src/insights/`](src/insights)).
+- **Insights without model guesswork.** 20 deterministic Cypher detectors (SEO, content, funnel, simulated ads,
+  knowledge gaps, and on-call and release health for the app) produce findings with evidence ids and numbers from the
+  graph; Today's note (the morning brief) is a goal pulse built from them, with an "On call" section only when Zoya or
+  Imran has something open ([`src/insights/`](src/insights)).
+- **Answers a busy owner can act on.** The Chief of Staff leads with the answer, numbers the steps, ranks at most five
+  items and ends on one next action, in plain words (no "baseline" or "agent"). The shape follows the MIT-licensed
+  [i-have-adhd](vendor/skills/i-have-adhd/NOTICE.md) rules and [`docs/owner-words.md`](docs/owner-words.md)
+  ([`src/agent/style.ts`](src/agent/style.ts)).
 - **Onboarding from a URL.** A polite, SSRF-safe crawler reads the site, builds the brand kit, runs SEO checks, maps
   services, audiences and needs, and enrols the business in a 90-day program with goals and Day-0 baselines
   ([`src/onboard/`](src/onboard), [`src/ingest/sources/website/`](src/ingest/sources/website)).
@@ -185,7 +190,7 @@ calling a model. A fresh FalkorDB is empty, so load something first:
 docker compose exec app tsx scripts/seed-demo.ts demo_seed --register
 docker compose exec app tsx src/cli.ts enroll demo_seed --country UK --industry "jobs platform"
 docker compose exec app tsx src/cli.ts insights demo_seed   # deterministic detectors, approval cards
-docker compose exec app tsx src/cli.ts brief demo_seed      # the morning brief
+docker compose exec app tsx src/cli.ts brief demo_seed      # today's note (the morning brief)
 ```
 
 Then open http://127.0.0.1:8787: the office, the 90-day card, the brain explorer, insights and approval cards for
@@ -235,8 +240,8 @@ is full-text only.
 | `npm run onboard -- --name "…" --slug … --url https://…` | Onboard a business from its website (crawl, brand kit, SEO checks, understanding, program) |
 | `enroll <tenant>` | Enrol a business already in the graph in Allevia 90: country defaults, goals, Day-0 baselines, capabilities |
 | `ask <tenant> "<question>"` | Ask the agent company and watch every agent's steps in the terminal |
-| `insights <tenant>` | Run the 14 detectors; write recommendations and approval cards |
-| `brief <tenant>` | Write today's morning brief (goal pulse, what changed, top 3, approvals, next action) |
+| `insights <tenant>` | Run the 20 detectors; write recommendations and approval cards |
+| `brief <tenant>` | Write today's note (goals, what changed, what we noticed, on call, waiting for your OK, next step) |
 | `approvals <tenant> [approve\|reject <id>]` | List or decide approval cards (`--edit <file>` teaches a learned rule) |
 | `program <tenant> [--read-only]` | The Allevia 90 scorecard |
 | `tell <tenant> "<instruction>"` | "Tell your team": preview a plain-language change, `--apply` to make it |

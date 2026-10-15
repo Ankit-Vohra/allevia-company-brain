@@ -279,8 +279,9 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   else lines.push("- Nothing new to flag today.");
   if (onCall.length) {
     lines.push("", "On call");
-    for (const r of onCall.slice(0, 3)) lines.push(`- ${clip(r.title, 110).replace(/[.:]$/, "")}${r.by ? ` (${plainWho(r.by)})` : ""}. [[${r.id}]]`);
-    if (onCall.length > 3) lines.push(`- ${plural(onCall.length - 3, "more thing")} to look at.`);
+    const shown = onCall.length <= 4 ? onCall : onCall.slice(0, 3); // never "1 more": show four whole, else three and a count
+    for (const r of shown) lines.push(`- ${clip(r.title, 110).replace(/[.:]$/, "")}${r.by ? ` (${plainWho(r.by)})` : ""}. [[${r.id}]]`);
+    if (onCall.length > shown.length) lines.push(`- ${plural(onCall.length - shown.length, "more thing")} to look at.`);
   }
   lines.push("", "Waiting for your OK");
   if (pending.count) {
@@ -312,7 +313,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   const title = `Today's note, ${shortDate(date)}`;
   const mentions = [...new Set([
     ...(biz ? [biz] : []), ...goals.map((x) => x.id), ...goals.flatMap((x) => (x.obsId ? [x.obsId] : [])), ...changes.map((c) => c.obsId),
-    ...learned.map((r) => r.id), ...top.map((r) => r.id), ...onCall.slice(0, 3).map((r) => r.id), ...pending.cards.map((c) => c.id),
+    ...learned.map((r) => r.id), ...top.map((r) => r.id), ...(onCall.length <= 4 ? onCall : onCall.slice(0, 3)).map((r) => r.id), ...pending.cards.map((c) => c.id),
   ])];
   const present = await existingIds(g, mentions);
   const agent = await ensureAgentNode(g, "chief-of-staff", now);

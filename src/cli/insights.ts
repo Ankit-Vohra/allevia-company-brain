@@ -53,7 +53,7 @@ export const commands: Command[] = [
       const created = r.recommendations.filter((x) => x.created).length;
       const cards = r.recommendations.filter((x) => x.approvalId).length;
       console.log(`Insights for ${tenant}: ${r.candidates.length} findings (${created} new), ${cards} with a card, ${r.resolved.length} resolved${values.llm ? `, ${r.polished} polished` : ""}`);
-      for (const area of ["seo", "content", "funnel", "ads", "knowledge"] as const) {
+      for (const area of ["seo", "content", "funnel", "ads", "knowledge", "tech"] as const) {
         const cs = r.candidates.filter((c) => c.area === area);
         if (!cs.length) continue;
         console.log(`\n${area.toUpperCase()}${area === "ads" ? " (simulated)" : ""}`);

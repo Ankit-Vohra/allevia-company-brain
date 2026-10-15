@@ -35,6 +35,7 @@ const AREA_METRICS: Record<Area, RegExp | null> = {
   funnel: /signup|setup|activat|conversion|funnel|otp|onboard|account|enquir|lead/i,
   ads: /cpa|^ads?_|_ads?$|ad_spend|spend|lead|conversion|roas|enquir/i,
   knowledge: null,
+  tech: null,
 };
 
 export function relatedGoals(c: Pick<Candidate, "area" | "metrics">, goals: GoalRef[]): GoalRef[] {

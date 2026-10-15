@@ -13,7 +13,7 @@ import type { GraphHandle } from "../graph/client.js";
 import type { EntityType } from "../graph/schema.js";
 import { DAY_MS, addDays, cap1, clip, dayMs, dayOf, fmt, humanise, list, median, money, pageLabel, pct, plural, round, shortDate, times } from "./text.js";
 
-export type Area = "seo" | "content" | "funnel" | "ads" | "knowledge";
+export type Area = "seo" | "content" | "funnel" | "ads" | "knowledge" | "tech";
 
 // What the executor needs. title/body/target are what the approval card shows; the rest are ids for the executor.
 export interface ActionPayload {
@@ -47,6 +47,11 @@ export interface DetectorOpts {
   staleDays?: number;        // a pending task untouched this long is stale (default 14)
   gapDays?: number;          // a channel with no post this long has a posting gap (default 7)
   minImpressions?: number;   // CTR checks need at least this many impressions (default 100)
+  newErrorsMin?: number;     // this many new app errors in a period is a pile-up on its own (default 10)
+  crashFreeMin?: number;     // sessions without a crash, in percent, below which the app is flagged (default 99.5)
+  minSessions?: number;      // crash and release checks need at least this many sessions behind them (default 30)
+  reviewWaitDays?: number;   // an app update waiting for Apple's review this long is flagged (default 3)
+  releaseDropPoints?: number; // crash-free sessions falling this many percentage points after a build is flagged (default 2)
 }
 
 type Read = Pick<GraphHandle, "roQuery">;
@@ -790,6 +795,288 @@ const knowledgeUnevidencedDecisions: Detector = {
   },
 };
 
+
+// ---------- tech: on call (Zoya) and releases (Imran) ----------
+//
+// Written for an owner who is not an engineer: titles and reasons say "app errors", "crashed", "froze" and "waiting for
+// Apple's review", never Sentry, ANR or crash-free. The evidence ids (Observations and Events from the ops snapshot)
+// are how the desks, and the "Show how we got this" panel, back every figure.
+
+const NEW_ERRORS_MIN = 10;
+const SPIKE_FACTOR = 2;
+const SPIKE_FLOOR = 5;
+const CRASH_FREE_MIN = 99.5;
+const MIN_SESSIONS = 30;
+const REVIEW_WAIT_DAYS = 3;
+const RELEASE_DROP = 2;
+const PLAY_CRASH_LIMIT = 1.09;   // Play's "bad behaviour" lines, used only when the snapshot did not carry them
+const PLAY_ANR_LIMIT = 0.47;
+const NEAR_LIMIT = 0.8;          // within 80% of a limit is "close to it"
+
+interface ObsRow { id: string; subject: string; value: number; at: string | null; from: string | null; simulated: boolean | null }
+
+// Current Observations of one metric on subjects of one type, newest window first, then the id (so ties are stable).
+async function obsSeries(g: Read, metric: string, label: EntityType, limit = 60): Promise<ObsRow[]> {
+  if (!LABEL_OK.test(label)) return [];
+  return ro<ObsRow>(g,
+    `MATCH (o:Observation)-[m:MEASURES]->(s:${label}) WHERE o.metric = $metric AND m.until IS NULL AND coalesce(o.baseline, false) = false
+     RETURN o.id AS id, s.id AS subject, o.value AS value, coalesce(o.windowEnd, o.asOf) AS at, o.windowStart AS from, o.simulated AS simulated
+     ORDER BY at DESC, id DESC LIMIT $limit`, { metric, limit });
+}
+
+interface IssueRow { id: string; name: string | null; level: string | null; unhandled: boolean | null; isNew: boolean | null; unresolved: boolean | null; firstSeen: string | null; lastSeen: string | null; app: string }
+
+// Every Sentry issue Event in the graph, with the Channel it AFFECTS.
+async function sentryIssues(g: Read): Promise<IssueRow[]> {
+  return ro<IssueRow>(g,
+    `MATCH (e:Event)-[a:AFFECTS]->(c:Entity) WHERE e.kind = 'sentry_issue' AND a.until IS NULL
+     RETURN e.id AS id, e.name AS name, e.level AS level, e.unhandled AS unhandled, e.isNew AS isNew, e.unresolved AS unresolved,
+            e.firstSeen AS firstSeen, e.lastSeen AS lastSeen, c.id AS app
+     ORDER BY id LIMIT 500`);
+}
+
+const num = (n: number | null | undefined): n is number => typeof n === "number" && Number.isFinite(n);
+const windowDays = (from: string | null, to: string | null): number | null => {
+  const a = dayOf(from), b = dayOf(to);
+  return a && b ? Math.round((dayMs(b) - dayMs(a)) / DAY_MS) + 1 : null;
+};
+const issueLine = (i: IssueRow, events?: number, users?: number): string =>
+  `${clip(i.name ?? i.id, 90)}${num(events) ? ` (${plural(events, "time")}${num(users) ? `, ${plural(users, "person", "people")}` : ""})` : ""}`;
+
+const techSentryNewIssues: Detector = {
+  area: "tech",
+  async run(g, opts) {
+    const series = await obsSeries(g, "sentry_new_issues", "Channel");
+    const latest = series[0];
+    if (!latest || !num(latest.value)) return [];
+    const prev = series.find((r) => r.subject === latest.subject && r.at !== latest.at && num(r.value));
+    const min = opts.newErrorsMin ?? NEW_ERRORS_MIN;
+    const n = latest.value;
+    const spike = !!prev && prev.value >= 1 && n >= SPIKE_FLOOR && n >= SPIKE_FACTOR * prev.value;
+    if (n < min && !spike) return [];
+    const days = windowDays(latest.from, latest.at);
+    const issues = (await sentryIssues(g)).filter((i) => i.app === latest.subject && i.isNew);
+    const events = await ro<{ id: string; metric: string; value: number }>(g,
+      `MATCH (o:Observation)-[m:MEASURES]->(e:Event) WHERE o.metric IN ['sentry_issue_events', 'sentry_issue_users'] AND m.until IS NULL AND e.id IN $ids
+       WITH e, o.metric AS metric, o ORDER BY coalesce(o.windowEnd, o.asOf) DESC, o.id DESC
+       RETURN e.id AS id, metric, collect(o.value)[0] AS value ORDER BY id, metric`, { ids: issues.map((i) => i.id) });
+    const ev = (id: string, metric: string) => events.find((x) => x.id === id && x.metric === metric)?.value;
+    const ranked = issues.slice().sort((a, b) => (ev(b.id, "sentry_issue_users") ?? 0) - (ev(a.id, "sentry_issue_users") ?? 0)
+      || (ev(b.id, "sentry_issue_events") ?? 0) - (ev(a.id, "sentry_issue_events") ?? 0) || a.id.localeCompare(b.id));
+    const crashing = issues.filter((i) => i.level === "fatal").length;
+    const top = ranked[0];
+    const span = days ? ` in the last ${plural(days, "day")}` : "";
+    const numbers: Record<string, number> = { new_errors: n, ...(days ? { period_days: days } : {}), ...(prev ? { previous_period: prev.value } : {}), ...(crashing ? { crashed_the_app: crashing } : {}) };
+    return [{
+      key: `tech.sentry_new_issues:${latest.subject}`, detector: "tech.sentry_new_issues", area: "tech", agent: "oncall-engineer",
+      title: `${plural(n, "new app error")}${span}`,
+      why: `${plural(n, "new kind")} of error ${n === 1 ? "has" : "have"} shown up in the app${days ? ` over ${plural(days, "day")} to ${shortDate(dayOf(latest.at) ?? "")}` : ""}${prev ? `; the period before had ${fmt(prev.value)}` : ""}.`
+        + `${crashing ? ` ${plural(crashing, "of the ones we can see")} crashed the app outright.` : ""}`
+        + `${top ? ` The one reaching most people: "${issueLine(top, ev(top.id, "sentry_issue_events"), ev(top.id, "sentry_issue_users"))}".` : ""}`,
+      impact: "Errors that nobody has looked at tend to turn into bad reviews and uninstalls.",
+      evidence: uniq([latest.id, ...(prev ? [prev.id] : []), ...ranked.slice(0, 8).map((i) => i.id)]), numbers, metrics: ["sentry_new_issues"],
+      ...(latest.simulated ? { simulated: true } : {}),
+      score: round(0.5 + cap(0.01 * n, 0.25) + (spike ? 0.1 : 0)), confidence: 0.75,
+      suggestedAction: {
+        kind: "github_issue",
+        payload: {
+          title: `App: look at ${plural(n, "new error")}${span}`,
+          body: [`${plural(n, "new error")} first seen${span}${prev ? ` (the period before: ${fmt(prev.value)})` : ""}.`, "",
+            ...ranked.slice(0, 10).map((i) => `- [ ] ${issueLine(i, ev(i.id, "sentry_issue_events"), ev(i.id, "sentry_issue_users"))}${i.level === "fatal" ? " (crashed the app)" : ""}`), "",
+            "Open each in Sentry, assign an owner, and mark the noise as ignored so the real ones stand out.", "", `Evidence: ${latest.id}`].join("\n"),
+          target: "Sentry", targetId: latest.subject,
+        },
+      },
+    }];
+  },
+};
+
+const techSentryHotIssue: Detector = {
+  area: "tech",
+  async run(g) {
+    const users = await obsSeries(g, "sentry_issue_users", "Event", 300);
+    const hits = await obsSeries(g, "sentry_issue_events", "Event", 300);
+    if (!users.length && !hits.length) return [];
+    const latestOf = (rows: ObsRow[]) => { const m = new Map<string, ObsRow>(); for (const r of rows) if (!m.has(r.subject)) m.set(r.subject, r); return m; };
+    const U = latestOf(users), E = latestOf(hits);
+    const issues = (await sentryIssues(g)).filter((i) => i.unresolved || i.isNew);
+    const appUsers = new Map((await obsSeries(g, "app_users", "Channel", 20)).map((r) => [r.subject, r] as const).reverse());
+    const out: Candidate[] = [];
+    for (const i of issues) {
+      const u = U.get(i.id), e = E.get(i.id);
+      const nu = u?.value ?? 0, ne = e?.value ?? 0;
+      const all = appUsers.get(i.app);
+      const serious = i.level === "fatal" || i.unhandled === true;
+      const big = nu >= 5 || ne >= 50 || (nu >= 2 && !!all && num(all.value) && nu * 10 >= all.value);
+      if (!serious || !big) continue;
+      const days = windowDays((u ?? e)?.from ?? null, (u ?? e)?.at ?? null);
+      const numbers: Record<string, number> = { people: nu, times: ne, ...(days ? { period_days: days } : {}), ...(all && num(all.value) ? { people_using_the_app: all.value } : {}) };
+      out.push({
+        key: `tech.sentry_hot_issue:${i.id}`, detector: "tech.sentry_hot_issue", area: "tech", agent: "oncall-engineer",
+        title: `An app error is hitting ${plural(nu, "person", "people")}: "${clip(i.name ?? i.id, 70)}"`,
+        why: `"${clip(i.name ?? i.id, 90)}" ${i.level === "fatal" ? "crashed the app" : "failed"} ${plural(ne, "time")} for ${plural(nu, "person", "people")}${days ? ` in ${plural(days, "day")}` : ""}${all && num(all.value) ? `, out of ${fmt(all.value)} who used the app` : ""}.${i.firstSeen ? ` First seen ${shortDate(i.firstSeen)}.` : ""}`,
+        impact: "A problem that keeps repeating for the same people is the one they remember.",
+        evidence: uniq([i.id, ...(u ? [u.id] : []), ...(e ? [e.id] : []), ...(all ? [all.id] : [])]), numbers, metrics: ["sentry_issue_events", "sentry_issue_users"],
+        ...((u ?? e)?.simulated ? { simulated: true } : {}),
+        score: round(0.55 + cap(0.02 * nu, 0.2) + (i.level === "fatal" ? 0.1 : 0)), confidence: 0.8,
+        suggestedAction: {
+          kind: "github_issue",
+          payload: {
+            title: `App: fix "${clip(i.name ?? i.id, 70)}"`,
+            body: [`${issueLine(i, ne, nu)}${days ? ` over ${plural(days, "day")}` : ""}.`, i.firstSeen ? `First seen ${shortDate(i.firstSeen)}${i.lastSeen ? `, last seen ${shortDate(i.lastSeen)}` : ""}.` : "", "",
+              "- [ ] Reproduce it from the Sentry event", "- [ ] Fix and ship, then watch the count fall", "", `Evidence: ${i.id}`].filter((l) => l !== "").join("\n"),
+            target: "Sentry", targetId: i.id,
+          },
+        },
+      });
+    }
+    return out.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key)).slice(0, 3);
+  },
+};
+
+const techCrashFreeLow: Detector = {
+  area: "tech",
+  async run(g, opts) {
+    const rate = (await obsSeries(g, "crash_free_sessions_pct", "Channel", 20))[0];
+    if (!rate) return [];
+    const sessions = (await obsSeries(g, "app_sessions", "Channel", 20)).find((r) => r.subject === rate.subject);
+    const usersPct = (await obsSeries(g, "crash_free_users_pct", "Channel", 20)).find((r) => r.subject === rate.subject);
+    const min = opts.crashFreeMin ?? CRASH_FREE_MIN;
+    const enough = opts.minSessions ?? MIN_SESSIONS;
+    if (!num(rate.value) || rate.value >= min || !sessions || !num(sessions.value) || sessions.value < enough) return [];
+    const days = windowDays(rate.from, rate.at);
+    const crashed = round(100 - rate.value, 1);
+    const hit = usersPct && num(usersPct.value) ? round(100 - usersPct.value, 0) : undefined;
+    const numbers: Record<string, number> = { sessions_without_a_crash_pct: rate.value, sessions_that_crashed_pct: crashed, sessions: sessions.value, aim_pct: min, ...(hit !== undefined ? { people_who_hit_a_crash_pct: hit } : {}) };
+    return [{
+      key: `tech.crash_free_low:${rate.subject}`, detector: "tech.crash_free_low", area: "tech", agent: "oncall-engineer",
+      title: `The app crashed in ${fmt(crashed)}% of sessions${days ? ` over ${plural(days, "day")}` : ""}`,
+      why: `${fmt(rate.value, 2)}% of ${fmt(sessions.value)} sessions ran without a crash${days ? ` in ${plural(days, "day")} to ${shortDate(dayOf(rate.at) ?? "")}` : ""}; we aim for ${fmt(min)}% or better.${hit !== undefined ? ` About ${fmt(hit)}% of the people who used the app hit a crash.` : ""}`,
+      impact: "A crash loses the person in the middle of what they were doing; many do not come back.",
+      evidence: uniq([rate.id, sessions.id, ...(usersPct ? [usersPct.id] : [])]), numbers, metrics: ["crash_free_sessions_pct"],
+      ...(rate.simulated ? { simulated: true } : {}),
+      score: round(0.5 + cap((min - rate.value) / 10, 0.35)), confidence: sessions.value >= 200 ? 0.85 : 0.65,
+    }];
+  },
+};
+
+const techPlayVitals: Detector = {
+  area: "tech",
+  async run(g) {
+    const out: Candidate[] = [];
+    for (const [what, rateMetric, limitMetric, fallback, say] of [
+      ["crash", "user_perceived_crash_rate_pct", "user_perceived_crash_rate_threshold_pct", PLAY_CRASH_LIMIT, { noun: "had the app crash", kind: "crashes" }],
+      ["anr", "user_perceived_anr_rate_pct", "user_perceived_anr_rate_threshold_pct", PLAY_ANR_LIMIT, { noun: "had the app freeze", kind: "freezes" }],
+    ] as const) {
+      const rate = (await obsSeries(g, rateMetric, "Channel", 10))[0];
+      if (!rate || !num(rate.value)) continue;
+      const limit = (await obsSeries(g, limitMetric, "Channel", 10)).find((r) => r.subject === rate.subject && num(r.value))?.value ?? fallback;
+      if (rate.value < NEAR_LIMIT * limit) continue;
+      const over = rate.value >= limit;
+      const days = windowDays(rate.from, rate.at);
+      out.push({
+        key: `tech.play_vitals:${rate.subject}:${what}`, detector: "tech.play_vitals", area: "tech", agent: "oncall-engineer",
+        title: `Google Play: ${fmt(rate.value)}% of people ${say.noun}, ${over ? "over" : "close to"} Google's ${fmt(limit)}% limit`,
+        why: `${fmt(rate.value)}% of Android users ${say.noun}${days ? ` in the ${plural(days, "day")} to ${shortDate(dayOf(rate.at) ?? "")}` : ""}. Google marks an app as behaving badly above ${fmt(limit)}%${over ? ", and this is above it" : ", and this is close"}.`,
+        impact: over ? "Past the limit, Google can show the app to fewer people in the Play Store." : "Crossing the limit can make Google show the app to fewer people.",
+        evidence: uniq([rate.id, rate.subject]), numbers: { rate_pct: rate.value, limit_pct: limit, ...(days ? { period_days: days } : {}) }, metrics: [rateMetric],
+        ...(rate.simulated ? { simulated: true } : {}),
+        score: round(over ? 0.75 + cap((rate.value - limit) / limit / 2, 0.2) : 0.5 + cap((rate.value / limit - NEAR_LIMIT) * 1.5, 0.2)), confidence: 0.85,
+        suggestedAction: {
+          kind: "github_issue",
+          payload: {
+            title: `Android: bring ${say.kind} under ${fmt(limit)}% (now ${fmt(rate.value)}%)`,
+            body: [`${fmt(rate.value)}% of Android users ${say.noun}; Google's limit is ${fmt(limit)}%.`, "",
+              `- [ ] Open Play Console > Android vitals and read the top ${say.kind} clusters`, "- [ ] Ship a fix for the biggest cluster", "", `Evidence: ${rate.id}`].join("\n"),
+            target: "Google Play Console", targetId: rate.subject,
+          },
+        },
+      });
+    }
+    return out;
+  },
+};
+
+const REVIEW_STATE: Array<[RegExp, string]> = [
+  [/UNRESOLVED/i, "held up by a question from Apple"], [/IN_REVIEW/i, "being reviewed now"], [/WAITING/i, "still waiting in line"],
+];
+
+const techAppReviewWaiting: Detector = {
+  area: "tech",
+  async run(g, opts) {
+    const days = (await obsSeries(g, "app_review_days_waiting", "Channel", 10))[0];
+    const min = opts.reviewWaitDays ?? REVIEW_WAIT_DAYS;
+    if (!days || !num(days.value) || days.value < min) return [];
+    const [ch] = await ro<{ version: string | null; state: string | null; sent: string | null }>(g,
+      "MATCH (c:Channel {id:$id}) RETURN c.latestVersion AS version, c.latestVersionState AS state, c.reviewSubmittedAt AS sent", { id: days.subject });
+    const [ev] = ch?.version ? await ro<{ id: string }>(g, "MATCH (e:Event {kind:'release', platform:'ios', version:$v}) RETURN e.id AS id ORDER BY id LIMIT 1", { v: ch.version }) : [];
+    const waited = Math.floor(days.value);
+    const what = ch?.version ? `iPhone app update ${ch.version}` : "iPhone app update";
+    const state = REVIEW_STATE.find(([re]) => re.test(ch?.state ?? ""))?.[1] ?? "still not approved";
+    return [{
+      key: `tech.app_review_waiting:${days.subject}`, detector: "tech.app_review_waiting", area: "tech", agent: "qa-release",
+      title: `The ${what} has waited ${plural(waited, "day")} for Apple's review`,
+      why: `The ${what} was sent to Apple${ch?.sent ? ` on ${shortDate(ch.sent)}` : ""} and is ${state}: ${plural(waited, "day")} so far. Most reviews finish within a couple of days.`,
+      impact: "Until Apple approves it, iPhone users keep the old version and anything it fixes stays unfixed.",
+      evidence: uniq([days.id, days.subject, ...(ev ? [ev.id] : [])]), numbers: { days_waiting: days.value, limit_days: min }, metrics: ["app_review_days_waiting"],
+      ...(days.simulated ? { simulated: true } : {}),
+      score: round(0.5 + cap(0.04 * (days.value - min), 0.3)), confidence: 0.85,
+    }];
+  },
+};
+
+const techReleaseHealth: Detector = {
+  area: "tech",
+  async run(g, opts) {
+    const [build] = await ro<{ id: string; name: string | null; at: string }>(g,
+      `MATCH (e:Event)-[a:AFFECTS]->(:Entity) WHERE e.kind IN ['build', 'release'] AND a.until IS NULL AND coalesce(e.expired, false) = false
+       WITH e, coalesce(e.releasedAt, e.uploadedAt) AS at WHERE at IS NOT NULL
+       RETURN DISTINCT e.id AS id, e.name AS name, at ORDER BY at DESC, id DESC LIMIT 1`);
+    if (!build) return [];
+    const R = dayOf(build.at);
+    if (!R) return [];
+    const pcts = await obsSeries(g, "crash_free_sessions_daily_pct", "Channel", 120);
+    const sess = await obsSeries(g, "app_sessions_daily", "Channel", 120);
+    const app = pcts[0]?.subject;
+    const sessionsOn = new Map(sess.filter((r) => r.subject === app).map((r) => [r.at, r] as const));
+    const days = pcts.filter((r) => r.subject === app && num(r.value) && r.at && sessionsOn.has(r.at)).map((r) => ({ day: dayOf(r.at)!, pct: r.value, n: sessionsOn.get(r.at)!.value, id: r.id }));
+    const from = addDays(R, -7);
+    const before = days.filter((d) => d.day >= from && d.day < R), after = days.filter((d) => d.day >= R);
+    const total = (xs: typeof days) => xs.reduce((a, d) => a + d.n, 0);
+    const mean = (xs: typeof days) => xs.reduce((a, d) => a + d.pct * d.n, 0) / total(xs);
+    const enough = opts.minSessions ?? MIN_SESSIONS;
+    const drop = opts.releaseDropPoints ?? RELEASE_DROP;
+    const measured = after.length >= 2 && total(after) >= enough && total(before) >= enough * 2;
+    const b = measured ? round(mean(before), 1) : undefined, a = measured ? round(mean(after), 1) : undefined;
+    const fell = b !== undefined && a !== undefined && b - a >= drop;
+    const newer = (await sentryIssues(g)).filter((i) => i.isNew && i.firstSeen && i.firstSeen >= R && i.app === app);
+    const manyNew = newer.length >= 3;
+    if (!fell && !manyNew) return [];
+    const parts = [
+      ...(fell ? [`sessions without a crash fell from ${fmt(b!)}% to ${fmt(a!)}%`] : []),
+      ...(manyNew ? [`${plural(newer.length, "new app error")} appeared`] : []),
+    ];
+    const numbers: Record<string, number> = { ...(fell ? { before_pct: b!, after_pct: a!, sessions_after: total(after) } : {}), ...(manyNew ? { new_errors_since: newer.length } : {}) };
+    return [{
+      key: `tech.release_health:${build.id}`, detector: "tech.release_health", area: "tech", agent: "qa-release",
+      title: `Since the app build of ${shortDate(R)}: ${parts.join(" and ")}`,
+      why: `The newest build went up on ${shortDate(R)}. Since then ${parts.join(", and ")}${fell ? ` (the 7 days before it: ${fmt(b!)}%; since: ${fmt(a!)}% across ${fmt(total(after))} sessions)` : ""}.`,
+      impact: "A release that makes the app worse is cheapest to fix, or to roll back, in the first few days.",
+      evidence: uniq([build.id, ...(fell ? after.slice(-5).map((d) => d.id) : []), ...(manyNew ? newer.slice(0, 5).map((i) => i.id) : [])]), numbers, metrics: ["crash_free_sessions_daily_pct"],
+      score: round(0.55 + (fell ? cap((b! - a!) / 20, 0.25) : 0) + (manyNew ? cap(0.02 * newer.length, 0.1) : 0)), confidence: fell ? 0.7 : 0.6,
+      suggestedAction: {
+        kind: "github_issue",
+        payload: {
+          title: `Release check: ${parts.join(" and ")} since the build of ${shortDate(R)}`,
+          body: [`Build ${build.name ?? build.id} (${R}).`, ...parts.map((p) => `- ${p}`), "",
+            "- [ ] Compare the new errors with the changes in this build", "- [ ] Decide: fix forward, or roll back", "", `Evidence: ${build.id}`].join("\n"),
+          target: "Release", targetId: build.id,
+        },
+      },
+    }];
+  },
+};
+
 // ---------- registry ----------
 
 export const DETECTORS = {
@@ -807,6 +1094,12 @@ export const DETECTORS = {
   "knowledge.orphan_docs": knowledgeOrphanDocs,
   "knowledge.stale_tasks": knowledgeStaleTasks,
   "knowledge.unevidenced_decisions": knowledgeUnevidencedDecisions,
+  "tech.sentry_new_issues": techSentryNewIssues,
+  "tech.sentry_hot_issue": techSentryHotIssue,
+  "tech.crash_free_low": techCrashFreeLow,
+  "tech.play_vitals": techPlayVitals,
+  "tech.app_review_waiting": techAppReviewWaiting,
+  "tech.release_health": techReleaseHealth,
 } satisfies Record<string, Detector>;
 
 export type DetectorName = keyof typeof DETECTORS;
