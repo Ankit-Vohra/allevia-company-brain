@@ -47,6 +47,12 @@ const REGIONS = [
   { country: "New Zealand", currency: "NZD", locale: "en-NZ", timeZone: "Pacific/Auckland" },
   { country: "Singapore", currency: "SGD", locale: "en-SG", timeZone: "Asia/Singapore" },
   { country: "India", currency: "INR", locale: "en-IN", timeZone: "Asia/Kolkata" },
+  { country: "Spain", currency: "EUR", locale: "en-IE", timeZone: "Europe/Madrid" },
+  { country: "Germany", currency: "EUR", locale: "en-IE", timeZone: "Europe/Berlin" },
+  { country: "France", currency: "EUR", locale: "en-IE", timeZone: "Europe/Paris" },
+  { country: "Italy", currency: "EUR", locale: "en-IE", timeZone: "Europe/Rome" },
+  { country: "Netherlands", currency: "EUR", locale: "en-IE", timeZone: "Europe/Amsterdam" },
+  { country: "Austria", currency: "EUR", locale: "en-IE", timeZone: "Europe/Vienna" },
 ];
 
 const PLURAL: Record<string, [string, string]> = {

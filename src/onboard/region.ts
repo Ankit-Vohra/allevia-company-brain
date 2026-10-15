@@ -22,6 +22,18 @@ export const REGIONS: Readonly<Record<string, Region>> = {
   AU: { country: "Australia", countryCode: "AU", currency: "AUD", locale: "en-AU", timeZone: "Australia/Sydney", privacyRegime: "au_privacy_act", weekStart: "mon" },
   US: { country: "United States", countryCode: "US", currency: "USD", locale: "en-US", timeZone: "America/New_York", privacyRegime: "us_state_privacy", weekStart: "sun" },
   IN: { country: "India", countryCode: "IN", currency: "INR", locale: "en-IN", timeZone: "Asia/Kolkata", privacyRegime: "in_dpdp", weekStart: "mon" },
+  // The countries the web form offers beyond those, and the biggest euro markets. The locale is the spelling the team
+  // writes in for the owner, so it stays English everywhere.
+  CA: { country: "Canada", countryCode: "CA", currency: "CAD", locale: "en-CA", timeZone: "America/Toronto", privacyRegime: "ca_pipeda", weekStart: "sun" },
+  IE: { country: "Ireland", countryCode: "IE", currency: "EUR", locale: "en-IE", timeZone: "Europe/Dublin", privacyRegime: "eu_gdpr", weekStart: "mon" },
+  NZ: { country: "New Zealand", countryCode: "NZ", currency: "NZD", locale: "en-NZ", timeZone: "Pacific/Auckland", privacyRegime: "nz_privacy_act", weekStart: "mon" },
+  SG: { country: "Singapore", countryCode: "SG", currency: "SGD", locale: "en-SG", timeZone: "Asia/Singapore", privacyRegime: "sg_pdpa", weekStart: "mon" },
+  ES: { country: "Spain", countryCode: "ES", currency: "EUR", locale: "en-IE", timeZone: "Europe/Madrid", privacyRegime: "eu_gdpr", weekStart: "mon" },
+  DE: { country: "Germany", countryCode: "DE", currency: "EUR", locale: "en-IE", timeZone: "Europe/Berlin", privacyRegime: "eu_gdpr", weekStart: "mon" },
+  FR: { country: "France", countryCode: "FR", currency: "EUR", locale: "en-IE", timeZone: "Europe/Paris", privacyRegime: "eu_gdpr", weekStart: "mon" },
+  IT: { country: "Italy", countryCode: "IT", currency: "EUR", locale: "en-IE", timeZone: "Europe/Rome", privacyRegime: "eu_gdpr", weekStart: "mon" },
+  NL: { country: "Netherlands", countryCode: "NL", currency: "EUR", locale: "en-IE", timeZone: "Europe/Amsterdam", privacyRegime: "eu_gdpr", weekStart: "mon" },
+  AT: { country: "Austria", countryCode: "AT", currency: "EUR", locale: "en-IE", timeZone: "Europe/Vienna", privacyRegime: "eu_gdpr", weekStart: "mon" },
 };
 
 // What people type for a country, lowercased with punctuation dropped.
@@ -32,6 +44,9 @@ const ALIASES: Record<string, string> = {
   au: "AU", australia: "AU", sydney: "AU", melbourne: "AU",
   us: "US", usa: "US", "united states": "US", "united states of america": "US", america: "US",
   in: "IN", india: "IN", bharat: "IN",
+  ca: "CA", canada: "CA", toronto: "CA", ie: "IE", ireland: "IE", dublin: "IE", nz: "NZ", "new zealand": "NZ", auckland: "NZ",
+  sg: "SG", singapore: "SG", es: "ES", spain: "ES", madrid: "ES", de: "DE", germany: "DE", berlin: "DE", fr: "FR", france: "FR", paris: "FR",
+  it: "IT", italy: "IT", rome: "IT", nl: "NL", netherlands: "NL", holland: "NL", amsterdam: "NL", at: "AT", austria: "AT", vienna: "AT",
 };
 
 const norm = (s: string) => s.normalize("NFKD").toLowerCase().replace(/[^a-z ]+/g, " ").replace(/\s+/g, " ").trim();
@@ -48,7 +63,9 @@ export function regionOfDomain(domain: string | undefined | null): Region | unde
   if (!domain) return undefined;
   const host = domain.trim().toLowerCase().replace(/^[a-z]+:\/\//, "").split("/")[0]!.replace(/\.$/, "");
   const tld = host.split(".").at(-1) ?? "";
-  const code = ({ uk: "GB", ae: "AE", au: "AU", in: "IN", us: "US" } as Record<string, string>)[tld];
+  const code = ({
+    uk: "GB", ae: "AE", au: "AU", in: "IN", us: "US", ca: "CA", ie: "IE", nz: "NZ", sg: "SG", es: "ES", de: "DE", fr: "FR", it: "IT", nl: "NL", at: "AT",
+  } as Record<string, string>)[tld];
   return code ? REGIONS[code] : undefined;
 }
 

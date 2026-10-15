@@ -113,5 +113,11 @@ export function guessRegion(url: string): { country: string; currency: string; l
   if (ends(".ie")) return { country: "Ireland", currency: "EUR", locale: "en-IE" };
   if (ends(".sg")) return { country: "Singapore", currency: "SGD", locale: "en-SG" };
   if (ends(".in")) return { country: "India", currency: "INR", locale: "en-GB" };
+  if (ends(".es")) return { country: "Spain", currency: "EUR", locale: "en-IE" };
+  if (ends(".de")) return { country: "Germany", currency: "EUR", locale: "en-IE" };
+  if (ends(".fr")) return { country: "France", currency: "EUR", locale: "en-IE" };
+  if (ends(".it")) return { country: "Italy", currency: "EUR", locale: "en-IE" };
+  if (ends(".nl")) return { country: "Netherlands", currency: "EUR", locale: "en-IE" };
+  if (ends(".at")) return { country: "Austria", currency: "EUR", locale: "en-IE" };
   return { country: "United States", currency: "USD", locale: "en-US" };
 }
