@@ -1,19 +1,23 @@
-// Home: the office. Ask the team something and watch it work: the plan on the whiteboard, files flying desk to desk,
-// findings pinned, reviews stamped, and the answer written by the Chief of Staff. Beside it, the business's 90 days
-// (goals against day 0, the first-pass curve, what the team can see) and Meera's morning brief. Desks switched off in
-// Team settings sit dimmed, and every rule the team learned from the owner's edits is a book on Sara's shelf.
+// Home: the office. Three things for the owner (how the week is going, what waits for their OK, one next step), and the
+// pixel office as the hero: the team at its desks, or at coffee, the game room and the cafeteria, with the dogs carrying
+// documents between desks while a request runs. The work log is out of sight: a quiet line at the bottom says who is
+// doing what, and opens to the whole story. The business's own clock lights the office, from morning sun to evening lamps.
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import type { AgentId, LearnedRuleDto } from "@shared/contracts";
-import { AGENTS, DEPARTMENTS } from "@shared/roster";
+import { AGENTS } from "@shared/roster";
 import { api } from "../api";
 import { AgentDrawer } from "../components/AgentDrawer";
 import { BriefPanel } from "../components/BriefPanel";
 import { AgentAvatar, agentDef, deptOf, fmtMs } from "../components/bits";
+import { ClockChip } from "../components/ClockChip";
 import { Icon } from "../components/Icon";
 import { LearnedPathDialog } from "../components/Learning";
-import { ProgramCard } from "../components/ProgramCard";
+import { ProgramCard, weekLine } from "../components/ProgramCard";
+import { Reveal } from "../components/Reveal";
+import { usePendingApprovals } from "../components/TopBar";
 import { WorkFeed } from "../components/WorkFeed";
+import { usePreviewFromUrl, useOfficeClock } from "../lib/daylight";
 import { OfficeCanvas, type ShelfBook } from "../office/OfficeCanvas";
 import { fmtLongDate } from "../lib/format";
 import { useMedia } from "../lib/useMedia";
@@ -22,13 +26,10 @@ import { laneOf } from "../state/derive";
 import { runStore, useRun, useRunStore, useRunView } from "../state/runs";
 import "./office-page.css";
 
+/** Two simple questions to start with; the owner can ask anything. */
 export const SUGGESTIONS: Record<string, string[]> = {
-  aamdani: [
-    "Why did we pause daily stories, and what should we post instead?",
-    "Which pages are losing search clicks, and why?",
-    "What is waiting on me this week?",
-  ],
-  "avs-atelier": ["Why don't we show up when people search 'architect in Raipur'?"],
+  aamdani: ["How is the business doing this week?", "What should we post this week?"],
+  "avs-atelier": ["Why don't we show up when people search 'architect in Raipur'?", "What should we fix first on the website?"],
 };
 
 /** For a business set up a moment ago: questions any owner can ask on day one. */
@@ -40,7 +41,7 @@ export const FIRST_DAY_QUESTIONS = [
 /** Fired by Team settings and Approvals when desks or learned rules change, so the office redraws them. */
 export const TEAM_CHANGED = "allevia:team-changed";
 
-type Tab = "p90" | "brief" | "log";
+const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 export function OfficePage() {
   const { tenant, mode, effectiveTheme, reducedMotion, speed, setSpeed } = useApp();
@@ -51,15 +52,18 @@ export function OfficePage() {
   const [question, setQuestion] = useState("");
   const [selected, setSelected] = useState<AgentId | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const [tab, setTab] = useState<Tab>(() => (record ? "log" : "p90"));
   const [askFocus, setAskFocus] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
   const [openRule, setOpenRule] = useState<LearnedRuleDto | null>(null);
+  const [petNote, setPetNote] = useState("");
   const compact = useMedia("(max-width: 760px)");
-  const narrow = useMedia("(max-width: 860px)");
+  const narrow = useMedia("(max-width: 900px)");
   const nav = useNavigate();
   const autoStarted = useRef(false);
+  const clock = useOfficeClock(tenant.timeZone);
+  usePreviewFromUrl();
 
-  // the 90 days, the ladder, the team's desks and what it learned; refreshed when another screen changes them
+  // the plan, the ladder, the team's desks and what it learned; refreshed when another screen changes them
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
@@ -70,6 +74,8 @@ export function OfficePage() {
   const caps = useAsync(() => api.capabilities(tenant.id).catch(() => []), [tenant.id]);
   const team = useAsync(() => api.team(tenant.id).catch(() => []), [tenant.id, tick]);
   const learning = useAsync(() => api.learning(tenant.id).catch(() => null), [tenant.id, tick]);
+  const recs = useAsync(() => api.recommendations(tenant.id).catch(() => []), [tenant.id]);
+  const pending = usePendingApprovals();
 
   const off = useMemo(() => new Set((team.data ?? []).filter((a) => !a.enabled).map((a) => a.id)), [team.data]);
   const books = useMemo<ShelfBook[]>(() => {
@@ -77,34 +83,29 @@ export function OfficePage() {
     return [...active].reverse().map((r) => ({ id: r.id, text: r.text, confidence: r.confidence, hue: (r.agents[0] && deptOf(r.agents[0])?.hue) || 60 }));
   }, [learning.data]);
 
-  // follow the tenant: show its latest run, if any; else a turn still working on the server (asked in a tab that has
-  // since closed, or from another one), which the office then follows live
+  // follow the tenant: show its latest run, if any
   useEffect(() => {
     const latest = runStore.latest(tenant.id);
     setRunKey(latest?.key);
-    setTab(latest ? "log" : "p90");
+    setLogOpen(false);
     if (latest?.status === "running" || mode !== "live") return;
     let live = true;
     api.liveTurns(tenant.id).then((list) => {
       const t = list[0];
       if (!live || !t || runStore.latest(tenant.id, (r) => r.status === "running")) return;
       setRunKey(runStore.attach(tenant.id, t));
-      setTab("log");
     }, () => {});
     return () => { live = false; };
   }, [tenant.id, mode]);
 
-  // ?ask=…&seek=ms starts a run straight away (used for demos and screenshots); ?tab=brief opens the brief
+  // ?ask=…&seek=ms starts a run straight away (used for demos and screenshots)
   useEffect(() => {
     if (autoStarted.current) return;
-    const p = new URLSearchParams(location.search);
-    if (p.get("tab") === "brief") setTab("brief");
-    const q = p.get("ask");
+    const q = new URLSearchParams(location.search).get("ask");
     if (!q) return;
     autoStarted.current = true;
     setQuestion("");
-    setRunKey(runStore.start(tenant.id, q, { seekMs: Number(p.get("seek") ?? 0) || undefined }));
-    setTab("log");
+    setRunKey(runStore.start(tenant.id, q, { seekMs: Number(new URLSearchParams(location.search).get("seek") ?? 0) || undefined }));
   }, [tenant.id]);
 
   const running = record?.status === "running";
@@ -124,8 +125,8 @@ export function OfficePage() {
     if (!text || running) return;
     setRunKey(runStore.start(tenant.id, text));
     setQuestion("");
-    setTab("log");
     setAskFocus(false);
+    setLogOpen(false);
   };
   const onSubmit = (e: FormEvent) => { e.preventDefault(); ask(question); };
 
@@ -137,184 +138,181 @@ export function OfficePage() {
     if (!turn) return;
     const events = await api.replay(tenant.id, turn.id);
     setRunKey(runStore.replay(tenant.id, turn.id, turn.question, events, { paced: true, speed: () => speed }));
-    setTab("log");
   };
 
   const working = view?.activeAgents ?? [];
-  const nodes = view?.nodes;
   const askHref = view?.sessionId ? `/ask/${view.sessionId}` : "/ask";
-  const ticker = useMemo(() => {
-    if (!view) return null;
+
+  // the quiet line at the bottom while a request runs: "Tara is drafting ideas…"
+  const tickerLine = useMemo(() => {
+    if (!view || !record) return null;
+    if (view.final) return { agent: "chief-of-staff" as AgentId, text: `Meera has your answer · ${fmtMs(view.final.ms)}`, done: true };
     const a = working[working.length - 1];
-    if (!a) return null;
+    if (!a) return { agent: "chief-of-staff" as AgentId, text: "Meera is reading your question…", done: false };
     const lane = laneOf(view, a);
-    const step = lane?.steps[lane.steps.length - 1];
-    return { agent: a, tool: step && !step.done ? step.name : undefined, text: lane?.status ?? lane?.task ?? "" };
-  }, [view, working]);
+    const status = (lane?.status ?? lane?.task ?? "").replace(/[.…]+$/, "").trim();
+    const nm = agentDef(a)?.name ?? "";
+    const text = !status ? `${nm} is on it…` : /^\w+ing\b/i.test(status) ? `${nm} is ${lowerFirst(status)}…` : `${nm}: ${lowerFirst(status)}…`;
+    return { agent: a, text, done: false };
+  }, [view, record, working]);
 
-  const suggestions = SUGGESTIONS[tenant.id] ?? FIRST_DAY_QUESTIONS;
-  const today = fmtLongDate();
-  const offCount = off.size;
-  const statusLine = running
-    ? `${working.length ? `${working.map((a) => agentDef(a)?.name).join(", ")} working` : "Starting"} · ${fmtMs(Math.max(0, elapsed))}`
-    : record?.status === "done" && view?.final
-      ? `Last request answered in ${fmtMs(view.final.ms)}`
-      : `${AGENTS.length} staff in ${DEPARTMENTS.length} departments`;
+  const suggestions = (SUGGESTIONS[tenant.id] ?? FIRST_DAY_QUESTIONS).slice(0, 2);
+  const topIdea = useMemo(() => [...(recs.data ?? [])].filter((r) => r.status !== "dismissed").sort((a, b) => b.score - a.score)[0], [recs.data]);
   const showSuggest = askFocus && !question.trim() && !running && !narrow;
-  const activeTab: Tab = tab === "log" && !record ? "p90" : tab;
-
-  const tabs: Array<{ id: Tab; label: string }> = [
-    { id: "p90", label: "90 days" },
-    { id: "brief", label: "Morning brief" },
-    ...(record ? [{ id: "log" as const, label: "Work log" }] : []),
-  ];
+  const week = weekLine(program.data);
 
   return (
     <div className="office-page">
-      <section className="office-main" aria-labelledby="office-title">
-        <div className="office-head">
-          <div className="office-titles">
-            <h1 id="office-title" className="office-title">{tenant.name}<span className="office-title-sub">’s office</span></h1>
-            <p className="office-meta"><span>{today}</span><span aria-hidden="true">·</span><span className={running ? "is-live" : ""}>{statusLine}</span>
-              {offCount > 0 && !running && <><span aria-hidden="true">·</span><Link to="/team" className="office-off-link">{offCount} {offCount === 1 ? "desk" : "desks"} switched off</Link></>}
-            </p>
-          </div>
-          <div className="office-tools">
-            {(mode === "mock" || record?.kind === "replay") && (
-              <div className="seg" role="group" aria-label="Playback speed">
-                {[1, 4].map((s) => (
-                  <button key={s} type="button" className={`seg-btn${speed === s ? " is-on" : ""}`} aria-pressed={speed === s} onClick={() => setSpeed(s)}>{s}×</button>
-                ))}
+      <header className="office-head">
+        <div className="office-titles">
+          <h1 id="office-title" className="office-title">{tenant.name}<span className="office-title-sub">’s office</span></h1>
+          <p className="office-meta">{fmtLongDate()}{off.size > 0 && <> · <Link to="/team" className="office-off-link">{off.size} {off.size === 1 ? "person is" : "people are"} switched off</Link></>}</p>
+        </div>
+        <div className="office-tools">
+          {(mode === "mock" || record?.kind === "replay") && (
+            <div className="seg" role="group" aria-label="Playback speed">
+              {[1, 4].map((s) => (
+                <button key={s} type="button" className={`seg-btn${speed === s ? " is-on" : ""}`} aria-pressed={speed === s} onClick={() => setSpeed(s)}>{s}×</button>
+              ))}
+            </div>
+          )}
+          <ClockChip />
+        </div>
+      </header>
+
+      <div className="ask-wrap">
+        <form className="ask-bar" onSubmit={onSubmit} role="search" aria-label="Ask your team">
+          <label htmlFor="office-q" className="visually-hidden">Ask your team</label>
+          <span className="ask-bar-icon" aria-hidden="true"><Icon name="ask" size={18} /></span>
+          <input
+            id="office-q"
+            className="ask-input"
+            placeholder="Ask your team anything…"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            onFocus={() => setAskFocus(true)}
+            onBlur={() => setTimeout(() => setAskFocus(false), 150)}
+            onKeyDown={(e) => { if (e.key === "Escape") setAskFocus(false); }}
+            autoComplete="off"
+            disabled={running}
+          />
+          <button type="submit" className="btn btn-gold" disabled={!question.trim() || running}>
+            {running ? "Working…" : "Ask"} <Icon name="send" size={16} />
+          </button>
+        </form>
+        {showSuggest && (
+          <ul className="ask-suggest" aria-label="Try asking">
+            {suggestions.map((s) => (
+              <li key={s}>
+                <button type="button" className="ask-suggest-q" onMouseDown={(e) => e.preventDefault()} onClick={() => ask(s)}>
+                  <span>{s}</span><Icon name="send" size={14} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {!running && !record && narrow && (
+        <div className="suggest" aria-label="Try one of these">
+          {suggestions.map((s) => <button key={s} type="button" className="suggest-chip" onClick={() => ask(s)}>{s}</button>)}
+        </div>
+      )}
+
+      <section className="office-stage" aria-label="The office">
+        <OfficeCanvas
+          view={view}
+          events={record?.events}
+          runKey={runKey}
+          dark={effectiveTheme === "dark"}
+          reducedMotion={reducedMotion}
+          speed={speed}
+          minutes={clock.minutes}
+          compact={compact}
+          maxHeight={narrow ? 100000 : undefined}
+          selected={selected}
+          onSelect={setSelected}
+          off={off}
+          books={learning.data ? books : undefined}
+          onBook={(id) => setOpenRule(learning.data?.rules.find((r) => r.id === id) ?? null)}
+          onStatus={setPetNote}
+        />
+        <p className="visually-hidden" role="status" aria-live="polite">{petNote}</p>
+
+        {tickerLine && record && (
+          <div className={`run-ticker${logOpen ? " is-open" : ""}${tickerLine.done ? " is-done" : ""}`}>
+            {logOpen && (
+              <div className="run-log">
+                <p className="run-log-q">{record.question}</p>
+                <WorkFeed events={record.events} view={view} status={record.status} askHref={askHref} nodes={view?.nodes} limit={compact ? 6 : undefined} />
+                {!running && (
+                  <div className="log-foot">
+                    <button type="button" className="btn btn-quiet btn-sm" onClick={() => { setRunKey(undefined); setLogOpen(false); }}>Clear</button>
+                    {view?.sessionId && <button type="button" className="btn btn-ghost btn-sm" onClick={() => nav(askHref)}>Read the full answer</button>}
+                  </div>
+                )}
               </div>
             )}
-            {running ? (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => runKey && runStore.stop(runKey)} disabled={record?.stopping}>
-                <Icon name="stop" size={14} /> {record?.stopping ? "Stopping…" : "Stop"}
-              </button>
-            ) : (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={replayLatest} disabled={!sessions.data?.length}><Icon name="replay" size={14} /> Replay last request</button>
+            <button type="button" className="run-line" aria-expanded={logOpen} onClick={() => setLogOpen((o) => !o)}>
+              <AgentAvatar id={tickerLine.agent} size={22} ring={!tickerLine.done} />
+              <span className="run-text" aria-live="polite">{tickerLine.text}</span>
+              {running && <span className="run-time">{fmtMs(Math.max(0, elapsed))}</span>}
+              <span className="run-open">{logOpen ? "Hide" : tickerLine.done ? "How it went" : "Show"}<Icon name="chevron" size={14} className="run-chev" /></span>
+            </button>
+            {running && !logOpen && (
+        <button type="button" className="run-stop btn btn-quiet btn-sm" onClick={() => runKey && runStore.stop(runKey)} disabled={record?.stopping}>
+          <Icon name="stop" size={13} /> {record?.stopping ? "Stopping…" : "Stop"}
+        </button>
+      )}
+      {tickerLine.done && !logOpen && view?.sessionId && (
+              <Link className="run-read btn btn-gold btn-sm" to={askHref}>Read the answer</Link>
             )}
           </div>
-        </div>
-
-        <div className="ask-wrap">
-          <form className="ask-bar" onSubmit={onSubmit} role="search" aria-label="Ask your team">
-            <label htmlFor="office-q" className="visually-hidden">Ask your team</label>
-            <span className="ask-bar-icon" aria-hidden="true"><Icon name="ask" size={18} /></span>
-            <input
-              id="office-q"
-              className="ask-input"
-              placeholder="Ask your team…"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              onFocus={() => setAskFocus(true)}
-              onBlur={() => setTimeout(() => setAskFocus(false), 150)}
-              onKeyDown={(e) => { if (e.key === "Escape") setAskFocus(false); }}
-              autoComplete="off"
-              disabled={running}
-            />
-            <button type="submit" className="btn btn-gold" disabled={!question.trim() || running}>
-              {running ? "Working…" : "Ask"} <Icon name="send" size={16} />
-            </button>
-          </form>
-          {showSuggest && (
-            <ul className="ask-suggest" aria-label="Try asking">
-              <li className="ask-suggest-head">Try asking</li>
-              {suggestions.map((s) => (
-                <li key={s}>
-                  <button type="button" className="ask-suggest-q" onMouseDown={(e) => e.preventDefault()} onClick={() => ask(s)}>
-                    <span>{s}</span><Icon name="send" size={14} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        {!running && !record && narrow && (
-          <div className="suggest" aria-label="Try one of these">
-            {suggestions.map((s) => (
-              <button key={s} type="button" className="suggest-chip" onClick={() => ask(s)}>{s}</button>
-            ))}
-          </div>
-        )}
-
-        <div className="office-stage">
-          <OfficeCanvas
-            view={view}
-            events={record?.events}
-            runKey={runKey}
-            dark={effectiveTheme === "dark"}
-            reducedMotion={reducedMotion}
-            speed={speed}
-            compact={compact}
-            maxHeight={narrow ? 100000 : undefined}
-            selected={selected}
-            onSelect={setSelected}
-            off={off}
-            books={learning.data ? books : undefined}
-            onBook={(id) => setOpenRule(learning.data?.rules.find((r) => r.id === id) ?? null)}
-          />
-        </div>
-        {compact && ticker && (
-          <p className="ticker" aria-live="polite">
-            <AgentAvatar id={ticker.agent} size={20} />
-            <b>{agentDef(ticker.agent)?.name}</b>
-            {ticker.tool && <code className="tool-name">{ticker.tool}()</code>}
-            <span>{ticker.text}</span>
-          </p>
         )}
       </section>
 
-      <aside className="office-log panel" aria-label="Your 90 days, the morning brief and the work log">
-        <div className="panel-head office-tabs" role="tablist" aria-label="Side panel">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              id={`otab-${t.id}`}
-              aria-selected={activeTab === t.id}
-              aria-controls={`opane-${t.id}`}
-              className={`office-tab${activeTab === t.id ? " is-on" : ""}`}
-              onClick={() => setTab(t.id)}
-            >
-              {t.label}
-              {t.id === "log" && record && <span className={`tab-dot${running ? " is-live" : record.status === "done" ? " is-done" : ""}`} aria-hidden="true" />}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === "p90" && (
-          <div className="office-pane" role="tabpanel" id="opane-p90" aria-labelledby="otab-p90">
-            <ProgramCard program={program.data} caps={caps.data} loading={program.loading} error={program.error} />
-            <button type="button" className="pane-next" onClick={() => setTab("brief")}>
-              <AgentAvatar id="chief-of-staff" size={22} /> <span>Read Meera’s morning brief</span> <Icon name="chevron-right" size={14} />
-            </button>
+      <div className="office-right">
+        <section className="home" aria-label="Today at a glance">
+          <div className="home-row">
+            <p className="home-label">This week</p>
+            <p className="home-week">{week}</p>
           </div>
-        )}
-        {activeTab === "brief" && (
-          <div className="office-pane" role="tabpanel" id="opane-brief" aria-labelledby="otab-brief">
-            <BriefPanel tenantId={tenant.id} onRan={() => program.reload()} />
-          </div>
-        )}
-        {activeTab === "log" && record && (
-          <div className="office-pane is-log" role="tabpanel" id="opane-log" aria-labelledby="otab-log">
-            <div className="log-status">
-              <p className="log-question">{record.question}</p>
-              <span className={`badge ${running ? "badge-gold" : record.status === "done" ? "badge-ok" : "badge-ink"}`}>
-                {running ? "Live" : record.status === "done" ? (record.kind === "replay" ? "Replayed" : "Done") : record.status === "stopped" ? "Stopped" : "Error"}
-              </span>
-            </div>
-            <WorkFeed events={record.events} view={view} status={record.status} askHref={askHref} nodes={nodes} limit={narrow ? 6 : undefined} />
-            {!running && (
-              <div className="log-foot">
-                <button type="button" className="btn btn-quiet btn-sm" onClick={() => { setRunKey(undefined); setTab("p90"); }}>Clear</button>
-                {view?.sessionId && <button type="button" className="btn btn-ghost btn-sm" onClick={() => nav(askHref)}>Follow up in Ask</button>}
-              </div>
+          <div className="home-row">
+            <p className="home-label">Waiting for your OK</p>
+            {pending > 0 ? (
+              <Link to="/approvals" className="home-ok">
+                <span className="count">{pending}</span>
+                <span>{pending === 1 ? "thing needs" : "things need"} you</span>
+                <Icon name="chevron-right" size={15} />
+              </Link>
+            ) : (
+              <p className="home-calm">Nothing right now. Nice.</p>
             )}
           </div>
-        )}
+          <div className="home-row">
+            <p className="home-label">Next step</p>
+            {topIdea ? (
+              <Link to="/insights" className="home-next">{topIdea.title}<Icon name="chevron-right" size={15} /></Link>
+            ) : (
+              <p className="home-calm">Ask your team a question below.</p>
+            )}
+          </div>
+        </section>
+
+      <aside className="office-side" aria-label="Your growth plan and today's note">
+        <div className="panel plan-panel">
+          <ProgramCard program={program.data} caps={caps.data} loading={program.loading} error={program.error} />
+        </div>
+        <div className="panel note-panel">
+          <Reveal label="Today's note from Meera" tone="row">
+            <BriefPanel tenantId={tenant.id} onRan={() => program.reload()} />
+          </Reveal>
+        </div>
+        {!running && sessions.data?.length ? (
+          <button type="button" className="btn btn-quiet btn-sm office-replay" onClick={replayLatest}><Icon name="replay" size={14} /> Replay the last request</button>
+        ) : null}
+        <p className="office-cast">{AGENTS.length} people, three dogs and two cats. Point at a dog to see how many documents it has carried today.</p>
       </aside>
+      </div>
 
       <AgentDrawer agentId={selected} onClose={() => setSelected(null)} view={view} />
       <LearnedPathDialog rule={openRule} onClose={() => setOpenRule(null)} onRetired={() => setTick((t) => t + 1)} />

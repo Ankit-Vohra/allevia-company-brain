@@ -1,32 +1,51 @@
-// The pixel office: a canvas (integer-scaled in device pixels, so every logical pixel is a crisp square) with a DOM
-// overlay for room labels, speech bubbles and one focusable button per agent.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+// The pixel office: one open floor drawn on a canvas, with a DOM overlay for the zone signs, speech bubbles and one
+// focusable button per desk. The canvas is scaled to fit any width from a phone to a wide monitor (crisp whole-pixel
+// scaling when it fits, a smooth fit otherwise, never zero). Idle life, the pets and the lighting all run here, on the
+// client only.
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentEvent, AgentId } from "@shared/contracts";
 import { AGENTS, DEPARTMENTS } from "@shared/roster";
+import { lightingAt } from "../lib/daylight";
 import { type LaneView, type RunView, laneOf } from "../state/derive";
 import {
-  drawBadge, drawChair, drawClock, drawDesk, drawDrawerOpen, drawFile, drawFileStack, drawHands, drawLampGlow, drawLearnedShelf,
-  drawNotes, drawPlan, drawScreen, drawServerLeds, drawSparkle, drawStatic, learnedSlots,
+  drawBadge, drawChair, drawClock, drawDesk, drawDrawerOpen, drawFileStack, drawHands, drawLearnedShelf, drawNotes, drawPlan, drawScreen,
+  drawServerLeds, drawSparkle, learnedSlots,
 } from "./draw";
-import { drawCat } from "./cat";
+import { drawFx, drawPerson, drawPet, drawZzz } from "./figures";
+import { Life, deliveriesToday } from "./life";
+import { type LightLayer, drawLighting, makeLightLayer } from "./light";
 import { type OfficeLayout, type Pt, buildLayout } from "./layout";
+import { type PetId, petById, PETS } from "./pets";
 import { officePalette } from "./palette";
+import { drawStatic, drawStatus, drawTv, drawWindows } from "./scene";
 import { type Eyes, shirtOf, skinOf, spriteCanvas } from "./sprites";
 import "./office.css";
 
 const CHIEF = "chief-of-staff";
 
-interface Flight { path: Pt[]; lengths: number[]; total: number; t0: number; dur: number; kind: "handoff" | "finding"; to: AgentId }
+/** One seed per page load: the office's idle life is the same for the whole session (and for a given ?seed=). */
+const SESSION_SEED = (() => {
+  try {
+    const p = Number(new URLSearchParams(location.search).get("seed"));
+    if (p) return p;
+  } catch { /* no location */ }
+  return Math.floor(Math.random() * 2 ** 31);
+})();
+
 interface Effect { kind: "badge-ok" | "badge-bad" | "sparkle"; x: number; y: number; t0: number; dur: number }
 interface Transient { text: string; tone: "ok" | "bad" | "done" | "handoff"; until: number }
+interface IdleBubble { text: string; x: number; y: number; until: number }
 
 export interface OfficeCanvasProps {
   view?: RunView;
   events?: AgentEvent[];
   runKey?: string;
+  /** An explicit dark theme: the office is dimmed a little more. */
   dark: boolean;
   reducedMotion: boolean;
   speed: number;
+  /** Minutes since midnight on the business's clock (or the preview): decides the light. */
+  minutes: number;
   compact?: boolean;
   maxHeight?: number;
   selected?: AgentId | null;
@@ -36,43 +55,41 @@ export interface OfficeCanvasProps {
   /** One book on Sara's shelf per learned rule, oldest first. */
   books?: ShelfBook[];
   onBook?: (ruleId: string) => void;
+  /** Said to screen readers and shown in the page when something happens (a dog delivers). */
+  onStatus?: (text: string) => void;
 }
 
 export interface ShelfBook { id: string; text: string; hue: number; confidence: number }
 
 const agentName = (id: string) => AGENTS.find((a) => a.id === id)?.name ?? id;
 
-function polyline(path: Pt[]) {
-  const lengths = [0];
-  for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1]!, b = path[i]!;
-    lengths.push(lengths[i - 1]! + Math.hypot(b.x - a.x, b.y - a.y));
-  }
-  return { lengths, total: lengths[lengths.length - 1]! };
-}
-
-function pointAt(f: Flight, k: number): Pt {
-  const d = k * f.total;
-  for (let i = 1; i < f.path.length; i++) {
-    if (d <= f.lengths[i]! || i === f.path.length - 1) {
-      const a = f.path[i - 1]!, b = f.path[i]!;
-      const seg = f.lengths[i]! - f.lengths[i - 1]! || 1;
-      const u = Math.min(1, Math.max(0, (d - f.lengths[i - 1]!) / seg));
-      return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u };
-    }
-  }
-  return f.path[f.path.length - 1]!;
-}
-
 // The Library's bookshelf, where every learned rule becomes a book.
 const libraryShelf = (L: OfficeLayout) => L.rooms.find((r) => r.dept.id === "knowledge")?.floor.find((f) => f.kind === "bookshelf")?.rect;
-
-// The picture frame on the Content Studio room's wall, where the Studio pins the newest photo.
+// The picture frame in the Content Studio zone, where the Studio pins the newest photo.
 const studioFrame = (L: OfficeLayout) => L.rooms.find((r) => r.dept.id === "content")?.wall.find((w) => w.kind === "frame")?.rect;
 
-const ease = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+/** The people the current request has put to work: the plan's steps, whoever has started, and Meera while she writes. */
+function busyOf(v: RunView | undefined): Set<string> {
+  const s = new Set<string>();
+  if (!v) return s;
+  const live = !v.final && v.count > 0 && !v.error;
+  for (const k of v.laneOrder) {
+    const l = v.lanes[k];
+    if (l && (l.phase === "working" || (live && l.phase === "planned"))) s.add(l.agent);
+  }
+  if (live && v.plan) for (const st of v.plan.steps) s.add(st.agent);
+  if (live && v.plan) s.add(v.plan.by);
+  if (live && v.answerStarted) s.add(CHIEF);
+  return s;
+}
 
-export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed, compact, maxHeight, selected, onSelect, off, books, onBook }: OfficeCanvasProps) {
+const petLine = (id: PetId) => {
+  const d = petById(id);
+  const n = deliveriesToday(id);
+  return d.kind === "dog" ? `${d.name} · ${d.breed} · ${n} ${n === 1 ? "delivery" : "deliveries"} today` : `${d.name} · ${d.breed} · office cat, off duty`;
+};
+
+export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed, minutes, compact, maxHeight, selected, onSelect, off, books, onBook, onStatus }: OfficeCanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -82,6 +99,8 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
   useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
+    const r0 = el.getBoundingClientRect();
+    setBox({ w: Math.floor(r0.width), h: Math.floor(r0.height) });
     const ro = new ResizeObserver(([entry]) => {
       const r = entry!.contentRect;
       setBox({ w: Math.floor(r.width), h: Math.floor(r.height) });
@@ -92,15 +111,18 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
 
   const orientation = box.w > 0 && box.w < 560 ? "portrait" : "landscape";
   const layout = useMemo<OfficeLayout>(() => buildLayout(orientation), [orientation]);
-  const pal = useMemo(() => officePalette(dark), [dark]);
+  const pal = useMemo(() => officePalette(), []);
 
-  // device pixels per logical pixel: an integer, so the art stays crisp
+  // The scale: how many CSS px one art pixel gets. Whole device pixels per art pixel when it fits nearly exactly (crisp);
+  // otherwise a smooth fit from a backing store of at least one device pixel per art pixel. Never zero, at any width.
   const availH = maxHeight ?? (box.h || 9999);
-  const s = Math.max(1, Math.floor(Math.min((box.w * dpr) / layout.w, (availH * dpr) / layout.h)));
-  const k = s / dpr; // CSS px per logical px
-  const cssW = (layout.w * s) / dpr, cssH = (layout.h * s) / dpr;
+  const fit = Math.max(0.35, Math.min(box.w / layout.w, availH / layout.h));
+  const sDev = fit * dpr;
+  const whole = sDev >= 1 && sDev - Math.floor(sDev) < 0.12;
+  const s = whole ? Math.floor(sDev) : Math.max(1, Math.ceil(sDev)); // device px per art px in the backing store
+  const k = whole ? s / dpr : fit;                                      // CSS px per art px
+  const cssW = layout.w * k, cssH = layout.h * k;
 
-  // static floor plan, redrawn only when the layout or theme changes
   const staticCanvas = useMemo(() => {
     const c = document.createElement("canvas");
     c.width = layout.w;
@@ -108,28 +130,34 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
     drawStatic(c.getContext("2d")!, layout, pal);
     return c;
   }, [layout, pal]);
+  const lightLayer = useMemo<LightLayer>(() => makeLightLayer(layout), [layout]);
 
-  // live state the frame loop reads
+  // the living office
+  const life = useMemo(() => new Life(layout, SESSION_SEED, reducedMotion), [layout, reducedMotion]);
+  const warmed = useRef<Life | null>(null);
+
   const [litBook, setLitBook] = useState<number | undefined>();
-  const live = useRef({ view, reducedMotion, speed, layout, pal, staticCanvas, s, selected, off, books, litBook });
-  live.current = { view, reducedMotion, speed, layout, pal, staticCanvas, s, selected, off, books, litBook };
+  const live = useRef({ view, reducedMotion, layout, pal, staticCanvas, lightLayer, s, selected, off, books, litBook, minutes, dark, life });
+  live.current = { view, reducedMotion, layout, pal, staticCanvas, lightLayer, s, selected, off, books, litBook, minutes, dark, life };
 
-  const flights = useRef<Flight[]>([]);
   const effects = useRef<Effect[]>([]);
   const delivered = useRef(0);
   const doneAt = useRef<Record<string, number>>({});
   const celebrateAt = useRef(0);
   const processed = useRef({ key: "", n: 0 });
   const [transients, setTransients] = useState<Record<string, Transient>>({});
+  const [chatter, setChatter] = useState<Record<string, IdleBubble>>({});
   const [wallPhoto, setWallPhoto] = useState<{ src: string; kind: string } | null>(null);
+  const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null);
+  const tipTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const lastHit = useRef<string>("");
 
-  // turn new events into transient animations
+  // turn new events into transient animations; documents ride with the dogs
   useEffect(() => {
     const key = runKey ?? "";
     const list = events ?? [];
     if (processed.current.key !== key) {
       processed.current = { key, n: 0 };
-      flights.current = [];
       effects.current = [];
       delivered.current = 0;
       doneAt.current = {};
@@ -144,22 +172,17 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
     const catchUp = fresh.length > 8;
     const now = performance.now();
     const L = live.current.layout;
-    const sp = Math.sqrt(Math.max(1, live.current.speed));
+    const lf = live.current.life;
+    const sp = Math.sqrt(Math.max(1, speed));
     const nextTransients: Record<string, Transient> = {};
     let nextPhoto: { src: string; kind: string } | undefined;
-    const fly = (from: AgentId, to: AgentId, kind: Flight["kind"]) => {
-      if (catchUp || live.current.reducedMotion) { if (kind === "finding") delivered.current++; return; }
-      const path = L.route(from, to);
-      if (path.length < 2) return;
-      const { lengths, total } = polyline(path);
-      flights.current.push({ path, lengths, total, t0: now + flights.current.filter((f) => f.t0 > now - 50).length * 120, dur: Math.max(700, (total / 190) * 1000) / sp, kind, to });
-    };
     for (const e of fresh) {
       if (e.type === "handoff") {
-        fly(e.from, e.to, "handoff");
-        if (!catchUp) nextTransients[e.from] = { text: `→ ${agentName(e.to)}: ${e.note}`, tone: "handoff", until: Date.now() + 2200 / sp };
+        lf.deliver(e.from, e.to, "handoff", !catchUp);
+        if (!catchUp) nextTransients[e.from] = { text: `Passing this to ${agentName(e.to)}`, tone: "handoff", until: Date.now() + 2200 / sp };
       } else if (e.type === "finding" && e.agent !== CHIEF) {
-        fly(e.agent, CHIEF, "finding");
+        lf.deliver(e.agent, CHIEF, "finding", !catchUp);
+        if (catchUp || live.current.reducedMotion) delivered.current++;
       } else if (e.type === "review") {
         const finding = live.current.view?.findings[e.findingId];
         const author = finding?.agent;
@@ -167,13 +190,12 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
         if (d && !catchUp) effects.current.push({ kind: e.verdict === "ok" ? "badge-ok" : "badge-bad", x: d.notes.x + 2, y: d.notes.y - 6, t0: now, dur: 2400 / sp });
         if (!catchUp) nextTransients[e.agent] = { text: `${e.verdict === "ok" ? "✓" : "✗"} ${author ? agentName(author) + ": " : ""}${e.note}`, tone: e.verdict === "ok" ? "ok" : "bad", until: Date.now() + 3200 / sp };
       } else if (e.type === "asset") {
-        // the Content Studio room: the newest photo goes up on its wall frame
         if (e.thumb) nextPhoto = { src: e.thumb.replace(/\?w=\d+$/, "?w=96"), kind: e.kind };
         const fr = studioFrame(L);
         if (fr && !catchUp && !live.current.reducedMotion) effects.current.push({ kind: "sparkle", x: fr.x + fr.w / 2, y: fr.y + fr.h / 2, t0: now, dur: 900 });
-        if (!catchUp) nextTransients[e.agent] = { text: e.kind === "original" ? "New photo in: having a look" : "A variant is ready for Nisha", tone: "done", until: Date.now() + 2600 / sp };
+        if (!catchUp) nextTransients[e.agent] = { text: e.kind === "original" ? "New photo in: having a look" : "A version is ready for Nisha", tone: "done", until: Date.now() + 2600 / sp };
       } else if (e.type === "assessment") {
-        if (!catchUp) nextTransients[e.agent] = { text: `${e.verdict[0]!.toUpperCase()}${e.verdict.slice(1)} it · ${e.overlays.length} boxes marked`, tone: "ok", until: Date.now() + 2600 / sp };
+        if (!catchUp) nextTransients[e.agent] = { text: `${e.verdict[0]!.toUpperCase()}${e.verdict.slice(1)} it`, tone: "ok", until: Date.now() + 2600 / sp };
       } else if (e.type === "agent_done") {
         doneAt.current[e.agent] = now;
       } else if (e.type === "final") {
@@ -184,7 +206,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
     }
     if (Object.keys(nextTransients).length) setTransients((t) => ({ ...t, ...nextTransients }));
     if (nextPhoto) setWallPhoto(nextPhoto);
-  }, [events, runKey]);
+  }, [events, runKey, speed]);
 
   // a new rule learned while the office is open: a sparkle over its book
   const bookCount = useRef<number | undefined>(undefined);
@@ -208,6 +230,18 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
     }, Math.max(50, next));
     return () => clearTimeout(id);
   }, [transients]);
+  useEffect(() => {
+    const times = Object.values(chatter).map((t) => t.until);
+    if (!times.length) return;
+    const next = Math.min(...times) - Date.now();
+    const id = setTimeout(() => {
+      setChatter((t) => Object.fromEntries(Object.entries(t).filter(([, v]) => v.until > Date.now())));
+    }, Math.max(50, next));
+    return () => clearTimeout(id);
+  }, [chatter]);
+
+  const statusRef = useRef(onStatus);
+  statusRef.current = onStatus;
 
   // the frame loop
   useEffect(() => {
@@ -216,23 +250,53 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     let raf = 0;
+    let last = 0;
     const seeds = Object.fromEntries(AGENTS.map((a, i) => [a.id, i * 7919 + 13]));
+    const emptyOff: ReadonlySet<string> = new Set();
     const frame = (tNow: number) => {
-      const { view: v, reducedMotion: rm, layout: L, pal: p, staticCanvas: sc, s: scale, off: offSet, books: shelfBooks, litBook: lit } = live.current;
-      const t = rm ? 0 : tNow;
+      const { view: v, reducedMotion: rm, layout: L, pal: p, staticCanvas: sc, s: scale, off: offSet, books: shelfBooks, litBook: lit, minutes: mins, dark: isDark, life: lf, lightLayer: ll } = live.current;
+      const dt = last ? tNow - last : 16;
+      last = tNow;
+      const lighting = lightingAt(mins);
+      const busy = busyOf(v);
+      const offs = offSet ?? emptyOff;
+      if (warmed.current !== lf) { lf.warmUp({ busy, off: offs, lighting }); warmed.current = lf; }
+      lf.update(dt, { busy, off: offs, lighting });
+      const lt = lf.t;
+
+      // what the people said, and what the dogs delivered
+      if (lf.speech.length) {
+        const said = lf.speech.splice(0);
+        setChatter((m) => {
+          const next = { ...m };
+          for (const sp of said) { const pe = lf.people.get(sp.agent); if (pe) next[sp.agent] = { text: sp.text, x: pe.x, y: pe.y - (pe.mode === "desk" ? 22 : 30), until: Date.now() + sp.ms }; }
+          return next;
+        });
+      }
+      if (lf.arrivals.length) {
+        for (const j of lf.arrivals.splice(0)) {
+          if (j.kind === "finding") delivered.current++;
+          statusRef.current?.(`${agentName(j.to)} gave the dog a treat`);
+        }
+      }
+
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(sc, 0, 0);
+      drawWindows(ctx, L, mins);
 
       const working = (a: AgentId) => laneOf(v ?? ({ lanes: {} } as RunView), a)?.phase === "working";
       const deptWorking = (dept: string) => AGENTS.some((a) => a.department === dept && working(a.id));
+      const playing = [...lf.people.values()].some((pe) => pe.act?.kind === "console");
 
-      // wall-hung things that change
+      // wall-hung and standing things that change
+      for (const it of L.backWall) if (it.kind === "clock") drawClock(ctx, it.rect, p, new Date());
       for (const room of L.rooms) {
         const active = deptWorking(room.dept.id);
         for (const it of room.wall) {
-          if (it.kind === "screen-dash" || it.kind === "screen-code") drawScreen(ctx, it, p, active, tNow);
-          else if (it.kind === "clock") drawClock(ctx, it.rect, p, new Date());
+          if (it.kind === "screen-dash" || it.kind === "screen-code") drawScreen(ctx, it, p, active || lighting.lamps > 0.5, lt);
+          else if (it.kind === "status") drawStatus(ctx, it.rect, p, lt, active);
+          else if (it.kind === "tv") drawTv(ctx, it.rect, p, playing, lt);
           else if (it.kind === "whiteboard") {
             const steps = (v?.plan?.steps ?? []).map((st) => {
               const lane = v?.lanes[st.agent];
@@ -254,72 +318,64 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
       const shelf = libraryShelf(L);
       if (shelf && shelfBooks) drawLearnedShelf(ctx, shelf, shelfBooks, p, lit);
 
-      // desks, back to front
-      const desks = Object.values(L.desks).sort((a, b) => a.desk.y - b.desk.y);
-      if (p.dark) for (const d of desks) if (working(d.agent)) drawLampGlow(ctx, d, p);
+      // everything that stands on the floor, back to front
       const celebrating = celebrateAt.current && tNow - celebrateAt.current < 1400 && !rm;
-      for (const d of desks) {
-        if (offSet?.has(d.agent)) {
-          // switched off: the desk dark, the agent dozing in a dimmed chair
+      const items: { y: number; draw: () => void }[] = [];
+      for (const d of Object.values(L.desks)) {
+        items.push({ y: d.desk.y + d.desk.h, draw: () => {
+          const person = lf.people.get(d.agent);
+          const isOff = offs.has(d.agent);
           drawChair(ctx, d, p);
-          ctx.globalAlpha = 0.38;
-          ctx.drawImage(spriteCanvas(d.agent, { bob: 0, eyes: "closed" }), d.sprite.x, d.sprite.y);
-          ctx.globalAlpha = 1;
-          drawDesk(ctx, d, p, { working: false, t: 0, lamp: true });
-          continue;
-        }
-        const lane: LaneView | undefined = v ? laneOf(v, d.agent) : undefined;
-        const isWorking = lane?.phase === "working";
-        const seed = seeds[d.agent] ?? 0;
-        const justDone = doneAt.current[d.agent] && tNow - doneAt.current[d.agent]! < 1500;
-        const inFinal = celebrating && v?.final?.agents.includes(d.agent);
-        let eyes: Eyes = "open";
-        if (inFinal || justDone) eyes = "happy";
-        else if (!rm && (t + seed * 97) % 4300 < 140) eyes = "closed";
-        else if (!rm && !isWorking) {
-          const g = Math.floor((t + seed * 131) / 2600) % 7;
-          eyes = g === 0 ? "left" : g === 3 ? "right" : "open";
-        }
-        const bob = rm ? 0 : isWorking ? (Math.floor((t + seed) / 280) % 5 === 0 ? 1 : 0) : (Math.floor((t + seed * 3) / 1100) % 2 as 0 | 1);
-        drawChair(ctx, d, p);
-        ctx.drawImage(spriteCanvas(d.agent, { bob: bob as 0 | 1, eyes, arms: inFinal ? "up" : undefined }), d.sprite.x, d.sprite.y);
-        drawDesk(ctx, d, p, { working: isWorking, t: tNow, lamp: true });
-        if (isWorking && !inFinal) drawHands(ctx, d, skinOf(d.agent), shirtOf(d.agent), rm ? 0 : Math.floor((tNow + seed) / 120));
-        const notes = (lane && v ? [...(v.lanes[d.agent]?.findings ?? [])] : []).map((f) => ({
-          verdict: f.reviews.length === 0 ? ("pending" as const) : f.reviews.some((r) => r.verdict !== "ok") ? ("fix" as const) : ("ok" as const),
-        }));
-        drawNotes(ctx, d, notes, p);
-        if (d.agent === CHIEF && delivered.current > 0) drawFileStack(ctx, d, delivered.current, p);
+          const atDesk = isOff || !person || person.mode === "desk";
+          if (isOff) {
+            ctx.globalAlpha = 0.38;
+            ctx.drawImage(spriteCanvas(d.agent, { bob: 0, eyes: "closed" }), d.sprite.x, d.sprite.y);
+            ctx.globalAlpha = 1;
+            drawDesk(ctx, d, p, { working: false, t: 0, lamp: true });
+            return;
+          }
+          const lane: LaneView | undefined = v ? laneOf(v, d.agent) : undefined;
+          const isWorking = lane?.phase === "working" && atDesk;
+          const seed = seeds[d.agent] ?? 0;
+          const justDone = doneAt.current[d.agent] && tNow - doneAt.current[d.agent]! < 1500;
+          const inFinal = celebrating && v?.final?.agents.includes(d.agent);
+          const sleepy = !!person?.sleepy && !busy.has(d.agent);
+          if (atDesk) {
+            let eyes: Eyes = "open";
+            const happy = person && lt < person.happyUntil;
+            if (inFinal || justDone || happy) eyes = "happy";
+            else if (sleepy) eyes = "closed";
+            else if (!rm && (lt + seed * 97) % 4300 < 140) eyes = "closed";
+            else if (!rm && !isWorking) {
+              const g = Math.floor((lt + seed * 131) / 2600) % 7;
+              eyes = g === 0 ? "left" : g === 3 ? "right" : "open";
+            }
+            let bob: 0 | 1 | 2 | 3 = rm ? 0 : isWorking ? (Math.floor((lt + seed) / 280) % 5 === 0 ? 1 : 0) : (Math.floor((lt + seed * 3) / 1100) % 2 as 0 | 1);
+            // someone nodding off: the head sinks and bobs back up
+            if (sleepy) bob = rm ? 2 : ((2 + (Math.floor((lt + seed) / 1700) % 3 === 0 ? 1 : 0)) as 2 | 3);
+            const hop = person && !rm && lt - person.jumpAt < 800 ? Math.round(Math.abs(Math.sin(((lt - person.jumpAt) / 800) * Math.PI * 2)) * 3) : 0;
+            ctx.drawImage(spriteCanvas(d.agent, { bob, eyes, arms: inFinal || hop ? "up" : undefined }), d.sprite.x, d.sprite.y - hop);
+            drawDesk(ctx, d, p, { working: isWorking, t: lt, lamp: true });
+            if (isWorking && !inFinal) drawHands(ctx, d, skinOf(d.agent), shirtOf(d.agent), rm ? 0 : Math.floor((lt + seed) / 120));
+            if (sleepy) drawZzz(ctx, d.sprite.x + 13, d.sprite.y + 1, lt + seed, rm);
+          } else drawDesk(ctx, d, p, { working: false, t: lt, lamp: true });
+          const notes = (lane && v ? [...(v.lanes[d.agent]?.findings ?? [])] : []).map((f) => ({
+            verdict: f.reviews.length === 0 ? ("pending" as const) : f.reviews.some((r) => r.verdict !== "ok") ? ("fix" as const) : ("ok" as const),
+          }));
+          drawNotes(ctx, d, notes, p);
+          if (d.agent === CHIEF && delivered.current > 0) drawFileStack(ctx, d, delivered.current, p);
+        } });
       }
+      for (const pe of lf.people.values()) if (pe.mode !== "desk" && !offs.has(pe.id)) items.push({ y: pe.y, draw: () => drawPerson(ctx, pe, lt, rm) });
+      for (const pet of lf.pets) items.push({ y: pet.y, draw: () => drawPet(ctx, pet, lt, rm, p) });
+      items.sort((a, b) => a.y - b.y);
+      for (const it of items) it.draw();
 
-      drawCat(ctx, L, tNow, p.dark, rm);
+      // the hour's light, over all of it
+      drawLighting(ctx, ll, L, { lighting, lit: busy, tvPlaying: playing, dark: isDark });
 
-      // flying files
+      // badges, sparkles, hearts and treats sit above the lighting
       const now = performance.now();
-      flights.current = flights.current.filter((f) => {
-        const k0 = (now - f.t0) / f.dur;
-        if (k0 < 0) return true;
-        if (k0 >= 1) {
-          if (f.kind === "finding") delivered.current++;
-          const end = f.path[f.path.length - 1]!;
-          effects.current.push({ kind: "sparkle", x: end.x, y: end.y - 2, t0: now, dur: 420 });
-          return false;
-        }
-        const kk = ease(k0);
-        for (let i = 3; i >= 1; i--) {
-          const q = pointAt(f, Math.max(0, kk - i * 0.025));
-          ctx.fillStyle = p.goldLight;
-          ctx.globalAlpha = 0.18 * (4 - i);
-          ctx.fillRect(Math.round(q.x) - 1, Math.round(q.y) - 1, 2, 2);
-        }
-        ctx.globalAlpha = 1;
-        const q = pointAt(f, kk);
-        const lift = Math.round(Math.sin(kk * Math.PI) * 4);
-        drawFile(ctx, q.x, q.y - lift, p, f.kind);
-        return true;
-      });
-
-      // badges and sparkles
       effects.current = effects.current.filter((e) => {
         const k0 = (now - e.t0) / e.dur;
         if (k0 >= 1) return false;
@@ -327,33 +383,39 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
         else drawBadge(ctx, e.x, e.y - Math.round(Math.min(1, k0 * 6) * 3), e.kind === "badge-ok" ? "ok" : "bad", p, k0 < 0.08 ? 0 : 1);
         return true;
       });
+      if (!rm) for (const f of lf.fx) drawFx(ctx, f, lt);
 
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [s, layout]);
+  }, [s, layout, life]);
 
-  // bubbles: what each agent is doing right now
+  // bubbles: what each person is doing right now, and the odd line of office chat
   const bubbles = useMemo(() => {
-    const out: { agent: AgentId; text: string; tool?: string; tone: "work" | "speak" | Transient["tone"] }[] = [];
+    const out: { agent: string; text: string; tone: "work" | "speak" | "chat" | Transient["tone"]; x: number; y: number }[] = [];
     const now = Date.now();
+    const desks = layout.desks;
     for (const a of AGENTS) {
+      const d = desks[a.id];
+      if (!d) continue;
       const tr = transients[a.id];
-      if (tr && tr.until > now) { out.push({ agent: a.id, text: tr.text, tone: tr.tone }); continue; }
+      if (tr && tr.until > now) { out.push({ agent: a.id, text: tr.text, tone: tr.tone, x: d.bubble.x, y: d.bubble.y }); continue; }
       const lane = view ? laneOf(view, a.id) : undefined;
-      if (!lane || lane.phase !== "working") continue;
-      const step = lane.steps[lane.steps.length - 1];
-      const pending = step && !step.done ? step : undefined;
-      if (a.id === CHIEF && view?.answerStarted && !view.final) out.push({ agent: a.id, text: "Writing your answer…", tone: "speak" });
-      else if (pending) out.push({ agent: a.id, text: lane.status ?? lane.task ?? "", tool: pending.name, tone: "work" });
-      else out.push({ agent: a.id, text: lane.status ?? lane.task ?? "Working", tone: "work" });
+      if (lane && lane.phase === "working") {
+        const step = lane.steps[lane.steps.length - 1];
+        const pending = step && !step.done ? step : undefined;
+        if (a.id === CHIEF && view?.answerStarted && !view.final) out.push({ agent: a.id, text: "Writing your answer…", tone: "speak", x: d.bubble.x, y: d.bubble.y });
+        else out.push({ agent: a.id, text: (pending ? lane.status ?? lane.task : lane.status ?? lane.task) ?? "Working", tone: "work", x: d.bubble.x, y: d.bubble.y });
+        continue;
+      }
+      const ch = chatter[a.id];
+      if (ch && ch.until > now) out.push({ agent: a.id, text: ch.text, tone: "chat", x: ch.x, y: ch.y });
     }
     return out;
-  }, [view, transients]);
+  }, [view, transients, chatter, layout]);
 
-  // keep bubbles from overlapping: lift a bubble above any earlier one it collides with. Re-run when a bubble changes
-  // size too (web fonts arriving, text rewrapping), or the measurements go stale.
+  // keep bubbles from overlapping: lift a bubble above any earlier one it collides with
   useLayoutEffect(() => {
     const root = overlayRef.current;
     if (!root) return;
@@ -383,6 +445,36 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
     return () => { ro.disconnect(); cancelAnimationFrame(raf); };
   }, [bubbles, k, layout]);
 
+  // pointing at the people and pets who are out and about
+  const toLogical = useCallback((e: { clientX: number; clientY: number }): Pt => {
+    const r = canvasRef.current!.getBoundingClientRect();
+    return { x: ((e.clientX - r.left) / r.width) * layout.w, y: ((e.clientY - r.top) / r.height) * layout.h };
+  }, [layout]);
+  const showTip = useCallback((id: PetId, pinned: boolean) => {
+    const pet = life.pets.find((p) => p.id === id);
+    if (!pet) return;
+    clearTimeout(tipTimer.current);
+    setTip({ x: pet.x, y: pet.y - (pet.kind === "dog" ? 15 : 9), text: petLine(id) });
+    if (pinned) tipTimer.current = setTimeout(() => setTip(null), 2800);
+  }, [life]);
+  const onMove = (e: React.PointerEvent) => {
+    const pt = toLogical(e);
+    const h = life.hit(pt.x, pt.y);
+    const key = h ? `${h.type}:${h.id}` : "";
+    if (key === lastHit.current) return;
+    lastHit.current = key;
+    if (canvasRef.current) canvasRef.current.style.cursor = h ? "pointer" : "";
+    if (h?.type === "pet") showTip(h.id, false);
+    else { clearTimeout(tipTimer.current); setTip(null); }
+  };
+  const onClick = (e: React.MouseEvent) => {
+    const pt = toLogical(e);
+    const h = life.hit(pt.x, pt.y);
+    if (!h) return;
+    if (h.type === "person") onSelect(h.id as AgentId);
+    else showTip(h.id, true);
+  };
+
   const ready = box.w > 0;
   return (
     <div className={`office-wrap${compact ? " is-compact" : ""}`} ref={wrapRef}>
@@ -390,18 +482,21 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
         <div className="office-frame" style={{ width: cssW, height: cssH, ["--k" as string]: k }}>
           <canvas
             ref={canvasRef}
-            className="office-canvas"
+            className={`office-canvas${whole ? " is-whole" : ""}`}
             width={layout.w * s}
             height={layout.h * s}
             style={{ width: cssW, height: cssH }}
+            onPointerMove={onMove}
+            onPointerLeave={() => { lastHit.current = ""; clearTimeout(tipTimer.current); setTip(null); }}
+            onClick={onClick}
             role="img"
-            aria-label={`The office: ${DEPARTMENTS.length} departments, ${AGENTS.length} staff.${view?.activeAgents.length ? ` Working now: ${view.activeAgents.map(agentName).join(", ")}.` : " Everyone is at their desk."}`}
+            aria-label={`The office: ${AGENTS.length} people in ${DEPARTMENTS.length} teams, a cafeteria and a game room, and three dogs and two cats.${view?.activeAgents.length ? ` Working now: ${view.activeAgents.map(agentName).join(", ")}.` : ""}`}
           />
           <div className="office-overlay" ref={overlayRef}>
             {layout.rooms.map((room) => {
               const active = room.agents.some((a) => view && laneOf(view, a)?.phase === "working");
               return (
-                <span key={room.dept.id} className={`room-label${active ? " is-active" : ""}`} style={{ left: room.label.x * k, top: room.label.y * k, ["--hue" as string]: room.dept.hue }}>
+                <span key={room.dept.id} className={`zone-sign${active ? " is-active" : ""}`} style={{ left: room.sign.x * k, top: room.sign.y * k, ["--hue" as string]: room.dept.hue }}>
                   {room.dept.name}
                 </span>
               );
@@ -434,7 +529,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
               if (!shelf) return null;
               const { slots, capacity } = learnedSlots(shelf, books.length);
               return (
-                <div className="shelf-hits" role="group" aria-label={`Sara's shelf: ${books.length} ${books.length === 1 ? "rule" : "rules"} learned from your edits`}>
+                <div className="shelf-hits" role="group" aria-label={`Sara's shelf: ${books.length} ${books.length === 1 ? "thing" : "things"} learned from your edits`}>
                   {slots.map((sl, i) => (
                     <button
                       key={books[i]!.id}
@@ -446,7 +541,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
                       onMouseLeave={() => setLitBook(undefined)}
                       onFocus={() => setLitBook(i)}
                       onBlur={() => setLitBook(undefined)}
-                      aria-label={`Learned rule: ${books[i]!.text} Show where it came from.`}
+                      aria-label={`Learned from your edits: ${books[i]!.text} Show where it came from.`}
                     >
                       <span className="book-tip" aria-hidden="true">{books[i]!.text}</span>
                     </button>
@@ -460,7 +555,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
             {wallPhoto && (() => {
               const fr = studioFrame(layout);
               if (!fr) return null;
-              const w = 22, h = 17; // logical px: a little larger than the frame it hangs in, like a pinned print
+              const w = 22, h = 17;
               return (
                 <img
                   key={wallPhoto.src}
@@ -473,16 +568,15 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
               );
             })()}
             {!compact &&
-              bubbles.map((b) => {
-                const d = layout.desks[b.agent];
-                if (!d) return null;
-                return (
-                  <div key={b.agent} className={`bubble tone-${b.tone}`} style={{ left: d.bubble.x * k, top: d.bubble.y * k }} aria-hidden="true">
-                    {b.tool && <code className="bubble-tool">{b.tool}()</code>}
-                    <span className="bubble-text">{b.text}</span>
-                  </div>
-                );
-              })}
+              bubbles.map((b) => (
+                <div key={b.agent} className={`bubble tone-${b.tone}`} style={{ left: b.x * k, top: b.y * k }} aria-hidden="true">
+                  <span className="bubble-text">{b.text}</span>
+                </div>
+              ))}
+            {tip && <div className="pet-tip" role="status" style={{ left: tip.x * k, top: tip.y * k }}>{tip.text}</div>}
+          </div>
+          <div className="visually-hidden" role="group" aria-label="The office pets">
+            {PETS.map((p) => <button key={p.id} type="button" onClick={() => showTip(p.id, true)}>{petLine(p.id)}</button>)}
           </div>
         </div>
       )}

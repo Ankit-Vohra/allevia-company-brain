@@ -21,7 +21,7 @@ const MORE_SCREENS: { to: string; label: string; blurb: string; icon: IconName }
 
 export const APPROVALS_CHANGED = "allevia:approvals-changed";
 
-function usePendingApprovals() {
+export function usePendingApprovals() {
   const { tenant } = useApp();
   const [tick, setTick] = useState(0);
   useEffect(() => {

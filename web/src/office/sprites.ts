@@ -133,7 +133,8 @@ const LOOKS: Record<string, Look> = {
 };
 
 export type Eyes = "open" | "closed" | "left" | "right" | "happy";
-export interface Variant { bob: 0 | 1; eyes: Eyes; arms?: "up" }
+export type Dir = "front" | "back" | "left" | "right";
+export interface Variant { bob: 0 | 1 | 2 | 3; eyes: Eyes; arms?: "up"; dir?: Dir }
 
 function paletteFor(a: AgentDef) {
   const { skin, hair, shirt, accent } = a.sprite;
@@ -152,61 +153,132 @@ function paletteFor(a: AgentDef) {
     h: hair,
     H: lighten(hair, 0.28),
     g: "#22223A",
+    p: mix(darken(shirt, 0.55), "#2B2F4A", 0.5),   // trousers
+    P: mix(darken(shirt, 0.7), "#1C1F33", 0.5),    // shoes
   } as Record<string, string>;
 }
 
-const cache = new Map<string, HTMLCanvasElement>();
+type Painter = (x: number, y: number, col: string | undefined) => void;
 
-/** A 16×20 canvas for this agent and variant (cached). */
-export function spriteCanvas(agentId: string, v: Variant): HTMLCanvasElement {
-  const key = `${agentId}|${v.bob}|${v.eyes}|${v.arms ?? ""}`;
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const def = AGENTS.find((a) => a.id === agentId) ?? AGENTS[0]!;
-  const pal = paletteFor(def);
-  const look = LOOKS[def.id] ?? { hair: "short", extras: [] };
-  const c = document.createElement("canvas");
-  c.width = SPRITE_W;
-  c.height = SPRITE_H;
-  const ctx = c.getContext("2d")!;
-  const px = (x: number, y: number, col: string | undefined) => {
-    if (!col) return;
-    ctx.fillStyle = col;
-    ctx.fillRect(x, y, 1, 1);
-  };
-  // head rows (0..11) bob down by 1px on breath frames; torso stays
-  const headShift = v.bob;
+/** The head (rows 0..11 of the base) and its hair and glasses, shifted down `shift` rows. Facing away shows hair only. */
+function paintHead(px: Painter, pal: Record<string, string>, look: Look, v: { eyes: Eyes; dir: Dir; shift: number }) {
+  const back = v.dir === "back";
   BASE.forEach((row, y) => {
-    const isHead = y <= 11;
-    const yy = isHead ? y + headShift : y;
+    if (y > 11) return;
     for (let x = 0; x < SPRITE_W; x++) {
       const ch = row[x]!;
       if (ch === ".") continue;
-      px(x, yy, pal[ch === "e" ? "s" : ch]);
+      const key = back && "sSbme".includes(ch) ? "h" : ch === "e" ? "s" : ch;
+      px(x, y + v.shift, pal[key]);
     }
   });
-  // eyes: two pixels tall; closed is a lash line, a glance moves the pupils one pixel
-  const dx = v.eyes === "left" ? -1 : v.eyes === "right" ? 1 : 0;
-  for (const ex of [5, 10]) {
-    if (v.eyes === "closed") px(ex, 7 + headShift, pal.m);
-    else if (v.eyes === "happy") { px(ex - 1, 7 + headShift, pal.m); px(ex, 6 + headShift, pal.m); px(ex + 1, 7 + headShift, pal.m); }
-    else { px(ex + dx, 6 + headShift, pal.e); px(ex + dx, 7 + headShift, pal.e); }
+  if (!back) {
+    // eyes: two pixels tall; closed is a lash line; a turn of the head moves the pupils and the mouth
+    const turn = v.dir === "left" ? -2 : v.dir === "right" ? 2 : 0;
+    const glance = v.eyes === "left" ? -1 : v.eyes === "right" ? 1 : 0;
+    for (const ex of [5, 10]) {
+      if (v.eyes === "closed") px(ex + turn, 7 + v.shift, pal.m);
+      else if (v.eyes === "happy") { px(ex + turn - 1, 7 + v.shift, pal.m); px(ex + turn, 6 + v.shift, pal.m); px(ex + turn + 1, 7 + v.shift, pal.m); }
+      else { px(ex + turn + glance, 6 + v.shift, pal.e); px(ex + turn + glance, 7 + v.shift, pal.e); }
+    }
+    if (turn) { px(7, 9 + v.shift, pal.s); px(8, 9 + v.shift, pal.s); px(7 + turn / 2, 9 + v.shift, pal.m); px(8 + turn / 2, 9 + v.shift, pal.m); }
   }
   const overlay = (rows: string[]) =>
     rows.forEach((row, y) => {
       for (let x = 0; x < Math.min(row.length, SPRITE_W); x++) {
         const ch = row[x]!;
         if (ch === "." || ch === " ") continue;
-        px(x, y + headShift, pal[ch]);
+        px(x, y + v.shift, pal[ch]);
       }
     });
   overlay(HAIR[look.hair]!);
-  for (const ex of look.extras) overlay(EXTRAS[ex]!);
-  if (v.arms === "up") {
-    // hooray: hands raised beside the head
-    for (const [x, y] of [[0, 8], [1, 8], [0, 9], [1, 9], [14, 8], [15, 8], [14, 9], [15, 9]] as const) px(x, y, pal.s);
-    for (const [x, y] of [[1, 10], [1, 11], [2, 12], [14, 10], [14, 11], [13, 12]] as const) px(x, y, pal.t);
+  if (back) {
+    // from behind the hair covers the whole head
+    for (let y = 3; y <= 10; y++) for (let x = 3; x <= 12; x++) px(x, y + v.shift, pal.h);
+    for (let x = 4; x <= 11; x++) px(x, 11 + v.shift, pal.o);
+  } else for (const ex of look.extras) overlay(EXTRAS[ex]!);
+}
+
+const cache = new Map<string, HTMLCanvasElement>();
+const lookOf = (def: AgentDef): Look => LOOKS[def.id] ?? { hair: "short", extras: [] };
+
+/** A 16×20 seated canvas for this agent and variant (cached). */
+export function spriteCanvas(agentId: string, v: Variant): HTMLCanvasElement {
+  const dir = v.dir ?? "front";
+  const key = `${agentId}|${v.bob}|${v.eyes}|${v.arms ?? ""}|${dir}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const def = AGENTS.find((a) => a.id === agentId) ?? AGENTS[0]!;
+  const pal = paletteFor(def);
+  const c = document.createElement("canvas");
+  c.width = SPRITE_W;
+  c.height = SPRITE_H;
+  const ctx = c.getContext("2d")!;
+  const px: Painter = (x, y, col) => {
+    if (!col) return;
+    ctx.fillStyle = col;
+    ctx.fillRect(x, y, 1, 1);
+  };
+  // the torso stays; the head (rows 0..11) bobs down on breath frames, and further when someone nods off
+  BASE.forEach((row, y) => {
+    if (y <= 11) return;
+    for (let x = 0; x < SPRITE_W; x++) { const ch = row[x]!; if (ch !== ".") px(x, y, pal[ch]); }
+  });
+  paintHead(px, pal, lookOf(def), { eyes: v.eyes, dir, shift: v.bob });
+  if (v.arms === "up") raiseHands(px, pal);
+  cache.set(key, c);
+  return c;
+}
+
+function raiseHands(px: Painter, pal: Record<string, string>) {
+  for (const [x, y] of [[0, 8], [1, 8], [0, 9], [1, 9], [14, 8], [15, 8], [14, 9], [15, 9]] as const) px(x, y, pal.s);
+  for (const [x, y] of [[1, 10], [1, 11], [2, 12], [14, 10], [14, 11], [13, 12]] as const) px(x, y, pal.t);
+}
+
+export const WALKER_H = 26;
+export interface WalkerVariant { dir: Dir; frame: 0 | 1 | 2; eyes?: Eyes; arms?: "up"; bob?: 0 | 1 }
+
+/** A standing figure, 16×26, for walking around the office: four facings, two walking frames and a standing one. */
+export function walkerCanvas(agentId: string, v: WalkerVariant): HTMLCanvasElement {
+  const key = `w|${agentId}|${v.dir}|${v.frame}|${v.eyes ?? "open"}|${v.arms ?? ""}|${v.bob ?? 0}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const def = AGENTS.find((a) => a.id === agentId) ?? AGENTS[0]!;
+  const pal = paletteFor(def);
+  const c = document.createElement("canvas");
+  c.width = SPRITE_W;
+  c.height = WALKER_H;
+  const ctx = c.getContext("2d")!;
+  const px: Painter = (x, y, col) => { if (col) { ctx.fillStyle = col; ctx.fillRect(x, y, 1, 1); } };
+  const rect = (x: number, y: number, w: number, h: number, col: string) => { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); };
+  const side = v.dir === "left" || v.dir === "right";
+  // torso: the seated body's shoulders and chest, then the hips and legs
+  BASE.forEach((row, y) => {
+    if (y <= 11 || y > 17) return;
+    for (let x = 0; x < SPRITE_W; x++) {
+      const ch = row[x]!;
+      if (ch === ".") continue;
+      if (side && (x < 3 || x > 12)) continue; // side-on: a narrower chest
+      px(x, y, pal[ch]);
+    }
+  });
+  const hipX0 = side ? 4 : 3, hipW = side ? 8 : 10;
+  rect(hipX0, 18, hipW, 2, pal.p!);
+  rect(hipX0, 18, hipW, 1, darken(pal.p!, 0.25));
+  if (side) {
+    const dirk = v.dir === "right" ? 1 : -1;
+    const stride = v.frame === 0 ? 0 : 2;
+    rect(6 + stride * dirk, 20, 3, 5, pal.p!); rect(6 + stride * dirk, 25, 4, 1, pal.P!);
+    if (v.frame) { rect(6 - stride * dirk, 20, 3, 4, darken(pal.p!, 0.18)); rect(6 - stride * dirk, 24, 4, 1, pal.P!); }
+    else { rect(7, 20, 3, 5, darken(pal.p!, 0.18)); rect(7, 25, 4, 1, pal.P!); }
+  } else {
+    const l = v.frame === 2 ? 5 : 6, r = v.frame === 1 ? 5 : 6;
+    rect(4, 20, 3, l, pal.p!); rect(4, 20 + l, 3, 1, pal.P!);
+    rect(9, 20, 3, r, pal.p!); rect(9, 20 + r, 3, 1, pal.P!);
+    rect(7, 20, 2, 2, darken(pal.p!, 0.3));
   }
+  paintHead(px, pal, lookOf(def), { eyes: v.eyes ?? "open", dir: v.dir, shift: v.bob ?? 0 });
+  if (v.arms === "up") raiseHands(px, pal);
   cache.set(key, c);
   return c;
 }
