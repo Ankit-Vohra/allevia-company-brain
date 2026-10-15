@@ -1,6 +1,25 @@
-// Server-sent events over fetch (EventSource cannot POST). Parses `event:` / `data:` blocks separated by a blank line.
+// Server-sent events over fetch (EventSource cannot POST). Parses `event:` / `data:` blocks separated by a blank line,
+// which is how the API frames every event (`event: <type>\ndata: <json>\n\n`); comment lines (`: ping`, the server's
+// keepalive) are skipped.
 
 export interface SseMessage { event: string; data: string; id?: string }
+
+/** An API error: the server's JSON `{error}` sentence when it sent one, and the HTTP status. */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+export async function errorFrom(res: Response, path: string): Promise<ApiError> {
+  let message = `${path} answered ${res.status}`;
+  try {
+    const body = (await res.json()) as { error?: unknown };
+    if (typeof body?.error === "string" && body.error) message = body.error;
+  } catch { /* not JSON: keep the status line */ }
+  return new ApiError(message, res.status);
+}
 
 export async function* readSse(body: ReadableStream<Uint8Array>, signal?: AbortSignal): AsyncGenerator<SseMessage> {
   const reader = body.getReader();
@@ -61,7 +80,8 @@ export async function postSse<T>(
     body: JSON.stringify(body),
     signal,
   });
-  if (!res.ok || !res.body) throw new Error(`${url} answered ${res.status}`);
+  if (!res.ok) throw await errorFrom(res, url);
+  if (!res.body) throw new ApiError(`${url} sent no stream`, res.status);
   for await (const msg of readSse(res.body, signal)) {
     try {
       onEvent(JSON.parse(msg.data) as T);
