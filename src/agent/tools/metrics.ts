@@ -45,6 +45,20 @@ function series(rows: Row[], groupBy: "day" | "week" | undefined, agg: Aggregate
   return [...buckets.entries()].map(([date, rs]) => ({ date, value: round(aggregate(agg, rs), 4) }));
 }
 
+// For an unknown metric name: the metrics that share a word with it first (most shared words first; "clicks" ~ "click"),
+// then the rest alphabetically, cut at `limit`. A tenant can have 80+ metrics, and an alphabetical list cut at 40 hid
+// every signup_funnel_* metric from a desk that asked for "funnel" (eval 2026-10-15).
+const stem = (w: string): string => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w);
+const words = (s: string): string[] => s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3).map(stem);
+
+export function suggestMetrics(asked: string, available: string[], limit = 40): { shown: string[]; related: number; more: number } {
+  const want = new Set(words(asked));
+  const score = (m: string): number => new Set(words(m).filter((w) => want.has(w))).size;
+  const ranked = [...new Set(available)].map((m) => ({ m, s: score(m) })).sort((a, b) => b.s - a.s || a.m.localeCompare(b.m));
+  const shown = ranked.slice(0, limit);
+  return { shown: shown.map((x) => x.m), related: shown.filter((x) => x.s > 0).length, more: Math.max(0, ranked.length - limit) };
+}
+
 // Per subject, the newest `per` observations of the metric in range, oldest first, plus how many there are.
 async function seriesFor(ctx: ToolContext, p: Record<string, unknown>, sids: string[], per: number): Promise<Array<{ n: number; rows: Row[] }>> {
   const res = await ro<{ n: number; rows: Row[] }>(ctx,
@@ -74,8 +88,10 @@ async function runTrend(args: { metric: string; subject?: string; from?: string;
   const rows = read.flatMap((x) => x.rows);
   if (!rows.length) {
     const avail = await ro<{ m: string }>(ctx,
-      "MATCH (o:Observation)-[:MEASURES]->(s:Entity) WHERE $sid IS NULL OR s.id = $sid RETURN DISTINCT o.metric AS m ORDER BY m LIMIT 40", p);
-    throw new InputError(`No ${JSON.stringify(args.metric)} observations${subject ? ` for ${subject.id}` : ""}${args.from || args.to ? " in that range" : ""}. Metrics available: ${avail.map((a) => a.m).join(", ") || "none"}.`);
+      "MATCH (o:Observation)-[:MEASURES]->(s:Entity) WHERE $sid IS NULL OR s.id = $sid RETURN DISTINCT o.metric AS m ORDER BY m LIMIT 1000", p);
+    const hint = suggestMetrics(args.metric, avail.map((a) => a.m).filter((m): m is string => typeof m === "string"));
+    throw new InputError(`No ${JSON.stringify(args.metric)} observations${subject ? ` for ${subject.id}` : ""}${args.from || args.to ? " in that range" : ""}. ` +
+      `Metrics available${hint.related ? " (closest first)" : ""}: ${hint.shown.join(", ") || "none"}${hint.more ? `, and ${hint.more} more` : ""}.`);
   }
   const cut = read.filter((x) => x.n > x.rows.length).length;
 

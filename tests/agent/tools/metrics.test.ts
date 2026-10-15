@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { GraphHandle } from "../../../src/graph/client.js";
-import { metricTrend, weekStart } from "../../../src/agent/tools/metrics.js";
+import { metricTrend, suggestMetrics, weekStart } from "../../../src/agent/tools/metrics.js";
 import { aggregateFor } from "../../../src/agent/tools/observations.js";
 import { call, ids, makeCtx, seededGraph } from "../../helpers/tools.js";
 
@@ -54,5 +54,30 @@ describe("metric_trend (integration)", () => {
     const r = await call(metricTrend, { metric: "revenue", subject: "channel:instagram" }, makeCtx(g));
     expect(r.data.error).toMatch(/No "revenue" observations for channel:instagram/);
     expect(r.data.error).toMatch(/followers, signups_from_reels/);
+  });
+
+  it("an unknown metric lists the names that share a word with it first", async () => {
+    const r = await call(metricTrend, { metric: "reel", subject: "channel:instagram" }, makeCtx(g));
+    expect(r.data.error).toMatch(/Metrics available \(closest first\): signups_from_reels, followers\./);
+  });
+});
+
+// Eval 2026-10-15 (funnel-dropoff): the list was alphabetical and cut at 40, so on a tenant with 80+ metrics a question
+// about "funnel" never saw signup_funnel_*, and the desk answered from a stale document instead.
+describe("suggestMetrics", () => {
+  const filler = Array.from({ length: 60 }, (_, i) => `a_metric_${String(i).padStart(2, "0")}`);
+  const all = [...filler, "signup_funnel_activated", "signup_funnel_accounts_created", "signups", "gsc_clicks"];
+
+  it("puts names that share a word (plural or not) first, then the rest alphabetically, and counts what was cut", () => {
+    const s = suggestMetrics("funnel", all, 40);
+    expect(s.shown.slice(0, 3)).toEqual(["signup_funnel_accounts_created", "signup_funnel_activated", "a_metric_00"]);
+    expect(s.shown).toHaveLength(40);
+    expect(s.more).toBe(24);
+    expect(suggestMetrics("signups funnel", all).shown.slice(0, 3)).toEqual(["signup_funnel_accounts_created", "signup_funnel_activated", "signups"]);
+    expect(suggestMetrics("search click", all).shown[0]).toBe("gsc_clicks");
+  });
+
+  it("is alphabetical when nothing is related, and short lists are not cut", () => {
+    expect(suggestMetrics("revenue", ["b", "a"])).toEqual({ shown: ["a", "b"], related: 0, more: 0 });
   });
 });

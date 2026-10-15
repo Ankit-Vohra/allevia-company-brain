@@ -4,7 +4,7 @@ import type { AgentEvent } from "../../shared/contracts.js";
 import type { GraphHandle } from "../../src/graph/client.js";
 import { AGENTS, agentById } from "../../shared/roster.js";
 import {
-  MAX_REVIEWERS, MAX_TURNS, asksToRemember, toolRounds, normalisePlan, rememberRefusal, reviewersFor, runTurn, toProposal, toolsFor, arrayArgKey,
+  MAX_REVIEWERS, MAX_TURNS, PATH_FIRST_NOTE, asksToRemember, notePathFirst, toolRounds, normalisePlan, rememberRefusal, reviewersFor, runTurn, toProposal, toolsFor, arrayArgKey,
   type TurnDeps, type TurnInput,
 } from "../../src/agent/orchestrator.js";
 import { FakeRuntime, type FakeScript, type RunInput } from "../../src/agent/runtime.js";
@@ -384,6 +384,38 @@ describe("runTurn: fast path", () => {
     const out = await run();
     expect(out.answer).toBe(answer);
     expect(events.filter(is("text")).map((e) => (e as { delta: string }).delta).join("")).toBe(answer);
+  });
+
+  // Eval 2026-10-15 (memory-ig-token): the Chief drew the path before writing anything, then wrote only "Everything is
+  // in the answer above." The show_path result it reads now says that the owner has seen no answer yet.
+  it("a path drawn before any answer tells the Chief nothing was shown yet; a path drawn after the answer doesn't", async () => {
+    const pathSummary = (events: AgentEvent[]) => (events.find(is("tool_result", "chief-of-staff", (e) => e.name === "show_path")) as { summary: string }).summary;
+    const answer = "We paused daily stories on 2026-10-10 to put the time into reels [[decision:pause-stories]]. Next: review reel reach.";
+    const first = setup({
+      "chief-of-staff:plan": plan([{ agent: "chief-of-staff", task: "Look it up" }]),
+      "chief-of-staff:direct": { calls: [{ name: "search", args: { query: "stories" } }, { name: "show_path", args: { ids: ["decision:pause-stories"] } }], text: answer },
+    });
+    const out = await first.run();
+    expect(pathSummary(first.events)).toMatch(/no answer yet/);
+    expect(out.answer).toBe(answer); // what it writes after the path is the answer
+
+    const after = setup({
+      "chief-of-staff:plan": plan([{ agent: "chief-of-staff", task: "Look it up" }]),
+      "chief-of-staff:direct": { preText: answer, calls: [{ name: "show_path", args: { ids: ["decision:pause-stories"] } }] },
+    });
+    await after.run();
+    expect(pathSummary(after.events)).not.toMatch(/no answer yet/);
+  });
+
+  it("notePathFirst only touches show_path, and only while nothing has been written", async () => {
+    let written = false;
+    const { tools } = registry();
+    const [search, path] = notePathFirst([tools.search!, tools.show_path!], () => written);
+    expect(search).toBe(tools.search);
+    const ctx = { touched: undefined } as never;
+    expect((await path!.run({ ids: ["a"] }, ctx)).note).toBe(PATH_FIRST_NOTE);
+    written = true;
+    expect((await path!.run({ ids: ["a"] }, ctx)).note).toBeUndefined();
   });
 
   it("a failed plan falls back to the fast path", async () => {

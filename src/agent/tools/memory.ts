@@ -20,6 +20,7 @@ interface MemRow { m: NodeRow; kind: string | null; text: string | null; at: num
 interface RecRow { rec: NodeRow; status: string | null; why: string | null; area: string | null; confidence: number | null; evidence: string[]; es: EdgeRow[] }
 
 const toMs = (v: number | string | null): number => (typeof v === "number" ? v : typeof v === "string" ? Date.parse(v) || 0 : 0);
+const TURN_CITED = 12; // entities returned per earlier turn, from what it cited
 const NOT_SUPERSEDED = "OPTIONAL MATCH (newer:Memory)-[s:SUPERSEDES]->(m) WHERE s.until IS NULL";
 
 async function runRecall(args: { ids?: string[]; query?: string }, ctx: ToolContext) {
@@ -67,15 +68,26 @@ async function runRecall(args: { ids?: string[]; query?: string }, ctx: ToolCont
   const col = new Collector();
   for (const t of targets) col.node(t);
   const seen = new Set<string>();
-  const turns = [...byEntity, ...byQuery].filter((t) => !seen.has(t.t.id) && seen.add(t.t.id))
-    .sort((a, b) => toMs(b.at) - toMs(a.at)).slice(0, 5).map((t) => {
-      col.node(t.t);
-      for (const e of t.es) col.edge(e);
-      return {
-        id: t.t.id, question: t.question ?? t.t.name, answer: clip(t.answer, 300) ?? null, at: isoOrNull(t.at),
-        ...(t.session ? { session: t.session } : {}), ...(t.agents?.length ? { agents: t.agents } : {}), ...(t.hit.length ? { touched: t.hit } : {}),
-      };
-    });
+  const picked = [...byEntity, ...byQuery].filter((t) => !seen.has(t.t.id) && seen.add(t.t.id))
+    .sort((a, b) => toMs(b.at) - toMs(a.at)).slice(0, 5);
+  // What each earlier turn cited (CITED edges exist only for citations verified when it was saved), so an answer that
+  // repeats one of them cites a node this call returned, not an id copied from the old answer's text.
+  const citedRows = picked.length ? await ro<{ tid: string; cs: Array<{ y: NodeRow; e: EdgeRow }> }>(ctx,
+    `UNWIND $tids AS tid MATCH (t:Entity {id:tid})-[c:CITED]->(y:Entity) WHERE c.until IS NULL
+     WITH tid, y, c ORDER BY y.id
+     WITH tid, collect({y: ${NODE("y")}, e: ${EDGE("c")}})[0..$k] AS cs RETURN tid, cs`, { tids: picked.map((t) => t.t.id), k: TURN_CITED }) : [];
+  const citedBy = new Map(citedRows.map((r) => [r.tid, r.cs]));
+  const turns = picked.map((t) => {
+    col.node(t.t);
+    for (const e of t.es) col.edge(e);
+    const cs = citedBy.get(t.t.id) ?? [];
+    for (const c of cs) { col.node(c.y); col.edge(c.e); }
+    return {
+      id: t.t.id, question: t.question ?? t.t.name, answer: clip(t.answer, 300) ?? null, at: isoOrNull(t.at),
+      ...(t.session ? { session: t.session } : {}), ...(t.agents?.length ? { agents: t.agents } : {}), ...(t.hit.length ? { touched: t.hit } : {}),
+      ...(cs.length ? { cited: cs.map((c) => c.y.id) } : {}),
+    };
+  });
   const mem = (m: MemRow) => {
     col.node(m.m);
     for (const e of m.es) col.edge(e);
