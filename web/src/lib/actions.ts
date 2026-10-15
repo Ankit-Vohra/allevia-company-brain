@@ -4,10 +4,11 @@ import type { ActionKind } from "@shared/contracts";
 import type { IconName } from "../components/Icon";
 
 export const ACTION: Record<ActionKind, { label: string; icon: IconName; effect: (target?: string) => string; done: string }> = {
+  // Where a fix lands is the business's choice (GET /api/:t/actions/target): its tasks in the app by default, or its own GitHub repo.
   github_issue: {
-    label: "GitHub issue", icon: "github",
-    effect: (t) => `Approving opens an issue${t ? ` in ${t.split(" · ")[0]}` : ""}. Nothing on the website changes until someone ships the fix.`,
-    done: "Issue opened",
+    label: "Fix for your website", icon: "file",
+    effect: () => "Approving adds this fix to your tasks (or opens an issue, if you chose GitHub). Nothing on the website changes until someone ships the fix.",
+    done: "Fix added",
   },
   content_draft: {
     label: "Content draft", icon: "pen",

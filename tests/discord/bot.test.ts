@@ -285,8 +285,8 @@ describe("/approvals and the buttons", () => {
     const bot = await makeBot();
     const ok = button("allevia:approve:approval:t-090-1");
     await bot.onButton(ok);
-    expect(await status("approval:t-090-1")).toBe("approved");
-    expect(decided).toEqual(["approval:t-090-1:approved"]);
+    expect(await status("approval:t-090-1")).toBe("executed");
+    expect(decided).toEqual(["approval:t-090-1:executed"]);
     const updated = ok.updates[0]!;
     expect(typeof updated !== "string" && updated.buttons?.length).toBeFalsy();
     expect(text(updated)).toMatch(/Approved/);
@@ -297,7 +297,7 @@ describe("/approvals and the buttons", () => {
 
     const twice = button("allevia:reject:approval:t-090-1");
     await bot.onButton(twice);
-    expect(await status("approval:t-090-1")).toBe("approved");
+    expect(await status("approval:t-090-1")).toBe("executed");
     expect(twice.replies[0]).toMatchObject({ ephemeral: true, text: expect.stringMatching(/already decided/i) });
 
     const gone = button("allevia:approve:approval:nope");

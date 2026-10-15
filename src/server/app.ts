@@ -17,7 +17,7 @@
 //   use: the real executors, with GitHub issues and Discord posts as a dry run unless ALLEVIA_ACTIONS_LIVE=1. The
 //   answer is the card plus `learned` (the learned-rule AgentEvents, in the JSON) and `action`.
 // Focused route files: routes/program.ts (program, capabilities, learning), routes/team.ts (agents, directives),
-// routes/goals.ts (the owner says OK to the suggested goals), routes/numbers.ts (the owner adds a spreadsheet of their numbers), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/graph-work.ts (the Brain page's "what breaks if something stops").
+// routes/goals.ts (the owner says OK to the suggested goals), routes/numbers.ts (the owner adds a spreadsheet of their numbers), routes/actions.ts (where an approved fix lands: tasks, or the business's own GitHub repo), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/graph-work.ts (the Brain page's "what breaks if something stops").
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
@@ -37,6 +37,7 @@ import type { LlmRunner } from "../ingest/llm.js";
 import { DecisionError, decide, type ActionOpts, type OnDecision } from "./approvals.js";
 import { PRIVATE_MESSAGE, authorize, clearSession, presentedTokens, requestView, scopesOf, setSession, type AuthDeps } from "./auth.js";
 import { HttpError, readBody, type RouteCtx } from "./http.js";
+import { registerActionRoutes } from "./routes/actions.js";
 import { registerGoalRoutes } from "./routes/goals.js";
 import { NUMBERS_UPLOAD_PATH, registerNumbersRoutes } from "./routes/numbers.js";
 import { registerProgramRoutes } from "./routes/program.js";
@@ -564,6 +565,7 @@ export function createApp(deps: ServerDeps): Hono {
   registerProgramRoutes(app, routeCtx);
   registerGoalRoutes(app, routeCtx);
   registerNumbersRoutes(app, routeCtx);
+  registerActionRoutes(app, routeCtx, { serverRepo: () => deps.actions?.config?.githubActionRepo });
   registerWorkRoutes(app, routeCtx);
   registerGraphWorkRoutes(app, routeCtx);
   registerUsageRoutes(app, routeCtx, { actionsLive: () => deps.actions?.live ?? loadConfig().actionsLive });
