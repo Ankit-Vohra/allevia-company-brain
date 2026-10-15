@@ -250,7 +250,7 @@ function buildCafe(Z: Rect, spots: Spot[], lights: Light[]): RoomLayout {
 /** The game room: ping-pong, a TV with a console and beanbags, a board game on a low table, the dog's bed. */
 function buildLounge(Z: Rect, spots: Spot[], lights: Light[]): { room: RoomLayout; dogbed: Rect; catbed: Rect } {
   const wide = Z.w >= 130;
-  const floor: Item<FloorKind>[] = [{ kind: "carpet", rect: { x: Z.x + 1, y: Z.y + 11, w: Z.w - 2, h: Z.h - 12 } }];
+  const floor: Item<FloorKind>[] = [{ kind: "carpet", n: 1, rect: { x: Z.x - 3, y: Z.y + 11, w: Z.w + 1, h: Z.h - 12 } }];
   const tvCx = Math.round(Z.x + Z.w * (wide ? 0.62 : 0.5));
   const tv: Item<WallKind> = { kind: "tv", rect: { x: tvCx - 14, y: Z.y + 12, w: 28, h: 11 } };
   floor.push({ kind: "console", rect: { x: tvCx - 12, y: Z.y + 25, w: 24, h: 6 } });
@@ -264,7 +264,7 @@ function buildLounge(Z: Rect, spots: Spot[], lights: Light[]): { room: RoomLayou
     spots.push({ id: `bag-${i}`, activity: i === nBags - 1 ? "nap" : "console", at: { x: r.x + 6, y: r.y + 8 }, face: "back", pose: "sit", group: i === nBags - 1 ? undefined : "console", zone: "lounge" });
   }
   const pp: Rect = wide
-    ? { x: Z.x + 14, y: Z.y + Math.round(Z.h * 0.42), w: 36, h: 18 }
+    ? { x: Z.x + 16, y: Z.y + Math.round(Z.h * 0.5), w: 36, h: 18 }
     : { x: Math.round(Z.x + (Z.w - 36) / 2), y: Z.y + Math.round(Z.h * 0.58), w: 36, h: 18 };
   floor.push({ kind: "pingpong", rect: pp });
   spots.push(
@@ -283,7 +283,7 @@ function buildLounge(Z: Rect, spots: Spot[], lights: Light[]): { room: RoomLayou
   const catbed: Rect = { x: Z.x + 6, y: Z.y + Z.h - 13, w: 12, h: 7 };
   floor.push({ kind: "dogbed", rect: dogbed }, { kind: "catbed", rect: catbed });
   lights.push({ at: { x: tvCx, y: Z.y + 22 }, r: 34, kind: "tv" });
-  const sign = { x: Z.x + Z.w / 2, y: Z.y + 6 };
+  const sign = { x: Z.x + Math.round(Z.w * 0.86), y: Z.y + 6 }; // clear of the players and their speech
   return { room: { kind: "lounge", dept: LOUNGE, rect: Z, inner: Z, sign, wall: [tv], floor, agents: [], label: sign }, dogbed, catbed };
 }
 
@@ -363,7 +363,7 @@ export function buildLayout(orientation: "landscape" | "portrait"): OfficeLayout
         const L = buildLounge(Z, spots, lights);
         rooms.push(L.room); dogbed = L.dogbed; catbed = L.catbed;
       }
-      for (const bx of bounds) {
+      for (const bx of bounds.slice(0, -1)) { // the last boundary is left open: the corner flows into the floor
         // a shelf and a plant on the boundary, with the middle left open to walk through
         divider({ x: bx, y: y + 12 }, { x: bx, y: y + ZONE_H - 4 }, [[26, 70]], dividers, []);
       }

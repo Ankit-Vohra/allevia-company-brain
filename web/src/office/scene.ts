@@ -24,7 +24,7 @@ export function drawStatic(c: Ctx, L: OfficeLayout, pal: OfficePalette) {
 
   // the shared corners' own floors, then each team's rug
   for (const room of L.rooms) for (const it of room.floor) if (it.kind === "tiles") drawTiles(c, it.rect, pal);
-  for (const room of L.rooms) for (const it of room.floor) if (it.kind === "carpet") drawCarpet(c, it.rect, pal, room.dept.hue);
+  for (const room of L.rooms) for (const it of room.floor) if (it.kind === "carpet") drawCarpet(c, it.rect, pal, room.dept.hue, it.n === 1);
   drawWalkways(c, L, pal);
   for (const room of L.rooms) {
     for (const it of room.floor) {
@@ -118,10 +118,11 @@ function drawTiles(c: Ctx, r: Rect, pal: OfficePalette) {
   R(c, r.x, r.y, r.w, 1, pal.laneEdge); R(c, r.x, r.y + r.h - 1, r.w, 1, pal.laneEdge);
 }
 
-function drawCarpet(c: Ctx, r: Rect, pal: OfficePalette, hue: number) {
+function drawCarpet(c: Ctx, r: Rect, pal: OfficePalette, hue: number, openLeft = false) {
   R(c, r.x, r.y, r.w, r.h, pal.carpet(hue));
   R(c, r.x, r.y, r.w, 1, pal.rugEdge(hue)); R(c, r.x, r.y + r.h - 1, r.w, 1, pal.rugEdge(hue));
-  R(c, r.x, r.y, 1, r.h, pal.rugEdge(hue)); R(c, r.x + r.w - 1, r.y, 1, r.h, pal.rugEdge(hue));
+  if (!openLeft) R(c, r.x, r.y, 1, r.h, pal.rugEdge(hue));
+  R(c, r.x + r.w - 1, r.y, 1, r.h, pal.rugEdge(hue));
   for (let y = r.y + 3; y < r.y + r.h - 3; y += 4) for (let x = r.x + 3 + ((y / 4) % 2) * 2; x < r.x + r.w - 3; x += 4) P(c, x, y, pal.rugFill(hue));
 }
 
