@@ -2,7 +2,7 @@
 // product is visible, and each opens a short page that says what it will do.
 import type { IconName } from "../components/Icon";
 
-export type SoonId = "studio" | "team" | "plan" | "program";
+export type SoonId = "studio" | "plan" | "program";
 
 export interface SoonScreen {
   id: SoonId;
@@ -29,18 +29,6 @@ export const SOON: SoonScreen[] = [
     ],
     agents: ["content-strategist", "copy-editor", "fact-checker"],
     meanwhile: { label: "Ask Tara for post ideas", to: "/ask?q=" + encodeURIComponent("What should we post this week, and why?") },
-  },
-  {
-    id: "team", path: "/team", nav: "Team settings", title: "Tell your team", icon: "office",
-    blurb: "Desks on or off, notes, and rules for everyone",
-    lede: "Say something once and the whole team follows it, for example “never quote prices on Instagram”. You see exactly what will change before it applies, and every rule shows where it came from.",
-    points: [
-      "Each desk on, light or off, with your notes",
-      "How much each desk may do alone, earned through approvals",
-      "Every learned rule, linked to the edit it came from",
-    ],
-    agents: ["chief-of-staff", "ops-manager", "librarian"],
-    meanwhile: { label: "Meet the team in the office", to: "/" },
   },
   {
     id: "plan", path: "/plan", nav: "Plan and usage", title: "Plan and usage", icon: "layers",

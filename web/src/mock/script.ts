@@ -63,7 +63,7 @@ export const citationsIn = (text: string) => [...new Set([...text.matchAll(/\[\[
 export const ALL_GOOD: TurnChecks = {
   citationsValid: true, invalidCitations: [],
   numbersGrounded: true, ungroundedNumbers: [],
-  simulatedDisclosed: true, freshnessDisclosed: true,
+  simulatedDisclosed: true, freshnessDisclosed: true, modeDisclosed: true,
 };
 
 export interface ScriptSpec {

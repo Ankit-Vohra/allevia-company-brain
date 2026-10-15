@@ -266,6 +266,13 @@
 .page-head > div { min-width: 0; }
 .page-lede { margin-top: 6px; max-width: 64ch; color: var(--color-ink-2); font-size: var(--text-base); text-wrap: pretty; }
 .page-lede b { font-weight: 600; color: var(--color-ink); }
+/* a row of headline numbers beside a page title (Approvals, Team settings) */
+.kpis { display: flex; margin: 0; border: var(--rule); border-radius: var(--radius-md); background: var(--color-card); }
+.kpi { display: grid; align-content: start; gap: 2px; padding: var(--space-sm) var(--space-md); min-width: 128px; }
+.kpi + .kpi { border-left: 1px solid var(--color-rule-2); }
+.kpi dt { font-size: var(--text-xs); font-weight: 600; color: var(--color-muted); }
+.kpi dd { margin: 0; font-family: var(--font-display); font-size: var(--text-xl); line-height: 1.1; }
+.kpi p { font-size: var(--text-2xs); color: var(--color-muted); max-width: 16ch; line-height: 1.35; }
 .notice { margin-top: var(--space-md); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-sm); font-size: var(--text-sm); }
 .notice-bad { background: var(--color-bad-soft); color: var(--color-bad); }
 .notice-ok { background: var(--color-ok-soft); color: var(--color-ok); }

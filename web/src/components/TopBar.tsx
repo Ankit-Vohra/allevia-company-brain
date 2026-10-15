@@ -116,7 +116,7 @@ function MoreMenu({ variant }: { variant: "desktop" | "mobile" }) {
     return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
   }, [open]);
   const items = SOON.filter((x) => x.id !== "studio"); // the Studio is built: a link of its own, not a "soon" item
-  const active = items.some((x) => loc.pathname === x.path) || (variant === "mobile" && loc.pathname === "/onboard");
+  const active = items.some((x) => loc.pathname === x.path) || loc.pathname === "/team" || (variant === "mobile" && loc.pathname === "/onboard");
   return (
     <div className={`more more-${variant}`} ref={ref}>
       {variant === "desktop" ? (
@@ -142,6 +142,10 @@ function MoreMenu({ variant }: { variant: "desktop" | "mobile" }) {
               <span className="switcher-text"><span className="switcher-name">Studio</span><span className="switcher-domain">Turn a phone photo into an on-brand post</span></span>
             </NavLink>
           )}
+          <NavLink to="/team" role="menuitem" className="more-item">
+            <span className="more-icon"><Icon name="office" size={16} /></span>
+            <span className="switcher-text"><span className="switcher-name">Team settings</span><span className="switcher-domain">Desks on or off, tell your team, what it learned</span></span>
+          </NavLink>
           {items.map((x) => (
             <NavLink key={x.id} to={x.path} role="menuitem" className="more-item">
               <span className="more-icon"><Icon name={x.icon} size={16} /></span>

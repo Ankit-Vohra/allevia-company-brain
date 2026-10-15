@@ -2,13 +2,16 @@
 // runs. Used with ?mock=1, or automatically when GET /api/health fails.
 import type { AgentEvent, AgentId, OnboardEvent } from "@shared/contracts";
 import { AGENTS } from "@shared/roster";
+import type { CapabilityState, DirectivePreview, LearnedRuleDto, ProgramScorecard } from "@shared/contracts";
 import type {
-  AgentDetail, AgentStats, AgentSummary, Approval, ApprovalDecision, FindingRecord, GraphData, NodeDetail, OnboardRequest,
-  Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Tenant, TurnRecord,
+  AgentDetail, AgentStats, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, FindingRecord, GraphData,
+  LearningFeed, NodeDetail, OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Tenant, TurnRecord,
 } from "../types-ext";
+import type { AgentPatch } from "../api";
 import { BRIEF, FRESHNESS, GRAPHS, KNOWS, PLAYBOOKS, TENANTS, seedApprovals, seedRecommendations } from "./data";
 import { type MockGraph, buildGraph, graphData, neighborhood, nodeDetail, refOf, searchGraph } from "./graph-kit";
 import { onboardScript } from "./onboard";
+import * as p90 from "./program";
 import { SCRIPTS, avsRun, pickScript, pendingRun, seoRun, storiesRun } from "./runs";
 import { type TimedEvent, compile } from "./script";
 
@@ -20,6 +23,10 @@ const graphs: Record<string, MockGraph> = { ...GRAPHS };
 const sessions: Record<string, StoredSession[]> = {};
 const recommendations = seedRecommendations();
 const approvals = seedApprovals();
+// the drafts the owner edited before approving, and the rules they taught (with their LEARNED_FROM paths in the graph)
+approvals.aamdani = [...(approvals.aamdani ?? []), ...p90.editedApprovals()];
+for (const [t, list] of Object.entries(approvals)) if (graphs[t]) p90.addLearningToGraph(graphs[t]!, t, list);
+const briefs: Record<string, Brief> = {};
 let counter = 100;
 
 function store(tenant: string, sessionId: string, title: string, at: string, events: AgentEvent[]) {
@@ -186,14 +193,20 @@ export const mockApi = {
   async recommendations(t: string): Promise<Recommendation[]> { return recommendations[t] ?? []; },
   async approvals(t: string): Promise<Approval[]> { return approvals[t] ?? []; },
 
-  async decide(t: string, id: string, d: ApprovalDecision): Promise<Approval> {
+  async decide(t: string, id: string, d: ApprovalDecision): Promise<DecisionResult> {
     const a = (approvals[t] ?? []).find((x) => x.id === id);
     if (!a) throw new Error(`No approval ${id}`);
     await sleep(500);
     a.decidedAt = today();
+    let learned: DecisionResult["learned"] = [];
     if (d.decision === "reject") { a.status = "rejected"; a.result = "Rejected by the owner"; }
     else {
-      if (d.editedPayload) a.editedPayload = d.editedPayload;
+      const edited = d.editedPayload && (d.editedPayload.title !== a.payload.title || d.editedPayload.body !== a.payload.body) ? d.editedPayload : undefined;
+      if (edited) {
+        a.editedPayload = edited;
+        learned = p90.learnFromEdit(t, a, edited).map((r) => ({ type: "learned" as const, ruleId: r.ruleId, text: r.text, fromApprovalId: a.id }));
+        if (graphs[t]) p90.addLearningToGraph(graphs[t]!, t, approvals[t] ?? []);
+      }
       a.status = "executed";
       a.result =
         a.kind === "github_issue" ? `Opened issue #${++counter} in Ankit-Vohra/allevia` :
@@ -202,7 +215,34 @@ export const mockApi = {
     }
     const r = (recommendations[t] ?? []).find((x) => x.approvalId === id);
     if (r) r.status = d.decision === "reject" ? "dismissed" : "approved";
-    return a;
+    return { ...a, learned, action: null };
+  },
+
+  // ---- Allevia 90, the ladder, the team and what it learned (./program.ts) ----
+
+  async program(t: string): Promise<ProgramScorecard | null> { return p90.programOf(t); },
+  async capabilities(t: string): Promise<CapabilityState[]> { return p90.capabilitiesOf(t); },
+  async team(t: string): Promise<AgentView[]> {
+    const stats = await mockApi.agents(t);
+    return p90.teamOf(t).map((s) => ({ ...stats.find((x) => x.id === s.id)!, ...s, learnedRules: p90.activeRulesFor(t, s.id) }));
+  },
+  async setAgent(t: string, id: string, patch: AgentPatch): Promise<AgentView> {
+    await sleep(250);
+    p90.setAgent(t, id, patch);
+    return (await mockApi.team(t)).find((a) => a.id === id)!;
+  },
+  async previewDirective(t: string, text: string): Promise<DirectivePreview> { await sleep(450); return p90.previewDirective(t, text); },
+  async applyDirective(t: string, id: string): Promise<DirectivePreview & { errors?: string[] }> { await sleep(350); return p90.applyDirective(t, id); },
+  async learning(t: string): Promise<LearningFeed> { return p90.learningFeed(t); },
+  async retireRule(t: string, ruleId: string): Promise<LearnedRuleDto> { await sleep(250); return p90.retireRule(t, ruleId); },
+  async brief(t: string): Promise<Brief | null> {
+    const name = tenants.find((x) => x.id === t)?.name ?? t;
+    return briefs[t] ?? { id: `document:brief-${t}`, title: "Morning brief", asOf: today().slice(0, 10), text: p90.briefText(t, name) };
+  },
+  async runBrief(t: string): Promise<Brief> {
+    await sleep(700);
+    const name = tenants.find((x) => x.id === t)?.name ?? t;
+    return (briefs[t] = { id: `document:brief-${t}`, title: "Morning brief", asOf: today().slice(0, 10), date: today().slice(0, 10), text: p90.briefText(t, name) });
   },
 
   async ask(t: string, body: { question: string; sessionId?: string }, onEvent: (e: AgentEvent) => void, opts: PlayOpts) {

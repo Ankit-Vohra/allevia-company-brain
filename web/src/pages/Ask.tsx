@@ -3,13 +3,15 @@
 // view, so "how did we get here" is always one click away.
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import type { AgentEvent, NodeRef } from "@shared/contracts";
+import type { AgentEvent, CapabilityState, NodeRef } from "@shared/contracts";
 import { api } from "../api";
 import { AgentAvatar, ChecksBadges, agentDef, fmtAgo, fmtDate, fmtMs } from "../components/bits";
+import { AnswerModes } from "../components/Capabilities";
 import { Icon, type IconName } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { RunTimeline } from "../components/RunTimeline";
 import { WorkLanes } from "../components/WorkLanes";
+import { modesUsed } from "../lib/capabilities";
 import { labelOfId, nameOfId } from "../lib/labels";
 import { useMedia } from "../lib/useMedia";
 import { useApp, useAsync } from "../state/app";
@@ -45,6 +47,8 @@ export default function AskPage() {
   const phone = useMedia("(max-width: 760px)");
 
   const sessions = useAsync(() => api.sessions(tenant.id), [tenant.id, runStore.sessionsVersion]);
+  // the capability ladder: an answer that drew on a source below "live" says so, and shows which (product design §2.3)
+  const caps = useAsync(() => api.capabilities(tenant.id).catch(() => [] as CapabilityState[]), [tenant.id]);
   const detail = useAsync(
     () => (sessionId ? api.session(tenant.id, sessionId).catch(() => null) : Promise.resolve(null)),
     [tenant.id, sessionId, runStore.sessionsVersion],
@@ -267,6 +271,7 @@ export default function AskPage() {
                   key={t.key}
                   turn={t}
                   view={views[i]!}
+                  caps={caps.data}
                   latest={i === turns.length - 1}
                   inGraph={t.key === graphTurnKey && turns.length > 1}
                   activeCite={t.key === graphTurnKey ? focus : undefined}
@@ -339,8 +344,8 @@ function ThreadList({ sessions, loading, activeId, onPick }: { sessions?: Sessio
   );
 }
 
-function TurnBlock({ turn, view, latest, inGraph, activeCite, onCite, onNodes, onReplay, onShowGraph, onRetry }: {
-  turn: TurnItem; view: RunView; latest: boolean; inGraph: boolean; activeCite?: string;
+function TurnBlock({ turn, view, caps, latest, inGraph, activeCite, onCite, onNodes, onReplay, onShowGraph, onRetry }: {
+  turn: TurnItem; view: RunView; caps?: CapabilityState[]; latest: boolean; inGraph: boolean; activeCite?: string;
   onCite: (id: string) => void; onNodes: (ids: string[]) => void; onReplay: () => void; onShowGraph: () => void; onRetry: () => void;
 }) {
   const live = turn.status === "running";
@@ -395,7 +400,10 @@ function TurnBlock({ turn, view, latest, inGraph, activeCite, onCite, onNodes, o
               <Markdown text={view.answer} nodes={view.nodes} onCite={onCite} activeId={activeCite} className="answer-md" />
               {view.final && (
                 <>
-                  <ChecksBadges checks={view.final.checks} />
+                  <div className="answer-checks">
+                    <ChecksBadges checks={view.final.checks} />
+                    <AnswerModes caps={modesUsed(view.final.citations, caps ?? [])} disclosed={view.final.checks.modeDisclosed} />
+                  </div>
                   {view.proposals.length > 0 && (
                     <ul className="proposals">
                       {view.proposals.map((p) => (

@@ -5,8 +5,8 @@ import type { AgentEvent, AgentId } from "@shared/contracts";
 import { AGENTS, DEPARTMENTS } from "@shared/roster";
 import { type LaneView, type RunView, laneOf } from "../state/derive";
 import {
-  drawBadge, drawChair, drawClock, drawDesk, drawDrawerOpen, drawFile, drawFileStack, drawHands, drawLampGlow, drawNotes,
-  drawPlan, drawScreen, drawServerLeds, drawSparkle, drawStatic,
+  drawBadge, drawChair, drawClock, drawDesk, drawDrawerOpen, drawFile, drawFileStack, drawHands, drawLampGlow, drawLearnedShelf,
+  drawNotes, drawPlan, drawScreen, drawServerLeds, drawSparkle, drawStatic, learnedSlots,
 } from "./draw";
 import { drawCat } from "./cat";
 import { type OfficeLayout, type Pt, buildLayout } from "./layout";
@@ -31,7 +31,14 @@ export interface OfficeCanvasProps {
   maxHeight?: number;
   selected?: AgentId | null;
   onSelect: (agent: AgentId) => void;
+  /** Desks the owner switched off (Team settings): the agent sits idle, dimmed, with an "off" sign. */
+  off?: ReadonlySet<AgentId>;
+  /** One book on Sara's shelf per learned rule, oldest first. */
+  books?: ShelfBook[];
+  onBook?: (ruleId: string) => void;
 }
+
+export interface ShelfBook { id: string; text: string; hue: number; confidence: number }
 
 const agentName = (id: string) => AGENTS.find((a) => a.id === id)?.name ?? id;
 
@@ -57,12 +64,15 @@ function pointAt(f: Flight, k: number): Pt {
   return f.path[f.path.length - 1]!;
 }
 
+// The Library's bookshelf, where every learned rule becomes a book.
+const libraryShelf = (L: OfficeLayout) => L.rooms.find((r) => r.dept.id === "knowledge")?.floor.find((f) => f.kind === "bookshelf")?.rect;
+
 // The picture frame on the Content Studio room's wall, where the Studio pins the newest photo.
 const studioFrame = (L: OfficeLayout) => L.rooms.find((r) => r.dept.id === "content")?.wall.find((w) => w.kind === "frame")?.rect;
 
 const ease = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
 
-export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed, compact, maxHeight, selected, onSelect }: OfficeCanvasProps) {
+export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed, compact, maxHeight, selected, onSelect, off, books, onBook }: OfficeCanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -100,8 +110,9 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
   }, [layout, pal]);
 
   // live state the frame loop reads
-  const live = useRef({ view, reducedMotion, speed, layout, pal, staticCanvas, s, selected });
-  live.current = { view, reducedMotion, speed, layout, pal, staticCanvas, s, selected };
+  const [litBook, setLitBook] = useState<number | undefined>();
+  const live = useRef({ view, reducedMotion, speed, layout, pal, staticCanvas, s, selected, off, books, litBook });
+  live.current = { view, reducedMotion, speed, layout, pal, staticCanvas, s, selected, off, books, litBook };
 
   const flights = useRef<Flight[]>([]);
   const effects = useRef<Effect[]>([]);
@@ -175,6 +186,18 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
     if (nextPhoto) setWallPhoto(nextPhoto);
   }, [events, runKey]);
 
+  // a new rule learned while the office is open: a sparkle over its book
+  const bookCount = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const n = books?.length;
+    const prev = bookCount.current;
+    bookCount.current = n;
+    if (n === undefined || prev === undefined || n <= prev || reducedMotion) return;
+    const shelf = libraryShelf(live.current.layout);
+    const slot = shelf ? learnedSlots(shelf, n).slots[n - 1] : undefined;
+    if (slot) effects.current.push({ kind: "sparkle", x: slot.x + 1, y: slot.y + 2, t0: performance.now(), dur: 1100 });
+  }, [books?.length, reducedMotion]);
+
   // expire transient bubbles
   useEffect(() => {
     const times = Object.values(transients).map((t) => t.until);
@@ -195,7 +218,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
     let raf = 0;
     const seeds = Object.fromEntries(AGENTS.map((a, i) => [a.id, i * 7919 + 13]));
     const frame = (tNow: number) => {
-      const { view: v, reducedMotion: rm, layout: L, pal: p, staticCanvas: sc, s: scale } = live.current;
+      const { view: v, reducedMotion: rm, layout: L, pal: p, staticCanvas: sc, s: scale, off: offSet, books: shelfBooks, litBook: lit } = live.current;
       const t = rm ? 0 : tNow;
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
       ctx.imageSmoothingEnabled = false;
@@ -227,11 +250,24 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
         }
       }
 
+      // Sara's shelf: one book per learned rule
+      const shelf = libraryShelf(L);
+      if (shelf && shelfBooks) drawLearnedShelf(ctx, shelf, shelfBooks, p, lit);
+
       // desks, back to front
       const desks = Object.values(L.desks).sort((a, b) => a.desk.y - b.desk.y);
       if (p.dark) for (const d of desks) if (working(d.agent)) drawLampGlow(ctx, d, p);
       const celebrating = celebrateAt.current && tNow - celebrateAt.current < 1400 && !rm;
       for (const d of desks) {
+        if (offSet?.has(d.agent)) {
+          // switched off: the desk dark, the agent dozing in a dimmed chair
+          drawChair(ctx, d, p);
+          ctx.globalAlpha = 0.38;
+          ctx.drawImage(spriteCanvas(d.agent, { bob: 0, eyes: "closed" }), d.sprite.x, d.sprite.y);
+          ctx.globalAlpha = 1;
+          drawDesk(ctx, d, p, { working: false, t: 0, lamp: true });
+          continue;
+        }
         const lane: LaneView | undefined = v ? laneOf(v, d.agent) : undefined;
         const isWorking = lane?.phase === "working";
         const seed = seeds[d.agent] ?? 0;
@@ -375,15 +411,17 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
               if (!d) return null;
               const lane = view ? laneOf(view, a.id) : undefined;
               const phase = lane?.phase;
+              const isOff = off?.has(a.id) ?? false;
               return (
                 <button
                   key={a.id}
                   type="button"
-                  className={`agent-hit${phase === "working" ? " is-working" : ""}${phase === "done" ? " is-done" : ""}${selected === a.id ? " is-selected" : ""}`}
+                  className={`agent-hit${phase === "working" ? " is-working" : ""}${phase === "done" ? " is-done" : ""}${selected === a.id ? " is-selected" : ""}${isOff ? " is-off" : ""}`}
                   style={{ left: (d.desk.x - 3) * k, top: (d.sprite.y + 1) * k, width: (d.desk.w + 6) * k, height: (d.desk.y + d.desk.h - d.sprite.y + 1) * k }}
                   onClick={() => onSelect(a.id)}
-                  aria-label={`${a.name}, ${a.title}${phase === "working" ? `, working: ${lane?.status ?? lane?.task ?? ""}` : phase === "done" ? ", finished" : ""}. Open profile.`}
+                  aria-label={`${a.name}, ${a.title}${isOff ? ", switched off" : phase === "working" ? `, working: ${lane?.status ?? lane?.task ?? ""}` : phase === "done" ? ", finished" : ""}. Open profile.`}
                 >
+                  {isOff && <span className="desk-off" style={{ left: (d.desk.w / 2 + 3) * k, top: (d.desk.y - d.sprite.y + 10) * k }} aria-hidden="true">off</span>}
                   <span className="agent-name" style={{ top: (d.desk.h + d.desk.y - d.sprite.y + 2) * k }}>
                     <span className="agent-dot" aria-hidden="true" />
                     {a.name}
@@ -391,6 +429,34 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
                 </button>
               );
             })}
+            {books && onBook && (() => {
+              const shelf = libraryShelf(layout);
+              if (!shelf) return null;
+              const { slots, capacity } = learnedSlots(shelf, books.length);
+              return (
+                <div className="shelf-hits" role="group" aria-label={`Sara's shelf: ${books.length} ${books.length === 1 ? "rule" : "rules"} learned from your edits`}>
+                  {slots.map((sl, i) => (
+                    <button
+                      key={books[i]!.id}
+                      type="button"
+                      className="book-hit"
+                      style={{ left: (sl.x - 0.5) * k, top: sl.y * k, width: 3 * k, height: sl.h * k }}
+                      onClick={() => onBook(books[i]!.id)}
+                      onMouseEnter={() => setLitBook(i)}
+                      onMouseLeave={() => setLitBook(undefined)}
+                      onFocus={() => setLitBook(i)}
+                      onBlur={() => setLitBook(undefined)}
+                      aria-label={`Learned rule: ${books[i]!.text} Show where it came from.`}
+                    >
+                      <span className="book-tip" aria-hidden="true">{books[i]!.text}</span>
+                    </button>
+                  ))}
+                  {books.length > capacity && (
+                    <span className="shelf-more" style={{ left: (shelf.x + shelf.w + 1) * k, top: shelf.y * k }}>+{books.length - capacity}</span>
+                  )}
+                </div>
+              );
+            })()}
             {wallPhoto && (() => {
               const fr = studioFrame(layout);
               if (!fr) return null;

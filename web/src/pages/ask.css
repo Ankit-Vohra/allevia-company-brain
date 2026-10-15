@@ -181,6 +181,8 @@
   background: var(--color-accent); animation: caret 1s steps(2, start) infinite;
 }
 @keyframes caret { to { visibility: hidden; } }
+/* the checks, and beside them where the answer's data came from when that was not a live connection */
+.answer-checks { display: grid; gap: 8px; justify-items: start; }
 .proposals { list-style: none; display: grid; gap: 8px; }
 .proposal {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px;

@@ -1,6 +1,6 @@
 // API shapes the web app needs that shared/contracts.ts does not define yet. The backend (Milestone 4.1) should return
 // exactly these; when they move into shared/contracts.ts, re-export them from there and delete them here.
-import type { ActionKind, AgentEvent, AgentId, EdgeRef, NodeRef, SourceRef, TurnChecks } from "@shared/contracts";
+import type { ActionKind, AgentEvent, AgentId, AgentSettings, EdgeRef, LearnedRuleDto, NodeRef, SourceRef, TurnChecks } from "@shared/contracts";
 
 export interface Tenant {
   id: string;            // graph name, e.g. "aamdani"
@@ -139,3 +139,30 @@ export interface OnboardRequest {
 
 /** A stored turn's event log, as returned by GET /api/:t/turns/:id/replay. */
 export type ReplayLog = AgentEvent[];
+
+// ---------- Allevia 90, the team and what it learned (product design §2.3–2.4, §3.3, §8) ----------
+// The shapes themselves live in shared/contracts.ts; these are the envelopes the routes wrap them in.
+
+/** GET /api/:t/agents: each roster agent's stats, its settings and the active rules it learned (src/server/routes/team.ts). */
+export type AgentView = AgentSummary & AgentSettings & {
+  learnedRules: Array<Pick<LearnedRuleDto, "id" | "text" | "confidence" | "appliedCount" | "learnedAt">>;
+};
+
+/** GET /api/:t/learning?since= */
+export interface LearningFeed {
+  since: string;
+  firstPass: { rate: number | null; decided30d: number; firstPass30d: number };
+  active: number;
+  rules: LearnedRuleDto[];
+}
+
+/** GET /api/:t/brief, and the part of POST /api/:t/brief/run's answer the web app reads. */
+export interface Brief { id: string; title: string; asOf?: string; date?: string; text: string }
+
+export type LearnedEvent = Extract<AgentEvent, { type: "learned" }>;
+
+/** POST /api/:t/approvals/:id: the card as it stands, plus the rules the decision taught and the Action it ran. */
+export interface DecisionResult extends Approval {
+  learned?: LearnedEvent[];
+  action?: { id: string; kind: ActionKind; status: "done" | "failed" | "skipped" | "dry_run"; result: string; url?: string; simulated?: boolean } | null;
+}
