@@ -11,6 +11,7 @@ needs_ok: true
 
 ## Method
 
+0. Purpose first. Before making anything, fill the one-line brief (open the creative-brief skill): the goal (sell, announce, show a feature, get enquiries or bookings, build trust), the one product, service, feature or offer it promotes (by its name in the records), for whom, the one message, the call to action and where it runs. Infer each from the records and the owner's words; ask at most three quick questions with suggested answers only for what matters and is unknown; if the owner says "just make it", pick the strongest product or offer for their goal and say why. Open the piece with the brief in one line.
 1. Say what the photo is and what it can carry. Open the record of the thing in it (`search`, then `get_entity`): name, price, place, year, material. The photo proves one thing; pick that one claim ("handmade in small batches", "finished in six weeks") from facts the record holds, never from what the picture seems to show.
 2. Pick the one offer or action: visit, book, order, call, ask for a quote. One ad, one action. If the owner gave a price or discount, copy it exactly; if the offer has dates or limits that the record lacks, write "[you tell us: the offer and its last date]".
 3. Check how this business's ads and posts were judged before: `content_performance` for the best two items and their hook family; `playbook` (topic "voice" and "hooks", channel the ad will run on) for voice rules and rules learned from the owner's edits. Reuse the hook family, not the words.
@@ -34,6 +35,7 @@ One page, in this order: the claim, the offer and action, the text on the image,
 
 ## Done well
 
+- [ ] It has a purpose: the one-line brief (goal, what it promotes, for whom, message, action, where) opens it, and every part serves it; a good-looking piece with no purpose fails.
 - [ ] One claim, one offer, one action, all traceable to the record or marked "[you tell us: ...]".
 - [ ] The text on the image is short, spelled exactly, and clear of the areas an app covers.
 - [ ] The brief names what must not change in the photo.

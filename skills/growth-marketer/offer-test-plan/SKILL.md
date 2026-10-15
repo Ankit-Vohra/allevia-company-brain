@@ -11,6 +11,7 @@ needs_ok: true
 
 ## Method
 
+0. Purpose first. Before making anything, fill the one-line brief (open the creative-brief skill): the goal (sell, announce, show a feature, get enquiries or bookings, build trust), the one product, service, feature or offer it promotes (by its name in the records), for whom, the one message, the call to action and where it runs. Infer each from the records and the owner's words; ask at most three quick questions with suggested answers only for what matters and is unknown; if the owner says "just make it", pick the strongest product or offer for their goal and say why. Open the piece with the brief in one line.
 1. Write the one question: "Does a free add-on bring more bookings than a 10% discount?" One change only; if two things change, nothing can be learned. Find the business's current offer and goal with `search`, and the number that will decide with `metric_trend` (enquiries, bookings or sign-ups per week) so you know today's level and its normal swing.
 2. Check the owner's margin before choosing the offer: a discount that wipes out the profit is not a test, it is a loss. Ask for the margin if it is not in the record: "[you tell us: the lowest price you can offer]".
 3. Choose the control and the variant. For a small audience, run them one after the other, equal length (A for one week, B for the next, same weekdays) or split by channel, not both at once. Look up the brand's own offer wording and rules with `playbook` (topic "offers", kind hook) so the variant sounds like them.
@@ -31,6 +32,7 @@ One page, plain words: question, what is tested, how long, the number that decid
 
 ## Done well
 
+- [ ] It has a purpose: the one-line brief (goal, what it promotes, for whom, message, action, where) opens it, and every part serves it; a good-looking piece with no purpose fails.
 - [ ] One question, one change, a control.
 - [ ] The deciding number is one the business already records, with today's level.
 - [ ] The run length and the "too small to call" warning are stated.

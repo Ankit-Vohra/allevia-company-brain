@@ -41,11 +41,11 @@ describe("the shipped skill packs", () => {
     }
   });
 
-  it("every person on the team has skills of their own: three to six", () => {
+  it("every person on the team has skills of their own: three to eight", () => {
     for (const a of AGENTS) {
       const mine = catalog.forAgent(a.id);
       expect(mine.length, `${a.name} has ${mine.length} skills`).toBeGreaterThanOrEqual(3);
-      expect(mine.length, `${a.name} has ${mine.length} skills`).toBeLessThanOrEqual(6);
+      expect(mine.length, `${a.name} has ${mine.length} skills`).toBeLessThanOrEqual(8);
     }
   });
 

@@ -11,6 +11,7 @@ needs_ok: true
 
 ## Method
 
+0. Purpose first. Before making anything, fill the one-line brief (open the creative-brief skill): the goal (sell, announce, show a feature, get enquiries or bookings, build trust), the one product, service, feature or offer it promotes (by its name in the records), for whom, the one message, the call to action and where it runs. Infer each from the records and the owner's words; ask at most three quick questions with suggested answers only for what matters and is unknown; if the owner says "just make it", pick the strongest product or offer for their goal and say why. Open the piece with the brief in one line.
 1. Name the occasion and the one goal. A campaign has one goal: enquiries, orders, bookings, or visits. Pick it from the request; if the owner gave none, take the goal the record shows for the business (search for "goal") and say which you took. A campaign that tries for reach, sales and followers at once is judged on none.
 2. Get the date from the record, not from memory. Call `search` for the occasion and the year (for example "Diwali 2026", "Eid sale") and look for the date the owner or a past plan recorded. Festival dates move: Diwali and Eid change every year, and Eid can fall a day apart between countries because it follows moon sighting; Mother's Day is on different dates in the US, the UK, India, Australia and the UAE. If the date is not recorded, write "[you tell us: the date this year in your city]" and keep every timeline point relative ("14 days before"), never a calendar date.
 3. See what happened last time. Call `search` for earlier campaigns and offers, then `get_entity` on the best hits for what was offered, to whom and for how long. Call `content_performance` with days 365 and limit 10 to see which posts around the same season did well and with which hook (the `byHook` ranking). If nothing is recorded, say "no earlier campaign recorded".
@@ -43,6 +44,7 @@ Example (a small salon, invented for illustration):
 
 ## Done well
 
+- [ ] It has a purpose: the one-line brief (goal, what it promotes, for whom, message, action, where) opens it, and every part serves it; a good-looking piece with no purpose fails.
 - [ ] One goal, one offer, one honest limit.
 - [ ] Every timeline point is relative unless the record or the owner gave the date.
 - [ ] Every price, discount, stock or slot number is from the record or marked "[you tell us: ...]".

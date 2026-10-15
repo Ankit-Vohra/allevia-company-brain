@@ -15,6 +15,7 @@ needs_ok: false
 3. Check what generated images typically get wrong: garbled or doubled letters, a dropped or invented word, numerals that changed (a 6 for a 5), a price with the wrong currency sign, a logo that is redrawn, recoloured, stretched or has an extra letter, a product whose shape or colour is not the real one, a missing "T&C apply" the offer needs.
 4. Check dates and offers against the record: the offer's end date, the day of the week, the festival date. A date that does not exist (a 31st of a 30-day month) or a past date fails.
 5. List separately the strings that must appear and the strings that must not (a competitor's name, an old price, a discontinued product).
+Before the verdict, check the piece against its one-line brief ("Made to sell: ..."): it promotes what the brief says, to the audience it names, with the same call to action, and that product or offer exists in the records. A piece with no brief, or one that drifted from it (a nice picture that sells nothing), is a "fix": say what the brief is and what the piece shows instead.
 6. Verdict: ok when every planned string matches the record; fix with the exact string as drawn or planned, what the record says, and the correction; reject when the logo or the main claim is wrong, or the image text cannot be read at all.
 
 ## House style

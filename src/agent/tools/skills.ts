@@ -21,7 +21,7 @@ async function runUseSkill(args: { id: string }, ctx: ToolContext) {
     const mine = catalog.forAgent(ctx.agentId).map((s) => s.id);
     throw new InputError(`${me} has no skill "${id}".${mine.length ? ` Yours: ${mine.join(", ")}.` : " You have no skills."}`);
   }
-  const learned = await learnedRulesForSkill(ctx.graph, skill.id);
+  const learned = [...new Set([...(await learnedRulesForSkill(ctx.graph, skill.id)), ...(skill.base ? await learnedRulesForSkill(ctx.graph, skill.base) : [])])];
   const guidance = await skillGuidance(skill, ctx, catalog, learned);
   return { data: { skill: skill.id, name: skill.name, source: skill.source }, nodes: [], edges: [], sources: [], note: `Opened ${skill.name}`, guidance };
 }

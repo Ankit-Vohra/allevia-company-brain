@@ -432,6 +432,17 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
   }
   if (deps.signal?.aborted) return result;
 
+  // ---------- this business's own skills (voice, what it sells, reels, ads), from what onboarding just wrote ----------
+  if (!stopped()) {
+    try {
+      const { writeCompanySkills } = await import("../agent/skills/company.js");
+      const s = await writeCompanySkills(g, { tenant: input.slug, now: now() });
+      log(`[onboard] company skills: ${s.written.length} written, ${s.unchanged.length} unchanged`);
+    } catch (e) {
+      log(`[onboard] company skills not written: ${msg(e)}`);
+    }
+  }
+
   // ---------- done ----------
   try {
     result.counts = await retrying(() => countGraph(g));

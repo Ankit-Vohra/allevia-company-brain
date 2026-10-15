@@ -11,6 +11,7 @@ needs_ok: true
 
 ## Method
 
+0. Purpose first. Before making anything, fill the one-line brief (open the creative-brief skill): the goal (sell, announce, show a feature, get enquiries or bookings, build trust), the one product, service, feature or offer it promotes (by its name in the records), for whom, the one message, the call to action and where it runs. Infer each from the records and the owner's words; ask at most three quick questions with suggested answers only for what matters and is unknown; if the owner says "just make it", pick the strongest product or offer for their goal and say why. Open the piece with the brief in one line.
 1. Check that the job suits a carousel. It suits four jobs: a process (steps in order), a list (three to seven items that stand alone), a before and after, and myth versus fact. It does not suit a single announcement or a mood: hand those to a one-photo post (Instagram post skill) or a reel (reel script skill) and say so in one line.
 2. Learn the brand's rules. Call `playbook` with topic "hooks" and channel "instagram" for the hook formulas, and `playbook` with topic "voice" and the same channel for how this brand talks. The owner's own rules in that list come first.
 3. Learn what worked here. Call `content_performance` with channel "instagram", days 90, limit 10. Find the items whose format is a carousel: saves and shares are the signal that matters for swipe posts (people save steps and lists), more than views. Take the hook family of the best one. If no carousel is recorded, say "no swipe posts to learn from yet" and use the best hook family from the other formats.
@@ -43,6 +44,7 @@ Example (5 slides, a physiotherapy clinic, invented for illustration):
 
 ## Done well
 
+- [ ] It has a purpose: the one-line brief (goal, what it promotes, for whom, message, action, where) opens it, and every part serves it; a good-looking piece with no purpose fails.
 - [ ] Slide 1 works alone in the feed: a promise or question in 8 words or fewer.
 - [ ] One idea per slide; headings 8 words or fewer, bodies 25 words or fewer.
 - [ ] The second-to-last slide pays off the hook and the last slide asks for exactly one thing.

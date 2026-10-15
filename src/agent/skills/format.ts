@@ -38,6 +38,7 @@ export interface Skill {
   sections: SkillSections;
   body: string;              // the markdown after the frontmatter (what use_skill returns)
   source: SkillSource;
+  base?: string;             // a business's own version of a shipped skill (aamdani-reel -> reel-script): rules on the base reach it
   path?: string;             // where a code skill lives, for lint messages
 }
 
@@ -47,7 +48,7 @@ export const MAX_NAME = 60;
 export const MAX_WHEN = 140;
 export const MAX_BODY = 9_000;
 export const MIN_CODE_BODY = 1_200;
-export const MAX_BUSINESS_BODY = 4_000;
+export const MAX_BUSINESS_BODY = 8_000;
 
 // Heading words that open each required section ("## Method", "## House style and output", "## Done well checklist"…).
 const SECTION_HEADS: Array<[keyof SkillSections, RegExp]> = [

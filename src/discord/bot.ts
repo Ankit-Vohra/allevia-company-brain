@@ -19,6 +19,7 @@ import type { AskInput, AskResult } from "../agent/ask.js";
 import { LANGUAGE_REPLY, parseLanguageSetting, setLanguagePreference } from "../agent/language.js";
 import type { GraphHandle } from "../graph/client.js";
 import { applyDirective, getDirective, parseDirective, previewDirective } from "../settings/directives.js";
+import { quickReplies } from "../../shared/quick-replies.js";
 import { DecisionError, decideAndNotify, type ActionOpts, type OnDecision } from "../server/approvals.js";
 import { approvals as listApprovals, latestBrief, sessionDetail } from "../server/reads.js";
 import type { ApprovalDto } from "../server/types.js";
@@ -81,6 +82,7 @@ export interface ButtonPort {
   defer?(): Promise<void>;                      // acknowledge before slow work (the card is edited later)
   thread?(): ThreadPort | null;                 // the thread the card is in, when it is in one (a retry posts its new option there)
   createThread?(name: string): Promise<ThreadPort>; // a new public thread in the channel the card is in (for /continue)
+  thread?(): ThreadPort | null;                 // the thread the button is in (a quick reply carries the conversation on)
   reply(text: string, opts?: { ephemeral?: boolean }): Promise<void>;
   update(m: Outgoing): Promise<void>;           // edit the card the button is on
 }
@@ -121,6 +123,8 @@ export const buttonId = (decision: "approve" | "reject", approvalId: string): st
 const BUTTON = new RegExp(`^${BUTTON_PREFIX}:(approve|reject):(.+)$`);
 const CONTINUE = new RegExp(`^${BUTTON_PREFIX}:continue:(.+)$`);
 const RULE_BUTTON = new RegExp(`^${BUTTON_PREFIX}:rule:(apply|skip):(.+)$`);
+const QUICK_REPLY = new RegExp(`^${BUTTON_PREFIX}:qr:(.+)$`);
+export const quickReplyId = (option: string): string => `${BUTTON_PREFIX}:qr:${option}`.slice(0, 100);
 
 // A plain message that is clearly a standing rule for one of the team's skills ("Tara, our posts always end with a
 // question"): not a question, and the rules (no model) read all of it as skill rules or skills.
@@ -233,6 +237,17 @@ export class AlleviaBot {
     }
   }
 
+  // A tapped quick reply is the owner's next message in that thread.
+  private async quickReply(b: ButtonPort, option: string): Promise<void> {
+    if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
+    const thread = b.thread?.();
+    if (!thread || b.threadParentId !== this.d.channelId) return b.reply("Reply in the thread with your answer.", { ephemeral: true });
+    const asker = b.isOwner ? FOUNDER : MEMBER;
+    await b.defer?.();
+    await b.update({ content: `Your answer: **${clip(option, 100)}**`, buttons: [] });
+    await this.turn(thread, option, asker, () => this.sessionFor(thread.id, option, asker));
+  }
+
   // ----- slash commands -----
 
   async onCommand(c: CommandPort): Promise<void> {
@@ -333,6 +348,8 @@ export class AlleviaBot {
       if (!b.isOwner) return b.reply("Only the owner can carry a conversation on here.", { ephemeral: true });
       return this.continueButton(b, cont[1]!);
     }
+    const qr = QUICK_REPLY.exec(b.customId);
+    if (qr) return this.quickReply(b, qr[1]!);
     const rule = RULE_BUTTON.exec(b.customId);
     if (rule) return this.ruleButton(b, rule[1] as "apply" | "skip", rule[2]!);
     const m = BUTTON.exec(b.customId);
@@ -420,6 +437,10 @@ export class AlleviaBot {
         url: pathViewUrl(this.d.webBase, this.d.tenant, sessionId), ...(lastError ? { error: lastError } : {}),
       });
       for (const p of parts) await thread.send(p);
+      // quick questions in the answer ("Quick question: What should this sell? [A] [B]") become buttons
+      for (const q of quickReplies(result?.answer ?? "")) {
+        await thread.send({ content: clip(q.question, 300), buttons: q.options.slice(0, 5).map((o) => ({ customId: quickReplyId(o), label: clip(o, 80), style: "secondary" as const })) });
+      }
       this.log(`thread ${thread.id}: ${result?.ok ? "answered" : "failed"} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     } finally {
       this.gate.live--;

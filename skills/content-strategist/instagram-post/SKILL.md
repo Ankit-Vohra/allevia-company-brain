@@ -11,6 +11,7 @@ needs_ok: true
 
 ## Method
 
+0. Purpose first. Before making anything, fill the one-line brief (open the creative-brief skill): the goal (sell, announce, show a feature, get enquiries or bookings, build trust), the one product, service, feature or offer it promotes (by its name in the records), for whom, the one message, the call to action and where it runs. Infer each from the records and the owner's words; ask at most three quick questions with suggested answers only for what matters and is unknown; if the owner says "just make it", pick the strongest product or offer for their goal and say why. Open the piece with the brief in one line.
 1. Name the post's one job before writing a word: announce something new, prove the work (a result, a before and after), invite a reply or a visit, or remind people of an offer. A post with two jobs does neither. If the request is vague ("a post about the new menu"), pick the job from the facts in step 4 and say which you picked in one line.
 2. Read the brand's rules first. Call `playbook` for the voice rules on Instagram (topic "voice", channel "instagram") and for the hook formulas (topic "hooks", channel "instagram"). Rules the owner taught the team from their edits come back in the same list; treat them as law, above your own habits.
 3. See what worked here, not what works in general. Call `content_performance` for Instagram over the last 60 days. Look at the best two posts and the weakest one: copy the hook family (a question, a number, a "before" line), never the words. If fewer than five posts are recorded, say "only a few posts to learn from" and lean on the hook formulas from step 2.
@@ -35,6 +36,7 @@ Below the caption, tell the owner in one line which hook family you used and why
 
 ## Done well
 
+- [ ] It has a purpose: the one-line brief (goal, what it promotes, for whom, message, action, where) opens it, and every part serves it; a good-looking piece with no purpose fails.
 - [ ] The first line stands alone and makes someone stop; it is not a label, a name or a date.
 - [ ] One job, one action: a single closing line, or none, never two asks.
 - [ ] Every name, place, year, number and claim is one the record holds; every gap is marked "[you tell us: …]".

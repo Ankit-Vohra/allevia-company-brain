@@ -38,7 +38,8 @@ export class SkillCatalog {
   has(agentId: string): boolean { return this.forAgent(agentId).length > 0; }
 
   rulesFor(agentId: string, skillId: string): SkillRule[] {
-    return this.rules.filter((r) => (r.skillId === skillId || r.skillId === "*") && r.agents.includes(agentId));
+    const base = this.get(agentId, skillId)?.base;
+    return this.rules.filter((r) => (r.skillId === skillId || r.skillId === "*" || (!!base && r.skillId === base)) && r.agents.includes(agentId));
   }
 
   /** This catalog with one business's skills and rules laid over it. */

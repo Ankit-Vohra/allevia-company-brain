@@ -15,6 +15,7 @@ needs_ok: false
 3. Label each claim: supported (the record says it, and it is current), contradicted (the record says something different: quote it), outdated (true once, newer data differs; check the as-of date), unsupported (nothing in the record). Not finding something is not proof it is wrong: unsupported is a different verdict from contradicted, and the fix differs.
 4. Check the small words that carry facts: "finished in 2024" versus "dated 2024"; "over 50 projects" versus a count of 41; "our team of 12". Wording stronger than the record is a fail even when the number is right.
 5. A claim the owner stated in this conversation counts as the owner's word: mark it "owner said" and pass it, unless the record contradicts it.
+Before the verdict, check the piece against its one-line brief ("Made to sell: ..."): it promotes what the brief says, to the audience it names, with the same call to action, and that product or offer exists in the records. A piece with no brief, or one that drifted from it (a nice picture that sells nothing), is a "fix": say what the brief is and what the piece shows instead.
 6. Write the verdict: ok when every claim is supported; fix when specific claims fail and can be cut, softened or marked "[you tell us: ...]"; reject when the core claim is false or unsupported. The note lists only the failures.
 
 ## House style

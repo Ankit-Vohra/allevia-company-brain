@@ -23,7 +23,7 @@ const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0
 
 interface Row {
   agent: string; id: string; kind: string; skillId: string | null; name: string | null; when: string | null;
-  body: string | null; text: string | null; at: number | null; channel: string | null; channelName: string | null;
+  body: string | null; text: string | null; at: number | null; channel: string | null; channelName: string | null; base: string | null;
 }
 
 // Every active skill and skill rule of this business, grouped by the memory that made them (one memory can be about
@@ -34,7 +34,7 @@ export async function loadBusinessSkills(g: Read): Promise<BusinessSkills> {
      MATCH (m:Memory)-[r:ABOUT]->(a)
      WHERE r.until IS NULL AND m.kind IN ['skill', 'skill_rule'] AND coalesce(m.status, 'active') = 'active'
      RETURN a.id AS agent, m.id AS id, m.kind AS kind, m.skillId AS skillId, m.skillName AS name, m.skillWhen AS when, m.body AS body,
-            m.text AS text, m.at AS at, m.channel AS channel, m.channelName AS channelName
+            m.text AS text, m.at AS at, m.channel AS channel, m.channelName AS channelName, m.baseSkill AS base
      ORDER BY m.at, m.id, a.id`, { ids: AGENTS.map((a) => agentNodeId(a.id)) });
   const byId = new Map<string, { row: Row; agents: string[] }>();
   for (const r of rows) {
@@ -55,7 +55,7 @@ export async function loadBusinessSkills(g: Read): Promise<BusinessSkills> {
       const body = row.body;
       skills.push({
         id: row.skillId!, name: row.name || row.skillId!, when: row.when || "", agents, tools: [], output: "reads", needsOk: false,
-        sections: { method: body, style: body, done: body, mistakes: body }, body, source: "business",
+        sections: { method: body, style: body, done: body, mistakes: body }, body, source: "business", ...(row.base ? { base: row.base } : {}),
       });
     }
   }

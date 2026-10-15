@@ -13,8 +13,12 @@ export function skillsBlock(skills: readonly Skill[], opts: { max?: number; phas
     : opts.phase === "review"
       ? "Open the one that fits the draft you are checking, in your first (only) round of tool calls."
       : "Open the one that fits with use_skill in your first round of tool calls, together with your lookups. Open at most two. If none fits, just do the work.";
-  const lines = skills.slice(0, opts.max ?? 12).map((s) => `- ${s.id}: ${s.name}. Use it for: ${oneLine(s.when)}${s.source === "business" ? " (set up for this business)" : ""}`);
-  return `Your skills (the way you do each kind of job here; each is a method with a house style, a checklist and common mistakes). ${open}\n${lines.join("\n")}`;
+  // this business's own versions of a craft (its reels, its ads, its voice) come first, and are opened first
+  const own = skills.filter((s) => s.source === "business" && s.base);
+  const ordered = [...own, ...skills.filter((s) => !own.includes(s))];
+  const lines = ordered.slice(0, opts.max ?? 14).map((s) => `- ${s.id}: ${s.name}. Use it for: ${oneLine(s.when)}${s.source === "business" ? " (set up for this business)" : ""}`);
+  const first = own.length ? `\nThis business has its own versions of some skills (${own.map((s) => s.id).join(", ")}): when the request is about that work (a reel, an ad, its voice), open the business's own one first, then the general one (${own.map((s) => s.base).join(", ")}) only if you need its full method.` : "";
+  return `Your skills (the way you do each kind of job here; each is a method with a house style, a checklist and common mistakes). ${open}${first}\n${lines.join("\n")}`;
 }
 
 /** The planner's view of a desk's skills: names only, so it can route "a reel script" to whoever has that skill. */
