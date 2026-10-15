@@ -5,7 +5,7 @@
 import { z } from "zod";
 import type { ToolContext } from "../tool.js";
 import {
-  Collector, EDGE, NODE, brief, clamp, defineTool, edgeAt, edgeText, parseAsOf, requireNode, ro, round, typeOf,
+  Collector, EDGE, InputError, NODE, brief, byExactName, clamp, defineTool, edgeAt, edgeText, parseAsOf, requireNode, ro, round, typeOf,
   type EdgeRow, type NodeRow,
 } from "./common.js";
 
@@ -53,10 +53,30 @@ export function betweennessOf(nodes: string[], edges: Array<[string, string]>): 
 
 interface Item { node: NodeRow; hop: number; e: EdgeRow }
 
-async function runImpact(args: { id: string; depth?: number; asOf?: string }, ctx: ToolContext) {
+// What an empty result means, said apart (the hackathon blog's "not in the graph" vs "no impact"):
+// - not in your records: the name or id is not in this business's graph (requireNode refuses before anything runs);
+// - not_mapped: it is in the graph, but no current DEPENDS_ON/AFFECTS/BLOCKS edge touches it either way, so its
+//   dependencies were never recorded. An empty traversal then says nothing about the real world;
+// - nothing_depends: its dependencies are recorded (it depends on something, or something depended on it), and
+//   nothing current depends on it or is affected or blocked by it;
+// - impact: the traversal found something.
+export type ImpactStatus = "impact" | "nothing_depends" | "not_mapped";
+
+export function impactNote(status: ImpactStatus, name: string): string | undefined {
+  if (status === "not_mapped") {
+    return `${name} is in your records, but no dependencies are recorded for it yet (no DEPENDS_ON, AFFECTS or BLOCKS link either way). That does not mean nothing depends on it: it is not mapped.`;
+  }
+  if (status === "nothing_depends") return `Nothing current depends on, or is affected or blocked by, ${name}. Its own links are recorded, so this is a real "nothing downstream".`;
+  return undefined;
+}
+
+async function runImpact(args: { id?: string; query?: string; depth?: number; asOf?: string }, ctx: ToolContext) {
   const asOf = parseAsOf(args.asOf);
   const depth = clamp(args.depth, 3, 1, 4);
-  const start = await requireNode(ctx, args.id);
+  // Resolve the name before any traversal: an unknown name is "not in your records", never an empty impact.
+  if (!args.id?.trim() && !args.query?.trim()) throw new InputError("Pass the id (preferred) or the name of what fails.");
+  const start = args.id?.trim() ? await requireNode(ctx, args.id.trim())
+    : (await byExactName(ctx, args.query!)) ?? (await requireNode(ctx, args.query!.trim()));
   const found = new Map<string, Item>();
   let frontier = [start.id];
   let more = false;
@@ -100,20 +120,29 @@ async function runImpact(args: { id: string; depth?: number; asOf?: string }, ct
   for (const e of kept) col.edge(e);
   const score = nodes.length >= 3 ? betweennessOf(nodes, kept.map((e) => [e.from, e.to])).get(start.id)! : 0;
   const pairs = ((nodes.length - 1) * (nodes.length - 2)) / 2;
+  let status: ImpactStatus = "impact";
+  if (!found.size) {
+    // Bind and use the edge (ID(r) >= 0): FalkorDB 6.0.2 collapses parallel edges nothing refers to under count().
+    const [m] = await ro<{ c: number }>(ctx,
+      `MATCH (s:Entity {id:$id}) OPTIONAL MATCH (s)-[r:DEPENDS_ON|AFFECTS|BLOCKS]-(:Entity) WHERE ID(r) >= 0 AND ${edgeAt("r", asOf)}
+       RETURN count(r) AS c`, { id: start.id, asOf });
+    status = (m?.c ?? 0) > 0 ? "nothing_depends" : "not_mapped";
+  }
   return col.result(ctx, {
-    id: start.id, type: typeOf(start), name: start.name ?? start.id, depth, total: found.size,
+    id: start.id, type: typeOf(start), name: start.name ?? start.id, depth, status, total: found.size,
     impacted: [...byHop.entries()].map(([hop, items]) => ({ hop, items })),
     betweenness: { score: round(score, 3), normalized: pairs > 0 ? round(score / pairs, 3) : 0, subgraphNodes: nodes.length },
   }, found.size ? (more || found.size >= IMPACT_CAP ? `Stopped at ${IMPACT_CAP} impacted items (first by name at each hop); there are more.` : undefined)
-    : `Nothing current depends on, or is affected or blocked by, ${start.id}.`);
+    : impactNote(status, start.id));
 }
 
 export const impactOf = defineTool({
   name: "impact_of",
   description:
-    "Answer 'what breaks if X fails, expires or goes down': what DEPENDS_ON X and what X AFFECTS or BLOCKS, up to depth hops over current edges, by hop with the edge that pulls each in, plus X's betweenness there. X is what fails; a token or login fails with the System that uses it, so search for that System first. Example: {\"id\":\"system:ig-connector\",\"depth\":3}",
+    "Answer 'what breaks if X fails, expires or goes down': what DEPENDS_ON X and X AFFECTS or BLOCKS, by hop (depth 1-4), each with its edge. A token fails with the System using it. status not_mapped = no dependencies recorded (never say nothing breaks); an unknown name: say you don't have it in the records. Example: {\"id\":\"system:ig-connector\",\"depth\":3}",
   input: {
-    id: z.string().min(1),
+    id: z.string().optional().describe("Id of what fails (preferred)"),
+    query: z.string().optional().describe("Its exact name, when you lack the id"),
     depth: z.number().int().optional().describe("Hops to follow, 1 to 4, default 3"),
     asOf: z.string().optional().describe("ISO date"),
   },

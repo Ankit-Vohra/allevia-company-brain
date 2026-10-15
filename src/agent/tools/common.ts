@@ -378,16 +378,34 @@ export async function suggest(ctx: ToolContext, idOrText: string): Promise<Brief
   }
 }
 
-// The node with this id; a merged duplicate's id gives the node it was merged into.
+// What a tool says when a name or id is not in this business's graph. It is said BEFORE any traversal runs, so the
+// answer is "I don't have that in your records", never an empty result that reads like "nothing depends on it".
+export const notInRecords = (text: string): string => `I don't have ${JSON.stringify(text)} in your records.`;
+
+// The node with this id; a merged duplicate's id gives the node it was merged into. A plain name ("Instagram
+// connector") is resolved first: a node whose name is exactly that (any case) is the one meant. Anything else is
+// refused with notInRecords and the closest things that are in the records.
 export async function requireNode(ctx: ToolContext, id: string): Promise<NodeRow> {
   const [found] = await ro<{ n: NodeRow; c: NodeRow | null }>(ctx,
     `MATCH (n:Entity {id:$id}) OPTIONAL MATCH (c:Entity {id: n.mergedInto})
      RETURN ${NODE("n")} AS n, CASE WHEN c IS NULL THEN null ELSE ${NODE("c")} END AS c LIMIT 1`, { id });
   if (found) return found.c ?? found.n;
+  const named = await byExactName(ctx, id);
+  if (named) return named;
   const suggestions = await suggest(ctx, id);
   throw new InputError(
-    `No entity with id ${id}.${suggestions.length ? ` Did you mean: ${suggestions.map((s) => s.id).join(", ")}?` : " Use search to find ids."}`,
-    { suggestions });
+    `${notInRecords(id)}${suggestions.length ? ` Closest things in the records: ${suggestions.map((s) => s.id).join(", ")}.` : " Use search to find ids."}`,
+    { suggestions, notInRecords: true });
+}
+
+// The one searchable node whose name is exactly `text` (case and spacing ignored); null when none, or when two differ.
+export async function byExactName(ctx: ToolContext, text: string, types: readonly string[] = SEARCH_TYPES): Promise<NodeRow | null> {
+  const want = text.trim().replace(/\s+/g, " ").toLowerCase();
+  if (!want || /^[a-z]+:/.test(want)) return null; // an id that was not found is not a name
+  const hits = await ftEntities(ctx, want, types, 10).catch(() => [] as FtHit[]);
+  const exact = hits.filter((h) => String(h.n.name ?? "").trim().replace(/\s+/g, " ").toLowerCase() === want);
+  const ids = new Set(exact.map((h) => h.n.id));
+  return ids.size === 1 ? exact[0]!.n : null;
 }
 
 // `id` wins; otherwise the best full-text match among `types` (the rest come back as alternatives).
@@ -395,6 +413,9 @@ export async function resolveTarget(ctx: ToolContext, args: { id?: string; query
   if (args.id?.trim()) return { node: await requireNode(ctx, args.id.trim()), alternatives: [] };
   if (!args.query?.trim()) throw new InputError("Pass an id (preferred) or a query.");
   const hits = await ftEntities(ctx, args.query, types, 5);
-  if (!hits.length) throw new InputError(`Nothing matches ${JSON.stringify(args.query)} among ${types.length > 6 ? "entities" : types.join("/")}. Try search.`);
+  if (!hits.length) {
+    throw new InputError(`${notInRecords(args.query.trim())} Nothing matches it among ${types.length > 6 ? "entities" : types.join("/")}; try search with other words.`,
+      { notInRecords: true });
+  }
   return { node: hits[0]!.n, alternatives: hits.slice(1).map((h) => brief(h.n)) };
 }

@@ -6,7 +6,7 @@ import type { ToolContext } from "../tool.js";
 import type { EntityType } from "../../graph/schema.js";
 import { toIso } from "../../util/time.js";
 import {
-  Collector, EDGE, InputError, NODE, SEARCH_TYPES, brief, clamp, defineTool, edgeAt, ftEntities, parseAsOf, requireNode,
+  Collector, EDGE, InputError, NODE, SEARCH_TYPES, notInRecords, brief, clamp, defineTool, edgeAt, ftEntities, parseAsOf, requireNode,
   resolveTarget, ro, round, typeOf, type Brief, type EdgeRow, type NodeRow,
 } from "./common.js";
 
@@ -96,7 +96,7 @@ async function runWhoKnows(args: { id?: string; query?: string; limit?: number }
   else if (args.query?.trim()) {
     const types = SEARCH_TYPES.filter((t: EntityType) => !ACTOR_TYPES.includes(t));
     topics = (await ftEntities(ctx, args.query, types, 3)).map((h) => h.n);
-    if (!topics.length) throw new InputError(`No topic matches ${JSON.stringify(args.query)}. Try search first.`);
+    if (!topics.length) throw new InputError(`${notInRecords(args.query.trim())} No topic matches it; try search first.`, { notInRecords: true });
   } else throw new InputError("Pass a topic id (preferred) or a query.");
   const tids = topics.map((t) => t.id);
   const p = { tids, actors: ACTOR_TYPES, per: DOCS_COUNTED };

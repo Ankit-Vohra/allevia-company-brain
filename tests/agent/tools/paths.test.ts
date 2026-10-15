@@ -33,7 +33,7 @@ describe("find_paths, show_path (integration)", () => {
 
   it("find_paths: unknown endpoint is an error with suggestions", async () => {
     const r = await call(findPaths, { from: "person:founder", to: "system:instagram" }, makeCtx(g));
-    expect(r.data.error).toMatch(/No entity with id system:instagram/);
+    expect(r.data.error).toMatch(/I don.t have "system:instagram" in your records/);
   });
 
   it("show_path: connects a 3-node chain by direct edges, in order", async () => {
