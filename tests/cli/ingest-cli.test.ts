@@ -34,7 +34,7 @@ describe("ingest CLI", () => {
       stats: { nodesCreated: 10, nodesUpdated: 2, versions: 1, edgesCreated: 20, edgesClosed: 1, observations: 5, errors: 0 },
       extraction: { docs: 58, cached: 3, entities: 400, relations: 300, observations: 50, olderReadings: 2, settlePasses: 1, dropped: 12, candidates: 58, skipped: 0, failed: 0, order: [], skippedDocs: [], failures: [] },
       embeddings: { entities: 900, chunks: 531 }, retired: { structure: 0, mentions: 0 },
-      librarian: { knowsAbout: { edges: 700, created: 700, closed: 0, actors: 5, errors: 0 }, rank: { nodes: 2000 }, community: { nodes: 2000, communities: 80 }, orphans: { count: 3, byType: { Document: 3 }, sample: [] }, ms: 1 },
+      librarian: { merge: { groups: 2, merged: 2, edgesMoved: 7, credentialLinks: 1, linksClosed: 0, skipped: [], errors: [] }, knowsAbout: { edges: 700, created: 700, closed: 0, actors: 5, errors: 0 }, rank: { nodes: 2000 }, community: { nodes: 2000, communities: 80 }, orphans: { count: 3, byType: { Document: 3 }, sample: [] }, ms: 1 },
       graph: { nodes: { Chunk: 531, Document: 300 }, edges: { MENTIONS: 900 } },
       redactions: { email: 5 }, privacyScanHits: 0, privacyScan: { hits: 0, byKind: {}, sample: [] }, skipped: [], writeErrors: [],
     } satisfies PipelineReport;
@@ -42,6 +42,7 @@ describe("ingest CLI", () => {
     expect(out).toContain("Ingest aamdani · 61.0 s · model haiku · vault 8a6f6089baf9");
     expect(out).toContain("brain      1158 nodes, 2146 edges, 0 observations, 58 docs, 66 skipped");
     expect(out).toContain("Extraction: 58 candidates · 58 extracted (3 cached) · 0 over the limit · 0 failed");
+    expect(out).toContain("Merges: 2 duplicate(s) in 2 group(s) · 7 edges moved · 1 new credential link(s)");
     expect(out).toContain("Librarian: KNOWS_ABOUT 700 (700 new, 0 closed) · 80 communities · 3 orphans (Document 3)");
     expect(out).toContain("Privacy scan: 0 hits");
     expect(out).toContain("Report: /tmp/r.json");

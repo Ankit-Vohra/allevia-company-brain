@@ -40,6 +40,8 @@ export const REL_TYPES = [
   "USES",
   // goals, program, media and guidance (product design §7.3)
   "PURSUES", "TRACKS", "ADVANCES", "ENROLLED_IN", "DERIVED_FROM", "USES_ASSET", "DEPICTS", "GUIDED_BY",
+  // the librarian's merge pass: a duplicate System/Channel/Product points at the node it is the same as
+  "SAME_AS",
 ] as const;
 export type RelType = (typeof REL_TYPES)[number];
 
@@ -151,6 +153,10 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   ...pat("Content", "USES_ASSET", "Asset"),
   ...pat("Asset", "DEPICTS", ["Product", "Page", "Business", "Event"]),
   ...pat(["Turn", "Finding", "Content"], "GUIDED_BY", ["Memory", "Rule", "BrandRule"]),
+  // the librarian's merge pass (src/ingest/merge.ts): same type only, duplicate -> canonical
+  ...pat("System", "SAME_AS", "System"),
+  ...pat("Channel", "SAME_AS", "Channel"),
+  ...pat("Product", "SAME_AS", "Product"),
 ];
 
 const ALLOWED = new Set(ALLOWED_PATTERNS.map(([f, r, t]) => `${f}|${r}|${t}`));
@@ -179,6 +185,7 @@ export const FUNCTIONAL_RELS: FunctionalRule[] = [
   { rel: "TRACKS", fromType: "Goal", key: "from", why: "a goal is measured by one metric" },
   { rel: "ENROLLED_IN", fromType: "Business", key: "from", why: "a business is in one current program" },
   { rel: "DERIVED_FROM", fromType: "Asset", key: "from", why: "an asset has one parent: the one it was made from" },
+  { rel: "SAME_AS", key: "from", why: "a duplicate is the same as one canonical node" },
 ];
 
 export function functionalRule(rel: RelType, fromType: EntityType, toType: EntityType): FunctionalRule | undefined {

@@ -1,5 +1,8 @@
 // The librarian (spec §6.6): a post-ingest pass over the whole graph.
 //
+// 0. Merges (src/ingest/merge.ts): System, Channel and Product nodes that name the same thing become one (SAME_AS to the
+//    canonical node, the registry's when there is one; edges moved, reversibly), and a credential is linked to the
+//    connector it unlocks. First, so what follows (KNOWS_ABOUT from MENTIONS, rank) sees one node.
 // 1. KNOWS_ABOUT (actor → entity), spec §5.5. An actor knows about what the documents it authored are about: the
 //    entities each document MENTIONS and the ones SOURCED_FROM it (a registry file's agent, an ADR's decision). Each
 //    authored document contributes commits × recency; DECIDED adds 2 × recency to the decision, OWNS adds 1 × recency to
@@ -23,6 +26,7 @@ import { noteGraphWrite } from "../graph/projection.js";
 import { isoDate } from "../util/time.js";
 import { typeFromId } from "../util/ids.js";
 import { isReservedId } from "./actors.js";
+import { mergeDuplicates, type MergeReport } from "./merge.js";
 
 export const HALF_LIFE_DAYS = 30;
 export const RECENCY_FLOOR = 0.1;
@@ -41,6 +45,7 @@ export function knowsAboutWeight(amount: number, at: number, now: number): numbe
 export interface LibrarianOptions { now?: number; timeoutMs?: number; log?: (line: string) => void }
 
 export interface LibrarianReport {
+  merge: MergeReport;
   knowsAbout: { edges: number; created: number; closed: number; actors: number; errors: number };
   rank: { nodes: number };
   community: { nodes: number; communities: number };
@@ -165,6 +170,10 @@ export async function runLibrarian(g: GraphHandle, opts: LibrarianOptions = {}):
   const timeoutMs = opts.timeoutMs ?? ALGO_TIMEOUT_MS;
   const log = opts.log ?? (() => {});
 
+  const merge = await mergeDuplicates(g, now);
+  log(`[librarian] merges: ${merge.merged} duplicate(s) in ${merge.groups} group(s), ${merge.edgesMoved} edge(s) moved, ${merge.credentialLinks} new credential link(s)` +
+    `${merge.skipped.length ? `, ${merge.skipped.length} group(s) left alone` : ""}${merge.errors.length ? `, ${merge.errors.length} error(s): ${merge.errors[0]}` : ""}`);
+
   const knowsAbout = await writeKnowsAbout(g, await deriveKnowsAbout(g, now), now);
   log(`[librarian] KNOWS_ABOUT: ${knowsAbout.edges} edges from ${knowsAbout.actors} actors (${knowsAbout.created} new, ${knowsAbout.closed} closed)`);
 
@@ -195,6 +204,7 @@ export async function runLibrarian(g: GraphHandle, opts: LibrarianOptions = {}):
   log(`[librarian] ${orphans.length} orphans`);
 
   return {
+    merge,
     knowsAbout,
     rank: { nodes: ranks.length },
     community: { nodes: comms.length, communities: new Set(comms.map((c) => c.communityId)).size },

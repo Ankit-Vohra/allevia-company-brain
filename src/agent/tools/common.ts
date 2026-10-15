@@ -331,11 +331,28 @@ export interface FtHit { n: NodeRow; summary: string | null; score: number }
 export async function ftEntities(ctx: ToolContext, text: string, types: readonly string[], k: number): Promise<FtHit[]> {
   const terms = ftTerms(text);
   if (!terms.length) return [];
-  return ro<FtHit>(ctx,
+  const hits = await ro<FtHit>(ctx,
     `CALL db.idx.fulltext.queryNodes('Entity', $q) YIELD node, score
      WITH node, score WHERE any(l IN labels(node) WHERE l IN $types)
      RETURN ${NODE("node")} AS n, node.summary AS summary, score ORDER BY score DESC, node.id LIMIT $k`,
     { q: ftQuery(terms), types: [...types], k });
+  // A duplicate the librarian merged answers as the node it was merged into (once, at its best rank).
+  const canon = await canonicalOf(ctx, hits.map((h) => h.n.id));
+  if (!canon.size) return hits;
+  const seen = new Set<string>();
+  return hits.map((h) => (canon.has(h.n.id) ? { ...h, n: canon.get(h.n.id)! } : h)).filter((h) => !seen.has(h.n.id) && !!seen.add(h.n.id));
+}
+
+// ---------- merged duplicates ----------
+
+// The nodes among `ids` that the librarian merged into another (SAME_AS, `mergedInto`; src/ingest/merge.ts), each with
+// the node it was merged into. Tools answer with that node, which carries every edge.
+export async function canonicalOf(ctx: ToolContext, ids: string[]): Promise<Map<string, NodeRow>> {
+  if (!ids.length) return new Map();
+  const rows = await ro<{ id: string; c: NodeRow }>(ctx,
+    `UNWIND $ids AS id MATCH (d:Entity {id:id}) WHERE d.mergedInto IS NOT NULL MATCH (c:Entity {id: d.mergedInto})
+     RETURN d.id AS id, ${NODE("c")} AS c`, { ids: [...new Set(ids)] });
+  return new Map(rows.map((r) => [r.id, r.c]));
 }
 
 // ---------- resolving ids ----------
@@ -361,9 +378,12 @@ export async function suggest(ctx: ToolContext, idOrText: string): Promise<Brief
   }
 }
 
+// The node with this id; a merged duplicate's id gives the node it was merged into.
 export async function requireNode(ctx: ToolContext, id: string): Promise<NodeRow> {
-  const row = await getNode(ctx, id);
-  if (row) return row;
+  const [found] = await ro<{ n: NodeRow; c: NodeRow | null }>(ctx,
+    `MATCH (n:Entity {id:$id}) OPTIONAL MATCH (c:Entity {id: n.mergedInto})
+     RETURN ${NODE("n")} AS n, CASE WHEN c IS NULL THEN null ELSE ${NODE("c")} END AS c LIMIT 1`, { id });
+  if (found) return found.c ?? found.n;
   const suggestions = await suggest(ctx, id);
   throw new InputError(
     `No entity with id ${id}.${suggestions.length ? ` Did you mean: ${suggestions.map((s) => s.id).join(", ")}?` : " Use search to find ids."}`,

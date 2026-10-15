@@ -2,6 +2,7 @@
 // access mode), the item's expectations (evals/set.ts), latency, the agents that worked and the tools they called.
 // A turn passes when it finished, every check passed and every expectation hit. Pure: no graph, no model.
 import type { AgentEvent, TurnChecks } from "../shared/contracts.js";
+import { SIMULATED_WORD } from "../src/agent/checks.js";
 import { typeFromId } from "../src/util/ids.js";
 import type { EvalItem } from "./set.js";
 
@@ -79,7 +80,6 @@ export function excerpt(answer: string, max = 300): string {
   return `${s.slice(0, max - 1).replace(/\s+\S*$/, "")}…`;
 }
 
-const SIMULATED = /simulated|सिम्युलेटेड|सिमुलेटेड/iu;
 const alternatives = (entry: string): string[] => entry.split("|").map((a) => a.trim()).filter(Boolean);
 const unique = <T>(xs: T[]): T[] => [...new Set(xs)];
 
@@ -118,7 +118,7 @@ export function scoreTurn(item: EvalItem, t: TurnObservation): ItemScore {
     const m = compilePattern(want).exec(text);
     out.push({ kind: "forbid", want, ok: !m, ...(m ? { got: m[0] } : {}) });
   }
-  if (x.simulated) out.push({ kind: "simulated", want: "says the data is simulated", ok: SIMULATED.test(text) });
+  if (x.simulated) out.push({ kind: "simulated", want: "says the data is simulated", ok: SIMULATED_WORD.test(text) });
 
   const checks: Record<CheckName, boolean> = {
     citationsValid: t.checks.citationsValid, numbersGrounded: t.checks.numbersGrounded, simulatedDisclosed: t.checks.simulatedDisclosed,

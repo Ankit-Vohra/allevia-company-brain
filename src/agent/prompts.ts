@@ -277,6 +277,7 @@ ${ANSWER_SHAPE}
 ${OWNER_WORDS_RULE}
 
 Keep these rules too:
+- Write nothing before your lookups are done: no working notes, no "let me check", no plan. Everything you write is shown to the owner as the answer.
 - Cite [[id]] for every claim, using the entity ids the findings cite (never the finding ids). Numbers with their dates. The "simulated", "as of <date>" and data-source rules apply (to the owner, simulated data is "sample numbers": say that word).
 - Reply in the language of the question: a question in Hindi gets a Hindi answer, in the same plain style.
 - Don't narrate the team's process unless it helps the owner trust the answer (for example "Isha double-checked the figures"); who worked on it and how we know sit behind "Show how we got this", which the screen provides.

@@ -6,7 +6,8 @@
 //   digits. A number from 1990 to 2100 is a year only next to a date or a year word ("in 2026", "FY 2026", "the 2026
 //   budget", "2025-2026"); otherwise ("2045 sessions") it is a quantity and is checked. Dates in tool data are not
 //   numbers (tool.ts), so "12%" is never grounded by "2026-10-12";
-// - simulated: if a touched node is simulated, the answer says so;
+// - simulated: if the answer uses simulated data (cites a simulated node, or a number of it is found only in simulated
+//   tool data), the answer says "simulated". Touching a simulated node without using it needs nothing;
 // - freshness: if the newest asOf used is over 7 days old, the answer says "as of <date>" (or "as at", or the Hindi
 //   "<date> तक" / "<date> के अनुसार") with an actual date: "as of now" doesn't count;
 // - access mode: for every capability the answer cites (its [[ids]]) whose access mode is not "api", the answer says
@@ -161,8 +162,9 @@ export function isGrounded(m: NumberMention, data: readonly number[]): boolean {
 const AS_OF = new RegExp(String.raw`\bas (?:of|at)\s+(?:(?:the\s+)?(?:week|month|day|quarter)\s+(?:to|ending|of)\s+)?${ANY_DATE}`, "iu");
 const HINDI_AS_OF = new RegExp(String.raw`(?:${ANY_DATE}|\d{1,2}\s+${HINDI_MONTH}(?:\s+\d{4})?)\s*(?:तक|के अनुसार)`, "u");
 
-// "simulated", or the owner's word for it: "sample numbers / data / figures" (docs/owner-words.md).
-const SIMULATED_SAID = /simulated|\bsample (?:numbers|data|figures)\b|सिम्युलेटेड|सिमुलेटेड|सैंपल (?:नंबर|आंकड़े|डेटा)|नमूना (?:संख्या|आंकड़े|डेटा)/i;
+// The word that discloses simulated data: "simulated", or the owner's word for it, "sample numbers / data / figures"
+// (docs/owner-words.md), in English or Hindi. The eval scorer's "simulated" expectation uses it too.
+export const SIMULATED_WORD = /simulated|\bsample (?:numbers|data|figures)\b|सिम्युलेटेड|सिमुलेटेड|सैंपल (?:नंबर|आंकड़े|डेटा)|नमूना (?:संख्या|आंकड़े|डेटा)/iu;
 
 export interface CheckOpts {
   now?: number;
@@ -176,14 +178,20 @@ export function checkTurn(answer: string, touched: TouchedSet, opts: CheckOpts =
   const cited = extractCitations(answer);
   const invalidCitations = cited.filter((id) => !touched.has(id));
 
-  const data = [...touched.numbers()].map(Number).filter(Number.isFinite);
-  if (opts.question) for (const q of findNumbers(opts.question)) data.push(q.value, ...(q.scale !== 1 ? [q.value * q.scale] : []));
+  const asked: number[] = [];
+  if (opts.question) for (const q of findNumbers(opts.question)) asked.push(q.value, ...(q.scale !== 1 ? [q.value * q.scale] : []));
+  const data = [...[...touched.numbers()].map(Number).filter(Number.isFinite), ...asked];
+  const real = [...[...touched.realNumbers()].map(Number).filter(Number.isFinite), ...asked];
+  const mentions = findNumbers(answer);
   const ungroundedNumbers: string[] = [];
-  for (const m of findNumbers(answer)) {
+  for (const m of mentions) {
     if (!isGrounded(m, data) && !ungroundedNumbers.includes(m.raw)) ungroundedNumbers.push(m.raw);
   }
 
-  const simulatedDisclosed = !touched.anySimulated() || SIMULATED_SAID.test(answer);
+  // Simulated data needs saying only when the answer USES it: it cites a simulated node, or one of its numbers is
+  // grounded only by simulated data. Merely touching a simulated node (a search that returned one) is not using it.
+  const usesSimulated = cited.some((id) => touched.isSimulated(id)) || mentions.some((m) => isGrounded(m, data) && !isGrounded(m, real));
+  const simulatedDisclosed = !usesSimulated || SIMULATED_WORD.test(answer);
 
   const newest = touched.newestAsOf();
   const newestMs = newest ? Date.parse(newest) : NaN;

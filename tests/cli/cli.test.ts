@@ -51,6 +51,17 @@ describe("work log", () => {
     expect(out).not.toContain("\x1b[");
   });
 
+  it("a working note taken back from the answer is marked as such, and the answer starts again", () => {
+    let out = "";
+    const log = workLog({ color: false, write: (s) => { out += s; } });
+    log({ type: "text", agent: "chief-of-staff", delta: "Owner is agent:ops. Check its team." });
+    log({ type: "text", agent: "chief-of-staff", delta: "", reset: true });
+    log({ type: "agent_status", agent: "chief-of-staff", text: "Owner is agent:ops. Check its team." });
+    log({ type: "text", agent: "chief-of-staff", delta: "Ops is in the Operations team." });
+    expect(out).toContain("Answer\nOwner is agent:ops. Check its team.\n    (taken back: a working note, not the answer)\n");
+    expect(out).toMatch(/\nAnswer\nOps is in the Operations team\.$/);
+  });
+
   it("colours agents by department when colour is on", () => {
     let out = "";
     const log = workLog({ color: true, write: (s) => { out += s; } });

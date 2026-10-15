@@ -73,7 +73,7 @@ describe("eval runner (fake mode)", () => {
     const r = await runEval(opts(["why-stories", "ads-cpa", "trap"]));
     expect(r.scores.map((s) => [s.id, s.pass])).toEqual([["why-stories", true], ["ads-cpa", false], ["trap", false]]);
     const ads = r.scores[1]!;
-    expect(ads.checks.simulatedDisclosed).toBe(false); // touched a simulated campaign and never said so
+    expect(ads.checks.simulatedDisclosed).toBe(false); // cited a simulated campaign and never said so
     expect(ads.expectations.map((e) => [e.kind, e.ok])).toEqual([["match", false], ["simulated", false]]);
     expect(r.scores[0]!.tools).toEqual(["search", "show_path"]); // the orchestrator draws the path from the citations
     expect(r.scores[0]!.turnId).toMatch(/^turn:/);

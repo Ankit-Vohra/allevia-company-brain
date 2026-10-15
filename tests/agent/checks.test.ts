@@ -154,17 +154,51 @@ describe("checkTurn: numbers", () => {
 });
 
 describe("checkTurn: simulated and freshness", () => {
-  it("a simulated node touched without the word 'simulated' fails; with it, passes", () => {
+  it("a cited simulated node without the word 'simulated' fails; with it, passes", () => {
     const t = touched({}, [{ id: "campaign:x", label: "Campaign", simulated: true }]);
-    expect(checkTurn("Pause the campaign.", t, { now: NOW }).simulatedDisclosed).toBe(false);
-    expect(checkTurn("Pause the (simulated) campaign.", t, { now: NOW }).simulatedDisclosed).toBe(true);
+    expect(checkTurn("Pause the campaign [[campaign:x]].", t, { now: NOW }).simulatedDisclosed).toBe(false);
+    expect(checkTurn("Pause the (simulated) campaign [[campaign:x]].", t, { now: NOW }).simulatedDisclosed).toBe(true);
     // the owner's word for it (docs/owner-words.md) counts as saying it
-    expect(checkTurn("Pause the campaign (sample numbers).", t, { now: NOW }).simulatedDisclosed).toBe(true);
-    expect(checkTurn("These are sample figures from a stand-in campaign.", t, { now: NOW }).simulatedDisclosed).toBe(true);
-    expect(checkTurn("Pause the campaign; here is a sample of the ads.", t, { now: NOW }).simulatedDisclosed).toBe(false);
+    expect(checkTurn("Pause the campaign (sample numbers) [[campaign:x]].", t, { now: NOW }).simulatedDisclosed).toBe(true);
+    expect(checkTurn("These are sample figures from a stand-in campaign [[campaign:x]].", t, { now: NOW }).simulatedDisclosed).toBe(true);
+    expect(checkTurn("Pause the campaign; here is a sample of the ads [[campaign:x]].", t, { now: NOW }).simulatedDisclosed).toBe(false);
   });
   it("no simulated nodes: disclosed trivially", () => {
     expect(checkTurn("ok", touched({}, [{ id: "a" }]), { now: NOW }).simulatedDisclosed).toBe(true);
+  });
+  it("a simulated node merely touched (not cited, none of its numbers used) needs no disclosure", () => {
+    // eval 2026-10-15 gsc-clicks: a metric_trend for "clicks" also returned the simulated ad campaigns' clicks
+    const t = touched({ metric: "clicks", bySubject: [{ id: "channel:google-search", last: 0, mean: 1.5 }, { id: "campaign:shorts", last: 4210 }], simulated: true },
+      [{ id: "channel:google-search", label: "Channel" }, { id: "campaign:shorts", label: "Campaign", simulated: true }]);
+    expect(checkTurn("Google search sent 0 clicks, 1.5 a day on average [[channel:google-search]].", t, { now: NOW }).simulatedDisclosed).toBe(true);
+  });
+  it("a number grounded only by simulated data needs the word, even with no simulated citation", () => {
+    const t = touched({ metric: "clicks", bySubject: [{ id: "channel:google-search", last: 0 }, { id: "campaign:shorts", last: 4210 }], simulated: true },
+      [{ id: "channel:google-search", label: "Channel" }, { id: "campaign:shorts", label: "Campaign", simulated: true }]);
+    expect(checkTurn("Shorts got 4210 clicks [[channel:google-search]].", t, { now: NOW }).simulatedDisclosed).toBe(false);
+    expect(checkTurn("Shorts got 4210 clicks (simulated) [[channel:google-search]].", t, { now: NOW }).simulatedDisclosed).toBe(true);
+  });
+  it("numbers under an object flagged simulated, or a tool result flagged simulated at its root, count as simulated", () => {
+    const ads = touched({ campaigns: [{ name: "Shorts", spend: 25632, simulated: true }], totals: { spend: 51000 }, simulated: true },
+      [{ id: "campaign:shorts", label: "Campaign", simulated: true }]);
+    expect(checkTurn("Ads spent 51000 in total.", ads, { now: NOW }).simulatedDisclosed).toBe(false);
+    expect(checkTurn("Shorts spent 25632.", ads, { now: NOW }).simulatedDisclosed).toBe(false);
+    const flagged = touched({ rows: [{ v: 812, simulated: true }, { v: 90 }] }, [{ id: "obs:a", label: "Observation", simulated: true }, { id: "obs:b", label: "Observation" }]);
+    expect(checkTurn("812 views", flagged, { now: NOW }).simulatedDisclosed).toBe(false);
+    expect(checkTurn("90 views", flagged, { now: NOW }).simulatedDisclosed).toBe(true);
+  });
+  it("a number found in real data too is not simulated-only", () => {
+    const t = new TouchedSet();
+    t.add({ data: { spend: 300, simulated: true }, nodes: [{ id: "campaign:a", label: "Campaign", name: "A", simulated: true }], edges: [], sources: [] });
+    t.add({ data: { budget: 300 }, nodes: [{ id: "document:plan", label: "Document", name: "Plan" }], edges: [], sources: [] });
+    expect(checkTurn("The budget is 300 [[document:plan]].", t, { now: NOW }).simulatedDisclosed).toBe(true);
+  });
+  it("a node seen once as simulated stays simulated when a later result returns it without the flag", () => {
+    const t = new TouchedSet();
+    t.add({ data: {}, nodes: [{ id: "campaign:a", label: "Campaign", name: "A", simulated: true }], edges: [], sources: [] });
+    t.add({ data: {}, nodes: [{ id: "campaign:a", label: "Campaign", name: "A" }], edges: [], sources: [] });
+    expect(t.isSimulated("campaign:a")).toBe(true);
+    expect(checkTurn("Pause it [[campaign:a]].", t, { now: NOW }).simulatedDisclosed).toBe(false);
   });
   it("data newer than 7 days needs no 'as of'", () => {
     const t = touched({}, [{ id: "obs:a", asOf: "2026-10-10" }]);

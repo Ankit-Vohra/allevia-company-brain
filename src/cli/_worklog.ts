@@ -91,6 +91,12 @@ export function workLog(opts: WorkLogOpts = {}): (e: AgentEvent) => void {
         line(`< ${who(e.agent)} ${e.ok ? `done in ${(e.ms / 1000).toFixed(1)}s` : red(`failed after ${(e.ms / 1000).toFixed(1)}s`)}`);
         break;
       case "text":
+        // A reset takes back what streamed so far (a working note the Chief wrote before a lookup); a terminal can't
+        // unprint it, so it is marked, and the answer starts again from `delta`.
+        if (e.reset) {
+          if (inText) line(dim("    (taken back: a working note, not the answer)"));
+          if (!e.delta) break;
+        }
         if (!inText) { write(`\n${bold("Answer")}\n`); inText = true; }
         write(e.delta);
         break;

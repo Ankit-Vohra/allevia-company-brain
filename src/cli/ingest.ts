@@ -51,6 +51,9 @@ export function formatReport(r: PipelineReport, reportPath: string): string {
       `Embeddings: ${r.embeddings.entities} entities, ${r.embeddings.chunks} chunks`,
     );
     if (r.librarian) {
+      const m = r.librarian.merge;
+      lines.push(`Merges: ${m.merged} duplicate(s) in ${m.groups} group(s) · ${m.edgesMoved} edges moved · ${m.credentialLinks} new credential link(s)` +
+        `${m.skipped.length ? ` · ${m.skipped.length} left alone` : ""}${m.errors.length ? ` · ${m.errors.length} errors` : ""}`);
       lines.push(`Librarian: KNOWS_ABOUT ${r.librarian.knowsAbout.edges} (${r.librarian.knowsAbout.created} new, ${r.librarian.knowsAbout.closed} closed) · ${r.librarian.community.communities} communities · ${r.librarian.orphans.count} orphans (${fmt(r.librarian.orphans.byType)})`);
     }
     lines.push(

@@ -326,6 +326,8 @@ export class ClaudeAgentSdkRuntime implements AgentRuntime {
 export interface FakeStep {
   preText?: string;                                // text written before the tool calls (streamed when streamText)
   calls?: Array<{ name: string; args?: unknown }>; // tool calls to make, in order, through invokeTool
+  // Model turns, each its text then its tool calls (run after preText/calls, before text): text between tool calls.
+  turns?: Array<{ text?: string; calls?: Array<{ name: string; args?: unknown }> }>;
   text?: string;                                   // final text (streamed as `text` deltas when streamText)
   structured?: unknown;
   delayMs?: number;                                // wait before answering (respects the abort signal)
@@ -368,19 +370,33 @@ export class FakeRuntime implements AgentRuntime {
     const stream = (text: string) => {
       if (input.streamText && text) for (const piece of text.match(/[\s\S]{1,40}/g) ?? []) emit({ type: "text", agent: input.agentId, delta: piece });
     };
-    stream(st.preText ?? "");
-    for (const c of st.calls ?? []) {
-      const tool = input.tools.find((t) => t.name === c.name);
-      if (!tool) {
-        emit({ type: "agent_status", agent: input.agentId, text: `No tool named ${c.name}` });
-        continue;
+    const call = async (calls: FakeStep["calls"]) => {
+      for (const c of calls ?? []) {
+        const tool = input.tools.find((t) => t.name === c.name);
+        if (!tool) {
+          emit({ type: "agent_status", agent: input.agentId, text: `No tool named ${c.name}` });
+          continue;
+        }
+        await invokeTool(tool, c.args ?? {}, input, emit, nextCallId(input.agentId));
       }
-      await invokeTool(tool, c.args ?? {}, input, emit, nextCallId(input.agentId));
+    };
+    // Like the SDK, a text block after earlier streamed text starts with a paragraph break.
+    let wrote = false;
+    const block = (text: string | undefined) => {
+      if (!text) return;
+      if (wrote) stream("\n\n");
+      stream(text);
+      wrote = true;
+    };
+    block(st.preText);
+    await call(st.calls);
+    for (const t of st.turns ?? []) {
+      block(t.text);
+      await call(t.calls);
     }
     if (st.fail) throw new Error(st.fail);
-    if (st.preText && st.text) stream("\n\n");
-    stream(st.text ?? "");
-    const text = [st.preText, st.text].filter(Boolean).join("\n\n"); // like the SDK: every text block, in order
+    block(st.text);
+    const text = [st.preText, ...(st.turns ?? []).map((t) => t.text), st.text].filter(Boolean).join("\n\n"); // like the SDK: every text block, in order
     if (st.partial) return { text, partial: true };
     return st.structured === undefined ? { text } : { text, structured: st.structured };
   }

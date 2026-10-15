@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { ToolContext } from "../tool.js";
 import { ENTITY_TYPES } from "../../graph/schema.js";
 import {
-  Collector, InputError, NODE, SEARCH_TYPES, clamp, clip, defineTool, ftQuery, ftTerms, ro, typeOf, type NodeRow,
+  Collector, InputError, NODE, SEARCH_TYPES, canonicalOf, clamp, clip, defineTool, ftQuery, ftTerms, ro, typeOf, type NodeRow,
 } from "./common.js";
 
 const RRF_K = 60;
@@ -96,6 +96,12 @@ async function run(args: { query: string; types?: string[]; limit?: number }, ct
       add(parent.id, parent, seen.size, via, { snippet: r.text ? snippetOf(r.text, terms) : undefined, chunk: r.c });
     });
   };
+  // A duplicate the librarian merged answers as the node it was merged into (src/ingest/merge.ts).
+  const canon = await safe(canonicalOf(ctx, [...ftE, ...vE].map((r) => r.n.id)).then((m) => [...m]), errors, "merged duplicates");
+  if (canon.length) {
+    const to = new Map(canon);
+    for (const r of [...ftE, ...vE]) { const c = to.get(r.n.id); if (c) r.n = c; }
+  }
   fuseEntities(ftE, "text");
   fuseChunks(ftC, "chunk-text");
   fuseEntities(vE, "vector");
