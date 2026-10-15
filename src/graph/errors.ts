@@ -5,6 +5,12 @@ export class InvalidWrite extends Error {
   override name = "InvalidWrite";
 }
 
+// A query refused before it reached the server because its text has a shape that crashes FalkorDB 6.0.2 (an ORDER BY
+// that can tie, or one that sorts a NaN): see safety.ts. Nothing was sent.
+export class UnsafeQuery extends Error {
+  override name = "UnsafeQuery";
+}
+
 export class MissingEndpoint extends Error {
   override name = "MissingEndpoint";
   constructor(readonly ids: string[], context = "") {

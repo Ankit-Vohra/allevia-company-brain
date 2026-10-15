@@ -156,10 +156,10 @@ async function changesSince(g: Read, since: number, now: number): Promise<{ coun
   }>(
     `MATCH (o:Observation)-[m:MEASURES]->(s:Entity)
      WHERE o.createdAt >= $since AND m.until IS NULL AND NOT o.metric STARTS WITH 'allevia.' AND coalesce(o.baseline, false) = false
-     WITH o, s ORDER BY coalesce(o.windowEnd, o.asOf) DESC LIMIT 500
+     WITH o, s ORDER BY coalesce(o.windowEnd, o.asOf) DESC, o.id LIMIT 500
      OPTIONAL MATCH (p:Observation)-[pm:MEASURES]->(s)
      WHERE p.metric = o.metric AND pm.until IS NULL AND coalesce(p.baseline, false) = false AND coalesce(p.windowEnd, p.asOf) < coalesce(o.windowEnd, o.asOf)
-     WITH o, s, p ORDER BY coalesce(p.windowEnd, p.asOf) DESC
+     WITH o, s, p ORDER BY coalesce(p.windowEnd, p.asOf) DESC, p.id
      WITH o, s, collect(p)[0] AS p
      RETURN o.id AS id, o.metric AS metric, o.value AS value, o.unit AS unit, s.id AS subject, s.name AS name, p.value AS prev, o.simulated AS simulated,
             o.windowStart AS oS, coalesce(o.windowEnd, o.asOf) AS oE, p.windowStart AS pS, coalesce(p.windowEnd, p.asOf) AS pE`, { since });
@@ -205,7 +205,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   if (opts.since !== undefined) since = typeof opts.since === "number" ? opts.since : Date.parse(opts.since);
   else {
     const [last] = await g.roQuery<{ at: number }>(
-      "MATCH (d:Document) WHERE d.kind = 'brief' AND d.id <> $id AND d.generatedAt < $now RETURN d.generatedAt AS at ORDER BY at DESC LIMIT 1", { id, now });
+      "MATCH (d:Document) WHERE d.kind = 'brief' AND d.id <> $id AND d.generatedAt < $now RETURN d.generatedAt AS at ORDER BY at DESC, d.id LIMIT 1", { id, now });
     since = last?.at ?? now - DAY_MS;
   }
   if (!Number.isFinite(since)) throw new Error(`brief: since is not a time: ${String(opts.since)}`);

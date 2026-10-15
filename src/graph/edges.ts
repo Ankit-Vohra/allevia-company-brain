@@ -79,10 +79,10 @@ export async function upsertEdge(g: GraphHandle, e: EdgeInput, now: number = Dat
   const stronger = "($c > coalesce(y.conf, 1) OR ($c = coalesce(y.conf, 1) AND ($asOfMs IS NULL OR y.asOfMs IS NULL OR $asOfMs >= y.asOfMs)))";
   const cypher = `MATCH (a:Entity {id:$from}), (b:Entity {id:$to})
     OPTIONAL MATCH (a)-[c:${T}]->(b) WHERE c.until IS NULL
-    WITH a, b, c ORDER BY c.recordedAt
+    WITH a, b, c ORDER BY c.recordedAt, id(c)
     WITH a, b, collect(c) AS cur
     OPTIONAL MATCH (a)-[h:${T}]->(b) WHERE h.until IS NOT NULL
-    WITH a, b, cur, h ORDER BY h.until DESC, h.recordedAt DESC
+    WITH a, b, cur, h ORDER BY h.until DESC, h.recordedAt DESC, id(h)
     WITH a, b, cur, collect(h) AS closed
     ${slot}
     WITH a, b, cur, closed, slot, [x IN cur + closed | id(x)] AS own

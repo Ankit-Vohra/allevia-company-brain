@@ -17,9 +17,16 @@
 // time fails as timed out), a write for up to WRITE_QUEUE_WAIT_MS.
 //
 // Params: the client inlines params as a `CYPHER k=v …` prefix. Lists and maps work (so `SET n += $props` works);
-// map keys must be plain identifiers, numbers must be finite, and undefined values are dropped.
+// map keys must be plain identifiers, numbers must be finite (subnormals are sent as 0), and undefined values are
+// dropped.
+//
+// Crash shapes: FalkorDB 6.0.2 panics, restarts and drops every unsaved write when it sorts rows that tie, or a NaN.
+// A query whose text has either shape is refused with UnsafeQuery before it is sent (safety.ts; the evidence is in
+// docs/notes/falkordb-nan-crash.md). `unchecked` skips the check, for crash experiments on a throwaway server only:
+// tests/graph/cypher-sources.test.ts fails if anything in src/ uses it.
 import { FalkorDB, type Graph } from "falkordb";
 import { loadConfig } from "../config.js";
+import { assertSafeQuery } from "./safety.js";
 
 export const DEFAULT_READ_TIMEOUT_MS = 15_000;
 // Rows per page for reads that page: well under RESULTSET_SIZE (10,000), so a page is never truncated.
@@ -29,9 +36,10 @@ const BUSY = /max pending queries exceeded/i;
 
 type Param = null | string | number | boolean | Param[] | { [k: string]: Param };
 type Params = Record<string, Param>;
-export interface QueryOpts { timeoutMs?: number }
+export interface QueryOpts { timeoutMs?: number; unchecked?: boolean }
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const MIN_NORMAL = 2.2250738585072014e-308; // the smallest double the server's parser accepts
 const GRAPH_NAME = /^[A-Za-z0-9_]+$/;
 
 // Tenant slugs are lowercase words joined by single underscores. "__" is reserved: projection graphs are named
@@ -48,7 +56,8 @@ function cleanParam(v: unknown, path: string): Param | undefined {
   if (v === null || typeof v === "string" || typeof v === "boolean") return v;
   if (typeof v === "number") {
     if (!Number.isFinite(v)) throw new Error(`param ${path} must be a finite number, got ${v}`);
-    return v;
+    // The server's parser refuses a subnormal double ("Float overflow '5e-324'"), and a decaying weight can reach one.
+    return Math.abs(v) < MIN_NORMAL ? 0 : v;
   }
   if (Array.isArray(v)) return v.map((x, i) => cleanParam(x, `${path}[${i}]`) ?? null);
   if (typeof v === "object") {
@@ -98,12 +107,14 @@ export class GraphHandle {
   }
 
   async query<T = Record<string, unknown>>(cypher: string, params?: Record<string, unknown>, opts?: QueryOpts): Promise<T[]> {
+    if (!opts?.unchecked) assertSafeQuery(cypher);
     const opt = withTimeout(toOptions(params), opts?.timeoutMs);
     const r = await admitted(WRITE_QUEUE_WAIT_MS, () => this.#g.query<T>(cypher, opt));
     return r.data ?? [];
   }
 
   async roQuery<T = Record<string, unknown>>(cypher: string, params?: Record<string, unknown>, opts?: QueryOpts): Promise<T[]> {
+    if (!opts?.unchecked) assertSafeQuery(cypher);
     const timeoutMs = opts?.timeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
     const o = toOptions(params);
     try {

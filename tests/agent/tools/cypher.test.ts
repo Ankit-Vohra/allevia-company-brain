@@ -147,7 +147,7 @@ describe("cypher", () => {
     it("an edge's src document counts as a source; bare values get a hint to return ids", async () => {
       const r = await call(cypher, { query: "MATCH (o:Observation)-[r:MEASURES]->(:Entity {id:'channel:instagram'}) RETURN r ORDER BY o.id LIMIT 1" }, makeCtx(g));
       expect(ids(r.sources)).toEqual(expect.arrayContaining(["document:ig-insights-oct"]));
-      const v = await call(cypher, { query: "MATCH (t:Task) RETURN t.name AS name ORDER BY name" }, makeCtx(g));
+      const v = await call(cypher, { query: "MATCH (t:Task) RETURN t.name AS name ORDER BY name, id(t)" }, makeCtx(g));
       expect(v.note).toMatch(/Return ids/);
     });
 

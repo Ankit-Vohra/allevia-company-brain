@@ -29,7 +29,7 @@ export async function latestFor(ctx: ToolContext, subjects: string[], metrics?: 
     `UNWIND $ids AS sid MATCH (s:Entity {id:sid}) WITH sid, s MATCH (o:Observation)-[r:MEASURES]->(s)
      WITH sid, o, r, coalesce(o.windowEnd, o.asOf) AS at WHERE $metrics IS NULL OR toLower(o.metric) IN $metrics
      WITH sid, toLower(o.metric) AS key, o, r, at ORDER BY at DESC, o.id DESC
-     WITH sid, key, head(collect(${OBS_ROW})) AS x ORDER BY x.at DESC, key
+     WITH sid, key, head(collect(${OBS_ROW})) AS x ORDER BY x.at DESC, key, sid
      RETURN sid AS s, collect(x)[0..$per] AS xs`,
     { ids: subjects, metrics: metrics?.map((m) => m.toLowerCase()) ?? null, per: METRICS_PER_SUBJECT });
   return rows.flatMap((r) => r.xs.map((x) => ({ s: r.s, ...x })));

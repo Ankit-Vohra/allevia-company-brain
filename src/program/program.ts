@@ -247,7 +247,7 @@ export interface CheckpointRow { id: string; day: number; at: number | null; dat
 export async function programCheckpoints(g: Read, program: string): Promise<CheckpointRow[]> {
   return g.roQuery<CheckpointRow>(
     `MATCH (c:Checkpoint)-[pp:PART_OF]->(:Program {id:$p}) WHERE pp.until IS NULL
-     RETURN c.id AS id, c.day AS day, c.at AS at, c.date AS date, c.summary AS summary ORDER BY c.day`, { p: program });
+     RETURN c.id AS id, c.day AS day, c.at AS at, c.date AS date, c.summary AS summary ORDER BY c.day, c.id`, { p: program });
 }
 
 const CHECKPOINT_TEXT: Record<CheckpointDay, string> = {
@@ -276,7 +276,7 @@ export async function checkpointWrite(g: GraphHandle, o: { program: string; day:
       ? await g.roQuery<{ id: string }>("MATCH (x:Observation {id:$id}) RETURN x.id AS id", { id: baselineObsId(gl.metricKey, gl.id) })
       : await g.roQuery<{ id: string }>(
         `MATCH (x:Observation)-[m:MEASURES]->(:Goal {id:$g}) WHERE m.until IS NULL AND coalesce(x.baseline, false) = false AND x.windowEnd <= $d
-         RETURN x.id AS id ORDER BY x.windowEnd DESC LIMIT 1`, { g: gl.id, d: o.date });
+         RETURN x.id AS id ORDER BY x.windowEnd DESC, x.id LIMIT 1`, { g: gl.id, d: o.date });
     if (r) w.edges.push({ from: r.id, type: "MEASURES", to: id });
   }
   return w;

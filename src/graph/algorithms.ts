@@ -100,6 +100,13 @@ function algoConfig(labels: readonly string[], rels: readonly string[]): string 
   return `{${parts.join(", ")}}`;
 }
 
+// The rows whose value is a finite number. An algorithm can score a node NaN or ±Infinity (0 / 0 on one with no edges);
+// such a score ranks nothing, a NaN in the JS sort makes its comparator inconsistent, and the client refuses to write a
+// non-finite number (the librarian's `rank` write would abort the whole run), so those nodes are left out.
+export function finiteRows(rows: Array<[string, number]>): Array<[string, number]> {
+  return rows.filter(([, v]) => typeof v === "number" && Number.isFinite(v));
+}
+
 // Runs a per-node algorithm once and returns every [id, value] row it yields (projected nodes without an id are
 // skipped), packed MAX_PAGE to a result row so no row is lost to RESULTSET_SIZE. Sorted by `order`.
 async function perNode(
@@ -110,7 +117,7 @@ async function perNode(
     `${call} YIELD node, ${col} WITH node.id AS id, ${col} AS v WHERE id IS NOT NULL
      WITH collect([id, v]) AS xs UNWIND range(0, size(xs) - 1, $page) AS i RETURN xs[i..i + $page] AS part`,
     { ...params, page: MAX_PAGE }, { timeoutMs });
-  return rows.flatMap((r) => r.part).sort(order);
+  return finiteRows(rows.flatMap((r) => r.part)).sort(order);
 }
 
 const byId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);

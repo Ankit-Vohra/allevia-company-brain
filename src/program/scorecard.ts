@@ -123,7 +123,7 @@ async function checkpointList(g: GraphHandle, program: string, startDate: string
 // The first-pass rate over the 30 days up to each day from the start to today, from the decided Approvals.
 export async function firstPassSeries(g: Pick<GraphHandle, "roQuery">, startAt: number, startDate: string, today: string): Promise<FirstPassPoint[]> {
   const rows = await g.roQuery<{ at: number; fp: boolean }>(
-    "MATCH (a:Approval) WHERE a.decidedAt >= $from AND a.firstPass IS NOT NULL RETURN a.decidedAt AS at, a.firstPass AS fp ORDER BY at LIMIT 5000",
+    "MATCH (a:Approval) WHERE a.decidedAt >= $from AND a.firstPass IS NOT NULL RETURN a.decidedAt AS at, a.firstPass AS fp ORDER BY at, a.id LIMIT 5000",
     { from: startAt - 30 * DAY });
   const out: FirstPassPoint[] = [];
   for (let d = startDate, i = 0; d <= today && i <= PROGRAM_DAYS; d = addDays(d, 1), i++) {

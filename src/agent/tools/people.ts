@@ -24,16 +24,16 @@ async function runWhoOwns(args: { id?: string; query?: string; asOf?: string }, 
   const type = typeOf(node);
   const p = { id: node.id, asOf };
   const [owners, previous, owns, inherited] = await Promise.all([
-    ro<Row>(ctx, `MATCH (o:Entity)-[r:OWNS]->(:Entity {id:$id}) WHERE ${edgeAt("r", asOf)} RETURN ${EDGE("r")} AS e, ${NODE("o")} AS n ORDER BY r.since LIMIT 10`, p),
+    ro<Row>(ctx, `MATCH (o:Entity)-[r:OWNS]->(:Entity {id:$id}) WHERE ${edgeAt("r", asOf)} RETURN ${EDGE("r")} AS e, ${NODE("o")} AS n ORDER BY r.since, id(r) LIMIT 10`, p),
     ro<Row>(ctx, `MATCH (o:Entity)-[r:OWNS]->(:Entity {id:$id}) WHERE r.until IS NOT NULL${asOf === undefined ? "" : " AND r.until <= $asOf"}
-      RETURN ${EDGE("r")} AS e, ${NODE("o")} AS n ORDER BY r.until DESC LIMIT 5`, p),
+      RETURN ${EDGE("r")} AS e, ${NODE("o")} AS n ORDER BY r.until DESC, id(r) LIMIT 5`, p),
     OWNER_TYPES.includes(type)
       ? ro<Row & { status: string | null }>(ctx, `MATCH (:Entity {id:$id})-[r:OWNS]->(x:Entity) WHERE ${edgeAt("r", asOf)}
-          RETURN ${EDGE("r")} AS e, ${NODE("x")} AS n, x.status AS status ORDER BY x.name LIMIT 26`, p)
+          RETURN ${EDGE("r")} AS e, ${NODE("x")} AS n, x.status AS status ORDER BY x.name, x.id LIMIT 26`, p)
       : Promise.resolve([]),
     ro<{ n: NodeRow; via: NodeRow; es: EdgeRow[] }>(ctx,
       `MATCH p = (:Entity {id:$id})-[:PART_OF*1..3]->(parent:Entity)<-[:OWNS]-(o:Entity) WHERE ALL(x IN relationships(p) WHERE ${edgeAt("x", asOf)})
-       RETURN ${NODE("o")} AS n, ${NODE("parent")} AS via, [x IN relationships(p) | ${EDGE("x")}] AS es ORDER BY length(p) LIMIT 5`, p),
+       RETURN ${NODE("o")} AS n, ${NODE("parent")} AS via, [x IN relationships(p) | ${EDGE("x")}] AS es ORDER BY length(p), parent.id, o.id LIMIT 5`, p),
   ]);
 
   const col = new Collector();

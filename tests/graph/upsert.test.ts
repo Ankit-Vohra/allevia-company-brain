@@ -51,7 +51,7 @@ describe("temporal upsert (integration)", () => {
     expect(cur).toEqual({ status: "done", u: T0 + 100, asOf: "2026-10-15" });
     // a second change: the new Version's since is when the previous state began
     await upsertNode(g, { type: "Task", id: "task:sitemap", name: "Fix sitemap", props: { status: "reopened" }, asOf: "2026-10-16" }, T0 + 200);
-    const vs = await g.roQuery<{ since: number; until: number }>("MATCH (:Entity {id:'task:sitemap'})-[:HAD_VERSION]->(v) RETURN v.since AS since, v.until AS until ORDER BY v.until");
+    const vs = await g.roQuery<{ since: number; until: number }>("MATCH (:Entity {id:'task:sitemap'})-[:HAD_VERSION]->(v) RETURN v.since AS since, v.until AS until ORDER BY v.until, id(v)");
     expect(vs).toEqual([
       { since: Date.parse("2026-10-14"), until: Date.parse("2026-10-15") },
       { since: Date.parse("2026-10-15"), until: Date.parse("2026-10-16") },
@@ -66,7 +66,7 @@ describe("temporal upsert (integration)", () => {
     const dated = Date.parse("2026-10-20");
     await upsertNode(g, { type: "Task", id, name: "U", props: { status: "done" }, asOf: "2026-10-20" }, dated + 99);
     const vs = await g.roQuery<{ since: number; until: number; props: string }>(
-      "MATCH (:Entity {id:$id})-[:HAD_VERSION]->(v) RETURN v.since AS since, v.until AS until, v.props AS props ORDER BY since", { id });
+      "MATCH (:Entity {id:$id})-[:HAD_VERSION]->(v) RETURN v.since AS since, v.until AS until, v.props AS props ORDER BY since, id(v)", { id });
     expect(vs.map((v) => ({ since: v.since, until: v.until, status: JSON.parse(v.props).status }))).toEqual([
       { since: T0, until: T0 + 10, status: "open" },
       { since: T0 + 10, until: dated, status: "doing" },
@@ -108,7 +108,7 @@ describe("temporal upsert (integration)", () => {
     expect(await upsertEdge(g, { from: "person:founder", type: "OWNS", to: "task:sitemap" }, T0)).toEqual({ created: true, closed: 0 });
     expect(await upsertEdge(g, { from: "agent:jarvis", type: "OWNS", to: "task:sitemap" }, T0 + 300)).toEqual({ created: true, closed: 1 });
     const rows = await g.roQuery<{ owner: string; until: number | null; retiredAt: number | null }>(
-      "MATCH (o)-[r:OWNS]->(:Entity {id:'task:sitemap'}) RETURN o.id AS owner, r.until AS until, r.retiredAt AS retiredAt ORDER BY r.recordedAt");
+      "MATCH (o)-[r:OWNS]->(:Entity {id:'task:sitemap'}) RETURN o.id AS owner, r.until AS until, r.retiredAt AS retiredAt ORDER BY r.recordedAt, id(r)");
     expect(rows).toEqual([
       { owner: "person:founder", until: T0 + 300, retiredAt: T0 + 300 },
       { owner: "agent:jarvis", until: null, retiredAt: null },
@@ -195,7 +195,7 @@ describe("temporal upsert (integration)", () => {
     await upsertEdge(g, { from: "person:founder", type: "OWNS", to: "task:handover", since: T0 + 10 }, T0 + 10);
     expect(await upsertEdge(g, { from: "agent:jarvis", type: "OWNS", to: "task:handover", since: T0 + 20 }, T0 + 30)).toEqual({ created: true, closed: 1 });
     const rows = await g.roQuery<Record<string, unknown>>(
-      "MATCH (o)-[r:OWNS]->(:Entity {id:'task:handover'}) RETURN o.id AS o, r.since AS since, r.until AS until, r.retiredAt AS ret ORDER BY r.since");
+      "MATCH (o)-[r:OWNS]->(:Entity {id:'task:handover'}) RETURN o.id AS o, r.since AS since, r.until AS until, r.retiredAt AS ret ORDER BY r.since, id(r)");
     expect(rows).toEqual([
       { o: "person:founder", since: T0 + 10, until: T0 + 20, ret: T0 + 30 },
       { o: "agent:jarvis", since: T0 + 20, until: null, ret: null },
@@ -208,7 +208,7 @@ describe("temporal upsert (integration)", () => {
     expect(await upsertEdge(g, { from: "person:founder", type: "OWNS", to: "task:late-owner", since: T0 + 50 }, T0 + 200))
       .toEqual({ created: true, closed: 0 });
     const rows = await g.roQuery<Record<string, unknown>>(
-      "MATCH (o)-[r:OWNS]->(:Entity {id:'task:late-owner'}) RETURN o.id AS o, r.since AS since, r.until AS until, r.retiredAt AS ret ORDER BY r.since");
+      "MATCH (o)-[r:OWNS]->(:Entity {id:'task:late-owner'}) RETURN o.id AS o, r.since AS since, r.until AS until, r.retiredAt AS ret ORDER BY r.since, id(r)");
     expect(rows).toEqual([
       { o: "person:founder", since: T0 + 50, until: T0 + 100, ret: T0 + 200 }, // created already closed
       { o: "agent:jarvis", since: T0 + 100, until: null, ret: null },

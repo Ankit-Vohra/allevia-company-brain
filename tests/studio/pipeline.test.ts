@@ -91,7 +91,7 @@ describe("studio pipeline (integration)", () => {
     expect(r.variants.map((v) => v.label)).toEqual(["A", "B"]);
     const rows = await g.roQuery<{ label: string; step: string; treatment: string; ai: boolean; iptc: string; w: number; h: number }>(
       `MATCH (v:Asset)-[d:DERIVED_FROM]->(:Asset {id:$id}) MATCH (:Agent {id:'agent:allevia-content-strategist'})-[:PRODUCED]->(v)
-       RETURN v.label AS label, d.step AS step, d.treatment AS treatment, v.aiEdited AS ai, v.iptcSourceType AS iptc, v.w AS w, v.h AS h ORDER BY label`,
+       RETURN v.label AS label, d.step AS step, d.treatment AS treatment, v.aiEdited AS ai, v.iptcSourceType AS iptc, v.w AS w, v.h AS h ORDER BY label, v.id`,
       { id: r.original.id });
     expect(rows.map((x) => [x.label, x.step, x.ai, x.iptc, x.w, x.h])).toEqual([
       ["A", "local-grade", false, "algorithmicallyEnhanced", 1080, 1350],
@@ -152,10 +152,10 @@ describe("studio pipeline (integration)", () => {
     expect(await one("MATCH (:Approval {id:$id})-[:RESULTED_IN]->(:Action)-[:RESULTED_IN]->(c:Content) RETURN c.id AS c", { id: r.approvalId })).toEqual({ c: ok.contentId });
     expect(await one("MATCH (:Content {id:$c})-[:PROMOTES]->(p:Content) RETURN p.id AS p", { c: ok.contentId })).toEqual({ p: PROJECT });
     const obs = await g.roQuery<{ metric: string; value: number; unit: string }>(
-      "MATCH (o:Observation)-[:MEASURES]->(:Content {id:$c}) RETURN o.metric AS metric, o.value AS value, o.unit AS unit ORDER BY metric", { c: ok.contentId });
+      "MATCH (o:Observation)-[:MEASURES]->(:Content {id:$c}) RETURN o.metric AS metric, o.value AS value, o.unit AS unit ORDER BY metric, o.id", { c: ok.contentId });
     expect(obs).toEqual([{ metric: "credits_charged", value: 1, unit: "credits" }, { metric: "usd_cost", value: 0.5, unit: "USD" }]);
     const statuses = await g.roQuery<{ label: string | null; status: string }>(
-      "MATCH (a:Asset) WHERE a.id IN $ids RETURN a.label AS label, a.status AS status ORDER BY label", { ids: [r.original.id, ...r.variants.map((v) => v.id)] });
+      "MATCH (a:Asset) WHERE a.id IN $ids RETURN a.label AS label, a.status AS status ORDER BY label, a.id", { ids: [r.original.id, ...r.variants.map((v) => v.id)] });
     expect(statuses.map((s) => s.status).sort()).toEqual(["approved", "declined", "used"]);
     // decided once
     await expect(approveStudioDraft(g, { approvalId: r.approvalId, now: now() }, decideWith)).rejects.toThrow(/already decided/);
