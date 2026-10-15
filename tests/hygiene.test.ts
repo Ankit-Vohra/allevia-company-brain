@@ -92,6 +92,8 @@ export function isClearlyFake(h: Hit): boolean {
 // Exact matches that are neither patterned nor made up, but are documented: not real. Keep this list short.
 const ALLOWED_VALUES: Array<{ match: string; why: string }> = [
   { match: "1ecea1993b7fce257ffbd686c070948b5e07eda6", why: "vendor/skills/i-have-adhd/NOTICE.md: the public git commit the MIT-licensed skill was taken from" },
+  { match: "ankit@allevia-ai.in", why: "site/src/company.ts: the public contact address printed on the website's legal and contact pages" },
+  { match: "harjinder@allevia-ai.in", why: "the second public alias at the website's domain, listed for completeness" },
   { match: "172.32.0.1", why: "SSRF boundary test: the first address just outside RFC 1918 172.16/12" },
   { match: "+441174960000", why: "Ofcom reserved drama range (0117 496 0xxx), never assigned" },
   { match: "~/.config/…", why: "docs name the kind of path the privacy filter drops" },

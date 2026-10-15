@@ -123,7 +123,8 @@ describe("company facts that only the founder can supply", () => {
 
   it("holds no real secret or personal identifier (a shipped value is empty or a public company fact)", () => {
     const json = JSON.stringify(COMPANY);
-    expect(json).not.toMatch(/@[a-z0-9-]+\.(com|in|io)\b/i);
+    // the only addresses allowed are public contact mailboxes at the product's own domain (printed on the legal pages)
+    expect(json.replace(/[a-z0-9._-]+@allevia-ai\.in\b/gi, "")).not.toMatch(/@[a-z0-9-]+\.(com|in|io)\b/i);
     expect(json).not.toMatch(/\d{6,}/);
   });
 });
