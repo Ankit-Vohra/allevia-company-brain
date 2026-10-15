@@ -93,6 +93,34 @@ export const PAGES: readonly PageDef[] = [
     footer: "Company", label: "Contact and support",
     priority: 0.7, changefreq: "monthly", schema: ["breadcrumb"],
   },
+  {
+    path: "/privacy/",
+    title: "Privacy Policy · Allevia",
+    description: "What Allevia collects from your website, accounts, photos and chats, why, where it is kept, how long, who processes it, and how to export or delete it.",
+    footer: "Legal", label: "Privacy Policy",
+    priority: 0.5, changefreq: "yearly", schema: ["breadcrumb"],
+  },
+  {
+    path: "/terms/",
+    title: "Terms of Service · Allevia",
+    description: "The terms for using Allevia: what the service is, what you agree to, who owns what, fees and refunds, and what happens if you stop.",
+    footer: "Legal", label: "Terms of Service",
+    priority: 0.5, changefreq: "yearly", schema: ["breadcrumb"],
+  },
+  {
+    path: "/data-deletion/",
+    title: "Delete your data · Allevia",
+    description: "How to ask Allevia to delete everything it holds about your business, how to disconnect Instagram or Google, what we delete and how long it takes.",
+    footer: "Legal", label: "Delete your data",
+    priority: 0.5, changefreq: "yearly", schema: ["breadcrumb"],
+  },
+  {
+    path: "/cookies/",
+    title: "Cookies and analytics · Allevia",
+    description: "This site sets no cookies and runs no analytics or ads. One small setting is stored in your browser, only if you change the price currency.",
+    footer: "Legal", label: "Cookies and analytics",
+    priority: 0.3, changefreq: "yearly", schema: ["breadcrumb"],
+  },
 ];
 
 export const pageByPath = (path: string): PageDef | undefined => PAGES.find((p) => p.path === path);
