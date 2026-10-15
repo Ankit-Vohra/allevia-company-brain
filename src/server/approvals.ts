@@ -1,0 +1,38 @@
+// The owner's decision on an Approval card (spec §9). For now a decision only records itself: the Approval's status
+// moves pending -> approved | edited | rejected through upsertNode (status is TRACKED, so the pending state is kept as a
+// Version), with decidedAt, decisionMs (proposal to decision) and, for an edit, the editedPayload. Executors and the
+// learning loop hang off the server's onDecision hook, which runs after this returns.
+import type { GraphHandle } from "../graph/client.js";
+import { upsertNode } from "../graph/upsert.js";
+import { serial } from "../agent/tools/common.js";
+import type { ApprovalPayload, ApprovalStatus } from "./types.js";
+
+export class DecisionError extends Error {
+  constructor(readonly status: 404 | 409, message: string) {
+    super(message);
+  }
+}
+
+export interface Decision { decision: "approve" | "reject"; editedPayload?: ApprovalPayload }
+
+const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+// `current` is the stored payload as the card shows it; an approve with an edited payload that differs is "edited".
+export async function decideApproval(
+  g: GraphHandle, id: string, d: Decision, current: ApprovalPayload, now: number = Date.now(),
+): Promise<{ status: ApprovalStatus; decidedAt: number; decisionMs: number }> {
+  return serial(`decide:${g.name}`, async () => {
+    const [row] = await g.roQuery<{ name: string | null; status: string | null; createdAt: number | null }>(
+      "MATCH (a:Approval {id:$id}) RETURN a.name AS name, a.status AS status, a.createdAt AS createdAt LIMIT 1", { id });
+    if (!row) throw new DecisionError(404, `No approval ${id}.`);
+    if ((row.status ?? "pending") !== "pending") throw new DecisionError(409, `${id} was already decided (${row.status}).`);
+    const edited = d.decision === "approve" && d.editedPayload && !sameJson(d.editedPayload, current) ? d.editedPayload : undefined;
+    const status: ApprovalStatus = d.decision === "reject" ? "rejected" : edited ? "edited" : "approved";
+    const decisionMs = Math.max(0, now - (typeof row.createdAt === "number" ? row.createdAt : now));
+    await upsertNode(g, {
+      type: "Approval", id, name: row.name || id,
+      props: { status, decidedAt: now, decisionMs, ...(edited ? { editedPayload: JSON.stringify(edited) } : {}) },
+    }, now);
+    return { status, decidedAt: now, decisionMs };
+  });
+}
