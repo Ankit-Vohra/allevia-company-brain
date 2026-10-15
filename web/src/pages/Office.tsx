@@ -182,17 +182,19 @@ export function OfficePage() {
           )}
         </div>
       )}
-      <button type="button" className="run-line" aria-expanded={logOpen} onClick={() => setLogOpen((o) => !o)}>
-        <AgentAvatar id={tickerLine.agent} size={22} ring={!tickerLine.done} />
-        <span className="run-text" aria-live="polite">{tickerLine.text}</span>
-        {running && <span className="run-time">{fmtMs(Math.max(0, elapsed))}</span>}
-        <span className="run-open">{logOpen ? "Hide" : tickerLine.done ? "How it went" : "Show"}<Icon name="chevron" size={14} className="run-chev" /></span>
-      </button>
-      {running && !logOpen && (
-        <button type="button" className="run-stop btn btn-quiet btn-sm" onClick={() => runKey && runStore.stop(runKey)} disabled={record?.stopping}>
-          <Icon name="stop" size={13} /> {record?.stopping ? "Stopping…" : "Stop"}
+      <div className="run-bar">
+        <button type="button" className="run-line" aria-expanded={logOpen} onClick={() => setLogOpen((o) => !o)}>
+          <AgentAvatar id={tickerLine.agent} size={22} ring={!tickerLine.done} />
+          <span className="run-text" aria-live="polite">{tickerLine.text}</span>
+          {running && <span className="run-time">{fmtMs(Math.max(0, elapsed))}</span>}
+          <span className="run-open">{logOpen ? "Hide" : tickerLine.done ? "How it went" : "Show"}<Icon name="chevron" size={14} className="run-chev" /></span>
         </button>
-      )}
+        {running && (
+          <button type="button" className="run-stop btn btn-quiet btn-sm" onClick={() => runKey && runStore.stop(runKey)} disabled={record?.stopping}>
+            <Icon name="stop" size={13} /> {record?.stopping ? "Stopping…" : "Stop"}
+          </button>
+        )}
+      </div>
       {tickerLine.done && !logOpen && view?.sessionId && (
         <Link className="run-read btn btn-gold btn-sm" to={askHref}>Read the answer</Link>
       )}
@@ -273,9 +275,9 @@ export function OfficePage() {
           books={learning.data ? books : undefined}
           onBook={(id) => setOpenRule(learning.data?.rules.find((r) => r.id === id) ?? null)}
           onStatus={setPetNote}
-          overlay={tickerEl}
         />
         <p className="visually-hidden" role="status" aria-live="polite">{petNote}</p>
+        <div className="run-slot">{tickerEl}</div>
 
       </section>
 

@@ -576,7 +576,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
             })()}
             {!compact &&
               bubbles.map((b) => (
-                <div key={b.agent} className={`bubble tone-${b.tone}${b.y * k < 44 ? " is-below" : ""}`} style={{ left: b.x * k, top: b.y * k < 44 ? (b.y + 34) * k : b.y * k }} aria-hidden="true">
+                <div key={b.agent} className={`bubble tone-${b.tone}${b.y * k < 96 ? " is-below" : ""}`} style={{ left: b.x * k, top: b.y * k < 96 ? (b.y + 32) * k : b.y * k }} aria-hidden="true">
                   <span className="bubble-text">{b.text}</span>
                 </div>
               ))}

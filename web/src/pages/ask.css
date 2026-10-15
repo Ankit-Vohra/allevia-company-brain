@@ -319,6 +319,6 @@ dialog.drawer.sheet-left[open] { animation: sheet-in var(--dur-long) var(--ease-
 }
 @media (max-width: 760px) {
   .turn-question { font-size: 1.3rem; }
-  .ask-graph { top: 0; width: 100vw; }
+  .ask-graph { top: 0; width: 100vw; z-index: 30; }
   .ask-title { visibility: visible; font-size: var(--text-md); }
 }
