@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { pathAllowed, dropSensitiveSections, redact, scanGraph, SENSITIVE } from "../../src/ingest/privacy.js";
+import { SENSITIVE_SECTION } from "../../src/ingest/sources/ops-map/privacy.js";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
 import { upsertNode, upsertEdge } from "../../src/graph/upsert.js";
 import { sha256 } from "../../src/util/ids.js";
@@ -73,6 +74,17 @@ describe("pathAllowed", () => {
   it("exports the sensitive-name pattern", () => {
     expect(SENSITIVE.test("Security notes")).toBe(true);
     expect(SENSITIVE.test("Channel mix")).toBe(false);
+  });
+
+  it("does not take server-side conversions for server infrastructure (a whole ADR was lost to that)", () => {
+    expect(SENSITIVE.test("003 — Our own first-touch attribution; server-side conversions; no MMP yet")).toBe(false);
+    expect(SENSITIVE.test("Server-side tracking")).toBe(false);
+    expect(SENSITIVE.test("Server setup")).toBe(true);
+    expect(SENSITIVE.test("Two servers and a box")).toBe(true);
+    expect(SENSITIVE.test("server-side secrets")).toBe(true); // still caught by "secret"
+    expect(pathAllowed("20-growth/server-side-conversions.md").allowed).toBe(true);
+    expect(pathAllowed("20-growth/server-notes.md").allowed).toBe(false);
+    expect(SENSITIVE_SECTION.source).toBe(SENSITIVE.source); // the ops mappers use the same pattern
   });
 });
 

@@ -2,8 +2,11 @@
 // dropped before mapping, free text (captions, search queries) is redacted with redact() from src/ingest/privacy.ts (the
 // one redaction engine, spec 6.3), and PENDING items under sensitive headings are not even counted.
 
-// Spec §6.3's section policy: a heading like this marks content that never enters the graph.
-export const SENSITIVE_SECTION = /security|audit|access|secret|credential|incident|backup|password|token|ssh|aws|server|infra|finance|bank|kyc/i;
+import { SENSITIVE } from "../../privacy.js";
+
+// Spec §6.3's section policy: a heading like this marks content that never enters the graph. The same pattern as the
+// vault's section and path policy (one definition, in src/ingest/privacy.ts).
+export const SENSITIVE_SECTION = SENSITIVE;
 
 // Keys that name a person or a way to reach one. Contact keys are dropped when they hold text (a count such as
 // `phoneVerified` stays); id and name keys are dropped whatever they hold.

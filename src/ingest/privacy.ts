@@ -11,7 +11,9 @@ import { fenceMask, frontmatterEnd, scanHeadings } from "./headings.js";
 
 export { redact } from "./redact.js";
 
-export const SENSITIVE = /security|audit|access|secret|credential|incident|backup|password|token|ssh|aws|server|infra|finance|bank|kyc/i;
+// "server-side" (conversions, tracking, rendering) is a marketing and web term, not the infrastructure "server" means here:
+// matching it dropped ADR 003 whole, because its title says "server-side conversions".
+export const SENSITIVE = /security|audit|access|secret|credential|incident|backup|password|token|ssh|aws|server(?!-side)|infra|finance|bank|kyc/i;
 
 // ---------- layer 1: paths ----------
 
