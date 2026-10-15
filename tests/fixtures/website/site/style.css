@@ -1,0 +1,12 @@
+body { background: #fbf8f3; color: #1f2a2e; font-family: "Inter", Arial, sans-serif; margin: 0; }
+h1, h2, h3 { font-family: "Cormorant Garamond", Georgia, serif; color: #1f2a2e; }
+header { background: #fbf8f3; padding: 16px 32px; display: flex; justify-content: space-between; }
+header .logo img { width: 160px; height: 48px; display: block; }
+nav a { color: #2f6f62; margin-left: 16px; text-decoration: none; }
+a { color: #2f6f62; }
+.btn { background: #b5523b; color: #ffffff; padding: 14px 28px; display: inline-block; border-radius: 4px; font-size: 18px; }
+.hero { padding: 64px 32px; min-height: 320px; }
+.band { background: #e9e1d4; padding: 48px 32px; min-height: 200px; }
+footer { background: #1f2a2e; color: #fbf8f3; padding: 32px; }
+footer a { color: #fbf8f3; }
+img.photo { width: 300px; height: 200px; background: #ccc; }
