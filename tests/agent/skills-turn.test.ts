@@ -177,6 +177,15 @@ describe("a turn that opens a skill", () => {
     expect(out.skills).toEqual([]);
   });
 
+  it("a skill the plan names is to be opened first; one it does not name is only listed", async () => {
+    const named = setup({ ...scripts(), "chief-of-staff:plan": { structured: { steps: [{ agent: "content-strategist", task: "Write the post with the instagram-post skill" }], rationale: "content" } } }, { skills: CATALOG });
+    await named.run();
+    expect(named.runtime.runs.find((r) => r.phase === "work")!.prompt).toMatch(/Your plan names your skill instagram-post: open it with use_skill in your first round/);
+    const plain = setup(scripts(), { skills: CATALOG });
+    await plain.run();
+    expect(plain.runtime.runs.find((r) => r.phase === "work")!.prompt).not.toMatch(/Your plan names your skill/);
+  });
+
   it("the Chief may open its planning skill while planning", async () => {
     const s = setup({
       ...scripts(),
