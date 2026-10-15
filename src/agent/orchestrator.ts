@@ -39,8 +39,9 @@ import { checkTurn, extractCitations, hasNumbers } from "./checks.js";
 import type { SkillCatalog } from "./skills/catalog.js";
 import { clipToItem } from "./style.js";
 import { languageNote } from "./language.js";
+import { humanPass, rewritePrompt, rewriteSystem, REWRITE_SCHEMA } from "./humanize.js";
 import {
-  CHIEF, FINDING_SCHEMA, findingMaxChars, MAX_DESKS, MAX_DESKS_BROAD, REVIEW_SCHEMA, agentSystemPrompt, directPrompt, planSchema,
+  CHIEF, CONTENT_DESK, FINDING_SCHEMA, findingMaxChars, MAX_DESKS, MAX_DESKS_BROAD, REVIEW_SCHEMA, agentSystemPrompt, directPrompt, planSchema,
   planPrompt, planSystemPrompt, reviewPrompt, revisePrompt, synthesisPrompt, workPrompt, type FindingView, type PromptOpts, type ReviewEvidence,
 } from "./prompts.js";
 import { invokeTool, isWriteTool, nextCallId, type AgentRuntime, type Emit, type RunInput, type RunOutput, type RunPhase } from "./runtime.js";
@@ -58,8 +59,8 @@ const EVIDENCE_ITEM_CHARS = 600;   // per tool result
 // Model turns per job (an SDK turn is one model response; a round of tool calls and a structured answer take one each).
 // Each budget is the job's tool rounds (stated in its prompt) + its answer + one turn of slack; a review has no slack:
 // it gets the cited tool data in its prompt, so one lookup at most and then its verdict.
-const TOOL_ROUNDS: Record<RunPhase, number> = { plan: 0, work: 5, review: 1, revise: 2, synthesis: 2, direct: 5 };
-export const MAX_TURNS: Record<RunPhase, number> = { plan: 3, work: 7, review: 2, revise: 4, synthesis: 4, direct: 7 };
+const TOOL_ROUNDS: Record<RunPhase, number> = { plan: 0, work: 5, review: 1, revise: 2, synthesis: 2, direct: 5, polish: 0 };
+export const MAX_TURNS: Record<RunPhase, number> = { plan: 3, work: 7, review: 2, revise: 4, synthesis: 4, direct: 7, polish: 2 };
 export const toolRounds = (phase: RunPhase): number => TOOL_ROUNDS[phase];
 
 // Planning is a short structured choice of desks: the cheapest model does it (unless TurnDeps.model overrides all).
@@ -96,6 +97,7 @@ export interface TurnDeps {
   capabilities?: CapabilityModeInfo[];      // the capability ladder: the Chief says where non-live data comes from
   team?: TeamSettings;                      // desks switched off or light, and the owner's standing instructions
   language?: string;                        // the business's own language setting (language.ts); absent: follow the question
+  humanize?: boolean;                       // default true: the standing last pass on the answer (src/agent/humanize.ts)
   skills?: SkillCatalog;                    // the skills agents can open (use_skill): the shipped packs plus this business's own; none = no skills
 }
 
@@ -931,6 +933,31 @@ class Turn {
     return `it built on an earlier draft of ${changed.map((x) => `${nameOf(x.agent)}'s finding [${x.id}], which reviewers then ${x.rejected ? "rejected" : "revised"}`).join("; and of ")}. Check what it took from it against the final version above.`;
   }
 
+  // ----- the last pass: the answer reads as a person wrote it -----
+
+  // The no-model pass always (wrappers, dashes, curly quotes); Dev on the cheapest model only when strong tells are left,
+  // and not for copy Dev already checked (the content desk's captions) or when Dev is switched off. A table or pure data
+  // is left alone. The owner sees the cleaned answer replace the streamed one; nothing it relies on can move (sameFacts).
+  async polish(text: string, plan: Plan): Promise<string> {
+    if (this.deps.humanize === false || !text.trim()) return text;
+    const dev = agentById("copy-editor")!;
+    const content = this.planFindings(plan).some((f) => f.agent === CONTENT_DESK && !f.rejected);
+    const instructions = (this.deps.team?.instructions ?? []).filter((n) => n.agents.includes(dev.id) && !n.channel).map((n) => n.text);
+    const r = await humanPass(text, {
+      skipModel: content || this.off.has(dev.id) || this.deps.signal?.aborted === true,
+      rewrite: async (t, tells) => {
+        const out = await this.step(dev, "Making the answer read like a person wrote it", () => this.runAgent(dev, {
+          phase: "polish", model: this.deps.model ?? LIGHT_MODEL, system: rewriteSystem({ instructions }), prompt: rewritePrompt(t, tells),
+          tools: [], outputSchema: REWRITE_SCHEMA, maxTurns: MAX_TURNS.polish,
+        }));
+        const s = (out?.structured ?? (out ? tryParseJson(out.text) : undefined)) as { text?: unknown } | undefined;
+        return typeof s?.text === "string" ? s.text : undefined;
+      },
+    });
+    if (r.changed) this.emit({ type: "text", agent: CHIEF, delta: r.text, reset: true });
+    return r.text;
+  }
+
   // ----- answer -----
 
   async answer(plan: Plan, fast: boolean, work?: WorkGates): Promise<{ text: string; ok: boolean }> {
@@ -1080,8 +1107,10 @@ export async function runTurn(input: TurnInput, deps: TurnDeps, emit: Emit): Pro
   const fastPath = plan.steps.length === 1 && plan.steps[0]!.agent === CHIEF;
   const work = fastPath ? undefined : t.work(plan.steps);
   work?.final.catch(() => {}); // awaited below; this only keeps an early rejection from going unhandled
-  const { text, ok } = await t.answer(plan, fastPath, work);
+  const answered = await t.answer(plan, fastPath, work);
   await work?.final;
+  const ok = answered.ok;
+  const text = ok ? await t.polish(answered.text, plan) : answered.text;
 
   const findings = plan.steps.map((s) => t.findings.get(s.agent)).filter((f): f is FindingRecord => !!f);
   const { turn: guidedBy, byAgent } = t.guidance([...plan.steps.map((s) => s.task), ...findings.map((f) => f.text), text]);

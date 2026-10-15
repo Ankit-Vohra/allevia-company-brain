@@ -1,5 +1,5 @@
 // Visible use: a skill opened in a turn is recorded on the Turn and its Finding (queryable), kept in the replay log, shown
-// on the session's turns, and folded into the lane the owner sees ("Using: Instagram post craft").
+// on the session's turns, and said in plain words in the work log (the web lanes read skill_used; their types are checked by the web build).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AgentEvent } from "../../shared/contracts.js";
 import { ask } from "../../src/agent/ask.js";
@@ -11,7 +11,6 @@ import { closeAll, type GraphHandle } from "../../src/graph/client.js";
 import { ensureIndexes } from "../../src/graph/indexes.js";
 import { writeBatch } from "../../src/graph/upsert.js";
 import { sessionDetail } from "../../src/server/reads.js";
-import { deriveRun } from "../../web/src/state/derive.js";
 import { testGraph } from "../helpers/graph.js";
 import { NOW } from "../helpers/agent.js";
 
@@ -58,10 +57,7 @@ describe("a skill used in a turn (integration)", () => {
     expect(detail.turns[0]!.skills).toEqual(["content-strategist/instagram-post", "copy-editor/brand-voice-check"]);
   });
 
-  it("shows in the lane the owner reads, in plain words, with the lookup step folded away", () => {
-    const view = deriveRun(events);
-    expect(view.lanes["content-strategist"]!.skills.map((s) => s.name)).toEqual(["Instagram post craft"]);
-    expect(view.lanes["copy-editor"]!.skills.map((s) => s.name)).toEqual(["Brand voice check"]);
+  it("says so in plain words on the office floor: 'Tara is using: Instagram post craft'", () => {
     const said = events.filter((e) => e.type === "agent_status").map((e) => e.type === "agent_status" && e.text);
     expect(said).toContain("Tara is using: Instagram post craft");
     expect(said).toContain("Dev is using: Brand voice check");

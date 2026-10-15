@@ -6,6 +6,7 @@
 // orchestrator also enforces as the run's maxTurns.
 import { AGENTS, agentById, departmentById, type AgentDef } from "../../shared/roster.js";
 import { MODE_PHRASE, type CapabilityModeInfo } from "../capabilities/modes.js";
+import { VOICE_RULES } from "./humanize.js";
 import { ANSWER_SHAPE, CONTENT_SHAPE, DESK_SHAPE, OWNER_WORDS_RULE } from "./style.js";
 import type { SkillCatalog } from "./skills/catalog.js";
 import type { Skill } from "./skills/format.js";
@@ -58,7 +59,7 @@ export const HOUSE_RULES = `House rules (every Allevia agent):
 
 // What each reviewer looks for when it checks someone else's finding.
 const REVIEW_FOCUS: Record<string, string> = {
-  "copy-editor": "Hold it to the brand's voice rules (look them up with playbook) and strip AI-sounding phrasing. If the owner asked for this kind of writing (a sale post, an offer, an announcement), don't send it back for being promotional: ask only for plain, human wording, and keep the owner's own request and wording. Facts are the fact checker's job; a \"[suggested: …]\" spot is meant to be there. A caption that is only a label (a name, a place, a year) is not on brand either: it needs a hook line and a sentence a person would say; send it back.",
+  "copy-editor": "Hold it to the brand's voice rules (look them up with playbook) and strip AI-sounding phrasing. If the owner asked for this kind of writing (a sale post, an offer, an announcement), don't send it back for being promotional: ask only for plain, human wording, and keep the owner's own request and wording. Facts are the fact checker's job; a \"[suggested: …]\" spot is meant to be there. A caption that is only a label (a name, a place, a year) is not on brand either: it needs a hook line and a sentence a person would say; send it back. Copy that sounds machine-written (\"not just X, but Y\", \"Let's dive in\", stock words, a dash in every sentence) goes back too, with each phrase quoted and its plain replacement (your skill make-it-sound-human).",
   "fact-checker": "Check every claim and number against the graph (open the cited ids). Anything unsupported goes back. What counts as a claim: names, places, dates, numbers, awards, materials, results, and what the business does or offers. A mood or a way of framing is not a claim, so leave it to the copy editor; a \"Film:\" direction is not a claim (it tells the owner what to shoot); a \"[suggested: …]\" spot is the writer's clearly marked proposal for the owner to accept, not a claim, so don't reject it for being absent from the record; reject it only if it states a number, award, price, date, result or named person as if it were fact, or contradicts the record. A \"[you tell us: …]\" placeholder is the right way to mark a missing hard fact, not a gap.",
   "coe-lead": "Check every figure: the right number, the right period, the right comparison. Anything not in the data goes back.",
 };
@@ -252,7 +253,7 @@ export function workPrompt(o: { question: string; task: string; recall: string; 
   }
   if (o.failedDeps.length) parts.push(`${o.failedDeps.map(who).join(" and ")} could not finish; work without that finding and say what is missing.`);
   parts.push(`Do the task with your tools${o.toolRounds !== undefined ? ` (${rounds(o.toolRounds)}; several tools in one round is fine)` : ""}, then return your Finding:
-- text: at most ${findingMaxChars(o.agent)} characters of plain markdown. Every claim cited as [[id]]; every number with its date or period; "not recorded" where the graph has nothing. ${o.agent === CONTENT_DESK ? CONTENT_SHAPE : DESK_SHAPE}
+- text: at most ${findingMaxChars(o.agent)} characters of plain markdown. Every claim cited as [[id]]; every number with its date or period; "not recorded" where the graph has nothing. ${o.agent === CONTENT_DESK ? `${CONTENT_SHAPE}\n${VOICE_RULES}` : DESK_SHAPE}
 - citations: every id you cited.
 - basedOn: the finding ids above that you built on (empty if none).
 - proposals: actions you would suggest, one line each (optional). Do not execute anything.`);
@@ -306,6 +307,8 @@ const ANSWER_RULES = `Write the answer to the owner now.
 ${ANSWER_SHAPE}
 
 ${OWNER_WORDS_RULE}
+
+${VOICE_RULES}
 
 Keep these rules too:
 - Write nothing before your lookups are done: no working notes, no "let me check", no plan. Everything you write is shown to the owner as the answer.

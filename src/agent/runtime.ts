@@ -24,7 +24,7 @@ import { subscriptionEnv } from "./sdk-env.js";
 import type { AlleviaTool, ToolContext } from "./tool.js";
 
 export type Emit = (e: AgentEvent) => void;
-export type RunPhase = "plan" | "work" | "review" | "revise" | "synthesis" | "direct";
+export type RunPhase = "plan" | "work" | "review" | "revise" | "synthesis" | "direct" | "polish";
 
 export interface RunInput {
   agentId: string;
