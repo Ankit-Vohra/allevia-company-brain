@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { GraphHandle } from "../../../src/graph/client.js";
+import type { ToolContext } from "../../../src/agent/tool.js";
 import { proposeAction } from "../../../src/agent/tools/actions.js";
 import { recall } from "../../../src/agent/tools/memory.js";
 import { call, ids, makeCtx, seededGraph } from "../../helpers/tools.js";
@@ -21,6 +22,12 @@ describe("propose_action (integration)", () => {
     expect(r.data).toMatchObject({ refused: true, error: expect.stringMatching(/read-only/) });
     expect((await g.roQuery<{ c: number }>("MATCH (r:Recommendation {id:'recommendation:add-meta-description-to-jobs'}) RETURN count(r) AS c"))[0]!.c).toBe(0);
     expect(proposeAction.writes).toBe(true);
+  });
+
+  it("a stopped run (ctx.signal) writes nothing", async () => {
+    const r = await call(proposeAction, args, makeCtx(g, { agentId: "tech-lead", signal: AbortSignal.abort() } as unknown as Partial<ToolContext>));
+    expect(r.data).toMatchObject({ refused: true, error: expect.stringMatching(/stopped/) });
+    expect((await g.roQuery<{ c: number }>("MATCH (r:Recommendation {id:'recommendation:add-meta-description-to-jobs'}) RETURN count(r) AS c"))[0]!.c).toBe(0);
   });
 
   it("creates a Recommendation, a pending Approval, evidence links and the agent that produced it", async () => {

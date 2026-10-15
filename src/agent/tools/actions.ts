@@ -8,7 +8,9 @@ import { agentById } from "../../../shared/roster.js";
 import { upsertEdge, upsertNode } from "../../graph/upsert.js";
 import { entityId } from "../../util/ids.js";
 import { isoDate } from "../../util/time.js";
-import { Collector, InputError, clip, defineTool, getNode, getNodes, nextId, refuseIfReadOnly, ro, serial } from "./common.js";
+import {
+  Collector, InputError, clip, defineTool, getNode, getNodes, nextId, refuseIfReadOnly, refuseIfStopped, ro, serial,
+} from "./common.js";
 
 const ACTION_KINDS = ["github_issue", "content_draft", "pause_ad", "discord_post"] as const satisfies readonly ActionKind[];
 const PAYLOAD_CAP = 20_000;
@@ -37,6 +39,7 @@ async function runPropose(args: Args, ctx: ToolContext) {
   const agentId = staffAgentId(ctx.agentId);
 
   const { approvalId, reused } = await serial(ctx.graph.name, async () => {
+    refuseIfStopped(ctx, "propose_action");
     if (!(await getNode(ctx, agentId))) {
       const def = agentById(ctx.agentId);
       await upsertNode(ctx.graph, {

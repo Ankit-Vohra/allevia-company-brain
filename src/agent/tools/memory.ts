@@ -10,7 +10,7 @@ import { DisallowedRelationship } from "../../graph/errors.js";
 import { isoDate } from "../../util/time.js";
 import {
   Collector, EDGE, InputError, NODE, SEARCH_TYPES, brief, clip, defineTool, ftEntities, getNodes, isoOrNull, nextId,
-  refuseIfReadOnly, ro, serial, type EdgeRow, type NodeRow,
+  refuseIfReadOnly, refuseIfStopped, ro, serial, type EdgeRow, type NodeRow,
 } from "./common.js";
 
 // ---------- recall ----------
@@ -139,6 +139,7 @@ async function runRemember(args: { text: string; kind: "preference" | "fact" | "
   const asOf = isoDate(ctx.now);
 
   const { id, stated } = await serial(ctx.graph.name, async () => {
+    refuseIfStopped(ctx, "remember");
     const id = await nextId(ctx, `memory:${ctx.turnId}-`);
     await upsertNode(ctx.graph, {
       type: "Memory", id, name: clip(text, 80)!, summary: clip(text, 400), props: { kind: args.kind, text: text.slice(0, 2000), at: ctx.now },

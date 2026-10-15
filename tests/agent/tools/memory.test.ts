@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { GraphHandle } from "../../../src/graph/client.js";
+import type { ToolContext } from "../../../src/agent/tool.js";
 import { recall, remember } from "../../../src/agent/tools/memory.js";
 import { SEED_NOW } from "../../fixtures/seed-graph.js";
 import { call, ids, makeCtx, seededGraph } from "../../helpers/tools.js";
@@ -56,6 +57,14 @@ describe("recall, remember (integration)", () => {
     expect(r.data).toMatchObject({ refused: true, error: expect.stringMatching(/read-only/) });
     expect(await count("MATCH (m:Memory) WHERE m.id STARTS WITH 'memory:t-100-' RETURN count(m) AS c")).toBe(0);
     expect(remember.writes).toBe(true);
+  });
+
+  it("remember: a run stopped mid-call (ctx.signal) writes nothing", async () => {
+    const stop = new AbortController();
+    const ctx = makeCtx(g, { signal: stop.signal, embedQuery: async () => { stop.abort(); return []; } } as unknown as Partial<ToolContext>);
+    const r = await call(remember, { text: "Keep this", kind: "fact", about: ["channel:instagram"] }, ctx);
+    expect(r.data).toMatchObject({ refused: true, error: expect.stringMatching(/stopped/) });
+    expect(await count("MATCH (m:Memory) WHERE m.id STARTS WITH 'memory:t-100-' RETURN count(m) AS c")).toBe(0);
   });
 
   it("remember: a Memory ABOUT existing entities, STATED by the asker, sourced to the turn; ids never collide", async () => {

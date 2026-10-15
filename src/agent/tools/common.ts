@@ -89,6 +89,13 @@ export function refuseIfReadOnly(ctx: ToolContext, tool: string): void {
   if (ctx.readOnly) throw new InputError(`${tool} is disabled in read-only mode; nothing was saved.`, { refused: true });
 }
 
+// dev's ToolContext gains `signal`, aborted when the agent's run is stopped (timeout, turn stopped): a write tool checks
+// it right before it commits, so a run stopped mid-call changes nothing. Read through a cast, so this compiles before
+// and after that field reaches this branch.
+export function refuseIfStopped(ctx: ToolContext, tool: string): void {
+  if ((ctx as { signal?: AbortSignal }).signal?.aborted) throw new InputError(`${tool} saved nothing: the run was stopped.`, { refused: true });
+}
+
 // ---------- reads ----------
 
 // Two FalkorDB planner traps every query here avoids:
