@@ -2,7 +2,9 @@
 // are functional, and which properties keep a version history. Writes are validated against this; the extraction
 // JSON schema is built from it. Bump ONTOLOGY_VERSION when a change needs re-ingestion.
 
-export const ONTOLOGY_VERSION = 1;
+// v2 (product design §7): Goal, Program, Checkpoint, Asset, Capability, their relationships (PURSUES, TRACKS, ADVANCES,
+// ENROLLED_IN, DERIVED_FROM, USES_ASSET, DEPICTS, GUIDED_BY), and the extended patterns that tie them to the rest.
+export const ONTOLOGY_VERSION = 2;
 
 // Every node also carries the base label `Entity` (so `MATCH (n:Entity {id})` finds anything, Chunks and Versions
 // included). The type label is the one that is not `Entity`.
@@ -12,6 +14,9 @@ export const ENTITY_TYPES = [
   "System", "Event", "Playbook", "Rule", "Recommendation", "Approval", "Action", "Session", "Turn", "Memory", "Version",
   // the agent company: one Finding per agent step-result inside a Turn (founder 2026-10-15: "every agent is visible")
   "Finding",
+  // product design §7.1: what the owner is pursuing, the Allevia 90 program and its day 0/30/60/90 checkpoints, media
+  // (originals, variants, finals), and what each connected source lets the agents do (the capability ladder)
+  "Goal", "Program", "Checkpoint", "Asset", "Capability",
 ] as const;
 export type EntityType = (typeof ENTITY_TYPES)[number];
 
@@ -33,6 +38,8 @@ export const REL_TYPES = [
   "HANDLED_BY", "PRODUCED", "REVIEWED",
   // who uses which tool/system (registry: agents using connectors and skills)
   "USES",
+  // goals, program, media and guidance (product design §7.3)
+  "PURSUES", "TRACKS", "ADVANCES", "ENROLLED_IN", "DERIVED_FROM", "USES_ASSET", "DEPICTS", "GUIDED_BY",
 ] as const;
 export type RelType = (typeof REL_TYPES)[number];
 
@@ -50,7 +57,7 @@ const ACTORS: EntityType[] = ["Person", "Agent"];
 const OWNERS: EntityType[] = ["Person", "Agent", "Team", "Business"];
 const OWNABLE: EntityType[] = [
   "Task", "System", "Channel", "Product", "Feature", "Decision", "Campaign", "Page", "Document", "Playbook", "Metric",
-  "BrandAsset", "Content",
+  "BrandAsset", "Content", "Goal",
 ];
 const EVIDENCE: EntityType[] = ["Observation", "Document", "Chunk", "Memory", "Event", "Decision"];
 
@@ -60,14 +67,16 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   ...pat(OWNERS, "OWNS", OWNABLE),
   ...pat([...ACTORS, "Team"], "KNOWS_ABOUT", "*"),
   ...pat(ACTORS, "AUTHORED", ["Document", "Content", "Decision", "Playbook", "Rule"]),
+  ...pat("Person", "AUTHORED", "Asset"),
   ...pat([...ACTORS, "Team"], "DECIDED", "Decision"),
   ...pat("Decision", "BASED_ON", [...EVIDENCE, "Recommendation"]),
   ...pat("Recommendation", "BASED_ON", [...EVIDENCE, "Rule", "Metric", "Content", "Page", "Campaign"]),
-  ...pat(["Decision", "Rule", "BrandRule", "Recommendation", "Document", "Memory", "Playbook"], "SUPERSEDES",
-    ["Decision", "Rule", "BrandRule", "Recommendation", "Document", "Memory", "Playbook"]).filter((p) => p[0] === p[2]),
+  ...pat(["Decision", "Rule", "BrandRule", "Recommendation", "Document", "Memory", "Playbook", "Goal"], "SUPERSEDES",
+    ["Decision", "Rule", "BrandRule", "Recommendation", "Document", "Memory", "Playbook", "Goal"]).filter((p) => p[0] === p[2]),
   ...pat(["Decision", "Event", "Action", "Task", "Recommendation"], "AFFECTS", "*"),
   ...pat("System", "DEPENDS_ON", "System"),
   ...pat("Channel", "DEPENDS_ON", ["System", "Channel"]),
+  ...pat("Capability", "DEPENDS_ON", ["Channel", "System"]),
   ...pat("Task", "DEPENDS_ON", ["Task", "System", "Decision"]),
   ...pat(["Product", "Feature"], "DEPENDS_ON", ["System", "Feature"]),
   ...pat("Campaign", "DEPENDS_ON", ["Channel", "Page", "Content"]),
@@ -80,6 +89,8 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   ...pat("Team", "PART_OF", ["Team", "Business"]),
   ...pat(["Product", "Channel"], "PART_OF", "Business"),
   ...pat("System", "PART_OF", "System"),
+  ...pat(["Goal", "Checkpoint"], "PART_OF", "Program"),
+  ...pat("Capability", "PART_OF", "Business"),
   // knowledge
   ...pat(["Document", "Chunk", "Content", "Task"], "MENTIONS", "*"),
   ...pat(["Document", "Chunk"], "LINKS_TO", ["Document", "Page"]),
@@ -121,13 +132,24 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   // agent company: a Turn is handled by agents; each agent PRODUCES Findings (its share of the work, with citations);
   // reviewers REVIEW them; a Finding can build on another agent's Finding (the handoff, visible as BASED_ON).
   ...pat("Turn", "HANDLED_BY", "Agent"),
-  ...pat("Agent", "PRODUCED", ["Finding", "Recommendation", "Content", "Document"]),
-  ...pat("Agent", "REVIEWED", ["Finding", "Content", "Recommendation"]),
+  ...pat("Agent", "PRODUCED", ["Finding", "Recommendation", "Content", "Document", "Asset", "Task"]),
+  ...pat("Agent", "REVIEWED", ["Finding", "Content", "Recommendation", "Asset"]),
   ...pat("Finding", "PART_OF", "Turn"),
   ...pat("Finding", "CITED", "*"),
   ...pat("Finding", "BASED_ON", ["Finding", ...EVIDENCE]),
   ...pat("Recommendation", "BASED_ON", "Finding"),
   ...pat(["Person", "Agent", "Team", "Business", "System"], "USES", ["System", "Channel", "Playbook", "Rule"]),
+  ...pat("Agent", "USES", "Capability"),
+  // goals, program, media and guidance (product design §7.3). Numbers stay Observations: MEASURES (Observation -> *)
+  // already reaches a Goal, an Asset or a Checkpoint.
+  ...pat("Business", "PURSUES", "Goal"),
+  ...pat("Goal", "TRACKS", "Metric"),
+  ...pat(["Recommendation", "Content", "Task", "Approval", "Campaign"], "ADVANCES", "Goal"),
+  ...pat("Business", "ENROLLED_IN", "Program"),
+  ...pat("Asset", "DERIVED_FROM", "Asset"), // edge props: step, treatment
+  ...pat("Content", "USES_ASSET", "Asset"),
+  ...pat("Asset", "DEPICTS", ["Product", "Page", "Business", "Event"]),
+  ...pat(["Turn", "Finding", "Content"], "GUIDED_BY", ["Memory", "Rule", "BrandRule"]),
 ];
 
 const ALLOWED = new Set(ALLOWED_PATTERNS.map(([f, r, t]) => `${f}|${r}|${t}`));
@@ -153,6 +175,9 @@ export const FUNCTIONAL_RELS: FunctionalRule[] = [
   { rel: "OWNS", toType: "Task", key: "to", why: "a task has one current owner" },
   { rel: "SUPERSEDES", key: "to", why: "a decision (or rule, doc…) is superseded by at most one successor" },
   { rel: "IN_SESSION", fromType: "Turn", key: "from", why: "a turn belongs to one session" },
+  { rel: "TRACKS", fromType: "Goal", key: "from", why: "a goal is measured by one metric" },
+  { rel: "ENROLLED_IN", fromType: "Business", key: "from", why: "a business is in one current program" },
+  { rel: "DERIVED_FROM", fromType: "Asset", key: "from", why: "an asset has one parent: the one it was made from" },
 ];
 
 export function functionalRule(rel: RelType, fromType: EntityType, toType: EntityType): FunctionalRule | undefined {
@@ -171,6 +196,14 @@ export const TRACKED_PROPS: Partial<Record<EntityType, string[]>> = {
   Recommendation: ["status"],
   Approval: ["status"],
   Observation: ["value", "unit"],
+  // product design §7.1 / §7.2
+  Goal: ["status", "target"],
+  Program: ["status", "guaranteeState"],
+  Asset: ["status"],
+  Capability: ["accessMode", "status"],
+  Business: ["country", "currency", "locale", "timeZone", "designStyle", "templateKey"],
+  Agent: ["enabled", "mode", "autonomy"],
+  Rule: ["status"],
 };
 
 // Types the entity search (full-text on name/summary, vector on embedding) should return. Chunks have their own
@@ -178,7 +211,7 @@ export const TRACKED_PROPS: Partial<Record<EntityType, string[]>> = {
 export const SEARCHABLE: EntityType[] = [
   "Business", "Person", "Agent", "Team", "Product", "Feature", "Audience", "Need", "BrandRule", "BrandAsset", "Channel",
   "Content", "Campaign", "Page", "Query", "Metric", "Document", "Decision", "Task", "System", "Event", "Playbook", "Rule",
-  "Recommendation", "Memory", "Finding",
+  "Recommendation", "Memory", "Finding", "Goal",
 ];
 
 const TYPE_SET = new Set<string>(ENTITY_TYPES);

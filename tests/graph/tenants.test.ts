@@ -2,6 +2,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import { randomBytes } from "node:crypto";
 import { closeAll, openGraph, openGraphByName, MAX_PAGE } from "../../src/graph/client.js";
 import { listIndexes } from "../../src/graph/indexes.js";
+import { ONTOLOGY_VERSION } from "../../src/graph/schema.js";
 import { ensureTenant, getTenant, listTenants, businessId } from "../../src/graph/tenants.js";
 import { entityId } from "../../src/util/ids.js";
 import { testGraphName } from "../helpers/graph.js";
@@ -33,7 +34,7 @@ describe("tenants (integration)", () => {
   it("creates the tenant, its Business node and its indexes", async () => {
     const t = await ensureTenant({ slug, name: "Aamdani Test", domain: "aamdani.ai", industry: "jobs", city: "Raipur" }, opts);
     expect(t).toMatchObject({ slug, name: "Aamdani Test", domain: "aamdani.ai", industry: "jobs", city: "Raipur",
-      graph: `allevia_${slug}`, businessId: entityId("Business", slug), ontologyVersion: 1 });
+      graph: `allevia_${slug}`, businessId: entityId("Business", slug), ontologyVersion: ONTOLOGY_VERSION });
     expect(typeof t.createdAt).toBe("number");
     const g = await openGraph(slug);
     const [b] = await g.roQuery<Record<string, unknown>>("MATCH (b:Entity:Business {id:$id}) RETURN b.name AS name, b.domain AS domain, b.city AS city", { id: businessId(slug) });

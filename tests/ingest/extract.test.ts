@@ -258,6 +258,8 @@ describe("extractDoc cache", () => {
     expect(base).toMatch(/^[0-9a-f]{64}$/);
     expect(cacheKey(doc, biz, "haiku", { ontology: 999, prompt: 1 })).not.toBe(base);
     expect(cacheKey(doc, biz, "haiku", { ontology: 1, prompt: 999 })).not.toBe(base);
+    // a v1 cache entry no longer matches: the ontology bump re-extracts
+    expect(cacheKey(doc, biz, "haiku", { ontology: 1 })).not.toBe(base);
   });
 
   it("misses when the system prompt text changes, e.g. another business context", () => {

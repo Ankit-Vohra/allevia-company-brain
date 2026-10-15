@@ -36,7 +36,8 @@ export interface BusinessContext { name: string; industry?: string }
 //   Page              ids are crawled URLs; "the jobs page" cannot become one
 //   Metric            numbers go in observations; metric definitions come from the ops snapshot
 //   Playbook, Rule    vendored know-how packs and rules learned from approvals
-const NOT_EXTRACTED = new Set<EntityType>(["Document", "Recommendation", "Finding", "Memory", "Page", "Metric", "Playbook", "Rule"]);
+//   Goal              set in the onboarding wizard against a measured baseline, not read out of a document
+const NOT_EXTRACTED = new Set<EntityType>(["Document", "Recommendation", "Finding", "Memory", "Page", "Metric", "Playbook", "Rule", "Goal"]);
 export const EXTRACTABLE_TYPES: EntityType[] = SEARCHABLE.filter((t) => !NOT_EXTRACTED.has(t));
 
 // One line each, written for a small business owner's records.
