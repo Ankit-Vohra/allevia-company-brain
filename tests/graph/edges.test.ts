@@ -203,4 +203,83 @@ describe("edge time (integration)", () => {
       { since: day("2026-10-12"), until: null, asOf: "2026-10-12" },
     ]);
   });
+
+  it("an older source never closes a holder backed by a newer source: its claim is stored closed and empty", async () => {
+    await task("task:contra");
+    const own = (o: string, since: string, asOf: string) =>
+      upsertEdge(g, { from: o, type: "OWNS", to: "task:contra", since: day(since), asOf, src: `document:${o}` }, day("2026-10-15"));
+    await own("person:p1", "2026-09-01", "2026-09-30"); // a 09-30 source: p1 has owned it since 09-01
+    expect(await own("person:p2", "2026-09-10", "2026-09-15")).toEqual({ created: true, closed: 0 }); // a 09-15 source says p2
+    expect(await owners("task:contra")).toEqual([
+      { o: "person:p1", since: day("2026-09-01"), until: null },
+      { o: "person:p2", since: day("2026-09-10"), until: day("2026-09-10") },
+    ]);
+    const [why] = await g.roQuery("MATCH (:Entity {id:'person:p2'})-[r:OWNS]->(:Entity {id:'task:contra'}) RETURN r.closeReason AS why");
+    expect(why).toEqual({ why: "contradicted by a newer source" });
+    await expectOneHolderAtATime("task:contra");
+    // a replay changes nothing; a newer source still hands over as usual
+    expect(await own("person:p2", "2026-09-10", "2026-09-15")).toEqual({ created: false, closed: 0 });
+    expect(await own("person:p3", "2026-10-05", "2026-10-05")).toEqual({ created: true, closed: 1 });
+    expect((await owners("task:contra")).filter((r) => r.until === null || r.until > r.since)).toEqual([
+      { o: "person:p1", since: day("2026-09-01"), until: day("2026-10-05") },
+      { o: "person:p3", since: day("2026-10-05"), until: null },
+    ]);
+  });
+
+  it("settles conflicting sources the same way whatever order they arrive in", async () => {
+    // p1 per a 09-30 source (since 09-01), p2 per an older 09-15 source (since 09-10), p3 per a 10-05 source
+    const facts = [
+      { o: "person:p1", since: day("2026-09-01"), asOf: "2026-09-30" },
+      { o: "person:p2", since: day("2026-09-10"), asOf: "2026-09-15" },
+      { o: "person:p3", since: day("2026-10-05"), asOf: "2026-10-05" },
+    ];
+    const expected = [
+      { o: "person:p1", since: day("2026-09-01"), until: day("2026-10-05") },
+      { o: "person:p2", since: day("2026-09-10"), until: day("2026-09-10") }, // contradicted: held at no moment
+      { o: "person:p3", since: day("2026-10-05"), until: null },
+    ];
+    for (const [k, order] of permutations(facts).entries()) {
+      const t = `task:sources-${k}`;
+      await task(t);
+      for (const f of order) await upsertEdge(g, { from: f.o, type: "OWNS", to: t, since: f.since, asOf: f.asOf }, day("2026-10-15"));
+      expect(await owners(t), `arrival order ${order.map((f) => f.o).join(" ")}`).toEqual(expected);
+      await expectOneHolderAtATime(t);
+      for (const f of order) {
+        expect(await upsertEdge(g, { from: f.o, type: "OWNS", to: t, since: f.since, asOf: f.asOf }, day("2026-10-16"))).toEqual({ created: false, closed: 0 });
+      }
+      expect(await owners(t)).toEqual(expected);
+    }
+  });
+
+  it("a functional fact replayed without its own since lands on the same edge (since = its source date)", async () => {
+    await task("task:nosince");
+    const own = (o: string, asOf: string, now: number) => upsertEdge(g, { from: o, type: "OWNS", to: "task:nosince", asOf }, now);
+    await own("person:p1", "2026-09-01", day("2026-10-15"));
+    await own("person:p2", "2026-09-10", day("2026-10-15") + 1);
+    const before = await owners("task:nosince");
+    expect(before).toEqual([
+      { o: "person:p1", since: day("2026-09-01"), until: day("2026-09-10") },
+      { o: "person:p2", since: day("2026-09-10"), until: null },
+    ]);
+    for (const now of [day("2026-10-16"), day("2026-10-17")]) {
+      expect(await own("person:p1", "2026-09-01", now)).toEqual({ created: false, closed: 0 });
+      expect(await own("person:p2", "2026-09-10", now + 1)).toEqual({ created: false, closed: 0 });
+    }
+    expect(await owners("task:nosince")).toEqual(before);
+  });
+
+  it("a re-assert refreshes the edge whose window covers its since, not the current one", async () => {
+    const knows = (since: string, asOf: string, now: number) =>
+      upsertEdge(g, { from: "person:p3", type: "KNOWS_ABOUT", to: "system:s1", since: day(since), asOf, src: `document:${asOf}` }, now);
+    const edges = () => g.roQuery("MATCH (:Entity {id:'person:p3'})-[r:KNOWS_ABOUT]->(:Entity {id:'system:s1'}) RETURN r.since AS since, r.until AS until, r.src AS src ORDER BY since");
+    await knows("2026-09-01", "2026-09-01", day("2026-09-01"));
+    await closeEdge(g, "person:p3", "KNOWS_ABOUT", "system:s1", day("2026-09-10"));
+    await knows("2026-09-20", "2026-09-20", day("2026-09-20"));
+    // a newer source restating that the fact held on 09-05
+    expect(await knows("2026-09-05", "2026-09-25", day("2026-09-25"))).toEqual({ created: false, closed: 0 });
+    expect(await edges()).toEqual([
+      { since: day("2026-09-01"), until: day("2026-09-10"), src: "document:2026-09-25" },
+      { since: day("2026-09-20"), until: null, src: "document:2026-09-20" }, // the current edge keeps its own source
+    ]);
+  });
 });

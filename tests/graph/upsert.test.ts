@@ -100,7 +100,8 @@ describe("temporal upsert (integration)", () => {
     expect(await upsertEdge(g, { ...e, conf: 0.95 }, T0 + 50)).toEqual({ created: false, closed: 0 });
     const rows = await g.roQuery<Record<string, unknown>>(
       "MATCH (:Entity {id:'system:gsc'})-[r:DEPENDS_ON]->(:Entity {id:'system:ops-mcp'}) RETURN r.since AS since, r.until AS until, r.recordedAt AS rec, r.src AS src, r.asOf AS asOf, r.conf AS conf, r.note AS note");
-    expect(rows).toEqual([{ since: T0, until: null, rec: T0, src: "document:pending", asOf: "2026-10-14", conf: 0.95, note: "pull" }]);
+    // since defaults to the source date (asOf), else now
+    expect(rows).toEqual([{ since: Date.parse("2026-10-14"), until: null, rec: T0, src: "document:pending", asOf: "2026-10-14", conf: 0.95, note: "pull" }]);
   });
 
   it("4. a functional edge with a new target closes the old one and keeps both", async () => {
@@ -251,6 +252,30 @@ describe("temporal upsert (integration)", () => {
     // equal conf behaves as before: update and version
     await addObservation(g, { ...measured, metric: "reach", value: 96 }, T0 + 3);
     expect((await g.roQuery("MATCH (:Entity {id:$rid})-[:HAD_VERSION]->(v) RETURN count(v) AS c", { rid }))[0]).toEqual({ c: 2 });
+  });
+
+  it("replaying two same-day readings from different sources adds nothing", async () => {
+    await upsertNode(g, { type: "Channel", id: "channel:same-day", name: "Same day" }, T0);
+    await upsertNode(g, { type: "Document", id: "document:reading-b", name: "B" }, T0);
+    const a = { subject: "channel:same-day", metric: "followers", value: 10, asOf: "2026-10-14", src: "document:reading-a" };
+    const b = { ...a, value: 12, src: "document:reading-b" };
+    const id = await addObservation(g, a, T0);
+    await addObservation(g, b, T0 + 1);
+    const state = async () => ({
+      value: (await g.roQuery<{ v: number }>("MATCH (o:Entity {id:$id}) RETURN o.value AS v", { id }))[0]!.v,
+      versions: await count("MATCH (:Entity {id:$id})-[:HAD_VERSION]->(v) RETURN count(v) AS c", { id }),
+      edges: await count("MATCH (:Entity {id:$id})-[r]-() RETURN count(r) AS c", { id }),
+    });
+    const first = await state();
+    expect(first).toMatchObject({ value: 12, versions: 1 });
+    for (let run = 0; run < 2; run++) {
+      await addObservation(g, a, T0 + 10 + run);
+      await addObservation(g, b, T0 + 20 + run);
+      expect(await state()).toEqual(first);
+    }
+    // a genuinely new reading for that day still lands
+    await addObservation(g, { ...a, value: 11 }, T0 + 30);
+    expect(await state()).toMatchObject({ value: 11, versions: 2 });
   });
 
   it("concurrent creates of one node report created exactly once", async () => {

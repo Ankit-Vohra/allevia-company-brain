@@ -14,18 +14,26 @@
 // rest dropped silently) on a big tenant. They run once and pack their rows into lists of MAX_PAGE per result row.
 // Time: every function takes `timeoutMs` (default DEFAULT_READ_TIMEOUT_MS, 15 s): one budget for the whole call,
 // projection reads included. Running out throws a "timed out" error.
+// Staleness: while the graph is being written too fast for a consistent read (a busy ingest), the per-node algorithms
+// run on the last good projection and their result carries `stale: true` (see projection.ts).
 // Note: FalkorDB's labelPropagation is synchronous; on near-bipartite shapes (two triangles sharing an edge) labels
 // oscillate and one tight-looking cluster can come back as two communities. Cliques and dense clusters settle.
 import { MAX_PAGE, readBudget, type GraphHandle } from "./client.js";
 import { CLOSED_EDGE_COST, isEntityType, isRelType, type EntityType, type RelType } from "./schema.js";
 import { MissingEndpoint } from "./errors.js";
 import { edgeValidAt, toPathResult, type PathResult, type RawPath } from "./read.js";
-import { onEdgesValidAt, SEARCHABLE_LABEL } from "./projection.js";
+import { onEdgesValidAt, SEARCHABLE_LABEL, type ProjectionInfo } from "./projection.js";
 
 export type { NodeRef, EdgeRef, PathResult } from "./read.js";
 export { currentEdge } from "./read.js";
 
 export interface AlgoOpts { timeoutMs?: number }
+// A result list; `stale: true` when it was computed on the last good projection, not on the graph as it is now.
+export type AlgoRows<T> = T[] & { stale?: true };
+
+function rowsOf<T>(rows: T[], info: ProjectionInfo): AlgoRows<T> {
+  return info.stale ? Object.assign(rows, { stale: true as const }) : rows;
+}
 
 function checkLabels(labels: readonly string[]): void {
   for (const l of labels) if (l !== "Entity" && !isEntityType(l)) throw new Error(`unknown label ${JSON.stringify(l)}`);
@@ -109,34 +117,34 @@ const byId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const scoreDesc = (a: [string, number], b: [string, number]): number => b[1] - a[1] || byId(a[0], b[0]);
 const groupAsc = (a: [string, number], b: [string, number]): number => a[1] - b[1] || byId(a[0], b[0]);
 
-export async function pageRank(g: GraphHandle, label: EntityType | "Entity", rel?: RelType, opts: AlgoOpts = {}): Promise<Array<{ id: string; score: number }>> {
+export async function pageRank(g: GraphHandle, label: EntityType | "Entity", rel?: RelType, opts: AlgoOpts = {}): Promise<AlgoRows<{ id: string; score: number }>> {
   checkLabels([label]);
   if (rel) checkRels([rel]);
-  const rows = await onEdgesValidAt(g, undefined, rel ? [rel] : [], (h, left) =>
-    perNode(h, `CALL algo.pageRank('${projLabel(label)}', ${rel ? `'${rel}'` : "null"})`, "score", {}, left(), scoreDesc), opts);
-  return rows.map(([id, score]) => ({ id, score }));
+  return onEdgesValidAt(g, undefined, rel ? [rel] : [], async (h, left, info) => rowsOf(
+    (await perNode(h, `CALL algo.pageRank('${projLabel(label)}', ${rel ? `'${rel}'` : "null"})`, "score", {}, left(), scoreDesc))
+      .map(([id, score]) => ({ id, score })), info), opts);
 }
 
-export async function betweenness(g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[], opts: AlgoOpts = {}): Promise<Array<{ id: string; score: number }>> {
+export async function betweenness(g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[], opts: AlgoOpts = {}): Promise<AlgoRows<{ id: string; score: number }>> {
   checkLabels(labels);
   checkRels(rels);
-  const rows = await onEdgesValidAt(g, undefined, rels, (h, left) =>
-    perNode(h, `CALL algo.betweenness(${algoConfig(labels, rels)})`, "score", { labels: labels.map(projLabel), rels }, left(), scoreDesc), opts);
-  return rows.map(([id, score]) => ({ id, score }));
+  return onEdgesValidAt(g, undefined, rels, async (h, left, info) => rowsOf(
+    (await perNode(h, `CALL algo.betweenness(${algoConfig(labels, rels)})`, "score", { labels: labels.map(projLabel), rels }, left(), scoreDesc))
+      .map(([id, score]) => ({ id, score })), info), opts);
 }
 
-export async function components(g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[], opts: AlgoOpts = {}): Promise<Array<{ id: string; componentId: number }>> {
+export async function components(g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[], opts: AlgoOpts = {}): Promise<AlgoRows<{ id: string; componentId: number }>> {
   checkLabels(labels);
   checkRels(rels);
-  const rows = await onEdgesValidAt(g, undefined, rels, (h, left) =>
-    perNode(h, `CALL algo.WCC(${algoConfig(labels, rels)})`, "componentId", { labels: labels.map(projLabel), rels }, left(), groupAsc), opts);
-  return rows.map(([id, componentId]) => ({ id, componentId }));
+  return onEdgesValidAt(g, undefined, rels, async (h, left, info) => rowsOf(
+    (await perNode(h, `CALL algo.WCC(${algoConfig(labels, rels)})`, "componentId", { labels: labels.map(projLabel), rels }, left(), groupAsc))
+      .map(([id, componentId]) => ({ id, componentId })), info), opts);
 }
 
-export async function communities(g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[], opts: AlgoOpts = {}): Promise<Array<{ id: string; communityId: number }>> {
+export async function communities(g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[], opts: AlgoOpts = {}): Promise<AlgoRows<{ id: string; communityId: number }>> {
   checkLabels(labels);
   checkRels(rels);
-  const rows = await onEdgesValidAt(g, undefined, rels, (h, left) =>
-    perNode(h, `CALL algo.labelPropagation(${algoConfig(labels, rels)})`, "communityId", { labels: labels.map(projLabel), rels }, left(), groupAsc), opts);
-  return rows.map(([id, communityId]) => ({ id, communityId }));
+  return onEdgesValidAt(g, undefined, rels, async (h, left, info) => rowsOf(
+    (await perNode(h, `CALL algo.labelPropagation(${algoConfig(labels, rels)})`, "communityId", { labels: labels.map(projLabel), rels }, left(), groupAsc))
+      .map(([id, communityId]) => ({ id, communityId })), info), opts);
 }

@@ -11,6 +11,11 @@
 // SILENTLY. A read whose row count grows with the graph must page (MAX_PAGE rows at a time, keyed on an ordered
 // column) or pack its rows into lists; projection.ts, algorithms.ts and tenants.ts do.
 //
+// Busy server: FalkorDB refuses a query outright when MAX_QUEUED_QUERIES (25 here) are already waiting ("Max pending
+// queries exceeded"). Such a query never ran, so it is sent again after a short, growing, jittered pause: a read within
+// its own timeout (the time spent waiting comes off the TIMEOUT it is sent with; a read the server never admits in
+// time fails as timed out), a write for up to WRITE_QUEUE_WAIT_MS.
+//
 // Params: the client inlines params as a `CYPHER k=v …` prefix. Lists and maps work (so `SET n += $props` works);
 // map keys must be plain identifiers, numbers must be finite, and undefined values are dropped.
 import { FalkorDB, type Graph } from "falkordb";
@@ -19,6 +24,8 @@ import { loadConfig } from "../config.js";
 export const DEFAULT_READ_TIMEOUT_MS = 15_000;
 // Rows per page for reads that page: well under RESULTSET_SIZE (10,000), so a page is never truncated.
 export const MAX_PAGE = 5000;
+export const WRITE_QUEUE_WAIT_MS = 30_000;
+const BUSY = /max pending queries exceeded/i;
 
 type Param = null | string | number | boolean | Param[] | { [k: string]: Param };
 type Params = Record<string, Param>;
@@ -58,12 +65,26 @@ function cleanParam(v: unknown, path: string): Param | undefined {
 
 type FalkorQueryOptions = NonNullable<Parameters<Graph["query"]>[1]>;
 
-function toOptions(params: Record<string, unknown> | undefined, timeoutMs: number | undefined): FalkorQueryOptions {
-  const opts: { params?: Params; TIMEOUT?: number } = {};
-  if (params && Object.keys(params).length) opts.params = cleanParam(params, "$") as Params;
-  if (timeoutMs !== undefined) opts.TIMEOUT = Math.max(1, Math.round(timeoutMs));
-  return opts;
+// Sends `run(msLeft)` until the server admits it (see "Busy server" above), for at most `windowMs`.
+async function admitted<T>(windowMs: number, run: (msLeft: number) => Promise<T>): Promise<T> {
+  const start = Date.now();
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await run(windowMs - (Date.now() - start));
+    } catch (e) {
+      const pause = Math.min(200, 5 * 2 ** attempt) * (0.5 + Math.random() / 2);
+      if (!BUSY.test(String((e as Error).message)) || Date.now() - start + pause >= windowMs) throw e;
+      await new Promise((r) => setTimeout(r, pause));
+    }
+  }
 }
+
+function toOptions(params: Record<string, unknown> | undefined): { params?: Params } {
+  return params && Object.keys(params).length ? { params: cleanParam(params, "$") as Params } : {};
+}
+
+const withTimeout = (o: { params?: Params }, timeoutMs: number | undefined): FalkorQueryOptions =>
+  (timeoutMs === undefined ? o : { ...o, TIMEOUT: Math.max(1, Math.round(timeoutMs)) }) as FalkorQueryOptions;
 
 export class GraphHandle {
   readonly name: string;
@@ -77,15 +98,21 @@ export class GraphHandle {
   }
 
   async query<T = Record<string, unknown>>(cypher: string, params?: Record<string, unknown>, opts?: QueryOpts): Promise<T[]> {
-    const opt = toOptions(params, opts?.timeoutMs);
-    const r = await this.#g.query<T>(cypher, opt);
+    const opt = withTimeout(toOptions(params), opts?.timeoutMs);
+    const r = await admitted(WRITE_QUEUE_WAIT_MS, () => this.#g.query<T>(cypher, opt));
     return r.data ?? [];
   }
 
   async roQuery<T = Record<string, unknown>>(cypher: string, params?: Record<string, unknown>, opts?: QueryOpts): Promise<T[]> {
-    const opt = toOptions(params, opts?.timeoutMs ?? DEFAULT_READ_TIMEOUT_MS);
-    const r = await this.#g.roQuery<T>(cypher, opt);
-    return r.data ?? [];
+    const timeoutMs = opts?.timeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
+    const o = toOptions(params);
+    try {
+      const r = await admitted(timeoutMs, (left) => this.#g.roQuery<T>(cypher, withTimeout(o, left)));
+      return r.data ?? [];
+    } catch (e) {
+      if (BUSY.test(String((e as Error).message))) throw new Error(`Query timed out: the server stayed busy for ${timeoutMs} ms`);
+      throw e;
+    }
   }
 
   // Deletes the whole graph, and its projections (`<name>__…`). Dropping a graph that does not exist (never written,
