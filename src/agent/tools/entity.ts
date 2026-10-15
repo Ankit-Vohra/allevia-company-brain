@@ -13,6 +13,7 @@ import {
 const GROUP_CAP = 10;    // items listed per relationship group (the count is always complete)
 const ITEM_CAP = 80;     // neighbour items over all groups
 const METRIC_CAP = 10;
+const NEIGHBOR_CAP = 60;  // neighbours listed (each may bring a via node at depth 2)
 const asOfInput = z.string().optional().describe("ISO date: see the graph as it was then, e.g. 2026-10-01");
 
 // Neighbour types hidden by default (counted instead). An entity of a bookkeeping type still sees its own kind.
@@ -113,29 +114,27 @@ interface PathRow { ns: NodeRow[]; es: EdgeRow[] }
 async function runNeighbors(args: { id: string; rels?: string[]; direction?: "out" | "in" | "both"; depth?: number; limit?: number; asOf?: string }, ctx: ToolContext) {
   const asOf = parseAsOf(args.asOf);
   const depth = clamp(args.depth, 1, 1, 2);
-  const limit = clamp(args.limit, DEFAULT_ROWS, 1, 100);
+  const limit = clamp(args.limit, DEFAULT_ROWS, 1, NEIGHBOR_CAP);
   const start = await requireNode(ctx, args.id);
   const rels = args.rels?.length ? args.rels : null;
   const dir = args.direction ?? "both";
   const pat = dir === "out" ? `-[*1..${depth}]->` : dir === "in" ? `<-[*1..${depth}]-` : `-[*1..${depth}]-`;
-  const rows = await ro<PathRow>(ctx,
+  // On the server: the shortest route to each neighbour, neighbours by hop then name, and the exact total. One row
+  // comes back, however many neighbours a hub has.
+  const [res] = await ro<{ total: number; items: PathRow[] }>(ctx,
     `MATCH p = (n:Entity {id:$id})${pat}(m:Entity)
      WHERE m.id <> $id AND ALL(r IN relationships(p) WHERE ${edgeAt("r", asOf)} AND ${rels ? "type(r) IN $rels" : "NOT type(r) IN $mem"})
        AND NONE(x IN nodes(p) WHERE any(l IN labels(x) WHERE l IN $hidden))
-     RETURN [x IN nodes(p) | ${NODE("x")}] AS ns, [r IN relationships(p) | ${EDGE("r")}] AS es LIMIT 1000`,
-    { id: start.id, asOf, rels: rels ?? [], mem: MEMORY_RELS, hidden: rels ? [] : hiddenFor(typeOf(start)) });
-
-  // Shortest route to each neighbour wins.
-  const best = new Map<string, PathRow>();
-  for (const r of rows) {
-    const m = r.ns.at(-1)!;
-    const have = best.get(m.id);
-    if (!have || r.es.length < have.es.length) best.set(m.id, r);
-  }
-  const ranked = [...best.values()].sort((a, b) => a.es.length - b.es.length || String(a.ns.at(-1)!.name).localeCompare(String(b.ns.at(-1)!.name)));
+     WITH m, collect(p) AS ps
+     WITH m, reduce(b = head(ps), x IN ps | CASE WHEN length(x) < length(b) THEN x ELSE b END) AS p
+     WITH m, p ORDER BY length(p), m.name, m.id
+     WITH collect(p) AS ps
+     RETURN size(ps) AS total, [p IN ps[0..$limit] | {ns: [x IN nodes(p) | ${NODE("x")}], es: [r IN relationships(p) | ${EDGE("r")}]}] AS items`,
+    { id: start.id, asOf, rels: rels ?? [], mem: MEMORY_RELS, hidden: rels ? [] : hiddenFor(typeOf(start)), limit });
+  const total = res?.total ?? 0;
   const col = new Collector();
   col.node(start);
-  const items = ranked.slice(0, limit).map((r) => {
+  const items = (res?.items ?? []).map((r) => {
     for (const n of r.ns) col.node(n);
     for (const e of r.es) col.edge(e);
     const m = r.ns.at(-1)!;
@@ -146,8 +145,8 @@ async function runNeighbors(args: { id: string; rels?: string[]; direction?: "ou
       ...(r.ns.length > 2 ? { via: r.ns.slice(1, -1).map((x) => x.id) } : {}),
     };
   });
-  const note = ranked.length > limit ? `Showing ${limit} of ${ranked.length} neighbours; filter with rels or raise limit.` : undefined;
-  return col.result(ctx, { id: start.id, depth, direction: dir, neighbors: items, total: ranked.length }, note);
+  const note = total > limit ? `Showing ${limit} of ${total} neighbours (nearest first, then by name); filter with rels or direction.` : undefined;
+  return col.result(ctx, { id: start.id, depth, direction: dir, neighbors: items, total }, note);
 }
 
 export const neighbors = defineTool({
@@ -159,7 +158,7 @@ export const neighbors = defineTool({
     rels: z.array(z.enum(REL_TYPES)).optional().describe("Only these relationship types"),
     direction: z.enum(["out", "in", "both"]).optional().describe("Default both"),
     depth: z.number().int().optional().describe("1 (default) or 2"),
-    limit: z.number().int().optional().describe("Default 25, max 100"),
+    limit: z.number().int().optional().describe("Default 25, max 60"),
     asOf: asOfInput,
   },
   run: runNeighbors,
@@ -183,20 +182,27 @@ function pick(json: string | null | undefined, keys: string[]): Record<string, u
 async function runHistory(args: { id: string }, ctx: ToolContext) {
   const target = await requireNode(ctx, args.id);
   const p = { id: target.id };
-  const [[node], versions, closed] = await Promise.all([
+  // The newest EVENT_CAP versions and closed relationships (oldest first once reversed), with full counts: the events
+  // shown are the latest, and each change's `after` is the next version's props, or the current ones for the newest.
+  const [[node], newest, closed, [counts]] = await Promise.all([
     ro<{ createdAt: number | null; kv: Array<[string, unknown]> }>(ctx, `MATCH (n:Entity {id:$id}) RETURN n.createdAt AS createdAt, ${PROPS}`, p),
     ro<{ v: NodeRow; e: EdgeRow; since: number; until: number; changed: string[] | null; props: string | null }>(ctx,
       `MATCH (:Entity {id:$id})-[h:HAD_VERSION]->(v:Version) RETURN ${NODE("v")} AS v, ${EDGE("h")} AS e, v.since AS since, v.until AS until,
-       v.changed AS changed, v.props AS props ORDER BY v.until LIMIT 50`, p),
+       v.changed AS changed, v.props AS props ORDER BY until DESC LIMIT $cap`, { ...p, cap: EVENT_CAP }),
     ro<{ e: EdgeRow; m: NodeRow; reason: string | null }>(ctx,
       `MATCH (:Entity {id:$id})-[r]-(m:Entity) WHERE r.until IS NOT NULL AND type(r) <> 'HAD_VERSION'
-       RETURN ${EDGE("r")} AS e, ${NODE("m")} AS m, r.closeReason AS reason ORDER BY r.until DESC LIMIT 50`, p),
+       RETURN ${EDGE("r")} AS e, ${NODE("m")} AS m, r.closeReason AS reason ORDER BY r.until DESC LIMIT $cap`, { ...p, cap: EVENT_CAP }),
+    ro<{ versions: number; closed: number }>(ctx,
+      `MATCH (n:Entity {id:$id}) OPTIONAL MATCH (n)-[:HAD_VERSION]->(v:Version) WITH n, count(v) AS versions
+       OPTIONAL MATCH (n)-[r]-(:Entity) WHERE r.until IS NOT NULL AND type(r) <> 'HAD_VERSION' RETURN versions, count(r) AS closed`, p),
   ]);
+  const versions = [...newest].reverse();
   const types = [...new Set(closed.map((c) => c.e.type))];
   // The current edges of a relationship that changed show who or what replaced the closed one.
   const successors = types.length ? await ro<{ e: EdgeRow; m: NodeRow }>(ctx,
-    `MATCH (:Entity {id:$id})-[r]-(m:Entity) WHERE r.until IS NULL AND type(r) IN $types RETURN ${EDGE("r")} AS e, ${NODE("m")} AS m LIMIT 50`,
-    { ...p, types }) : [];
+    `MATCH (:Entity {id:$id})-[r]-(m:Entity) WHERE r.until IS NULL AND type(r) IN $types
+     RETURN ${EDGE("r")} AS e, ${NODE("m")} AS m ORDER BY r.since DESC LIMIT $cap`,
+    { ...p, types, cap: EVENT_CAP }) : [];
 
   // Each event keeps the node and edge it is about; only the events shown contribute them to the result.
   const col = new Collector();
@@ -228,7 +234,8 @@ async function runHistory(args: { id: string }, ctx: ToolContext) {
     return rest;
   });
   return col.result(ctx, {
-    id: target.id, type: typeOf(target), name: target.name ?? target.id, versions: versions.length, closedRelationships: closed.length,
+    id: target.id, type: typeOf(target), name: target.name ?? target.id, versions: counts?.versions ?? versions.length,
+    closedRelationships: counts?.closed ?? closed.length,
     events: shown,
   }, events.length > EVENT_CAP ? `Showing the latest ${EVENT_CAP} of ${events.length} events.` : events.length <= 1 ? "No recorded changes." : undefined);
 }

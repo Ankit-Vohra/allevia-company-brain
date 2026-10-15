@@ -8,6 +8,10 @@ import {
   type NodeRow,
 } from "./common.js";
 
+const LIST_CAP = 25;  // evidence and affected items listed (the totals are complete)
+const CHAIN_CAP = 10;
+const SOURCES_SHOWN = 3;
+
 interface EvRow { e: EdgeRow; n: NodeRow; metric: string | null; value: number | null; unit: string | null; ws: string | null; we: string | null; text: string | null }
 interface ChainRow { n: NodeRow; status: string | null; decidedAt: string | null; es: EdgeRow[] }
 
@@ -16,7 +20,7 @@ async function runTrace(args: { id?: string; query?: string }, ctx: ToolContext)
   let note: string | undefined;
   if (typeOf(node) !== "Decision") {
     const rows = await ro<{ d: NodeRow }>(ctx,
-      `MATCH (d:Decision)-[r:AFFECTS]->(:Entity {id:$id}) WHERE r.until IS NULL RETURN ${NODE("d")} AS d ORDER BY d.decidedAt DESC, d.id LIMIT 5`, { id: node.id });
+      `MATCH (d:Decision)-[r:AFFECTS]->(:Entity {id:$id}) WHERE r.until IS NULL RETURN ${NODE("d")} AS d, d.decidedAt AS decidedAt ORDER BY decidedAt DESC, d.id LIMIT 5`, { id: node.id });
     if (!rows.length) throw new InputError(`${node.id} is a ${typeOf(node)}, not a Decision, and no decision affects it. Try search with types ["Decision"].`);
     note = `${node.id} is not a Decision; traced ${rows[0]!.d.id}, the latest decision that affects it.`;
     alternatives = rows.slice(1).map((r) => brief(r.d));
@@ -25,22 +29,25 @@ async function runTrace(args: { id?: string; query?: string }, ctx: ToolContext)
   const p = { id: node.id };
   const cur = "ALL(r IN relationships(p) WHERE r.until IS NULL)";
   const [[dec], evidence, deciders, affects, older, newer] = await Promise.all([
-    ro<{ status: string | null; decidedAt: string | null; summary: string | null }>(ctx,
-      "MATCH (d:Entity {id:$id}) RETURN d.status AS status, d.decidedAt AS decidedAt, d.summary AS summary", p),
+    ro<{ status: string | null; decidedAt: string | null; summary: string | null; evidenceTotal: number; affectsTotal: number }>(ctx,
+      `MATCH (d:Entity {id:$id})
+       OPTIONAL MATCH (d)-[b:BASED_ON]->(:Entity) WHERE b.until IS NULL WITH d, count(b) AS evidenceTotal
+       OPTIONAL MATCH (d)-[a:AFFECTS]->(:Entity) WHERE a.until IS NULL
+       RETURN d.status AS status, d.decidedAt AS decidedAt, d.summary AS summary, evidenceTotal, count(a) AS affectsTotal`, p),
     ro<EvRow>(ctx,
       `MATCH (:Entity {id:$id})-[r:BASED_ON]->(ev:Entity) WHERE r.until IS NULL
        RETURN ${EDGE("r")} AS e, ${NODE("ev")} AS n, ev.metric AS metric, ev.value AS value, ev.unit AS unit, ev.windowStart AS ws,
-       ev.windowEnd AS we, coalesce(ev.summary, ev.text) AS text ORDER BY ev.id`, p),
+       ev.windowEnd AS we, coalesce(ev.summary, ev.text) AS text ORDER BY ev.id LIMIT $cap`, { ...p, cap: LIST_CAP }),
     ro<{ e: EdgeRow; n: NodeRow; at: string | null }>(ctx,
-      `MATCH (a:Entity)-[r:DECIDED]->(:Entity {id:$id}) WHERE r.until IS NULL RETURN ${EDGE("r")} AS e, ${NODE("a")} AS n, r.at AS at`, p),
+      `MATCH (a:Entity)-[r:DECIDED]->(:Entity {id:$id}) WHERE r.until IS NULL RETURN ${EDGE("r")} AS e, ${NODE("a")} AS n, r.at AS at LIMIT 10`, p),
     ro<{ e: EdgeRow; n: NodeRow }>(ctx,
-      `MATCH (:Entity {id:$id})-[r:AFFECTS]->(x:Entity) WHERE r.until IS NULL RETURN ${EDGE("r")} AS e, ${NODE("x")} AS n ORDER BY x.name`, p),
+      `MATCH (:Entity {id:$id})-[r:AFFECTS]->(x:Entity) WHERE r.until IS NULL RETURN ${EDGE("r")} AS e, ${NODE("x")} AS n ORDER BY x.name, x.id LIMIT $cap`, { ...p, cap: LIST_CAP }),
     ro<ChainRow>(ctx,
       `MATCH p = (:Entity {id:$id})-[:SUPERSEDES*1..6]->(o:Entity) WHERE ${cur}
-       RETURN ${NODE("o")} AS n, o.status AS status, o.decidedAt AS decidedAt, [r IN relationships(p) | ${EDGE("r")}] AS es ORDER BY length(p)`, p),
+       RETURN ${NODE("o")} AS n, o.status AS status, o.decidedAt AS decidedAt, [r IN relationships(p) | ${EDGE("r")}] AS es ORDER BY length(p) LIMIT $chain`, { ...p, chain: CHAIN_CAP }),
     ro<ChainRow>(ctx,
       `MATCH p = (nw:Entity)-[:SUPERSEDES*1..6]->(:Entity {id:$id}) WHERE ${cur}
-       RETURN ${NODE("nw")} AS n, nw.status AS status, nw.decidedAt AS decidedAt, [r IN relationships(p) | ${EDGE("r")}] AS es ORDER BY length(p)`, p),
+       RETURN ${NODE("nw")} AS n, nw.status AS status, nw.decidedAt AS decidedAt, [r IN relationships(p) | ${EDGE("r")}] AS es ORDER BY length(p) LIMIT $chain`, { ...p, chain: CHAIN_CAP }),
   ]);
 
   const col = new Collector();
@@ -58,7 +65,7 @@ async function runTrace(args: { id?: string; query?: string }, ctx: ToolContext)
       ...(r.metric !== null && r.value !== null ? { metric: r.metric, value: r.value, ...(r.unit ? { unit: r.unit } : {}), window: r.ws ? `${r.ws}..${r.we}` : r.we } : {}),
       ...(r.n.simulated ? { simulated: true } : {}),
       ...(r.text ? { text: clip(r.text, 300) } : {}),
-      sources: evSources.get(r.n.id) ?? [],
+      sources: (evSources.get(r.n.id) ?? []).slice(0, SOURCES_SHOWN),
     };
   });
   const people = deciders.map((r) => {
@@ -85,7 +92,8 @@ async function runTrace(args: { id?: string; query?: string }, ctx: ToolContext)
   return col.result(ctx, {
     decision: { ...brief(node), status: dec?.status ?? null, decidedAt: dec?.decidedAt ?? null, ...(dec?.summary ? { summary: clip(dec.summary) } : {}) },
     current: supersededBy.length === 0,
-    evidence: ev, decidedBy: people, affects: hit, supersedes, supersededBy,
+    evidence: ev, ...((dec?.evidenceTotal ?? 0) > ev.length ? { evidenceTotal: dec!.evidenceTotal } : {}), decidedBy: people,
+    affects: hit, ...((dec?.affectsTotal ?? 0) > hit.length ? { affectsTotal: dec!.affectsTotal } : {}), supersedes, supersededBy,
     ...(alternatives.length ? { alternatives } : {}),
   }, [note, ...gaps].filter(Boolean).join(" ") || undefined);
 }

@@ -8,7 +8,10 @@ import { isoDate } from "../../util/time.js";
 import {
   Collector, EDGE, NODE, brief, clamp, clip, defineTool, median, ro, round, type Brief, type EdgeRow, type NodeRow,
 } from "./common.js";
-import { ALIASES, latestByMetric, observationsFor, pick, resolveChannel } from "./observations.js";
+import { ALIASES, latestByMetric, latestFor, resolveChannel } from "./observations.js";
+
+const CONTENT_CAP = 500;  // newest items considered
+const LINKS_PER_ITEM = 6; // hook rules and audiences per item
 
 interface ContentRow { c: NodeRow; format: string | null; publishedAt: string | null; hook: string | null }
 
@@ -17,28 +20,33 @@ async function runContent(args: { channel?: string; days?: number; limit?: numbe
   const channel = args.channel?.trim() ? await resolveChannel(ctx, args.channel) : null;
   const days = args.days === undefined ? null : clamp(args.days, 30, 1, 3650);
   const cutoff = days === null ? null : isoDate(ctx.now - days * 86_400_000);
-  const items = await ro<ContentRow>(ctx,
-    `MATCH (c:Content) ${channel ? "MATCH (c)-[pr:PUBLISHED_ON]->(:Entity {id:$ch}) WHERE pr.until IS NULL" : ""}
-     WITH DISTINCT c WHERE $cutoff IS NULL OR c.publishedAt >= $cutoff
+  const match = `MATCH (c:Content) ${channel ? "MATCH (c)-[pr:PUBLISHED_ON]->(:Entity {id:$ch}) WHERE pr.until IS NULL" : ""}
+     WITH DISTINCT c WHERE $cutoff IS NULL OR c.publishedAt >= $cutoff`;
+  const p = { ch: channel?.id ?? null, cutoff, cap: CONTENT_CAP };
+  const [items, [count]] = await Promise.all([
+    ro<ContentRow>(ctx, `${match}
      RETURN ${NODE("c")} AS c, c.format AS format, c.publishedAt AS publishedAt, coalesce(c.hook, c.caption) AS hook
-     ORDER BY c.publishedAt DESC LIMIT 500`, { ch: channel?.id ?? null, cutoff });
+     ORDER BY publishedAt DESC, c.id LIMIT $cap`, p),
+    ro<{ n: number }>(ctx, `${match} RETURN count(c) AS n`, p),
+  ]);
   const col = new Collector();
   if (channel) col.node(channel);
   if (!items.length) return col.result(ctx, { channel: channel?.id ?? null, days, items: [], byHook: [] }, "No content found for that filter.");
 
   const ids = items.map((i) => i.c.id);
   const [links, obs] = await Promise.all([
-    ro<{ cid: string; x: NodeRow; e: EdgeRow }>(ctx,
-      `UNWIND $ids AS cid MATCH (:Entity {id:cid})-[r:USES_RULE|TARGETS]->(x:Entity) WHERE r.until IS NULL RETURN cid, ${NODE("x")} AS x, ${EDGE("r")} AS e`, { ids }),
-    observationsFor(ctx, ids),
+    ro<{ cid: string; ls: Array<{ x: NodeRow; e: EdgeRow }> }>(ctx,
+      `UNWIND $ids AS cid MATCH (c:Entity {id:cid}) WITH cid, c MATCH (c)-[r:USES_RULE|TARGETS]->(x:Entity) WHERE r.until IS NULL
+       WITH cid, r, x ORDER BY type(r) DESC, x.id WITH cid, collect({x: ${NODE("x")}, e: ${EDGE("r")}})[0..$per] AS ls RETURN cid, ls`,
+      { ids, per: LINKS_PER_ITEM }),
+    latestFor(ctx, ids),
   ]);
   const latest = latestByMetric(obs);
   const viewMetric = ALIASES.views.find((m) => [...latest.values()].some((byM) => byM.has(m))) ?? null;
   const viewsOf = (id: string) => (viewMetric ? latest.get(id)?.get(viewMetric)?.value ?? null : null);
   const med = median(ids.map(viewsOf).filter((v): v is number => v !== null));
 
-  const rules = new Map<string, Array<{ x: NodeRow; e: EdgeRow }>>();
-  for (const l of links) rules.set(l.cid, [...(rules.get(l.cid) ?? []), l]);
+  const rules = new Map(links.map((l) => [l.cid, l.ls]));
   const rows = items.map((it) => {
     const views = viewsOf(it.c.id);
     return { it, views, multiple: views !== null && med ? round(views / med, 2) : null, links: rules.get(it.c.id) ?? [] };
@@ -79,12 +87,13 @@ async function runContent(args: { channel?: string; days?: number; limit?: numbe
     }
   }
   const byHook = [...hooks.values()].map((h) => ({ ...h.rule, items: h.multiples.length, medianMultiple: round(median(h.multiples)!, 2) }))
-    .sort((a, b) => b.medianMultiple - a.medianMultiple);
+    .sort((a, b) => b.medianMultiple - a.medianMultiple || b.items - a.items).slice(0, 15);
   const simulated = obs.some((o) => o.o.simulated === true);
   const notes = [
     ...(simulated ? ["Includes simulated data."] : []),
     ...(viewMetric ? [] : ["No view observations found, so no outlier multiples."]),
     ...(rows.length > limit ? [`Showing the top ${limit} of ${rows.length} items.`] : []),
+    ...((count?.n ?? 0) > rows.length ? [`Considered the newest ${rows.length} of ${count!.n} items; narrow with days or channel.`] : []),
   ];
   return col.result(ctx, {
     channel: channel?.id ?? null, days, viewMetric, medianViews: med, considered: rows.length, items: out, byHook,

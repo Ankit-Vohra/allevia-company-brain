@@ -67,17 +67,27 @@ export const important = defineTool({
 
 const TOPIC_RELS: RelType[] = ["MENTIONS", "LINKS_TO"];
 
+const MEMBER_SAMPLE = 2_000; // members whose degree is read, spread over the biggest communities
+
 async function runTopics(args: { limit?: number }, ctx: ToolContext) {
   const limit = clamp(args.limit, 8, 1, 20);
-  const stored = await ro<{ c: string | number; id: string }>(ctx,
-    "MATCH (n:Entity) WHERE n.community IS NOT NULL RETURN n.community AS c, n.id AS id LIMIT 5000");
-  const method = new Set(stored.map((s) => s.c)).size >= 2 ? "stored" : "label_propagation";
-  const rows = method === "stored" ? stored.map((s) => ({ id: s.id, communityId: s.c }))
-    : await communities(bounded(ctx.graph), [], TOPIC_RELS);
-  const groups = new Map<string | number, string[]>();
-  for (const r of rows) groups.set(r.communityId, [...(groups.get(r.communityId) ?? []), r.id]);
-  const multi = [...groups.entries()].filter(([, ids]) => ids.length >= 2);
-  const memberIds = multi.flatMap(([, ids]) => ids).slice(0, 2000);
+  // Stored communities are grouped on the server (a big tenant has more members than one result holds): their sizes
+  // are exact, and each brings a sample of members whose degree names it.
+  const stored = await ro<{ c: string | number; size: number; ids: string[] }>(ctx,
+    `MATCH (n:Entity) WHERE n.community IS NOT NULL WITH n.community AS c, collect(n.id) AS ids
+     RETURN c, size(ids) AS size, ids[0..$per] AS ids ORDER BY size DESC LIMIT $groups`,
+    { per: Math.ceil(MEMBER_SAMPLE / (limit * 2)), groups: limit * 2 });
+  const method = stored.length >= 2 ? "stored" : "label_propagation";
+  let groups: Array<{ cid: string | number; size: number; ids: string[] }>;
+  if (method === "stored") groups = stored.map((s) => ({ cid: s.c, size: s.size, ids: s.ids }));
+  else {
+    const byId = new Map<string | number, string[]>();
+    for (const r of await communities(bounded(ctx.graph), [], TOPIC_RELS)) byId.set(r.communityId, [...(byId.get(r.communityId) ?? []), r.id]);
+    groups = [...byId.entries()].map(([cid, ids]) => ({ cid, size: ids.length, ids })).sort((a, b) => b.size - a.size).slice(0, limit * 2);
+  }
+  const multi = groups.filter((x) => x.size >= 2);
+  const per = Math.ceil(MEMBER_SAMPLE / Math.max(1, multi.length));
+  const memberIds = multi.flatMap((x) => x.ids.slice(0, per));
   const degrees = memberIds.length ? await ro<{ n: NodeRow; deg: number }>(ctx,
     `UNWIND $ids AS id MATCH (n:Entity {id:id}) OPTIONAL MATCH (n)-[r:MENTIONS|LINKS_TO]-() WHERE r.until IS NULL
      RETURN ${NODE("n")} AS n, count(r) AS deg`, { ids: memberIds }) : [];
@@ -85,11 +95,11 @@ async function runTopics(args: { limit?: number }, ctx: ToolContext) {
 
   const col = new Collector();
   const shown: string[] = [];
-  const out = multi.map(([cid, ids]) => {
+  const out = multi.map(({ cid, size, ids }) => {
     const members = ids.map((id) => info.get(id)).filter((d): d is { n: NodeRow; deg: number } => !!d && typeOf(d.n) !== "Chunk")
       .sort((a, b) => b.deg - a.deg || String(a.n.name).localeCompare(String(b.n.name)));
     const named = [...members.filter((m) => typeOf(m.n) !== "Document"), ...members.filter((m) => typeOf(m.n) === "Document")];
-    return { cid, size: ids.length, members, label: named.slice(0, 3).map((m) => m.n.name ?? m.n.id).join(", ") };
+    return { cid, size, members, label: named.slice(0, 3).map((m) => m.n.name ?? m.n.id).join(", ") };
   }).filter((c) => c.members.length).sort((a, b) => b.size - a.size || a.label.localeCompare(b.label)).slice(0, limit).map((c, i) => {
     const top = c.members.slice(0, 6);
     for (const m of top) {

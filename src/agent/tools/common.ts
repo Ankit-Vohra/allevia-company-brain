@@ -20,7 +20,7 @@ export const READ_TIMEOUT_MS = 8_000;
 export const DEFAULT_ROWS = 25;
 export const TEXT_CAP = 400;
 export const SOURCE_CAP = 20;          // sources beyond the one-per-node cover
-export const SOURCE_COVER_CAP = 100;   // hard ceiling on the cover itself (tools keep their node counts well below)
+export const SOURCE_COVER_CAP = 150;   // hard ceiling on the cover itself; every tool returns at most this many nodes
 // Graph algorithms (paths, PageRank, communities) also read projection graphs this module cannot reach: dev's
 // algorithms.ts takes no timeout yet, so those reads use the graph core's default. Pass { timeoutMs: ALGO_TIMEOUT_MS }
 // to shortestPaths/pageRank/communities once they accept it; until then bounded() applies it to every read they make
@@ -77,9 +77,9 @@ export function serial<T>(key: string, fn: () => Promise<T>): Promise<T> {
 
 // The next free `<prefix><n>` (n from 1).
 export async function nextId(ctx: ToolContext, prefix: string): Promise<string> {
-  const rows = await ro<{ id: string }>(ctx, "MATCH (n:Entity) WHERE n.id STARTS WITH $p RETURN n.id AS id", { p: prefix });
-  const max = rows.reduce((m, r) => Math.max(m, Number(r.id.slice(prefix.length)) || 0), 0);
-  return `${prefix}${max + 1}`;
+  const [row] = await ro<{ max: number | null }>(ctx,
+    "MATCH (n:Entity) WHERE n.id STARTS WITH $p RETURN max(toInteger(substring(n.id, size($p)))) AS max", { p: prefix });
+  return `${prefix}${(row?.max ?? 0) + 1}`;
 }
 
 export function refuseIfReadOnly(ctx: ToolContext, tool: string): void {
@@ -88,8 +88,29 @@ export function refuseIfReadOnly(ctx: ToolContext, tool: string): void {
 
 // ---------- reads ----------
 
+// Two FalkorDB planner traps every query here avoids:
+// - An UNWIND variable inside a pattern with an edge skips the id index: `UNWIND $ids AS x MATCH (a)-[r]->(:Entity
+//   {id:x})` walks every such edge for each x (1.9 s against 5 ms for 600 ids). Bind the anchor alone first:
+//   `UNWIND $ids AS x MATCH (n:Entity {id:x}) WITH x, n MATCH (a)-[r]->(n)`.
+// - ORDER BY after RETURN resolves `v.until` against the RETURNed `v`; when `v` is a NODE() map without `until`, the
+//   sort silently does nothing. Order by a RETURNed alias (`v.until AS until … ORDER BY until`).
+
 export function ro<T = Record<string, unknown>>(ctx: ToolContext, cypher: string, params?: Record<string, unknown>, timeoutMs = READ_TIMEOUT_MS): Promise<T[]> {
   return ctx.graph.roQuery<T>(cypher, params, { timeoutMs: Math.min(timeoutMs, READ_TIMEOUT_MS) });
+}
+
+// FalkorDB sends at most 10,000 rows (RESULTSET_SIZE) and drops the rest without an error. A read that can produce
+// more either aggregates on the server, or comes back packed: `body` is a query up to (not including) its last WITH,
+// `row` the map each of its rows becomes; rows arrive PACK to a result row, at most `cap` of them, plus the full count.
+export const PACK = 2_000;
+export async function packed<T>(ctx: ToolContext, body: string, row: string, params: Record<string, unknown> = {}, cap = 50_000): Promise<{ rows: T[]; total: number }> {
+  const parts = await ro<{ total: number; part: T[] }>(ctx,
+    `${body}
+     WITH collect(${row}) AS all
+     WITH size(all) AS total, all[0..$cap] AS xs
+     UNWIND range(0, size(xs) - 1, $pack) AS i RETURN total, xs[i..i + $pack] AS part`,
+    { ...params, cap, pack: PACK });
+  return { rows: parts.flatMap((p) => p.part), total: parts[0]?.total ?? 0 };
 }
 
 // The graph core's algorithms call roQuery without a timeout; this view caps the reads they make on the tenant graph
@@ -182,8 +203,10 @@ export class Collector {
 export interface SourceRow { of: string; id: string; title: string | null; asOf: string | null }
 
 const SOURCE_IDS_CAP = 1_000;
+const SOURCES_PER_ID = 3; // SOURCED_FROM documents per id, newest first (a hub can have thousands)
 
-// One row per (id, Document behind it), in the ids' order.
+// One row per (id, Document behind it), in the ids' order. At most 1 + SOURCES_PER_ID + 1 + 1 rows per id, so even
+// SOURCE_IDS_CAP ids stay under FalkorDB's 10,000-row result cap (rows past it are dropped silently).
 export async function sourceRows(ctx: ToolContext, ids: string[]): Promise<SourceRow[]> {
   const list = [...new Set(ids)].slice(0, SOURCE_IDS_CAP);
   if (!list.length) return [];
@@ -191,12 +214,13 @@ export async function sourceRows(ctx: ToolContext, ids: string[]): Promise<Sourc
   const rows = await ro<SourceRow>(ctx,
     `UNWIND $ids AS oid MATCH (d:Entity {id:oid}) WHERE d:Document RETURN ${cols}
      UNION ALL
-     UNWIND $ids AS oid MATCH (:Entity {id:oid})-[:SOURCED_FROM]->(d:Document) RETURN ${cols}
+     UNWIND $ids AS oid MATCH (n:Entity {id:oid}) WITH oid, n MATCH (n)-[:SOURCED_FROM]->(d:Document) WITH oid, d ORDER BY d.asOf DESC, d.id
+     WITH oid, collect(d)[0..$per] AS ds UNWIND ds AS d RETURN ${cols}
      UNION ALL
      UNWIND $ids AS oid MATCH (n:Entity {id:oid}) WHERE n.src IS NOT NULL WITH oid, n.src AS src MATCH (d:Entity {id:src}) WHERE d:Document RETURN ${cols}
      UNION ALL
-     UNWIND $ids AS oid MATCH (d:Document)-[:HAS_CHUNK]->(:Entity {id:oid}) RETURN ${cols}`,
-    { ids: list });
+     UNWIND $ids AS oid MATCH (c:Entity {id:oid}) WITH oid, c MATCH (d:Document)-[:HAS_CHUNK]->(c) RETURN ${cols}`,
+    { ids: list, per: SOURCES_PER_ID });
   const order = new Map(list.map((id, i) => [id, i]));
   return rows.sort((a, b) => (order.get(a.of) ?? 0) - (order.get(b.of) ?? 0));
 }
@@ -246,8 +270,9 @@ export function clip(v: unknown, n = TEXT_CAP): string | undefined {
   return v.length > n ? `${v.slice(0, n - 1)}…` : v;
 }
 
+// Never NaN: these numbers end up in query text (variable-length bounds) and LIMITs.
 export const clamp = (v: number | undefined, def: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, Math.round(v ?? def)));
+  Math.min(max, Math.max(min, Math.round(typeof v === "number" && Number.isFinite(v) ? v : def)));
 
 export const round = (v: number, d = 2): number => Math.round(v * 10 ** d) / 10 ** d;
 

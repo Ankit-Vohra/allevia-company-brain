@@ -1,7 +1,7 @@
-// Shared reading of numbers (Observation nodes) for the analytics tools: fetch observations for subjects, keep the
-// latest per metric, match metric names by alias (ingestion names vary: views/plays, signups/conversions…), and
-// aggregate a bucket the right way (flows with a window sum, snapshots take the latest, rates average). Also the
-// channel lookup the content and playbook tools share.
+// Shared reading of numbers (Observation nodes) for the analytics tools: the newest observation per metric and window
+// totals, both computed on the server (FalkorDB returns at most 10,000 rows); metric names matched by alias (ingestion
+// names vary: views/plays, signups/conversions…); and a bucket aggregated the right way (flows with a window sum,
+// snapshots take the latest, rates average). Also the channel lookup the content and playbook tools share.
 import type { ToolContext } from "../tool.js";
 import { EDGE, InputError, NODE, ro, type EdgeRow, type NodeRow } from "./common.js";
 
@@ -18,16 +18,48 @@ export const ALIASES = {
   signups: ["signups", "conversions", "results", "leads"],
 } as const;
 
-// Newest first. `metrics` are matched case-insensitively; `from`/`to` are ISO dates on windowEnd (or asOf).
-export async function observationsFor(ctx: ToolContext, subjects: string[], opts: { metrics?: string[]; from?: string | null; to?: string | null; limit?: number } = {}): Promise<ObsRow[]> {
+const OBS_ROW = `{o: ${NODE("o")}, e: ${EDGE("r")}, metric: o.metric, value: o.value, unit: o.unit, ws: o.windowStart, we: o.windowEnd, at: at}`;
+const METRICS_PER_SUBJECT = 20;
+
+// The newest observation of each metric (case-insensitive) of each subject, chosen on the server: a dense daily series
+// cannot push another subject's numbers out of the result. One row per subject comes back. `metrics` filters.
+export async function latestFor(ctx: ToolContext, subjects: string[], metrics?: readonly string[]): Promise<ObsRow[]> {
   if (!subjects.length) return [];
-  return ro<ObsRow>(ctx,
-    `UNWIND $ids AS sid MATCH (o:Observation)-[r:MEASURES]->(:Entity {id:sid})
+  const rows = await ro<{ s: string; xs: Array<Omit<ObsRow, "s">> }>(ctx,
+    `UNWIND $ids AS sid MATCH (s:Entity {id:sid}) WITH sid, s MATCH (o:Observation)-[r:MEASURES]->(s)
+     WITH sid, o, r, coalesce(o.windowEnd, o.asOf) AS at WHERE $metrics IS NULL OR toLower(o.metric) IN $metrics
+     WITH sid, toLower(o.metric) AS key, o, r, at ORDER BY at DESC, o.id DESC
+     WITH sid, key, head(collect(${OBS_ROW})) AS x ORDER BY x.at DESC, key
+     RETURN sid AS s, collect(x)[0..$per] AS xs`,
+    { ids: subjects, metrics: metrics?.map((m) => m.toLowerCase()) ?? null, per: METRICS_PER_SUBJECT });
+  return rows.flatMap((r) => r.xs.map((x) => ({ s: r.s, ...x })));
+}
+
+// One metric of one subject over a window, totalled on the server (a year of daily numbers for 200 campaigns is
+// hundreds of thousands of rows). `newest` keeps the latest few observations, for nodes and provenance.
+export interface ObsTotal {
+  s: string; metric: string; unit: string | null; n: number; sum: number; last: number; windowed: boolean; simulated: boolean;
+  newest: Array<{ o: NodeRow; e: EdgeRow }>;
+}
+
+export async function totalsFor(ctx: ToolContext, subjects: string[], opts: { metrics: readonly string[]; from?: string | null; to?: string | null; keep?: number }): Promise<ObsTotal[]> {
+  if (!subjects.length) return [];
+  return ro<ObsTotal>(ctx,
+    `UNWIND $ids AS sid MATCH (s:Entity {id:sid}) WITH sid, s MATCH (o:Observation)-[r:MEASURES]->(s)
      WITH sid, o, r, coalesce(o.windowEnd, o.asOf) AS at
-     WHERE ($metrics IS NULL OR toLower(o.metric) IN $metrics) AND ($from IS NULL OR at >= $from) AND ($to IS NULL OR at <= $to)
-     RETURN sid AS s, ${NODE("o")} AS o, ${EDGE("r")} AS e, o.metric AS metric, o.value AS value, o.unit AS unit,
-       o.windowStart AS ws, o.windowEnd AS we, at ORDER BY at DESC, o.id LIMIT $limit`,
-    { ids: subjects, metrics: opts.metrics?.map((m) => m.toLowerCase()) ?? null, from: opts.from ?? null, to: opts.to ?? null, limit: opts.limit ?? 5000 });
+     WHERE toLower(o.metric) IN $metrics AND ($from IS NULL OR at >= $from) AND ($to IS NULL OR at <= $to)
+     WITH sid, toLower(o.metric) AS metric, o, r, at ORDER BY at DESC, o.id DESC
+     WITH sid, metric, count(o) AS n, sum(o.value) AS sum, collect({o: ${NODE("o")}, e: ${EDGE("r")}, v: o.value, unit: o.unit,
+       ws: o.windowStart, sim: o.simulated}) AS xs
+     RETURN sid AS s, metric, xs[0].unit AS unit, n, sum, xs[0].v AS last, all(x IN xs WHERE x.ws IS NOT NULL) AS windowed,
+       any(x IN xs WHERE x.sim = true) AS simulated, [x IN xs[0..$keep] | {o: x.o, e: x.e}] AS newest`,
+    { ids: subjects, metrics: opts.metrics.map((m) => m.toLowerCase()), from: opts.from ?? null, to: opts.to ?? null, keep: opts.keep ?? 2 });
+}
+
+// A window total the right way for its metric (see aggregateFor).
+export function totalOf(t: ObsTotal): number {
+  const kind = kindOf(t.metric, t.unit, t.windowed);
+  return kind === "sum" ? t.sum : kind === "mean" ? t.sum / t.n : t.last;
 }
 
 // subject -> metric (lowercased) -> newest observation
@@ -56,8 +88,12 @@ export type Aggregate = "sum" | "mean" | "last";
 // Rates average; observations with a window (daily signups, weekly clicks) are flows and sum; snapshots without a
 // window start (followers, lifetime views) take the latest value.
 export function aggregateFor(metric: string, unit: string | null, rows: Array<{ ws: string | null }>): Aggregate {
+  return kindOf(metric, unit, rows.every((r) => r.ws !== null && r.ws !== undefined));
+}
+
+function kindOf(metric: string, unit: string | null, windowed: boolean): Aggregate {
   if (RATE.test(metric) || /%|percent|ratio|position/i.test(unit ?? "")) return "mean";
-  return rows.every((r) => r.ws !== null && r.ws !== undefined) ? "sum" : "last";
+  return windowed ? "sum" : "last";
 }
 
 // `rows` oldest first.

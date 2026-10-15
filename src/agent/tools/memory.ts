@@ -41,7 +41,7 @@ async function runRecall(args: { ids?: string[]; query?: string }, ctx: ToolCont
       `MATCH (t:Turn)-[r:TOUCHED|CITED]->(x:Entity) WHERE x.id IN $ids
        WITH t, collect(DISTINCT x.id) AS hit, collect(${EDGE("r")}) AS es
        OPTIONAL MATCH (t)-[:IN_SESSION]->(s:Entity)
-       RETURN ${turnCols}, hit, es ORDER BY t.at DESC LIMIT 5`, { ids }),
+       RETURN ${turnCols}, hit, es ORDER BY at DESC LIMIT 5`, { ids }),
     ro<TurnRow>(ctx,
       `UNWIND $tids AS tid MATCH (t:Entity {id:tid}) OPTIONAL MATCH (t)-[:IN_SESSION]->(s:Entity) RETURN ${turnCols}, [] AS hit, [] AS es`, { tids: queryTurns }),
     ro<MemRow>(ctx,
@@ -49,19 +49,19 @@ async function runRecall(args: { ids?: string[]; query?: string }, ctx: ToolCont
        WITH m, collect(DISTINCT x.id) AS about, collect(${EDGE("r")}) AS es
        ${NOT_SUPERSEDED} WITH m, about, es, count(newer) AS superseded WHERE superseded = 0
        OPTIONAL MATCH (who:Entity)-[:STATED]->(m)
-       RETURN ${NODE("m")} AS m, m.kind AS kind, m.text AS text, m.at AS at, about, es, collect(who.id) AS by ORDER BY m.at DESC LIMIT 10`, { ids }),
+       RETURN ${NODE("m")} AS m, m.kind AS kind, m.text AS text, m.at AS at, about, es, collect(who.id) AS by ORDER BY at DESC LIMIT 10`, { ids }),
     ro<MemRow>(ctx,
       `MATCH (m:Memory) WHERE m.kind = 'preference' ${NOT_SUPERSEDED} WITH m, count(newer) AS superseded WHERE superseded = 0
-       RETURN ${NODE("m")} AS m, m.kind AS kind, m.text AS text, m.at AS at, [] AS about, [] AS es, [] AS by ORDER BY m.at DESC LIMIT 5`),
+       RETURN ${NODE("m")} AS m, m.kind AS kind, m.text AS text, m.at AS at, [] AS about, [] AS es, [] AS by ORDER BY at DESC LIMIT 5`),
     ro<RecRow>(ctx,
       `MATCH (rec:Recommendation)-[r:EVIDENCED_BY]->(x:Entity) WHERE x.id IN $ids AND r.until IS NULL
        WITH rec, collect(DISTINCT x.id) AS evidence, collect(${EDGE("r")}) AS es
-       RETURN ${NODE("rec")} AS rec, rec.status AS status, rec.summary AS why, rec.area AS area, rec.confidence AS confidence, evidence, es
-       ORDER BY rec.updatedAt DESC LIMIT 20`, { ids }),
+       RETURN ${NODE("rec")} AS rec, rec.status AS status, rec.summary AS why, rec.area AS area, rec.confidence AS confidence, evidence, es,
+       rec.updatedAt AS updatedAt ORDER BY updatedAt DESC LIMIT 20`, { ids }),
     ro<{ c: number }>(ctx, "MATCH (a:Approval) WHERE a.status = 'pending' RETURN count(a) AS c"),
   ]);
   const approvals = recs.length ? await ro<{ rid: string; a: NodeRow; e: EdgeRow; status: string | null; kind: string | null }>(ctx,
-    `UNWIND $rids AS rid MATCH (:Entity {id:rid})-[p:PROPOSES]->(a:Approval) RETURN rid, ${NODE("a")} AS a, ${EDGE("p")} AS e, a.status AS status, a.kind AS kind`,
+    `UNWIND $rids AS rid MATCH (rec:Entity {id:rid}) WITH rid, rec MATCH (rec)-[p:PROPOSES]->(a:Approval) RETURN rid, ${NODE("a")} AS a, ${EDGE("p")} AS e, a.status AS status, a.kind AS kind LIMIT 100`,
     { rids: recs.map((r) => r.rec.id) }) : [];
 
   const col = new Collector();

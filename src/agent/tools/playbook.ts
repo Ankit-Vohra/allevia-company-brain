@@ -27,7 +27,7 @@ async function runPlaybook(args: { topic?: string; kind?: string; channel?: stri
     if (!terms.length) throw new InputError("The topic has no searchable words, e.g. 'hooks', 'meta description'.");
     const hits = await ftEntities(ctx, args.topic, ["Rule", "BrandRule", "Playbook"], 50);
     const [included, textual] = await Promise.all([
-      ro<{ id: string }>(ctx, "UNWIND $pbs AS pid MATCH (:Entity {id:pid})-[i:INCLUDES]->(r:Entity) WHERE i.until IS NULL RETURN r.id AS id",
+      ro<{ id: string }>(ctx, "UNWIND $pbs AS pid MATCH (pb:Entity {id:pid}) WITH pb MATCH (pb)-[i:INCLUDES]->(r:Entity) WHERE i.until IS NULL RETURN r.id AS id LIMIT 500",
         { pbs: hits.filter((h) => h.n.labels.includes("Playbook")).map((h) => h.n.id) }),
       ro<{ id: string }>(ctx,
         `MATCH (r:Entity) WHERE (r:Rule OR r:BrandRule) AND any(t IN $terms WHERE toLower(coalesce(r.text, '')) CONTAINS t OR toLower(coalesce(r.kind, '')) = t)
@@ -46,19 +46,23 @@ async function runPlaybook(args: { topic?: string; kind?: string; channel?: stri
   }
 
   const rules = await ro<RuleRow>(ctx,
-    `MATCH (r:Entity) WHERE (r:Rule OR r:BrandRule) AND ($ids IS NULL OR r.id IN $ids) AND ($kind IS NULL OR toLower(r.kind) = $kind)
+    `MATCH (r:Entity) WHERE (r:Rule OR r:BrandRule) AND ($ids IS NULL OR r.id IN $ids) AND ($allowed IS NULL OR r.id IN $allowed)
+       AND ($kind IS NULL OR toLower(r.kind) = $kind)
      RETURN ${NODE("r")} AS r, r.kind AS kind, r.text AS text, r.severity AS severity, r.weight AS weight, r.template AS template,
-       r.example AS example, r.howToFix AS howToFix, r.rank AS rank LIMIT 500`,
-    { ids: order, kind: args.kind?.trim().toLowerCase() || null });
+       r.example AS example, r.howToFix AS howToFix, r.rank AS rank ORDER BY coalesce(rank, 0) DESC, r.name, r.id LIMIT 500`,
+    { ids: order, allowed: allowed ? [...allowed] : null, kind: args.kind?.trim().toLowerCase() || null });
   const pos = new Map((order ?? []).map((id, i) => [id, i]));
   const picked = rules.filter((r) => !allowed || allowed.has(r.r.id))
     .sort((a, b) => order ? pos.get(a.r.id)! - pos.get(b.r.id)! : (b.rank ?? 0) - (a.rank ?? 0) || String(a.r.name).localeCompare(String(b.r.name)))
     .slice(0, limit);
   const ids = picked.map((r) => r.r.id);
   const links = ids.length ? await ro<{ rid: string; x: NodeRow; e: EdgeRow; rel: string }>(ctx,
-    `UNWIND $ids AS rid MATCH (pb:Playbook)-[e:INCLUDES]->(:Entity {id:rid}) WHERE e.until IS NULL RETURN rid, ${NODE("pb")} AS x, ${EDGE("e")} AS e, 'playbook' AS rel
+    `UNWIND $ids AS rid MATCH (rule:Entity {id:rid}) WITH rid, rule MATCH (pb:Playbook)-[e:INCLUDES]->(rule) WHERE e.until IS NULL
+     WITH rid, head(collect({x: ${NODE("pb")}, e: ${EDGE("e")}})) AS y RETURN rid, y.x AS x, y.e AS e, 'playbook' AS rel
      UNION ALL
-     UNWIND $ids AS rid MATCH (:Entity {id:rid})-[e:APPLIES_TO]->(x:Entity) WHERE e.until IS NULL RETURN rid, ${NODE("x")} AS x, ${EDGE("e")} AS e, 'applies' AS rel`,
+     UNWIND $ids AS rid MATCH (rule:Entity {id:rid}) WITH rid, rule MATCH (rule)-[e:APPLIES_TO]->(x:Entity) WHERE e.until IS NULL
+     WITH rid, x, e ORDER BY x.id WITH rid, collect({x: ${NODE("x")}, e: ${EDGE("e")}})[0..5] AS xs UNWIND xs AS y
+     RETURN rid, y.x AS x, y.e AS e, 'applies' AS rel`,
     { ids }) : [];
 
   const out = picked.map((r) => {

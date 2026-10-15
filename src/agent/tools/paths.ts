@@ -56,8 +56,8 @@ async function runShowPath(args: { ids: string[] }, ctx: ToolContext) {
   const present = list.filter((id) => found.has(id));
   const pairs = present.slice(1).map((b, i): [string, string] => [present[i]!, b]).filter(([a, b]) => a !== b);
   const direct = pairs.length ? await ro<{ a: string; b: string; e: EdgeRow }>(ctx,
-    `UNWIND $pairs AS p MATCH (a:Entity {id:p[0]})-[r]-(b:Entity {id:p[1]}) WHERE r.until IS NULL AND NOT type(r) IN $mem
-     RETURN p[0] AS a, p[1] AS b, ${EDGE("r")} AS e`, { pairs, mem: MEMORY_RELS }) : [];
+    `UNWIND $pairs AS p MATCH (a:Entity {id:p[0]}) WITH p, a MATCH (a)-[r]-(b:Entity {id:p[1]}) WHERE r.until IS NULL AND NOT type(r) IN $mem
+     WITH p, head(collect(${EDGE("r")})) AS e RETURN p[0] AS a, p[1] AS b, e`, { pairs, mem: MEMORY_RELS }) : [];
   const directByPair = new Map<string, EdgeRow>();
   for (const d of direct) if (!directByPair.has(`${d.a}|${d.b}`)) directByPair.set(`${d.a}|${d.b}`, d.e);
 

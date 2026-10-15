@@ -58,20 +58,25 @@ async function runImpact(args: { id: string; depth?: number; asOf?: string }, ct
   const depth = clamp(args.depth, 3, 1, 4);
   const start = await requireNode(ctx, args.id);
   const found = new Map<string, Item>();
-  const edges: EdgeRow[] = [];
-  const visited = new Set([start.id]);
   let frontier = [start.id];
+  let more = false;
+  // One query per hop, new nodes only, first by name: a hub with 10,000+ dependents cannot overflow the result, and
+  // the IMPACT_CAP kept are the same every time. Each node comes once, with one edge that pulls it in.
   for (let hop = 1; hop <= depth && frontier.length && found.size < IMPACT_CAP; hop++) {
+    const k = IMPACT_CAP - found.size + 1;
+    const branch = (pattern: string) =>
+      `UNWIND $ids AS fid MATCH (f:Entity {id:fid}) WITH f MATCH ${pattern} WHERE ${edgeAt("r", asOf)} AND NOT x.id IN $seen
+       WITH x, head(collect(${EDGE("r")})) AS e RETURN ${NODE("x")} AS x, e ORDER BY x.name, x.id LIMIT $k`;
     const rows = await ro<{ x: NodeRow; e: EdgeRow }>(ctx,
-      `UNWIND $ids AS fid MATCH (x:Entity)-[r:DEPENDS_ON]->(:Entity {id:fid}) WHERE ${edgeAt("r", asOf)} RETURN ${NODE("x")} AS x, ${EDGE("r")} AS e
-       UNION ALL
-       UNWIND $ids AS fid MATCH (:Entity {id:fid})-[r:AFFECTS|BLOCKS]->(x:Entity) WHERE ${edgeAt("r", asOf)} RETURN ${NODE("x")} AS x, ${EDGE("r")} AS e`,
-      { ids: frontier, asOf });
+      `${branch("(x:Entity)-[r:DEPENDS_ON]->(f)")} UNION ALL ${branch("(f)-[r:AFFECTS|BLOCKS]->(x:Entity)")}`,
+      { ids: frontier, asOf, seen: [start.id, ...found.keys()], k });
     const next: string[] = [];
-    for (const r of rows.sort((a, b) => String(a.x.name).localeCompare(String(b.x.name)))) {
-      edges.push(r.e);
-      if (visited.has(r.x.id) || found.size >= IMPACT_CAP) continue;
-      visited.add(r.x.id);
+    for (const r of rows.sort((a, b) => String(a.x.name).localeCompare(String(b.x.name)) || a.x.id.localeCompare(b.x.id))) {
+      if (found.has(r.x.id)) continue;
+      if (found.size >= IMPACT_CAP) {
+        more = true;
+        break;
+      }
       found.set(r.x.id, { node: r.x, hop, e: r.e });
       next.push(r.x.id);
     }
@@ -80,8 +85,11 @@ async function runImpact(args: { id: string; depth?: number; asOf?: string }, ct
 
   const col = new Collector();
   col.node(start);
-  const inSet = new Set([start.id, ...found.keys()]);
-  const kept = edges.filter((e) => inSet.has(e.from) && inSet.has(e.to));
+  const nodes = [start.id, ...found.keys()];
+  // The impact subgraph: every current DEPENDS_ON/AFFECTS/BLOCKS edge among the nodes found (at most 61).
+  const kept = (await ro<{ e: EdgeRow }>(ctx,
+    `MATCH (a:Entity)-[r:DEPENDS_ON|AFFECTS|BLOCKS]->(b:Entity) WHERE a.id IN $ids AND b.id IN $ids AND ${edgeAt("r", asOf)}
+     RETURN ${EDGE("r")} AS e LIMIT 1000`, { ids: nodes, asOf })).map((r) => r.e);
   const byHop = new Map<number, Array<Record<string, unknown>>>();
   for (const it of found.values()) {
     col.node(it.node);
@@ -90,14 +98,14 @@ async function runImpact(args: { id: string; depth?: number; asOf?: string }, ct
     byHop.set(it.hop, list);
   }
   for (const e of kept) col.edge(e);
-  const nodes = [...inSet];
   const score = nodes.length >= 3 ? betweennessOf(nodes, kept.map((e) => [e.from, e.to])).get(start.id)! : 0;
   const pairs = ((nodes.length - 1) * (nodes.length - 2)) / 2;
   return col.result(ctx, {
     id: start.id, type: typeOf(start), name: start.name ?? start.id, depth, total: found.size,
     impacted: [...byHop.entries()].map(([hop, items]) => ({ hop, items })),
     betweenness: { score: round(score, 3), normalized: pairs > 0 ? round(score / pairs, 3) : 0, subgraphNodes: nodes.length },
-  }, found.size ? (found.size >= IMPACT_CAP ? `Stopped at ${IMPACT_CAP} impacted items.` : undefined) : `Nothing current depends on, or is affected or blocked by, ${start.id}.`);
+  }, found.size ? (more || found.size >= IMPACT_CAP ? `Stopped at ${IMPACT_CAP} impacted items (first by name at each hop); there are more.` : undefined)
+    : `Nothing current depends on, or is affected or blocked by, ${start.id}.`);
 }
 
 export const impactOf = defineTool({
