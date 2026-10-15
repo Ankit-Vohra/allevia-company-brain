@@ -1,0 +1,84 @@
+{
+ "tool": "account_reach",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for account_reach"
+ ],
+ "data": {
+  "account": {
+   "username": "example_business",
+   "followers": 4704,
+   "follows": 82,
+   "posts": 729
+  },
+  "newFollowers": {
+   "last7d": {
+    "since": "2026-10-08",
+    "change": 89
+   },
+   "last28d": {
+    "since": "2026-09-17",
+    "change": 290
+   }
+  },
+  "followerHistory": [
+   {
+    "day": "2026-10-13",
+    "followers": 4668
+   },
+   {
+    "day": "2026-10-14",
+    "followers": 2635
+   },
+   {
+    "day": "2026-10-15",
+    "followers": 4409
+   }
+  ],
+  "last7d": {
+   "since": "",
+   "until": "",
+   "reach": 6398,
+   "views": 3354,
+   "reachFollowers": null,
+   "reachNonFollowers": null,
+   "nonFollowerShare": 0.228,
+   "reachBySurface": [],
+   "viewsBySurface": [],
+   "accountsEngaged": 591,
+   "totalInteractions": 564,
+   "profileVisits": 930,
+   "linkTaps": 74,
+   "websiteClicks": null,
+   "likes": null,
+   "comments": null,
+   "shares": null,
+   "saves": null,
+   "replies": null
+  },
+  "last28d": {
+   "since": "",
+   "until": "",
+   "reach": 90295,
+   "views": 19757,
+   "reachFollowers": null,
+   "reachNonFollowers": null,
+   "nonFollowerShare": 0.924,
+   "reachBySurface": [],
+   "viewsBySurface": [],
+   "accountsEngaged": 419,
+   "totalInteractions": 1869,
+   "profileVisits": 597,
+   "linkTaps": 73,
+   "websiteClicks": 74,
+   "likes": null,
+   "comments": null,
+   "shares": null,
+   "saves": null,
+   "replies": null
+  },
+  "notes": []
+ }
+}

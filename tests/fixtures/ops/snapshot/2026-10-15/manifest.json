@@ -1,0 +1,301 @@
+{
+ "tenant": "aamdani",
+ "snapshotDate": "2026-10-15",
+ "startedAt": "2026-10-15T03:00:00.000Z",
+ "finishedAt": "2026-10-15T03:00:00.000Z",
+ "remoteCacheDir": "/tmp/allevia-ops-cache",
+ "serverToolCount": 54,
+ "calls": {
+  "users_summary": {
+   "tool": "users_summary",
+   "file": "users_summary.json",
+   "args": {},
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 5584,
+   "bytes": 2013
+  },
+  "new_users": {
+   "tool": "new_users",
+   "file": "new_users.json",
+   "args": {
+    "from": "2026-09-18",
+    "to": "2026-10-15",
+    "group_by": "day"
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 9060,
+   "bytes": 1142
+  },
+  "acquisition_sources": {
+   "tool": "acquisition_sources",
+   "file": "acquisition_sources.json",
+   "args": {
+    "from": "2026-09-18",
+    "to": "2026-10-15",
+    "limit": 15
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 8204,
+   "bytes": 2216
+  },
+  "signup_funnel": {
+   "tool": "signup_funnel",
+   "file": "signup_funnel.json",
+   "args": {
+    "from": "2026-09-18",
+    "to": "2026-10-15"
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 5230,
+   "bytes": 1879
+  },
+  "search_console": {
+   "tool": "search_console",
+   "file": "search_console.json",
+   "args": {
+    "days": 28,
+    "breakdown": "query",
+    "limit": 25,
+    "fresh": false
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 6240,
+   "bytes": 1718
+  },
+  "search_console.page": {
+   "tool": "search_console",
+   "file": "search_console.page.json",
+   "args": {
+    "days": 28,
+    "breakdown": "page",
+    "limit": 25,
+    "fresh": false
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 2851,
+   "bytes": 1900
+  },
+  "analytics_ga4": {
+   "tool": "analytics_ga4",
+   "file": "analytics_ga4.json",
+   "args": {
+    "days": 28,
+    "breakdown": "source",
+    "site": "all",
+    "limit": 25,
+    "fresh": false
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 7269,
+   "bytes": 2309
+  },
+  "analytics_ga4.page": {
+   "tool": "analytics_ga4",
+   "file": "analytics_ga4.page.json",
+   "args": {
+    "days": 28,
+    "breakdown": "page",
+    "site": "www",
+    "limit": 25,
+    "fresh": false
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 8336,
+   "bytes": 1305
+  },
+  "reels_performance": {
+   "tool": "reels_performance",
+   "file": "reels_performance.json",
+   "args": {
+    "days": 28,
+    "include_duration": false,
+    "fresh": false
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 1235,
+   "bytes": 2118
+  },
+  "account_reach": {
+   "tool": "account_reach",
+   "file": "account_reach.json",
+   "args": {
+    "fresh": false
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 1399,
+   "bytes": 1566
+  },
+  "published_content": {
+   "tool": "published_content",
+   "file": "published_content.json",
+   "args": {
+    "days": 28,
+    "limit": 100
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 6256,
+   "bytes": 1441
+  },
+  "facebook_reels": {
+   "tool": "facebook_reels",
+   "file": "facebook_reels.json",
+   "args": {
+    "limit": 25,
+    "fresh": false
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 5748,
+   "bytes": 603
+  },
+  "youtube_stats": {
+   "tool": "youtube_stats",
+   "file": "youtube_stats.json",
+   "args": {
+    "limit": 25,
+    "fresh": false
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 3477,
+   "bytes": 688
+  },
+  "marketplace": {
+   "tool": "marketplace",
+   "file": "marketplace.json",
+   "args": {
+    "from": "2026-09-18",
+    "to": "2026-10-15",
+    "top": 10,
+    "series": false
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 3675,
+   "bytes": 1115
+  },
+  "connectors_status": {
+   "tool": "connectors_status",
+   "file": "connectors_status.json",
+   "args": {},
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 4088,
+   "bytes": 1293
+  },
+  "brain_pending": {
+   "tool": "brain_pending",
+   "file": "brain_pending.json",
+   "args": {
+    "owner": "all",
+    "include_done": false,
+    "limit": 200
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 5023,
+   "bytes": 1855
+  },
+  "review_cards": {
+   "tool": "review_cards",
+   "file": "review_cards.json",
+   "args": {
+    "days": 28,
+    "limit": 100
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 6197,
+   "bytes": 634
+  },
+  "ai_features": {
+   "tool": "ai_features",
+   "file": "ai_features.json",
+   "args": {
+    "from": "2026-09-18",
+    "to": "2026-10-15"
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 2447,
+   "bytes": 1322
+  },
+  "posthog_funnels": {
+   "tool": "posthog_funnels",
+   "file": "posthog_funnels.json",
+   "args": {
+    "days": 28,
+    "funnel": "seeker_signup",
+    "fresh": false
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 6484,
+   "bytes": 1141
+  },
+  "sentry_issues": {
+   "tool": "sentry_issues",
+   "file": "sentry_issues.json",
+   "args": {
+    "period": "14d",
+    "environment": "production",
+    "limit": 10,
+    "fresh": false
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 6085,
+   "bytes": 880
+  },
+  "play_health": {
+   "tool": "play_health",
+   "file": "play_health.json",
+   "args": {
+    "days": 28,
+    "reviews": 0,
+    "fresh": false
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 8111,
+   "bytes": 483
+  },
+  "app_store_status": {
+   "tool": "app_store_status",
+   "file": "app_store_status.json",
+   "args": {
+    "reviews": 0,
+    "fresh": false
+   },
+   "status": "not_configured",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 1567,
+   "bytes": 275,
+   "message": "ASC key not set"
+  },
+  "admin_metrics": {
+   "tool": "admin_metrics",
+   "file": "admin_metrics.json",
+   "args": {
+    "tab": "overview",
+    "days": 28
+   },
+   "status": "ok",
+   "asOf": "2026-10-15T03:00:00.000Z",
+   "ms": 8615,
+   "bytes": 2627
+  }
+ },
+ "skipped": {}
+}

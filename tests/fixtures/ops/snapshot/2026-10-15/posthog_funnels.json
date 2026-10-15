@@ -1,0 +1,67 @@
+{
+ "tool": "posthog_funnels",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for posthog_funnels"
+ ],
+ "data": {
+  "days": 28,
+  "activeUsers": 253,
+  "daily": [
+   {
+    "day": "2026-10-14",
+    "users": 358,
+    "events": 8248
+   },
+   {
+    "day": "2026-10-15",
+    "users": 65,
+    "events": 2313
+   }
+  ],
+  "topEvents": [
+   {
+    "event": "$screen",
+    "count": 92027,
+    "users": 875
+   }
+  ],
+  "funnel": {
+   "name": "seeker_signup",
+   "windowDays": 14,
+   "steps": [
+    {
+     "step": 1,
+     "event": "app_first_open",
+     "users": 935,
+     "fromPreviousPct": 51.98,
+     "fromStartPct": 49.05
+    },
+    {
+     "step": 2,
+     "event": "otp_verified",
+     "users": 682,
+     "fromPreviousPct": 16.79,
+     "fromStartPct": 47.45
+    },
+    {
+     "step": 3,
+     "event": "setup_completed",
+     "users": 328,
+     "fromPreviousPct": 26.12,
+     "fromStartPct": 37.1
+    },
+    {
+     "step": 4,
+     "event": "job_applied",
+     "users": 178,
+     "fromPreviousPct": 44.77,
+     "fromStartPct": 1.47
+    }
+   ]
+  },
+  "note": "synthetic"
+ }
+}

@@ -1,0 +1,97 @@
+{
+ "tool": "search_console",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for search_console"
+ ],
+ "data": {
+  "site": "sc-domain:example.test",
+  "window": {
+   "from": "2026-09-17",
+   "to": "2026-10-14",
+   "days": 28
+  },
+  "previousWindow": {
+   "from": "2026-08-20",
+   "to": "2026-09-16"
+  },
+  "totals": {
+   "clicks": 673,
+   "impressions": 73953,
+   "ctrPct": 38.64,
+   "avgPosition": 32.54
+  },
+  "previous": {
+   "clicks": 342,
+   "impressions": 75614,
+   "ctrPct": 98.33,
+   "avgPosition": 91.69
+  },
+  "change": {
+   "clicksPct": 48.31,
+   "impressionsPct": 66.81
+  },
+  "latestDayWithData": "2026-10-12",
+  "daily": [
+   {
+    "day": "2026-10-12",
+    "clicks": 61,
+    "impressions": 982,
+    "avgPosition": 17.05
+   }
+  ],
+  "sitemaps": [
+   {
+    "path": "https://www.aamdani.ai/sitemap-fixture.xml",
+    "lastSubmitted": null,
+    "lastDownloaded": null,
+    "pending": false,
+    "errors": 0,
+    "errorMayBeStale": false,
+    "warnings": 0,
+    "submittedUrls": 428,
+    "indexedUrls": 59
+   },
+   {
+    "path": "https://app.aamdani.ai/sitemap-fixture.xml",
+    "lastSubmitted": null,
+    "lastDownloaded": null,
+    "pending": false,
+    "errors": 93,
+    "errorMayBeStale": true,
+    "warnings": 0,
+    "submittedUrls": 88,
+    "indexedUrls": 82
+   }
+  ],
+  "note": "synthetic",
+  "top": {
+   "by": "page",
+   "rows": [
+    {
+     "page": "https://www.aamdani.ai/jobs/example-role",
+     "clicks": 48,
+     "impressions": 4362,
+     "ctrPct": 96.31,
+     "avgPosition": 3.55
+    },
+    {
+     "page": "https://www.aamdani.ai/",
+     "clicks": 54,
+     "impressions": 6778,
+     "ctrPct": 42.79,
+     "avgPosition": 83.95
+    },
+    {
+     "page": "https://app.aamdani.ai/example-page",
+     "clicks": 81,
+     "impressions": 581,
+     "ctrPct": 69.2,
+     "avgPosition": 18.54
+    }
+   ]
+  }
+ }
+}

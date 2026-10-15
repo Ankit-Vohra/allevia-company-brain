@@ -1,0 +1,104 @@
+{
+ "tool": "signup_funnel",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for signup_funnel"
+ ],
+ "data": {
+  "database": "prod",
+  "range": {
+   "from": "2026-09-18",
+   "to": "2026-10-15",
+   "days": 28,
+   "window": "custom",
+   "timeZone": "Asia/Kolkata",
+   "todayIST": "2026-10-15"
+  },
+  "seekers": {
+   "stages": [
+    {
+     "stage": "accounts created",
+     "count": 930,
+     "pctOfFirst": null,
+     "dropOffPct": null
+    },
+    {
+     "stage": "OTP verified",
+     "count": 756,
+     "pctOfFirst": null,
+     "dropOffPct": null
+    },
+    {
+     "stage": "setup completed",
+     "count": 350,
+     "pctOfFirst": null,
+     "dropOffPct": null
+    },
+    {
+     "stage": "first application",
+     "count": 60,
+     "pctOfFirst": null,
+     "dropOffPct": null
+    }
+   ],
+   "setupCompletedAny": 765,
+   "activatedAny": 82
+  },
+  "employers": {
+   "stages": [
+    {
+     "stage": "accounts created",
+     "count": 93,
+     "pctOfFirst": null,
+     "dropOffPct": null
+    },
+    {
+     "stage": "OTP verified",
+     "count": 92,
+     "pctOfFirst": null,
+     "dropOffPct": null
+    },
+    {
+     "stage": "setup completed",
+     "count": 92,
+     "pctOfFirst": null,
+     "dropOffPct": null
+    },
+    {
+     "stage": "first live job",
+     "count": 48,
+     "pctOfFirst": null,
+     "dropOffPct": null
+    }
+   ],
+   "setupCompletedAny": 93,
+   "activatedAny": 54
+  },
+  "loginLayer": [
+   {
+    "provider": "phone",
+    "stages": [
+     {
+      "stage": "auth accounts",
+      "count": 607,
+      "pctOfFirst": null,
+      "dropOffPct": null
+     },
+     {
+      "stage": "phone confirmed (OTP)",
+      "count": 162,
+      "pctOfFirst": null,
+      "dropOffPct": null
+     }
+    ]
+   }
+  ],
+  "notes": [],
+  "excluded": {
+   "accounts": 89,
+   "rule": "synthetic exclusion rule"
+  }
+ }
+}

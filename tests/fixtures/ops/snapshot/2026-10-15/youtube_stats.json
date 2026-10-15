@@ -1,0 +1,33 @@
+{
+ "tool": "youtube_stats",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for youtube_stats"
+ ],
+ "data": {
+  "channel": {
+   "id": "UC000000000000000000000",
+   "title": "Example channel",
+   "handle": "@example",
+   "subscribers": 507,
+   "views": 62492,
+   "videoCount": 73
+  },
+  "videos": [
+   {
+    "id": "vid000000a1",
+    "title": "Driver jobs — apply in 2 minutes",
+    "publishedAt": "2026-10-10T11:48:00Z",
+    "durationS": 93,
+    "isShort": true,
+    "privacy": "public",
+    "views": 7295,
+    "likes": 59,
+    "comments": 89,
+    "url": "https://youtube.com/shorts/vid000000a1"
+   }
+  ]
+ }
+}

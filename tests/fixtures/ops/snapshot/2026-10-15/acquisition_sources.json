@@ -1,0 +1,123 @@
+{
+ "tool": "acquisition_sources",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for acquisition_sources"
+ ],
+ "data": {
+  "database": "prod",
+  "range": {
+   "from": "2026-09-18",
+   "to": "2026-10-15",
+   "days": 28,
+   "window": "custom",
+   "timeZone": "Asia/Kolkata",
+   "todayIST": "2026-10-15"
+  },
+  "kind": "all",
+  "signups": 786,
+  "organicNone": 900,
+  "notRecorded": 88,
+  "byChannel": [
+   {
+    "channel": "organic",
+    "signups": 432,
+    "sharePct": 51.9,
+    "setupCompleted": 92
+   },
+   {
+    "channel": "instagram",
+    "signups": 92,
+    "sharePct": 64.21,
+    "setupCompleted": 73
+   },
+   {
+    "channel": "website",
+    "signups": 63,
+    "sharePct": 35.33,
+    "setupCompleted": 83
+   },
+   {
+    "channel": "unknown_old_app",
+    "signups": 83,
+    "sharePct": 50.73,
+    "setupCompleted": 59
+   },
+   {
+    "channel": "play_store",
+    "signups": 63,
+    "sharePct": 75.92,
+    "setupCompleted": 74
+   },
+   {
+    "channel": "facebook",
+    "signups": 88,
+    "sharePct": 96.39,
+    "setupCompleted": 83
+   },
+   {
+    "channel": "youtube",
+    "signups": 64,
+    "sharePct": 21.88,
+    "setupCompleted": 54
+   },
+   {
+    "channel": "ai_search",
+    "signups": 60,
+    "sharePct": 51.78,
+    "setupCompleted": 93
+   },
+   {
+    "channel": "search",
+    "signups": 54,
+    "sharePct": 51.49,
+    "setupCompleted": 54
+   },
+   {
+    "channel": "other_tagged",
+    "signups": 74,
+    "sharePct": 74.27,
+    "setupCompleted": 61
+   },
+   {
+    "channel": "unknown",
+    "signups": 83,
+    "sharePct": 41.53,
+    "setupCompleted": 55
+   }
+  ],
+  "bySourceKind": [
+   {
+    "sourceKind": "none",
+    "signups": 885,
+    "sharePct": 81.58,
+    "setupCompleted": 65
+   }
+  ],
+  "byUtmSource": [
+   {
+    "utmSource": "(none)",
+    "signups": 567,
+    "sharePct": 22.04,
+    "setupCompleted": 723
+   }
+  ],
+  "byUtmMedium": [],
+  "byUtmCampaign": [],
+  "byPlatform": [],
+  "topReferrerHosts": [],
+  "adClicks": {
+   "withAttribution": 430,
+   "googleAdClick": 0,
+   "metaAdClick": 0
+  },
+  "sourceMeaning": {},
+  "channelMeaning": {},
+  "excluded": {
+   "accounts": 54,
+   "rule": "synthetic exclusion rule"
+  }
+ }
+}

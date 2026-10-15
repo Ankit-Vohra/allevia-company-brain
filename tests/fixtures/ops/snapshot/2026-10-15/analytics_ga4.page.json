@@ -1,0 +1,68 @@
+{
+ "tool": "analytics_ga4",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for analytics_ga4"
+ ],
+ "data": {
+  "property": "properties/000000000",
+  "window": {
+   "from": "2026-09-17",
+   "to": "2026-10-14",
+   "days": 28
+  },
+  "previousWindow": {
+   "from": "2026-08-20",
+   "to": "2026-09-16"
+  },
+  "totals": {
+   "activeUsers": 8403,
+   "newUsers": 6108,
+   "sessions": 4316,
+   "pageViews": 4648,
+   "engagementRatePct": 66.52,
+   "avgSessionSec": 2395.91
+  },
+  "previous": {
+   "activeUsers": 9146,
+   "newUsers": 4476,
+   "sessions": 5944,
+   "pageViews": 9009,
+   "engagementRatePct": 39.12,
+   "avgSessionSec": 6476.76
+  },
+  "change": {
+   "activeUsersPct": 61.09,
+   "sessionsPct": 5.14,
+   "pageViewsPct": 58.66
+  },
+  "note": "synthetic",
+  "site": "www",
+  "breakdown": {
+   "by": "page",
+   "dimension": "pagePath",
+   "rows": [
+    {
+     "page": "/",
+     "activeUsers": 746,
+     "newUsers": 0,
+     "sessions": 8898,
+     "pageViews": 5037,
+     "engagementRatePct": 0,
+     "avgSessionSec": 0
+    },
+    {
+     "page": "/jobs/example-role",
+     "activeUsers": 613,
+     "newUsers": 0,
+     "sessions": 208,
+     "pageViews": 918,
+     "engagementRatePct": 0,
+     "avgSessionSec": 0
+    }
+   ]
+  }
+ }
+}

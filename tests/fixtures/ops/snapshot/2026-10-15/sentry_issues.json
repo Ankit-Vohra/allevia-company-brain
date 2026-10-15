@@ -1,0 +1,47 @@
+{
+ "tool": "sentry_issues",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for sentry_issues"
+ ],
+ "data": {
+  "org": "example",
+  "period": "14d",
+  "environment": "production",
+  "stability": {
+   "crashFreeSessionsPct": 98.48,
+   "crashFreeUsersPct": 96.09,
+   "sessions": 87563,
+   "users": 1462,
+   "series": []
+  },
+  "newIssues": {
+   "count": 95,
+   "items": []
+  },
+  "topUnresolved": [
+   {
+    "id": "APP-1",
+    "title": "SyntheticError",
+    "where": "x",
+    "level": "error",
+    "priority": null,
+    "unhandled": true,
+    "eventsInPeriod": 94,
+    "users": 48,
+    "firstSeen": "2026-10-01",
+    "lastSeen": "2026-10-14",
+    "link": "https://example.test/issues/1"
+   }
+  ],
+  "latestRelease": [
+   {
+    "project": "app",
+    "release": "1.2.3"
+   }
+  ],
+  "note": "synthetic"
+ }
+}
