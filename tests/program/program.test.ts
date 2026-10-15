@@ -110,7 +110,7 @@ describe("enrol an existing business, then the scorecard (integration)", () => {
   it("goals: three from the template, pursued, tracked, owned, part of the program, sourced from the template", async () => {
     const goals = await q<{ id: string; name: string; owner: string; metric: string; prog: string; tpl: string }>(
       `MATCH (b:Business {id:$b})-[:PURSUES]->(gl:Goal)-[:TRACKS]->(m:Metric), (a:Agent)-[:OWNS]->(gl), (gl)-[:PART_OF]->(p:Program), (gl)-[:SOURCED_FROM]->(d:Document {kind:'template'})
-       RETURN gl.id AS id, gl.name AS name, a.rosterId AS owner, m.key AS metric, p.id AS prog, d.id AS tpl ORDER BY gl.priority`, { b: biz });
+       RETURN gl.id AS id, gl.name AS name, a.rosterId AS owner, m.key AS metric, p.id AS prog, d.id AS tpl ORDER BY gl.priority, gl.id`, { b: biz });
     expect(goals.map((x) => [x.name, x.owner, x.metric])).toEqual([
       ["Weekly signups", "growth-marketer", "new_accounts"], ["Instagram reach", "content-strategist", "account_reach"], ["Search clicks", "data-analyst", "gsc_clicks"],
     ]);
@@ -122,7 +122,7 @@ describe("enrol an existing business, then the scorecard (integration)", () => {
 
   it("baseline: real numbers only (the partial day, simulated and stale readings left out); unknown stays unknown", async () => {
     const goals = await q<{ name: string; baseline: number | null; conf: string; target: number; basis: string; at: string | null; due: string }>(
-      "MATCH (gl:Goal) RETURN gl.name AS name, gl.baseline AS baseline, gl.baselineConf AS conf, gl.target AS target, gl.targetBasis AS basis, gl.baselineAt AS at, gl.dueAt AS due ORDER BY gl.priority");
+      "MATCH (gl:Goal) RETURN gl.name AS name, gl.baseline AS baseline, gl.baselineConf AS conf, gl.target AS target, gl.targetBasis AS basis, gl.baselineAt AS at, gl.dueAt AS due ORDER BY gl.priority, gl.id");
     expect(goals).toEqual([
       { name: "Weekly signups", baseline: week, conf: "measured", target: Math.ceil(week * 1.5), basis: "baseline", at: "2026-10-14", due: "2027-01-13" },
       { name: "Instagram reach", baseline: 2100, conf: "measured", target: 3150, basis: "baseline", at: "2026-10-14", due: "2027-01-13" },
@@ -138,7 +138,7 @@ describe("enrol an existing business, then the scorecard (integration)", () => {
   it("Day-0 checkpoint measured by the program's own numbers; no approval history is made up", async () => {
     const [cp] = await q<{ day: number; date: string }>("MATCH (c:Checkpoint)-[:PART_OF]->(:Program) RETURN c.day AS day, c.date AS date");
     expect(cp).toEqual({ day: 0, date: "2026-10-15" });
-    const m = await q<{ metric: string; v: number }>("MATCH (o:Observation)-[:MEASURES]->(:Checkpoint) WHERE o.metric STARTS WITH 'allevia.' RETURN o.metric AS metric, o.value AS v ORDER BY metric");
+    const m = await q<{ metric: string; v: number }>("MATCH (o:Observation)-[:MEASURES]->(:Checkpoint) WHERE o.metric STARTS WITH 'allevia.' RETURN o.metric AS metric, o.value AS v ORDER BY metric, o.id");
     expect(m).toEqual([{ metric: "allevia.deliverables_approved", v: 0 }, { metric: "allevia.learned_rules", v: 0 }]);
     expect((await q<{ c: number }>("MATCH (a:Approval) RETURN count(a) AS c"))[0]!.c).toBe(0);
     expect(first.capabilities?.length).toBe(7);
@@ -195,7 +195,7 @@ describe("enrol an existing business, then the scorecard (integration)", () => {
     expect(p.deliverables).toMatchObject({ approvedSinceStart: 3, editedSinceStart: 1 });
     const signups = p.goals.find((x) => x.name === "Weekly signups")!;
     expect(signups).toMatchObject({ baseline: week, current: 140, currentAt: "2026-11-14" });
-    const d30 = await q<{ m: string }>("MATCH (o:Observation)-[:MEASURES]->(c:Checkpoint {day:30}) RETURN o.metric AS m ORDER BY m");
+    const d30 = await q<{ m: string }>("MATCH (o:Observation)-[:MEASURES]->(c:Checkpoint {day:30}) RETURN o.metric AS m ORDER BY m, o.id");
     expect(d30.map((x) => x.m)).toEqual(expect.arrayContaining(["allevia.first_pass_rate", "new_accounts"]));
     // read only (public mode) writes nothing
     const before = (await q<{ c: number }>("MATCH (n:Entity) RETURN count(n) AS c"))[0]!.c;

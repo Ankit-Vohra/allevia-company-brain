@@ -212,13 +212,20 @@ describe("every tool and query over a graph of ties, zeros and gaps (integration
 
   it("runs the cypher tool's escape hatch over tied rows, with a unique last key", async () => {
     for (const query of [
-      "MATCH (n:Entity) WHERE n.name = 'Swarm item' RETURN n.id AS id, n.asOf AS asOf ORDER BY asOf DESC, id",
+      "MATCH (n:Entity) WHERE n.name STARTS WITH 'Swarm item' RETURN n.id AS id, n.asOf AS asOf ORDER BY asOf DESC, id",
       "MATCH (n:Entity)-[r]->(m:Entity) RETURN n.id AS a, type(r) AS t, m.id AS b ORDER BY t, a, b LIMIT 300",
       "MATCH (n:Entity) RETURN n.asOf AS d, count(*) AS c ORDER BY c DESC, d",
       "MATCH (o:Observation) RETURN o.id AS id, o.value AS v ORDER BY v, id",
       "MATCH (o:Observation) RETURN o.metric AS m, sum(o.value) AS total ORDER BY total DESC, m",
-      "MATCH (o:Observation) WITH o.metric AS m, CASE WHEN sum(o.value) = 0 THEN null ELSE count(o) / sum(o.value) END AS r RETURN m, r ORDER BY r, m",
-    ]) await run("cypher", { query });
+      "MATCH (o:Observation) WITH o.metric AS m, CASE WHEN sum(o.value) = 0 THEN null ELSE count(o) / sum(o.value) END AS r ORDER BY r, m RETURN m, r",
+    ]) {
+      // The tool turns a refusal into a normal result, so look for it: a query that is not sent proves nothing.
+      await probe(`cypher ${query.slice(0, 70)}`, async () => {
+        const r = await call(tool("cypher"), { query }, ctx());
+        if (r.data.error) throw new Error(`the cypher tool refused or failed it: ${r.data.error}`);
+        if (!r.data.rows.length) throw new Error("it returned no rows");
+      });
+    }
     expect(crashes).toEqual([]);
   });
 

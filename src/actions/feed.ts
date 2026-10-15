@@ -16,9 +16,9 @@ async function toDtos(g: Read, rows: RuleRow[]): Promise<LearnedRuleDto[]> {
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
   const [from, agents] = await Promise.all([
-    g.roQuery<{ id: string; a: string }>("UNWIND $ids AS id MATCH (r:Rule {id:id})-[:LEARNED_FROM]->(a:Approval) RETURN r.id AS id, a.id AS a ORDER BY a", { ids }),
+    g.roQuery<{ id: string; a: string }>("UNWIND $ids AS id MATCH (r:Rule {id:id})-[:LEARNED_FROM]->(a:Approval) RETURN r.id AS id, a.id AS a ORDER BY a, id", { ids }),
     g.roQuery<{ id: string; agent: string | null }>(
-      "UNWIND $ids AS id MATCH (r:Rule {id:id})-[e:APPLIES_TO]->(ag:Agent) WHERE e.until IS NULL RETURN r.id AS id, ag.rosterId AS agent ORDER BY agent", { ids }),
+      "UNWIND $ids AS id MATCH (r:Rule {id:id})-[e:APPLIES_TO]->(ag:Agent) WHERE e.until IS NULL RETURN r.id AS id, ag.rosterId AS agent ORDER BY agent, id", { ids }),
   ]);
   return rows.map((r) => ({
     id: r.id, text: r.text ?? r.id, op: r.op ?? "instruction", status: r.status === "retired" ? "retired" : "active",
@@ -35,7 +35,7 @@ const RULE_FIELDS = `r.id AS id, coalesce(r.text, r.name) AS text, r.op AS op, r
 export async function learnedRules(g: Read, since = 0, limit = 200): Promise<LearnedRuleDto[]> {
   const rows = await g.roQuery<RuleRow>(
     `MATCH (r:Rule) WHERE r.kind = 'learned' AND coalesce(r.learnedAt, r.createdAt, 0) >= $since
-     RETURN ${RULE_FIELDS} ORDER BY at DESC, id LIMIT $limit`, { since, limit: Math.max(1, Math.min(500, limit)) });
+     RETURN ${RULE_FIELDS} ORDER BY at DESC, r.id LIMIT $limit`, { since, limit: Math.max(1, Math.min(500, limit)) });
   return toDtos(g, rows);
 }
 

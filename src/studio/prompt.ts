@@ -39,19 +39,19 @@ export async function buildEditPrompt(
   fidelity.forEach((r) => sources.add(r.id));
   const audiences = await g.roQuery<{ id: string; name: string | null }>("MATCH (a:Audience) RETURN a.id AS id, a.name AS name ORDER BY a.id LIMIT 3");
   const needs = audiences.length
-    ? await g.roQuery<{ name: string | null }>("MATCH (a:Audience)-[:HAS_NEED]->(n:Need) WHERE a.id IN $ids RETURN n.name AS name ORDER BY n.name LIMIT 4", { ids: audiences.map((x) => x.id) })
+    ? await g.roQuery<{ name: string | null }>("MATCH (a:Audience)-[:HAS_NEED]->(n:Need) WHERE a.id IN $ids RETURN n.name AS name ORDER BY n.name, n.id LIMIT 4", { ids: audiences.map((x) => x.id) })
     : [];
   audiences.forEach((x) => sources.add(x.id));
   const winners = await g.roQuery<{ id: string; name: string | null; v: number }>(
     `MATCH (o:Observation)-[:MEASURES]->(c:Content) WHERE o.metric IN ['reach', 'saves', 'engagement', 'likes', 'views']
-     RETURN c.id AS id, c.name AS name, max(o.value) AS v ORDER BY v DESC LIMIT 3`);
+     RETURN c.id AS id, c.name AS name, max(o.value) AS v ORDER BY v DESC, id LIMIT 3`);
   winners.forEach((w) => sources.add(w.id));
   const format = await g.roQuery<{ id: string }>(
     "MATCH (r:Rule) WHERE r.summary CONTAINS '4:5' RETURN r.id AS id ORDER BY r.id LIMIT 2");
   format.forEach((r) => sources.add(r.id));
   const horizon = now + 21 * 86_400_000;
   const season = await g.roQuery<{ id: string; name: string | null }>(
-    "MATCH (e:Event) WHERE e.kind IN ['season', 'holiday'] AND coalesce(e.at, 0) >= $now AND coalesce(e.at, 0) <= $horizon RETURN e.id AS id, e.name AS name ORDER BY e.at LIMIT 2",
+    "MATCH (e:Event) WHERE e.kind IN ['season', 'holiday'] AND coalesce(e.at, 0) >= $now AND coalesce(e.at, 0) <= $horizon RETURN e.id AS id, e.name AS name ORDER BY e.at, e.id LIMIT 2",
     { now, horizon });
   season.forEach((e) => sources.add(e.id));
   if (ctx.project) sources.add(ctx.project.contentId);

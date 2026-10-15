@@ -122,7 +122,7 @@ describe("onboard (fixture site, fake LLM, test graph)", () => {
     const [b] = await q("MATCH (b:Business) WHERE b.templateKey IS NOT NULL RETURN b.currency AS currency, b.locale AS locale, b.timeZone AS tz, b.templateKey AS tk");
     expect(b).toEqual({ currency: "GBP", locale: "en-GB", tz: "Europe/London", tk: "architecture_studio" });
     const goals = await q<{ name: string; baseline: number | null; conf: string }>(
-      "MATCH (:Business)-[:PURSUES]->(gl:Goal)-[:PART_OF]->(:Program) RETURN gl.name AS name, gl.baseline AS baseline, gl.baselineConf AS conf ORDER BY gl.priority");
+      "MATCH (:Business)-[:PURSUES]->(gl:Goal)-[:PART_OF]->(:Program) RETURN gl.name AS name, gl.baseline AS baseline, gl.baselineConf AS conf ORDER BY gl.priority, gl.id");
     expect(goals).toEqual([
       { name: "Qualified enquiries per month", baseline: null, conf: "unknown" },
       { name: "Instagram reach", baseline: null, conf: "unknown" },
