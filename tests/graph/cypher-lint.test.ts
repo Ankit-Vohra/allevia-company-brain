@@ -34,6 +34,8 @@ describe("unguardedEdgeAggregates", () => {
     expect(unguardedEdgeAggregates("MATCH (o:Observation)-[:MEASURES]->(s) WITH s, collect(o) AS os RETURN s.id, os")).toHaveLength(1);
     expect(unguardedEdgeAggregates("MATCH (a)-->(b) RETURN count(b)")).toHaveLength(1);
     expect(unguardedEdgeAggregates("MATCH (a)-[:R]->(b)-[:S]->(c) RETURN count(c)")).toHaveLength(2);
+    expect(unguardedEdgeAggregates("MATCH (a)-[:R*1..1]->(b) RETURN count(b)")).toHaveLength(1); // one hop is planned like a plain edge
+    expect(unguardedEdgeAggregates("MATCH (a)-[r:R*1]->(b) RETURN count(b)")).toHaveLength(1);
   });
 
   it("passes a relationship that is bound and used (WHERE ID(e) >= 0, or a test on e), and aggregates that ignore repeats", () => {
@@ -43,6 +45,8 @@ describe("unguardedEdgeAggregates", () => {
     expect(unguardedEdgeAggregates("MATCH (a)-[:R]->(b) RETURN count(DISTINCT b)")).toEqual([]);
     expect(unguardedEdgeAggregates("MATCH (a)-[:R]->(b) RETURN a.id, max(b.at) AS last")).toEqual([]);
     expect(unguardedEdgeAggregates("MATCH (a)-[:R*1..3]->(b) RETURN count(b)")).toEqual([]);
+    expect(unguardedEdgeAggregates("MATCH (a)-[:R*]->(b) RETURN count(b)")).toEqual([]);
+    expect(unguardedEdgeAggregates("MATCH (a)-[:R*1..__EXPR__]->(b) RETURN count(b)")).toEqual([]);
     expect(unguardedEdgeAggregates("MATCH (a:Agent) WHERE NOT (a)-[:OWNS]->() RETURN count(a)")).toEqual([]);
     expect(unguardedEdgeAggregates("MATCH (a)-[:R]->(b) RETURN b.id")).toEqual([]); // no aggregate
   });

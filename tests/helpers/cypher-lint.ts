@@ -11,7 +11,7 @@
 //    unreferenced `-[e:R]->` does the same. Allevia keeps parallel edges on purpose (a fact that ended and was asserted
 //    again is two edges), so a count, sum or collect over a traversal must bind the edge and use it:
 //    `MATCH (a)-[e:R]->(b) WHERE ID(e) >= 0 RETURN count(b)` (or any test on e, such as e.until IS NULL).
-//    Variable-length patterns and patterns inside NOT / EXISTS are not affected and are skipped.
+//    Variable-length patterns of two or more hops (they count paths) and patterns inside NOT / EXISTS are not affected and are skipped.
 
 const IDENT = "[A-Za-z_][A-Za-z0-9_]*";
 
@@ -61,6 +61,15 @@ export function idAnchors(text: string): string[] {
 // parallel edge changes nothing), and min/max do not either.
 const AGGREGATE = /\b(?:count|collect|sum|avg)\s*\(\s*(?!DISTINCT\b)/i;
 
+// `*1..1`, `*1`, `*..1`, `*0..1`: a variable-length pattern that can only take one hop. A bound that is not a literal
+// (`*1..__EXPR__`) is not judged.
+function singleHop(body: string): boolean {
+  const m = /\*\s*(\d*)\s*(\.\.\s*(\d*))?/.exec(body);
+  if (!m) return false;
+  const max = m[2] === undefined ? m[1] : m[3];
+  return max === "1";
+}
+
 // Positions of the relationship patterns of a query that are exposed: no alias, or an alias nothing else in the text uses.
 export function unguardedEdgeAggregates(text: string): string[] {
   if (!AGGREGATE.test(text)) return [];
@@ -71,7 +80,8 @@ export function unguardedEdgeAggregates(text: string): string[] {
     const body = m[2];
     const at = m.index!;
     if (m[0] === "--" && /\w\s*$/.test(text.slice(Math.max(0, at - 1), at))) continue; // `x--y`, not a pattern
-    if (body !== undefined && body.includes("*")) continue; // variable length: each path counts
+    // variable length: each path counts, except a single hop (`*1..1`, `*1`), which the server plans like a plain edge
+    if (body !== undefined && body.includes("*") && !singleHop(body)) continue;
     const before = text.slice(Math.max(0, at - 120), at);
     // a pattern inside NOT ( … ) or EXISTS( … ) only asks whether an edge exists
     if (/(?:\bNOT\s*|\bEXISTS?\s*\()\(?\s*\([^)]*\)\s*$/i.test(before)) continue;
