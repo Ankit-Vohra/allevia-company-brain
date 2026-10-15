@@ -12,7 +12,7 @@ import { agentNodeId } from "../agent/memory.js";
 import { serial } from "../agent/tools/common.js";
 import { entityId } from "../util/ids.js";
 import { isoDate } from "../util/time.js";
-import { decideApproval, DecisionError } from "../server/approvals.js";
+import { DecisionError } from "../server/approvals.js";
 import { TARA, type PhotoAssessment } from "./assess.js";
 import { DEV, type Caption } from "./caption.js";
 import type { StudioContext } from "./context.js";
@@ -106,8 +106,13 @@ export async function studioCard(g: GraphHandle, approvalId: string): Promise<{ 
 
 export interface ApproveInput { approvalId: string; variantId?: string; caption?: string; now: number }
 
-// Records the owner's approval (decideApproval: pending -> approved | edited) and writes the draft.
-export async function approveStudioDraft(g: GraphHandle, input: ApproveInput): Promise<{ contentId: string; status: string; variantId: string }> {
+// How a decision is recorded: the server passes its own (server/approvals.ts `decide`: the status change, the executor
+// that writes the draft Content and its Action, the learning loop). Returns the status it recorded.
+export type DecideFn = (approvalId: string, editedPayload?: { title: string; body: string; target: string }) => Promise<{ status: string }>;
+
+// The owner picks a variant (it must have passed Nisha) and may edit the caption; the decision is recorded through
+// `decide`, then the draft gets the Studio's part: the chosen variant, the project page, the credits.
+export async function approveStudioDraft(g: GraphHandle, input: ApproveInput, decide: DecideFn): Promise<{ contentId: string; status: string; variantId: string }> {
   const card = await studioCard(g, input.approvalId);
   if (!card) throw new DecisionError(404, `No Studio card ${input.approvalId}.`);
   if (card.status !== "pending") throw new DecisionError(409, `${input.approvalId} was already decided (${card.status}).`);
@@ -118,30 +123,36 @@ export async function approveStudioDraft(g: GraphHandle, input: ApproveInput): P
   const current = { title: card.payload.title, body: card.payload.body, target: card.payload.target };
   const caption = input.caption?.trim();
   const edited = caption && caption !== current.body ? { ...current, body: caption.slice(0, 5000) } : undefined;
-  const d = await decideApproval(g, input.approvalId, { decision: "approve", ...(edited ? { editedPayload: edited } : {}) }, current, input.now);
+  const d = await decide(input.approvalId, edited);
   const contentId = await finalizeStudioDraft(g, input.approvalId, card.payload, variantId, edited?.body ?? current.body, input.now);
   return { contentId, status: d.status, variantId };
 }
 
+// The draft post with the Studio's part attached. When the approval's executor already wrote the draft Content
+// (Approval -RESULTED_IN-> Action -RESULTED_IN-> Content), that Content gets it; otherwise the Studio writes both.
 export async function finalizeStudioDraft(g: GraphHandle, approvalId: string, p: StudioPayload, variantId: string, body: string, now: number): Promise<string> {
   const s = p.studio;
-  const [orig] = await g.roQuery<{ sha: string | null }>("MATCH (a:Asset {id:$id}) RETURN a.sha256 AS sha", { id: s.originalId });
-  const short = (orig?.sha ?? s.originalId.replace(/^asset:/, "")).slice(0, 12);
-  const contentId = entityId("Content", `post ${short}`);
-  const actionId = entityId("Action", `studio draft ${short}`);
   const src = approvalId;
   const asOf = isoDate(now);
   const v = s.variants.find((x) => x.id === variantId);
-  await upsertNode(g, {
-    type: "Content", id: contentId, name: p.title.replace(/^Post the /, "Post: ").replace(/ photo$/, ""), summary: body.slice(0, 600),
-    props: {
-      format: "post", status: "draft", channel: "instagram", caption: body.slice(0, 5000), altText: s.altText, aspect: "4:5",
-      assetId: variantId, aiEdited: v?.aiEdited ?? false, createdBy: "studio",
-    }, src, asOf,
-  }, now);
-  await upsertNode(g, { type: "Action", id: actionId, name: `Saved the draft post ${contentId}`, props: { kind: "content_draft", status: "done", at: now }, src, asOf }, now);
-  await upsertEdge(g, { from: approvalId, type: "RESULTED_IN", to: actionId, src, asOf }, now);
-  await upsertEdge(g, { from: actionId, type: "RESULTED_IN", to: contentId, src, asOf }, now);
+  const [made] = await g.roQuery<{ id: string; name: string }>(
+    "MATCH (:Approval {id:$id})-[:RESULTED_IN]->(:Action)-[:RESULTED_IN]->(c:Content) RETURN c.id AS id, c.name AS name LIMIT 1", { id: approvalId });
+  const [orig] = await g.roQuery<{ sha: string | null }>("MATCH (a:Asset {id:$id}) RETURN a.sha256 AS sha", { id: s.originalId });
+  const short = (orig?.sha ?? s.originalId.replace(/^asset:/, "")).slice(0, 12);
+  const contentId = made?.id ?? entityId("Content", `post ${short}`);
+  const studioProps = { format: "post", status: "draft", channel: "instagram", altText: s.altText, aspect: "4:5", assetId: variantId, aiEdited: v?.aiEdited ?? false, createdBy: "studio" };
+  if (made) {
+    await upsertNode(g, { type: "Content", id: contentId, name: made.name, props: studioProps }, now);
+  } else {
+    const actionId = entityId("Action", `studio draft ${short}`);
+    await upsertNode(g, {
+      type: "Content", id: contentId, name: p.title.replace(/^Post the /, "Post: ").replace(/ photo$/, ""), summary: body.slice(0, 600),
+      props: { ...studioProps, caption: body.slice(0, 5000) }, src, asOf,
+    }, now);
+    await upsertNode(g, { type: "Action", id: actionId, name: `Saved the draft post ${contentId}`, props: { kind: "content_draft", status: "done", at: now }, src, asOf }, now);
+    await upsertEdge(g, { from: approvalId, type: "RESULTED_IN", to: actionId, src, asOf }, now);
+    await upsertEdge(g, { from: actionId, type: "RESULTED_IN", to: contentId, src, asOf }, now);
+  }
   await upsertEdge(g, { from: contentId, type: "USES_ASSET", to: variantId, src, asOf }, now);
   await upsertEdge(g, { from: agentNodeId(TARA), type: "PRODUCED", to: contentId, src, asOf }, now);
   await upsertEdge(g, { from: agentNodeId(DEV), type: "AUTHORED", to: contentId, props: { part: "caption" }, src, asOf }, now);
@@ -159,7 +170,7 @@ export async function finalizeStudioDraft(g: GraphHandle, approvalId: string, p:
   }
   await addObservation(g, { subject: contentId, metric: "credits_charged", value: s.credits, unit: "credits", asOf, src: approvalId, evidence: "Product design §4.2: a static post uses 1 Studio credit, spent on approval." }, now);
   await addObservation(g, { subject: contentId, metric: "usd_cost", value: POST_COST_USD, unit: "USD", asOf, src: approvalId, conf: 0.5, evidence: POST_COST_EVIDENCE }, now);
-  const [ap] = await g.roQuery<{ name: string }>("MATCH (a:Approval {id:$id}) RETURN a.name AS name", { id: approvalId });
-  await upsertNode(g, { type: "Approval", id: approvalId, name: ap?.name ?? approvalId, props: { result: `Draft post saved (${contentId}); not published.`, contentId } }, now);
+  const [ap] = await g.roQuery<{ name: string; result: string | null }>("MATCH (a:Approval {id:$id}) RETURN a.name AS name, a.result AS result", { id: approvalId });
+  await upsertNode(g, { type: "Approval", id: approvalId, name: ap?.name ?? approvalId, props: { result: ap?.result || `Draft post saved (${contentId}); not published.`, contentId } }, now);
   return contentId;
 }

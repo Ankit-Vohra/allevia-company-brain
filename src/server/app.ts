@@ -34,6 +34,7 @@ import { registerTeamRoutes } from "./routes/team.js";
 import { registerWorkRoutes } from "./routes/work.js";
 import * as reads from "./reads.js";
 import { sse } from "./sse.js";
+import { mountStudio, STUDIO_UPLOAD_PATH, studioDecisionHook, type StudioWiring } from "./studio.js";
 import type { TenantDto } from "./types.js";
 
 // ---------- deps ----------
@@ -86,6 +87,7 @@ export interface ServerDeps {
   directiveLlm?: LlmRunner | null;
   loadOnboard?: () => Promise<OnboardFn | null>;   // null: onboarding is not installed (501)
   loadPlans?: () => Promise<PlansModule | null>;    // null: pricing data is not installed (501)
+  studio?: () => Promise<StudioWiring | null>;      // the Studio's assets, vision and engine; absent: 501
   now?: () => number;
   heartbeatMs?: number;     // SSE keepalive comment interval; 0 turns it off (default 15 s)
   replaySpeed?: number;     // public-mode replay pacing; 1 = about real time, 0 = instant (default 1)
@@ -207,6 +209,8 @@ export function createApp(deps: ServerDeps): Hono {
   }
 
   const refuseInPublicMode = () => { if (deps.publicMode) throw new HttpError(403, PUBLIC_REFUSAL); };
+  // Studio cards approved anywhere become draft posts; then the server's own hook runs.
+  const onDecision = studioDecisionHook(deps.openGraph, now, deps.onDecision);
 
   // ---- middleware ----
   app.use("*", secureHeaders({ crossOriginResourcePolicy: "same-origin", xFrameOptions: "DENY" }));
@@ -216,7 +220,9 @@ export function createApp(deps: ServerDeps): Hono {
     allowHeaders: ["content-type", "accept"],
     maxAge: 600,
   }));
-  app.use("/api/*", bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: "The request body is too large." }, 413) }));
+  // 64 KB everywhere except the Studio's photo upload, which sets its own limit (studio.ts)
+  const smallBodies = bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: "The request body is too large." }, 413) });
+  app.use("/api/*", (c, next) => (c.req.method === "POST" && STUDIO_UPLOAD_PATH.test(c.req.path) ? next() : smallBodies(c, next)));
   app.use("/api/*", async (c, next) => {
     await next();
     if (!c.res.headers.get("cache-control")) c.header("Cache-Control", "no-store");
@@ -383,7 +389,7 @@ export function createApp(deps: ServerDeps): Hono {
     refuseInPublicMode();
     const body = await readBody(c, DecisionBody);
     return c.json(await decide(g, reg.slug, c.req.param("id"), body, {
-      now: now(), log, ...(deps.onDecision ? { onDecision: deps.onDecision } : {}), ...(deps.actions ? { actions: deps.actions } : {}),
+      now: now(), log, onDecision, ...(deps.actions ? { actions: deps.actions } : {}),
     }));
   });
 
@@ -427,6 +433,17 @@ export function createApp(deps: ServerDeps): Hono {
       release();
       throw e;
     }
+  });
+
+  mountStudio(app, {
+    tenantOf, refuseInPublicMode, heartbeatMs, now, log,
+    // the Studio's own approve route records the decision the way every surface does (executors, learning loop and the
+    // server's hook), then attaches the chosen variant itself; so the studio hook is left out here
+    decide: (g, tenant, id, d) => decide(g, tenant, id, d, {
+      now: now(), log, ...(deps.onDecision ? { onDecision: deps.onDecision } : {}), ...(deps.actions ? { actions: deps.actions } : {}),
+    }),
+    fail: (status, message) => { throw new HttpError(status, message); },
+    ...(deps.studio ? { studio: deps.studio } : {}),
   });
 
   app.all("/api/*", () => { throw new HttpError(404, "No such endpoint."); });

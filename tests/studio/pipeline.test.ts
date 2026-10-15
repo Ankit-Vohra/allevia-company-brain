@@ -10,7 +10,8 @@ import sharp from "sharp";
 import type { AgentEvent } from "../../shared/contracts.js";
 import type { GraphHandle } from "../../src/graph/client.js";
 import { closeAll } from "../../src/graph/client.js";
-import { approveStudioDraft, studioCard } from "../../src/studio/approve.js";
+import { approveStudioDraft, studioCard, type DecideFn } from "../../src/studio/approve.js";
+import { decide } from "../../src/server/approvals.js";
 import { FakeEngine, HiggsfieldEngine, RecordedEngine, recordingKey } from "../../src/studio/engine.js";
 import { chooseTilt, latestStudioRun, runStudio } from "../../src/studio/pipeline.js";
 import { AssetStore } from "../../src/studio/store.js";
@@ -39,6 +40,9 @@ describe("studio pipeline (integration)", () => {
   });
 
   const one = async <T>(cypher: string, params?: Record<string, unknown>) => (await g.roQuery<T>(cypher, params))[0]!;
+  // decisions go through the server's own path: the status change, the content_draft executor (its markdown under the temp
+  // data dir) and the learning loop
+  const decideWith: DecideFn = (id, edited) => decide(g, "kestrel_oak", id, { decision: "approve", ...(edited ? { editedPayload: edited } : {}) }, { now: now(), actions: { config: { dataDir: dir } } });
 
   it("streams asset, assessment, variant A and B, reviews, a proposal and a final; writes the graph", async () => {
     const vision = new FakeVision({ "content-strategist": TARA_ANSWER, "fact-checker": nishaAnswer(true), "copy-editor": DEV_ANSWER });
@@ -137,10 +141,10 @@ describe("studio pipeline (integration)", () => {
     expect(latest.events.map((e) => e.type)).toEqual(events.map((e) => e.type));
 
     // approving: a "changed" variant is refused, then A with an edited caption writes the draft
-    await expect(approveStudioDraft(g, { approvalId: r.approvalId, variantId: r.variants[1]!.id, now: now() })).rejects.toThrow(/held variant B back/);
+    await expect(approveStudioDraft(g, { approvalId: r.approvalId, variantId: r.variants[1]!.id, now: now() }, decideWith)).rejects.toThrow(/held variant B back/);
     const edited = "Harbour House, from the street.\n\nBristol";
-    const ok = await approveStudioDraft(g, { approvalId: r.approvalId, variantId: r.variants[0]!.id, caption: edited, now: now() });
-    expect(ok.status).toBe("edited");
+    const ok = await approveStudioDraft(g, { approvalId: r.approvalId, variantId: r.variants[0]!.id, caption: edited, now: now() }, decideWith);
+    expect(ok.status).toMatch(/^(edited|executed)$/);
     const content = await one<{ p: Record<string, unknown> }>("MATCH (c:Content {id:$id}) RETURN properties(c) AS p", { id: ok.contentId });
     expect(content.p).toMatchObject({ format: "post", status: "draft", caption: edited, channel: "instagram" });
     expect(await one("MATCH (:Content {id:$c})-[:USES_ASSET]->(a:Asset) RETURN a.id AS a", { c: ok.contentId })).toEqual({ a: r.variants[0]!.id });
@@ -154,7 +158,7 @@ describe("studio pipeline (integration)", () => {
       "MATCH (a:Asset) WHERE a.id IN $ids RETURN a.label AS label, a.status AS status ORDER BY label", { ids: [r.original.id, ...r.variants.map((v) => v.id)] });
     expect(statuses.map((s) => s.status).sort()).toEqual(["approved", "declined", "used"]);
     // decided once
-    await expect(approveStudioDraft(g, { approvalId: r.approvalId, now: now() })).rejects.toThrow(/already decided/);
+    await expect(approveStudioDraft(g, { approvalId: r.approvalId, now: now() }, decideWith)).rejects.toThrow(/already decided/);
   }, 60_000);
 
   it("RecordedEngine replays a recording by original + treatment; without one there is no variant B, never a fake", async () => {
@@ -202,7 +206,7 @@ describe("studio pipeline (integration)", () => {
     expect(r.fidelity.map((f) => f.badge)).toEqual(["unchecked"]);
     const card = (await studioCard(g, r.approvalId))!;
     expect(card.payload.studio.variants[0]!.badge).toBe("unchecked");
-    await expect(approveStudioDraft(g, { approvalId: r.approvalId, now: now() })).rejects.toThrow(/held variant A back/);
+    await expect(approveStudioDraft(g, { approvalId: r.approvalId, now: now() }, decideWith)).rejects.toThrow(/held variant A back/);
   }, 60_000);
 
   it("chooseTilt trusts confident edges, falls back to Tara, and calls a small angle level", () => {
