@@ -10,7 +10,7 @@ import { interruptible } from "./_interrupt.js";
 export const commands: Command[] = [
   {
     name: "eval",
-    usage: "eval <tenant> [--limit N] [--only id,id] [--tags a,b] [--fake] [--model haiku] [--verbose]",
+    usage: "eval <tenant> [--limit N] [--only id,id] [--tags a,b] [--fake] [--model haiku] [--verbose] [--rescore]",
     summary: "Run the tenant's eval questions, score every turn and write docs/evals/<date>-<tenant>.md",
     async run(args) {
       const { evalMain } = await import("../../evals/runner.js");

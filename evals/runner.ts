@@ -6,7 +6,9 @@
 //   interrupted run keeps what it did; running a question again adds an attempt.
 // - fake (--fake): a scripted FakeRuntime and fake tools through the same ask() on a throwaway graph that is dropped
 //   afterwards. No model is called and no tenant graph is touched: it checks the plumbing (CI and dry runs).
-// CLI: `npm run cli -- eval <tenant> [--limit N] [--only a,b] [--tags x,y] [--fake] [--model haiku] [--verbose]`,
+// - rescore (--rescore): the day's stored turns scored again against the set as it is now (no model is called), so an
+//   expectation fixed after a run applies to every attempt alike.
+// CLI: `npm run cli -- eval <tenant> [--limit N] [--only a,b] [--tags x,y] [--fake] [--model haiku] [--verbose] [--rescore]`,
 // or `npx tsx evals/runner.ts <same args>`.
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { randomBytes } from "node:crypto";
@@ -14,11 +16,11 @@ import { join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { z } from "zod";
-import type { AgentEvent, NodeRef } from "../shared/contracts.js";
+import type { AgentEvent, NodeRef, TurnChecks } from "../shared/contracts.js";
 import { ask, type AskDeps } from "../src/agent/ask.js";
 import { FakeRuntime } from "../src/agent/runtime.js";
 import type { AlleviaTool } from "../src/agent/tool.js";
-import { closeAll, openGraphByName, type GraphHandle } from "../src/graph/client.js";
+import { closeAll, openGraph, openGraphByName, type GraphHandle } from "../src/graph/client.js";
 import { ensureIndexes } from "../src/graph/indexes.js";
 import { istDate } from "../src/util/time.js";
 import { renderReport, keptNotes, type Attempt, type ResultsFile } from "./report.js";
@@ -163,11 +165,65 @@ export async function runEval(o: RunEvalOptions): Promise<RunEvalResult> {
   return { scores, summary: summarize(scores), reportPath, resultsPath, ...(own ? { scratchGraph: own.name } : {}) };
 }
 
+// ---------- re-scoring ----------
+
+// Scores every stored attempt of the day again against the set as it is now, from the Turn saved in the graph (answer,
+// citations, checks, agents, event log): an expectation fixed after a run applies to every turn alike, and no model is
+// called. Attempts whose Turn is gone keep their old score.
+export interface RescoreOptions {
+  tenant: string;
+  set: EvalSet;
+  graph: GraphHandle;
+  mode?: "live" | "fake";
+  reportDir?: string;
+  resultsDir?: string;
+  date?: string;
+}
+
+interface StoredTurn { answer: string | null; citations: string[] | null; checks: string | null; agents: string[] | null; ms: number | null; events: string | null; status: string | null; error: string | null }
+
+const parse = <T>(s: string | null, fallback: T): T => {
+  try { return s ? (JSON.parse(s) as T) : fallback; } catch { return fallback; }
+};
+
+export async function rescore(o: RescoreOptions): Promise<{ changed: Array<{ id: string; attempt: number; was: boolean; now: boolean }>; reportPath: string; resultsPath: string }> {
+  const mode = o.mode ?? "live";
+  const date = o.date ?? istDate(Date.now());
+  const stem = fileStem({ date, tenant: o.tenant, mode });
+  const reportPath = join(o.reportDir ?? (mode === "fake" ? RESULTS_DIR : REPORT_DIR), `${stem}.md`);
+  const resultsPath = join(o.resultsDir ?? RESULTS_DIR, `${stem}.json`);
+  if (!existsSync(resultsPath)) throw new Error(`No results to re-score at ${resultsPath}.`);
+  const results = JSON.parse(readFileSync(resultsPath, "utf8")) as ResultsFile;
+  const changed: Array<{ id: string; attempt: number; was: boolean; now: boolean }> = [];
+  for (const it of o.set.items) {
+    const attempts = results.items[it.id];
+    if (!attempts) continue;
+    for (const [i, a] of attempts.entries()) {
+      const [t] = await o.graph.roQuery<StoredTurn>(
+        `MATCH (t:Turn {id:$id}) RETURN t.answer AS answer, t.citations AS citations, t.checks AS checks, t.agents AS agents, t.ms AS ms,
+         t.events AS events, t.status AS status, t.error AS error`, { id: a.turnId });
+      const checks = t ? parse<TurnChecks | null>(t.checks, null) : null;
+      if (!t || !checks) continue;
+      const ok = (t.status ?? "ok") === "ok";
+      const s = scoreTurn(it, {
+        ok, turnId: a.turnId, answer: t.answer ?? "", citations: t.citations ?? [], checks,
+        agents: t.agents ?? [], ms: t.ms ?? a.ms, events: parse<AgentEvent[]>(t.events, []), ...(t.error ? { error: t.error } : {}),
+      });
+      if (s.pass !== a.pass) changed.push({ id: it.id, attempt: i + 1, was: a.pass, now: s.pass });
+      attempts[i] = { ...s, at: a.at, model: a.model };
+    }
+  }
+  writeFileSync(resultsPath, `${JSON.stringify(results, null, 1)}\n`);
+  const notes = keptNotes(existsSync(reportPath) ? readFileSync(reportPath, "utf8") : undefined);
+  writeFileSync(reportPath, renderReport(results, o.set, { notes }));
+  return { changed, reportPath, resultsPath };
+}
+
 // ---------- the command ----------
 
-export interface EvalArgs { tenant: string; limit?: number; only?: string[]; tags?: string[]; fake: boolean; model?: string; verbose: boolean; set?: string }
+export interface EvalArgs { tenant: string; limit?: number; only?: string[]; tags?: string[]; fake: boolean; model?: string; verbose: boolean; set?: string; rescore?: true }
 
-const USAGE = "Usage: npm run cli -- eval <tenant> [--limit N] [--only id,id] [--tags a,b] [--fake] [--model haiku] [--verbose] [--set path.yaml]";
+const USAGE = "Usage: npm run cli -- eval <tenant> [--limit N] [--only id,id] [--tags a,b] [--fake] [--model haiku] [--verbose] [--set path.yaml] [--rescore]";
 const list = (s: string | undefined): string[] | undefined => (s ? s.split(",").map((x) => x.trim()).filter(Boolean) : undefined);
 
 export function parseEvalArgs(args: string[]): EvalArgs {
@@ -175,7 +231,7 @@ export function parseEvalArgs(args: string[]): EvalArgs {
     args, allowPositionals: true,
     options: {
       limit: { type: "string" }, only: { type: "string" }, tags: { type: "string" }, fake: { type: "boolean" },
-      model: { type: "string" }, verbose: { type: "boolean" }, set: { type: "string" },
+      model: { type: "string" }, verbose: { type: "boolean" }, set: { type: "string" }, rescore: { type: "boolean" },
     },
   });
   const [tenant] = positionals;
@@ -186,7 +242,7 @@ export function parseEvalArgs(args: string[]): EvalArgs {
     tenant, fake: values.fake === true, verbose: values.verbose === true,
     ...(limit !== undefined ? { limit } : {}), ...(list(values.only) ? { only: list(values.only)! } : {}),
     ...(list(values.tags) ? { tags: list(values.tags)! } : {}), ...(values.model ? { model: values.model } : {}),
-    ...(values.set ? { set: values.set } : {}),
+    ...(values.set ? { set: values.set } : {}), ...(values.rescore ? { rescore: true as const } : {}),
   };
 }
 
@@ -200,6 +256,12 @@ export async function evalMain(argv: string[], o: { signal?: AbortSignal; onEven
   const items = selectItems(found.set.items, { ...(a.only ? { only: a.only } : {}), ...(a.tags ? { tags: a.tags } : {}), ...(a.limit !== undefined ? { limit: a.limit } : {}) });
   if (!items.length) { console.error("No questions selected."); return 2; }
   const tenant = found.set.tenant;
+  if (a.rescore) {
+    const r = await rescore({ tenant, set: found.set, graph: await openGraph(tenant), mode: a.fake ? "fake" : "live" });
+    for (const c of r.changed) console.log(`${c.id} attempt ${c.attempt}: ${c.was ? "PASS" : "FAIL"} -> ${c.now ? "PASS" : "FAIL"}`);
+    console.log(`Re-scored against ${relative(REPO, found.path)}: ${r.changed.length} verdict(s) changed. Report: ${relative(REPO, r.reportPath)}`);
+    return 0;
+  }
   console.log(`${a.fake ? "FAKE eval" : "Eval"}: ${tenant}, ${items.length} of ${found.set.items.length} question(s) from ${relative(REPO, found.path)}${a.model ? `, model ${a.model}` : ""}`);
   const r = await runEval({
     tenant, set: found.set, setPath: relative(REPO, found.path), items, mode: a.fake ? "fake" : "live",
@@ -215,7 +277,8 @@ const invoked = process.argv[1] ? resolve(process.argv[1]) : "";
 if (invoked === fileURLToPath(import.meta.url) || pathToFileURL(invoked).href === import.meta.url) {
   const { interruptible } = await import("../src/cli/_interrupt.js");
   const stop = interruptible();
-  evalMain(process.argv.slice(2), { signal: stop.signal })
+  const log = process.argv.includes("--verbose") ? (await import("../src/cli/_worklog.js")).workLog() : undefined;
+  evalMain(process.argv.slice(2), { signal: stop.signal, ...(log ? { onEvent: (_it: EvalItem, e: AgentEvent) => log(e) } : {}) })
     .catch((e) => { console.error(e instanceof Error ? e.message : String(e)); return 1; })
     .then(async (code) => { stop.dispose(); await closeAll(); process.exit(code); });
 }

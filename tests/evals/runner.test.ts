@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { closeAll, listGraphs, type GraphHandle } from "../../src/graph/client.js";
 import { ensureIndexes } from "../../src/graph/indexes.js";
-import { fakeAskDeps, parseEvalArgs, runEval, type FakeAnswer } from "../../evals/runner.js";
+import { fakeAskDeps, parseEvalArgs, rescore, runEval, type FakeAnswer } from "../../evals/runner.js";
 import { parseSet, type EvalItem } from "../../evals/set.js";
 import { testGraph } from "../helpers/graph.js";
 import { NOW } from "../helpers/agent.js";
@@ -121,6 +121,39 @@ describe("eval runner (fake mode)", () => {
     expect(md).toContain("| 3 | trap |");
   });
 
+  it("rescore applies the current expectations to the stored turns of every attempt, without calling a model", async () => {
+    const edited = parseSet(`
+tenant: test
+items:
+  - id: why-stories
+    question: Why did we pause daily stories?
+    tags: [why]
+    expect:
+      mustMatch: ["reels"]
+  - id: ads-cpa
+    question: Which campaign has the worst cost per signup?
+    tags: [ads]
+    expect:
+      mustMatch: [youtube]
+      simulated: true
+  - id: trap
+    question: What is our NPS?
+    tags: [trap]
+    expect:
+      mustMatch: ["no record"]
+`);
+    const r = await rescore({ tenant: "test", set: edited, graph: g, mode: "fake", reportDir: join(dir, "docs"), resultsDir: join(dir, "data"), date: "2026-10-15" });
+    expect(r.changed).toEqual([
+      { id: "why-stories", attempt: 1, was: true, now: false },
+      { id: "trap", attempt: 1, was: false, now: true },
+    ]);
+    const md = readFileSync(r.reportPath, "utf8");
+    expect(md).toMatch(/\| 1 \| why-stories \| why \| FAIL \| ok \| 0\/1 \|/);
+    expect(md).toMatch(/\| 3 \| trap \| trap \| PASS \| ok \| 1\/1 \|/);
+    expect(md).toContain("Fixed: the ads desk now says simulated."); // notes survive
+    expect(md).toContain("Attempt 1: FAIL"); // ads-cpa keeps both attempts, each re-scored
+  });
+
   it("without injected deps, fake mode runs on its own throwaway graph and drops it afterwards", async () => {
     const r = await runEval({ ...opts(["trap"]), depsFor: undefined, reportDir: join(dir, "docs2"), resultsDir: join(dir, "data2") });
     expect(r.scores[0]!.ok).toBe(true);
@@ -137,6 +170,7 @@ describe("eval CLI arguments", () => {
       tenant: "aamdani", limit: 3, tags: ["why", "ads"], only: ["a", "b"], fake: true, model: "haiku", verbose: false,
     });
     expect(parseEvalArgs(["avs"])).toEqual({ tenant: "avs", fake: false, verbose: false });
+    expect(parseEvalArgs(["avs", "--rescore"])).toEqual({ tenant: "avs", fake: false, verbose: false, rescore: true });
     expect(() => parseEvalArgs([])).toThrow(/Usage/);
     expect(() => parseEvalArgs(["aamdani", "--limit", "x"])).toThrow(/--limit/);
   });

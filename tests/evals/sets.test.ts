@@ -55,6 +55,12 @@ describe("eval sets", () => {
     expect(ok("NPS is not recorded anywhere in the company brain.")).toBe(true);
     expect(ok("We don't have a customer survey on record.")).toBe(true);
     expect(ok("Our NPS is 42, as of the last survey.")).toBe(false);
+    // avs: a year next to "enquiries" is not a count (it tripped the first version on 2026-10-15)
+    const avs = sets.avs.set.items.find((i) => i.id === "avs-trap-enquiries")!;
+    const forbidden = (answer: string) => avs.expect.forbid.some((p) => compilePattern(p).test(answer));
+    expect(forbidden("September 2026 enquiries: not recorded, so I can't give a figure.")).toBe(false);
+    expect(forbidden("We got 12 enquiries last month.")).toBe(true);
+    expect(forbidden("The goal is 8 qualified enquiries a month.")).toBe(false);
   });
 
   it("rejects a malformed set and selects by --only, --tags and --limit", () => {
