@@ -12,6 +12,7 @@ import { closeAll, openGraphByName, type GraphHandle } from "../../src/graph/cli
 import { getTenant } from "../../src/graph/tenants.js";
 import { onboard, startUrl, type OnboardDeps, type OnboardResult } from "../../src/onboard/onboard.js";
 import { localRuleId } from "../../src/ingest/sources/website/seo.js";
+import { scanGraph } from "../../src/ingest/privacy.js";
 import { testGraph } from "../helpers/graph.js";
 import { FakeLlm } from "../helpers/fake-llm.js";
 import { startSite, type SiteServer } from "../fixtures/website/server.js";
@@ -116,6 +117,22 @@ describe("onboard (fixture site, fake LLM, test graph)", () => {
     const missing = await q<{ c: number }>("MATCH (n:Product) WHERE n.embedding IS NULL RETURN count(n) AS c");
     expect(missing[0]!.c).toBe(0);
     expect((await q<{ c: number }>("MATCH (c:Chunk) WHERE c.textEmbedding IS NULL RETURN count(c) AS c"))[0]!.c).toBe(0);
+  });
+
+  it("keeps the business's own contact details out of the graph and away from the model: placeholders, and the privacy scan finds nothing else", async () => {
+    // the fixture's contact page says "Email hello@example.com or call 0117 496 0000."
+    const chunk = await q<{ t: string }>("MATCH (c:Chunk) WHERE c.url ENDS WITH '/contact' RETURN c.text AS t ORDER BY c.id");
+    expect(chunk.map((c) => c.t).join("\n")).toMatch(/Email \[redacted:email\] or call/);
+    const nodes = await q<{ id: string; vals: unknown[] }>("MATCH (n) RETURN n.id AS id, [k IN keys(n) WHERE NOT k IN ['embedding', 'textEmbedding'] | n[k]] AS vals ORDER BY id(n)");
+    const edges = await q<{ vals: unknown[] }>("MATCH ()-[r]->() RETURN [k IN keys(r) | r[k]] AS vals ORDER BY id(r)");
+    const strings = [...nodes, ...edges].flatMap((r) => r.vals.flat()).filter((v): v is string => typeof v === "string");
+    expect(strings.length).toBeGreaterThan(500);
+    expect(strings.filter((s) => s.includes("hello@example.com"))).toEqual([]);
+    expect(llm.calls.filter((c) => `${c.system}\n${c.prompt}`.includes("hello@example.com"))).toEqual([]);
+    // the fixture site is served from 127.0.0.1:<port>, so every url and domain is an address; nothing else may be found
+    expect((await scanGraph(g)).filter((h) => h.kind !== "ipv4")).toEqual([]);
+    // what is not personal data stays: the Instagram profile link is still a Channel
+    expect(await q("MATCH (c:Channel {id:'channel:instagram'}) WHERE c.url STARTS WITH 'https://www.instagram.com/' RETURN c.id")).toHaveLength(1);
   });
 
   it("v2: country defaults from the site, the studio template's goals with unknown baselines, the program and its Day-0 checkpoint", async () => {

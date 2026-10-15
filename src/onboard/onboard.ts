@@ -24,7 +24,7 @@ import { loadPlaybooks } from "../ingest/sources/playbooks.js";
 import type { GraphWrite } from "../ingest/types.js";
 import {
   BlockedUrlError, brandWrite, buildBrandKit, channelsWrite, checkUrl, crawlSite, describeBrand, evaluateSeo,
-  extractPages, findSocials, linksWrite, makeAsk, normalizeUrl, pageDocId, pageId, pageWrite, profileBusiness, profileWrite,
+  extractPages, findSocials, linksWrite, makeAsk, normalizeUrl, pageDocId, pageId, pageWrite, profileBusiness, profileWrite, redactPage,
   seoRulesWrite, seoWrite, understandingLinks, websiteChannelWrite, type BrandVoice, type CrawlOptions, type CrawlResult, type PageData,
 } from "../ingest/sources/website/index.js";
 import type { BaselineResult } from "../program/program.js";
@@ -215,7 +215,8 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
     crawl = await (deps.crawl ?? crawlSite)(start, {
       maxPages: 40, ...deps.crawlOptions, log,
       screenshotDir: join(dataDir, "onboard", input.slug, "screenshots"),
-      onPage: async (p) => {
+      onPage: async (raw) => {
+        const p = redactPage(raw); // whatever crawls, nothing unfiltered reaches an event, the graph or a model (page.ts)
         send({ type: "page", url: p.finalUrl, title: p.title ?? new URL(p.finalUrl).pathname });
         try {
           await write("crawl", pageWrite(p));
@@ -224,7 +225,7 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
         }
       },
     });
-    pages = crawl.pages;
+    pages = crawl.pages.map(redactPage);
     result.pages = pages.length;
     await write("crawl", websiteChannelWrite(crawl.origin, businessId, asOf));
     await write("crawl", linksWrite(pages));

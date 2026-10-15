@@ -342,3 +342,46 @@ describe("scanGraph (integration)", () => {
     expect(hits.filter((h) => h.prop === "sha").map((h) => h.id)).toEqual(["playbook:demo-bad"]);
   });
 });
+
+describe("scanGraph: digests and content-addressed keys are not secrets", () => {
+  let g: GraphHandle;
+  let cleanup: () => Promise<void>;
+  const sha = sha256("a studio photo"); // 64 hex characters: the shape of a key to the long-random-token rule
+  const dh = "c3a1f09d5e7b2468";
+  const SECRET = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"; // patterned, so the hygiene scan reads it as fictional
+  const asset = (status: string) =>
+    ({ type: "Asset", id: "asset:photo", name: "Photo", props: { kind: "original", sha256: sha, dhash: dh, storageKey: `${sha}.jpg`, status } }) as const;
+
+  beforeAll(async () => {
+    ({ g, cleanup } = await testGraph());
+    await upsertNode(g, asset("new"));
+    await upsertNode(g, asset("approved")); // a tracked prop changed: the old state is now a Version whose `props` JSON holds the same digests
+    await upsertNode(g, { type: "Document", id: "document:web-a", name: "Web page: A", props: { kind: "webpage", hash: sha } });
+    await upsertNode(g, { type: "Chunk", id: "chunk:a-0", name: "A (part 1)", props: { text: "Plain words about a studio.", ord: 0, embedKey: "0123456789abcdef" } });
+  });
+  afterAll(async () => {
+    await cleanup();
+    await closeAll();
+  });
+
+  it("skips sha256, dhash, hash, embedKey and a content-addressed storageKey, on the node and in its Version snapshot", async () => {
+    const [v] = await g.roQuery<{ c: number }>("MATCH (:Asset {id:'asset:photo'})-[:HAD_VERSION]->(v:Version) RETURN count(v) AS c");
+    expect(v!.c).toBe(1); // the snapshot exists, so the next line proves it is skipped too
+    expect(await scanGraph(g)).toEqual([]);
+  });
+
+  it("still catches a real secret in a normal text prop, a note that is not named like a digest, and a storageKey that is not a content address", async () => {
+    await upsertNode(g, { type: "Chunk", id: "chunk:leak-0", name: "Leak (part 1)", props: { text: `Deploy with ${SECRET} then wait.`, ord: 0 } });
+    await upsertNode(g, { type: "Task", id: "task:leak", name: "Leak", summary: `the key is ${SECRET}` });
+    await upsertNode(g, { type: "Asset", id: "asset:note", name: "Note", props: { kind: "original", note: sha, storageKey: SECRET } });
+    const hits = (await scanGraph(g)).map((h) => `${h.id}|${h.prop}`).sort();
+    expect(hits).toEqual(["asset:note|note", "asset:note|storageKey", "chunk:leak-0|text", "task:leak|summary"]);
+  });
+
+  it("reads a Version snapshot like the node it came from: a secret in an old summary is found, named by its prop", async () => {
+    await upsertNode(g, { type: "Page", id: "page:leaky", name: "Old title", summary: `key ${SECRET}`, props: { url: "https://example.test/" } });
+    await upsertNode(g, { type: "Page", id: "page:leaky", name: "New title", summary: "clean now", props: { url: "https://example.test/" } });
+    const hits = (await scanGraph(g)).filter((h) => h.id.includes("page:leaky")).map((h) => `${h.id.replace(/@.*/, "@…")}|${h.prop}|${h.kind}`);
+    expect(hits).toEqual(["version:page:leaky@…|props.summary|secret"]);
+  });
+});

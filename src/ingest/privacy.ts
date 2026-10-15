@@ -121,8 +121,10 @@ export function dropSensitiveSections(md: string): { text: string; dropped: stri
 
 export interface ScanHit { id: string; prop: string; kind: string; sample: string }
 
-// Properties that hold generated digests or vectors, not text from a source.
-const SKIP_PROPS = new Set(["hash", ENTITY_VECTOR_PROP, CHUNK_VECTOR_PROP]);
+// Properties that hold generated digests or vectors, not text from a source: a Document's content hash, a Studio asset's
+// sha256 and 64-bit dHash, the key an embedding was computed from, the vectors themselves. Skipped by name, so a long hex
+// string in one of them is never taken for a key. A secret pasted into any other prop is still found.
+const SKIP_PROPS = new Set(["hash", "sha256", "dhash", "embedKey", ENTITY_VECTOR_PROP, CHUNK_VECTOR_PROP]);
 
 // The report must not re-leak what it found: show only the edges of a match.
 function maskSample(s: string): string {
@@ -130,17 +132,46 @@ function maskSample(s: string): string {
 }
 
 // A `sha` prop (the upstream commit a vendored playbook pack was taken from) is skipped only while it holds a bare git
-// digest: the long-random-token rule cannot tell a commit id from a key without the word "commit" next to it.
+// digest: the long-random-token rule cannot tell a commit id from a key without the word "commit" next to it. A Studio
+// asset's `storageKey` is its sha256 plus the file extension (a name for stored bytes, studio/store.ts), skipped only
+// while it has exactly that shape: the prop's name ends in "Key", which the `name: value` rule would take for a credential.
 const DIGEST_PROPS = new Set(["sha"]);
 const DIGEST = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const STORAGE_KEY = /^[0-9a-f]{64}\.[a-z0-9]{2,5}$/;
 
-function scanProps(owner: string, kv: Array<[string, unknown]>, hits: ScanHit[]): void {
+// Is this prop a digest or a content address rather than text from a source? The audit does not read it and the scrub
+// (scrub.ts) does not rewrite it.
+export function isDigestProp(prop: string, value: unknown): boolean {
+  if (SKIP_PROPS.has(prop)) return true;
+  if (typeof value !== "string") return false;
+  if (DIGEST_PROPS.has(prop)) return DIGEST.test(value);
+  return prop === "storageKey" && STORAGE_KEY.test(value);
+}
+
+// A Version node keeps the state its entity had before a tracked prop changed as one JSON string in `props`. The audit
+// and the scrub read it as the entity's own properties (same skips, same detectors): a digest in an old state is no more
+// a secret than it was on the node, and an address in an old title is as personal as it was.
+export function versionSnapshot(prop: string, value: unknown): Record<string, unknown> | null {
+  if (prop !== "props" || typeof value !== "string" || !value.startsWith("{")) return null;
+  try {
+    const o: unknown = JSON.parse(value);
+    return o && typeof o === "object" && !Array.isArray(o) ? (o as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function scanProps(owner: string, kv: Array<[string, unknown]>, hits: ScanHit[], prefix = ""): void {
   for (const [prop, value] of kv) {
-    if (SKIP_PROPS.has(prop)) continue;
-    if (DIGEST_PROPS.has(prop) && typeof value === "string" && DIGEST.test(value)) continue;
+    if (isDigestProp(prop, value)) continue;
+    const snapshot = versionSnapshot(prop, value);
+    if (snapshot) {
+      scanProps(owner, Object.entries(snapshot), hits, `${prefix}${prop}.`);
+      continue;
+    }
     const strings = typeof value === "string" ? [value] : Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
     for (const s of strings) {
-      for (const h of findSensitive(s)) hits.push({ id: owner, prop, kind: h.kind, sample: maskSample(h.match) });
+      for (const h of findSensitive(s)) hits.push({ id: owner, prop: `${prefix}${prop}`, kind: h.kind, sample: maskSample(h.match) });
     }
   }
 }

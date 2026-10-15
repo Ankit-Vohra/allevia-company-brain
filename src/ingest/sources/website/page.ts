@@ -3,6 +3,7 @@
 // (esbuild's __name) that do not exist in the page. Everything a page says is untrusted data: it is stored and
 // measured, never obeyed.
 import { cutText } from "../../extract-schema.js";
+import { redact } from "../../privacy.js";
 import { normalizeUrl, toSiteUrl } from "./urls.js";
 
 export const MAX_TEXT_CHARS = 8_000;
@@ -194,7 +195,47 @@ export function jsonLdTypes(blocks: unknown[]): string[] {
   return [...out];
 }
 
+// ---------- privacy ----------
+// Everything a page says in words goes through the privacy filter (redact, spec 6.3) before it is kept: the business's
+// own email and phone on its contact page, an address in a title or a JSON-LD block, a key pasted into a page. The filter
+// runs once, where the crawler builds PageData (fromCapture), so the text that becomes a Page, Document or Chunk, the
+// text a model reads, and the evidence an SEO check quotes are all the redacted text. onboard() runs `redactPage` over
+// whatever a crawler hands it as well (it is idempotent), so a crawler that did not filter is no way round it.
+// Not filtered, on purpose: URLs (page, canonical, links, og:image, redirects) are identifiers, not prose, and a
+// profile link such as instagram.com/<handle> must reach findSocials intact; JSON-LD `sameAs` is the same list of links.
+// Counts (wordCount, links, images) measure the real page and stay as they were.
+
+const scrub = (s: string): string => redact(s).text;
+const isUrl = (s: string): boolean => /^https?:\/\/\S+$/i.test(s);
+
+// Every string in a JSON-LD block except the sameAs profile links. Deeper than 16 levels is dropped: no real block is.
+function redactJsonLd(v: unknown, depth = 0): unknown {
+  if (typeof v === "string") return scrub(v);
+  if (v === null || typeof v !== "object") return v;
+  if (depth > 16) return null;
+  if (Array.isArray(v)) return v.map((x) => redactJsonLd(x, depth + 1));
+  return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, k === "sameAs" ? x : redactJsonLd(x, depth + 1)]));
+}
+
+// A copy of the page whose prose is redacted: main text, title, meta description, headings, Open Graph text (not its
+// URLs), JSON-LD strings and the error line.
+export function redactPage(p: PageData): PageData {
+  return {
+    ...p,
+    ...(p.title !== undefined ? { title: scrub(p.title) } : {}),
+    ...(p.metaDescription !== undefined ? { metaDescription: scrub(p.metaDescription) } : {}),
+    ...(p.error !== undefined ? { error: scrub(p.error) } : {}),
+    h1: p.h1.map(scrub),
+    h2: p.h2.map(scrub),
+    text: scrub(p.text),
+    jsonLd: p.jsonLd.map((b) => redactJsonLd(b)),
+    og: Object.fromEntries(Object.entries(p.og).map(([k, v]) => [k, isUrl(v) ? v : scrub(v)])),
+  };
+}
+
 // Turn the capture into PageData's DOM fields. Links are normalised and split into this site's and everyone else's.
+// The prose is redacted here (see above): the main text before it is cut to MAX_TEXT_CHARS, so an address that straddles
+// the limit never leaves a fragment, and the word count is of the page as it was.
 export function fromCapture(c: Captured, origin: string): Pick<PageData,
   "title" | "titleCount" | "metaDescription" | "metaDescriptionCount" | "canonical" | "robotsMeta" | "h1" | "h2" | "text" |
   "wordCount" | "internalLinks" | "externalLinks" | "images" | "jsonLd" | "jsonLdTypes" | "jsonLdErrors" | "og" | "lang" |
@@ -212,19 +253,21 @@ export function fromCapture(c: Captured, origin: string): Pick<PageData,
   let jsonLdErrors = 0;
   for (const s of c.jsonLd) {
     try {
-      jsonLd.push(JSON.parse(s));
+      jsonLd.push(redactJsonLd(JSON.parse(s)));
     } catch {
       jsonLdErrors++;
     }
   }
   const text = c.text ?? "";
   const opt = <T>(v: T | null | undefined): T | undefined => (v === null || v === undefined || v === "" ? undefined : v);
+  const prose = (v: string | null | undefined): string | undefined => opt(v === null || v === undefined ? v : scrub(v));
   return {
-    title: opt(c.title), titleCount: c.titleCount, metaDescription: opt(c.metaDescription), metaDescriptionCount: c.metaDescriptionCount,
-    canonical: opt(c.canonical), robotsMeta: opt(c.robotsMeta), h1: c.h1, h2: c.h2,
-    text: cutText(text, MAX_TEXT_CHARS), wordCount: countWords(text),
+    title: prose(c.title), titleCount: c.titleCount, metaDescription: prose(c.metaDescription), metaDescriptionCount: c.metaDescriptionCount,
+    canonical: opt(c.canonical), robotsMeta: opt(c.robotsMeta), h1: c.h1.map(scrub), h2: c.h2.map(scrub),
+    text: cutText(scrub(text), MAX_TEXT_CHARS), wordCount: countWords(text),
     internalLinks: [...internal].slice(0, 500), externalLinks: [...external].slice(0, 300),
-    images: c.images, jsonLd, jsonLdTypes: jsonLdTypes(jsonLd), jsonLdErrors, og: c.og, lang: opt(c.lang), viewport: opt(c.viewport),
+    images: c.images, jsonLd, jsonLdTypes: jsonLdTypes(jsonLd), jsonLdErrors, og: Object.fromEntries(Object.entries(c.og).map(([k, v]) => [k, isUrl(v) ? v : scrub(v)])),
+    lang: opt(c.lang), viewport: opt(c.viewport),
     mixedContent: c.mixed, favicon: opt(c.favicon), logo: c.logo ?? undefined,
   };
 }
