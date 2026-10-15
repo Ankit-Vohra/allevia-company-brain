@@ -15,7 +15,8 @@ export interface JoinDeps { hub: HubPort; store: HubStore; staffRoleId: string; 
 
 const PARALLEL = 5;
 
-export async function attributeJoin(d: JoinDeps): Promise<Attribution> {
+// The open links that were used since we last looked (marked used as a side effect).
+async function consumed(d: JoinDeps): Promise<InviteRecord[]> {
   const now = (d.now ?? Date.now)();
   const open = await d.store.openInvites(d.hub.guildId);
   const live: InviteRecord[] = [];
@@ -36,6 +37,17 @@ export async function attributeJoin(d: JoinDeps): Promise<Attribution> {
     if (seen ? seen.uses > i.uses : i.uses === 0) used.push({ ...i, uses: seen ? seen.uses : i.maxUses });
   }
   for (const i of used) await d.store.saveInvite({ ...i, status: "used", usedAt: now });
+  return used;
+}
+
+// When the bot starts: links used while it was not running. Nobody can tell who joined with them, so they are marked
+// used (they must not be mistaken for the next person's join) and the businesses are returned for staff to be told.
+export async function sweepOfflineJoins(d: JoinDeps): Promise<string[]> {
+  return (await consumed(d)).map((i) => i.slug);
+}
+
+export async function attributeJoin(d: JoinDeps): Promise<Attribution> {
+  const used = await consumed(d);
   if (used.length === 0) return { kind: "none" };
   if (used.length > 1) return { kind: "ambiguous", slugs: used.map((i) => i.slug) };
   const inv = used[0]!;

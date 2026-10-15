@@ -6,7 +6,7 @@ import type { TurnChecks } from "../../shared/contracts.js";
 import type { AskInput, AskResult } from "../../src/agent/ask.js";
 import { AlleviaBot, type ButtonPort, type CommandPort, type MessagePort, type Outgoing, type PostedPort, type ThreadPort } from "../../src/discord/bot.js";
 import { HubBot, type JoinPort } from "../../src/discord/hub-bot.js";
-import { attributeJoin } from "../../src/discord/hub-join.js";
+import { attributeJoin, sweepOfflineJoins } from "../../src/discord/hub-join.js";
 import { provisionCustomer, type ProvisionDeps } from "../../src/discord/hub-provision.js";
 import type { AreaRecord } from "../../src/discord/hub-types.js";
 import type { GraphHandle } from "../../src/graph/client.js";
@@ -516,6 +516,19 @@ describe("attributing a join (invite use counts)", () => {
     const { h, st, s } = await rigJoin();
     h.channels.clear(); // listInvites answers null for a channel it cannot see
     expect(await attributeJoin({ hub: h, store: st, staffRoleId: s })).toEqual({ kind: "none" });
+  });
+
+  it("links used while the bot was off are swept up, so they are never mistaken for the next person's join", async () => {
+    const { h, st, d, s, b } = await rigJoin();
+    const a = (await st.invites("aamdani"))[0]!;
+    h.join(a.code); // someone joined with A's link while nobody was watching
+    expect(await sweepOfflineJoins({ hub: h, store: st, staffRoleId: s })).toEqual(["aamdani"]);
+    expect((await st.invites("aamdani"))[0]!.status).toBe("used");
+    // later a different person joins with B's link: that is a clean, single match
+    const bInv = (await st.invites("avs_atelier"))[0]!;
+    h.join(bInv.code);
+    expect(await attributeJoin({ hub: h, store: st, staffRoleId: s })).toMatchObject({ kind: "matched", slug: "avs_atelier", roleId: b.roleId });
+    void d;
   });
 
   it("never hands out the staff or @everyone role, even if a saved record says to", async () => {

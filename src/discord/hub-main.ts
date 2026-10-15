@@ -8,6 +8,7 @@ import type { GraphHandle } from "../graph/client.js";
 import { approval as readApproval, approvals as readApprovals, latestBrief } from "../server/reads.js";
 import { AlleviaBot } from "./bot.js";
 import { HubBot } from "./hub-bot.js";
+import { sweepOfflineJoins } from "./hub-join.js";
 import { syncArea, type TenantSource } from "./hub-provision.js";
 import { hubSettings, productionHub } from "./hub-service.js";
 import { tenantTimeZone } from "./main.js";
@@ -52,6 +53,18 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
     },
   });
 
+  // A join link used while the bot was not running: nobody can tell who joined, so staff are told to give the role by hand.
+  try {
+    const missed = await sweepOfflineJoins({ hub: service.deps.hub, store: service.deps.store, staffRoleId });
+    const inbox = (await service.deps.store.getHub(guildId))?.supportInboxId;
+    if (missed.length && inbox) {
+      await service.deps.hub.sendMessage(inbox, `Someone joined with the join link for ${[...new Set(missed)].join(", ")} while the bot was not running, so they have no access yet. Find them in Server Settings > Members and give them the customer role by hand.`);
+    }
+  } catch (e) {
+    log(`[hub] could not check for joins while the bot was off: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // (before logging in, so a join that arrives now is never mixed up with one that happened while the bot was off)
   const { startHubClient } = await import("./hub-client.js");
   const client = await startHubClient(hubBot, { token, appId, guildId }, log);
 
