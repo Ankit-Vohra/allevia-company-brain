@@ -17,7 +17,7 @@ import type { EditPrompt, EditTreatment } from "./prompt.js";
 import type { AssetStore } from "./store.js";
 
 export interface VariantRecord extends AssetRecord {
-  label: "A" | "B";
+  label: string;              // "A" (safe), "B" (best bet), then "C", "D" ... for the owner's adjustments
   treatment: string;
   step: string;
   aiEdited: boolean;
@@ -34,9 +34,9 @@ export const REGISTRATION_FLOOR = 0.4;
 
 const variantId = (originalSha: string, label: string, sha: string) => entityId("Asset", `${originalSha.slice(0, 16)}-${label.toLowerCase()}-${sha.slice(0, 8)}`);
 
-async function saveVariant(
+export async function saveVariant(
   g: GraphHandle, store: AssetStore, tenant: string, original: AssetRecord, buffer: Buffer,
-  v: { label: "A" | "B"; name: string; treatment: string; step: string; aiEdited: boolean; engine: string; extra: Record<string, string | number | boolean | string[]> },
+  v: { label: string; name: string; treatment: string; step: string; aiEdited: boolean; engine: string; extra: Record<string, string | number | boolean | string[]> },
   now: number,
 ): Promise<VariantRecord> {
   const meta = await sharp(buffer).metadata();

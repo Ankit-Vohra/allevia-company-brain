@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 
 const TENANT = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
-const KEY = /^[0-9a-f]{64}\.(?:jpg|png|webp)$/;
+const KEY = /^[0-9a-f]{64}\.(?:jpg|png|webp|mp4|mov|webm)$/;
 
 export class AssetStore {
   readonly root: string;
@@ -26,7 +26,7 @@ export class AssetStore {
     return p.startsWith(dir + sep) ? p : null;
   }
 
-  put(tenant: string, sha256: string, bytes: Buffer, ext: "jpg" | "png" | "webp" = "jpg"): string {
+  put(tenant: string, sha256: string, bytes: Buffer, ext: "jpg" | "png" | "webp" | "mp4" | "mov" | "webm" = "jpg"): string {
     const key = `${sha256}.${ext}`;
     const p = this.path(tenant, key);
     if (!p) throw new Error(`bad storage key ${key}`);
