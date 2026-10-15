@@ -55,8 +55,8 @@ export const HOUSE_RULES = `House rules (every Allevia agent):
 
 // What each reviewer looks for when it checks someone else's finding.
 const REVIEW_FOCUS: Record<string, string> = {
-  "copy-editor": "Hold it to the brand's voice rules (look them up with playbook) and strip AI-sounding phrasing. Facts are the fact checker's job. A caption that is only a label (a name, a place, a year) is not on brand either: it needs a hook line and a sentence a person would say; send it back.",
-  "fact-checker": "Check every claim and number against the graph (open the cited ids). Anything unsupported goes back. What counts as a claim: names, places, dates, numbers, awards, materials, results, and what the business does or offers. A mood or a way of framing is not a claim, so leave it to the copy editor; a \"Film:\" direction is not a claim (it tells the owner what to shoot); a \"[you tell us: …]\" placeholder is the right way to mark a missing fact, not a gap.",
+  "copy-editor": "Hold it to the brand's voice rules (look them up with playbook) and strip AI-sounding phrasing. If the owner asked for this kind of writing (a sale post, an offer, an announcement), don't send it back for being promotional: ask only for plain, human wording, and keep the owner's own request and wording. Facts are the fact checker's job; a \"[suggested: …]\" spot is meant to be there. A caption that is only a label (a name, a place, a year) is not on brand either: it needs a hook line and a sentence a person would say; send it back.",
+  "fact-checker": "Check every claim and number against the graph (open the cited ids). Anything unsupported goes back. What counts as a claim: names, places, dates, numbers, awards, materials, results, and what the business does or offers. A mood or a way of framing is not a claim, so leave it to the copy editor; a \"Film:\" direction is not a claim (it tells the owner what to shoot); a \"[suggested: …]\" spot is the writer's clearly marked proposal for the owner to accept, not a claim, so don't reject it for being absent from the record; reject it only if it states a number, award, price, date, result or named person as if it were fact, or contradicts the record. A \"[you tell us: …]\" placeholder is the right way to mark a missing hard fact, not a gap.",
   "coe-lead": "Check every figure: the right number, the right period, the right comparison. Anything not in the data goes back.",
 };
 
@@ -273,7 +273,7 @@ export function reviewPrompt(o: { question: string; reviewer: AgentDef; finding:
 
 // ---------- REVISE (the producer, once, after a "fix") ----------
 
-const KEEP_WHOLE = `This is copy the owner will post: Keep every caption and the whole script. Fix only what a note flags: cut or soften that one claim, or put "[you tell us: …]" where a missing fact belongs. Never drop a part (a caption, a scene, the script) because it needed a change.`;
+const KEEP_WHOLE = `This is copy the owner will post: Keep every caption and the whole script. Fix only what a note flags: cut or soften that one claim, or put a clearly marked "[suggested: …]" (from the business's own profile) where a missing detail belongs. Never drop a part (a caption, a scene, the script) because it needed a change.`;
 
 export function revisePrompt(o: { question: string; task: string; finding: FindingView; notes: Array<{ reviewer: string; verdict: string; note: string }>; toolRounds?: number; agent?: string; language?: string }): string {
   return [
@@ -316,7 +316,7 @@ export function sourcesBlock(sources: readonly CapabilityModeInfo[], intro: stri
 // When a finding holds copy to post (captions, a script): the owner reads and posts the copy itself, not a description of it
 // (content trial 2026-10-15: "Caption: tell us what happened" stood in for the Hindi caption, and fixes the revision had
 // already made were listed as things left to do).
-const CONTENT_ANSWER_RULE = `The content desk's finding holds copy for the owner to post. Put the captions and the script in your answer word for word (each caption in a quote block, in the language it will be posted in), in the order given. Don't rewrite them into ideas or summaries, and don't shorten them. The five-item limit doesn't apply to a week of posts. Reviews of the earlier draft that the revised text already addresses are done: they are not to-dos for the owner. Tell the owner only what is still open: each "[you tell us: …]" spot and any note the revised text did not address. If you propose a content draft with propose_action, payload.body is that same text, whole; a proposal without it saves nothing.`;
+const CONTENT_ANSWER_RULE = `The content desk's finding holds copy for the owner to post. Put the captions and the script in your answer word for word (each caption in a quote block, in the language it will be posted in), in the order given. Don't rewrite them into ideas or summaries, and don't shorten them. The five-item limit doesn't apply to a week of posts. Reviews of the earlier draft that the revised text already addresses are done: they are not to-dos for the owner. Keep every "[suggested: …]" spot exactly as written and tell the owner in one line that those are suggestions from their business profile, which they can accept by replying "fill it in" or change in their own words. Tell the owner only what else is still open: each "[you tell us: …]" spot and any note the revised text did not address. If you propose a content draft with propose_action, payload.body is that same text, whole; a proposal without it saves nothing.`;
 
 export function synthesisPrompt(o: {
   question: string; recall: string; findings: FindingView[]; failed: string[]; chiefTask?: string; canLookUp?: boolean;
