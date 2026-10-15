@@ -1,0 +1,38 @@
+# The image gets source, vendored data and the built web app. Never company data, models, secrets or git history.
+
+# secrets and local config
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# company data, caches and local models (mounted at runtime, never baked in)
+data
+models
+.cache
+
+# dependencies and builds (rebuilt inside the image for Linux)
+node_modules
+**/node_modules
+dist
+web/dist
+site/dist
+*.tsbuildinfo
+
+# not needed to run
+.git
+.github
+.claude
+docs
+site
+coverage
+*.log
+.DS_Store
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# tests, except the synthetic demo company that scripts/seed-demo.ts builds
+tests/**
+!tests/fixtures/seed-graph.ts

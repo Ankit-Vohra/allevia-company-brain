@@ -1,0 +1,65 @@
+# Allevia with its graph: FalkorDB 6.0.2 (append-only persistence on a volume) and the app (API + web on one port).
+#
+#   cp .env.example .env          # optional: every name is documented there; leave values empty for the defaults
+#   docker compose up -d --build  # http://127.0.0.1:8787  (FalkorDB Browser: http://127.0.0.1:3090)
+#
+# The app starts in the public read-only demo (ALLEVIA_PUBLIC_MODE=1): no model calls, every write refused, Ask
+# replays recorded showcase turns. A fresh FalkorDB is empty; README.md "Run it" shows how to load the synthetic demo
+# company (no model needed) or onboard a real business (needs a Claude login and live mode).
+#
+# Ports bind to 127.0.0.1 only. FalkorDB is published on 6390 (not 6379) so the CLI on the host (`npm run cli`)
+# reaches the same graph with its default ALLEVIA_FALKORDB_URL.
+name: allevia
+
+services:
+  falkordb:
+    image: falkordb/falkordb:6.0.2
+    restart: unless-stopped
+    environment:
+      REDIS_ARGS: "--appendonly yes --appendfsync everysec"
+      FALKORDB_ARGS: "THREAD_COUNT 4 MAX_QUEUED_QUERIES 500"
+    volumes:
+      - falkordb-data:/var/lib/falkordb/data
+    ports:
+      - "127.0.0.1:${FALKORDB_PORT:-6390}:6379"
+      - "127.0.0.1:${FALKORDB_BROWSER_PORT:-3090}:3000"
+    healthcheck:
+      test: ["CMD", "redis-cli", "PING"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      args:
+        WITH_CHROMIUM: "${WITH_CHROMIUM:-0}"
+    image: allevia:local
+    restart: unless-stopped
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    # Every name in .env reaches the container; the app reads only the ones in .env.example.
+    env_file:
+      - path: .env
+        required: false
+    # These win over .env: they are the container's own paths and addresses.
+    environment:
+      ALLEVIA_FALKORDB_URL: redis://falkordb:6379
+      ALLEVIA_PUBLIC_MODE: "${ALLEVIA_PUBLIC_MODE:-1}"
+      ALLEVIA_DATA_DIR: /data
+      ALLEVIA_MODELS_DIR: /models
+      ALLEVIA_ENV_FILE: /dev/null
+      HOST: 0.0.0.0
+      PORT: "8787"
+      ALLEVIA_WEB_URL: "${ALLEVIA_WEB_URL:-http://127.0.0.1:8787}"
+    ports:
+      - "127.0.0.1:${ALLEVIA_PORT:-8787}:8787"
+    volumes:
+      - allevia-data:/data
+      # The local e5 embedding model (Xenova/multilingual-e5-small), if you have it; without it search is full-text only.
+      - "${ALLEVIA_MODELS_HOST_DIR:-./models}:/models:ro"
+
+volumes:
+  falkordb-data:
+  allevia-data:

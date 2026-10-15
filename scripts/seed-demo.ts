@@ -1,14 +1,18 @@
 // Seeds a throwaway tenant with the synthetic seedMini company (tests/fixtures/seed-graph.ts) for live smoke runs of
 // `npm run cli -- ask`. The graph is the one the CLI opens for that tenant (graphName: allevia_<tenant>), dropped and
 // rebuilt each time. seedMini stores stand-in vectors; when the local e5 model is present they are replaced with real
-// ones, so vector search behaves as it does on an ingested tenant. The tenant is not added to the registry.
-// Usage: npx tsx scripts/seed-demo.ts [tenant]   (default demo_seed; refuses names that are not demo_* or *_seed)
+// ones, so vector search behaves as it does on an ingested tenant. The tenant is added to the registry (allevia_meta)
+// only with --register, so the web app lists it and `enroll` can start its program (the Docker quick start does this).
+// Usage: npx tsx scripts/seed-demo.ts [tenant] [--register]   (default demo_seed; refuses names that are not demo_* or *_seed)
 import { closeAll, graphName, listGraphs, openGraph } from "../src/graph/client.js";
 import { typeOfLabels } from "../src/graph/schema.js";
+import { ensureTenant } from "../src/graph/tenants.js";
 import { localEmbedder } from "../src/agent/wiring.js";
 import { seedMini } from "../tests/fixtures/seed-graph.js";
 
-const tenant = process.argv[2] ?? "demo_seed";
+const args = process.argv.slice(2);
+const register = args.includes("--register");
+const tenant = args.find((a) => !a.startsWith("--")) ?? "demo_seed";
 if (!/^demo_|_seed$/.test(tenant)) throw new Error(`refusing to reseed "${tenant}": only throwaway tenants (demo_* or *_seed)`);
 
 async function realVectors(g: Awaited<ReturnType<typeof openGraph>>): Promise<number> {
@@ -32,6 +36,11 @@ try {
   const [row] = await g.roQuery<{ n: number }>("MATCH (n:Entity) RETURN count(n) AS n");
   const vectors = await realVectors(g);
   console.log(`Seeded ${name}: ${row?.n ?? 0} nodes; ${vectors ? `${vectors} real e5 vectors` : "stand-in vectors (no local model)"}.`);
+  if (register) {
+    const display = tenant.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "); // demo_seed -> Demo Seed
+    await ensureTenant({ slug: tenant, name: display, domain: "demo.example", industry: "jobs platform (synthetic demo data)", city: "Raipur" });
+    console.log(`Registered "${display}" (${tenant}) in the tenant registry.`);
+  }
 } finally {
   await closeAll();
 }

@@ -1,0 +1,161 @@
+# Submission checklist
+
+Deadline: **18 October 2026, 23:59 IST** (submissions close then). Everything is submitted from the team panel on
+WeMakeDevs (https://www.wemakedevs.org/hackathons/falkordb). The page does not list the form fields, so have every
+item below ready before opening the form.
+
+Rules that shape the submission (from the hackathon page): FalkorDB must be the primary graph database and central
+to the product; the submission and its main FalkorDB implementation must be new work from the event; a live
+deployment is preferred, and a project that cannot be deployed must include complete local setup instructions and a
+working demo video. Coding assistants are allowed, and the team must be able to explain what was built and why.
+
+## 1. What to submit
+
+| Item | Where it comes from | Status |
+|---|---|---|
+| Project name and one-line pitch | README first lines: "A done-for-you AI growth team for small businesses, with a company brain in FalkorDB behind every answer." | [ ] |
+| Tracks | All three: 01 Act on connected data, 02 Agent memory and coordination, 03 Company brain (README "Tracks") | [ ] |
+| Public repository URL | Section 2 below. **Not** the existing private repo. | [ ] |
+| Live demo URL | Section 3 below (public read-only mode) | [ ] |
+| Demo video URL | Section 4 below (YouTube, unlisted or public) | [ ] |
+| Description | README "The problem", "What it does", "How FalkorDB is central" | [ ] |
+| How FalkorDB is used | README "How FalkorDB is central" table | [ ] |
+| Team members | Every member registered in the team panel (prizes go to every member) | [ ] |
+| Blog post (side prize) | `docs/blog-post.md`, published on a public platform (dev.to, Hashnode or Medium), link submitted | [ ] |
+| Screenshots | `docs/screenshots/` (README uses a selection) | [ ] |
+
+## 2. Make the repository public (fresh history only)
+
+**Do not switch `Ankit-Vohra/allevia` to public.** It holds the full development history (dev and main are pushed),
+and early commits contain values that were later removed from the code by the hygiene work (see commit `95a1925`,
+"no real infra/company identifiers in code or docs"). Commit metadata also carries a local machine name. GitHub keeps
+old commits reachable by SHA after a force-push, so rewriting that repo is not enough either.
+
+Publish a **new repository from one squashed commit** instead.
+
+1. **Rotate the Discord bot token first.** It has lived in the local env file during development and the bot has run
+   on the demo server. Reset it in the Discord developer portal, put the new one in `~/.config/allevia/allevia.env`,
+   and restart the bot. Do the same for any other token in that file that was ever pasted into a chat, log or
+   terminal recording (the AVS Instagram token).
+2. **Decide the private repo's fate.** Rename it (for example `allevia-dev-history`) and keep it private, so the
+   public repo can take the name `allevia`. Then point `ALLEVIA_ACTION_REPO` at a **private** repo: the `github_issue`
+   executor writes business findings into issues, and issues in a public repo are public.
+3. **Check `.env.example` has no values.** Every line must be `NAME=` followed only by spaces and a comment:
+   ```sh
+   grep -nE '^[A-Z_]+=[^[:space:]#]' .env.example   # must print nothing
+   ```
+   The comments document defaults; review them once more for anything that should not be public (a username, an SSH
+   alias, a path).
+4. **Choose a licence** for Allevia's own code and add `LICENSE` (the repo has none yet; without one, the code is
+   all rights reserved). Vendored data keeps its own licences in `vendor/playbooks/` and `.claude/skills/brag-slim/`.
+5. **Export the tree without history and commit it once:**
+   ```sh
+   SHA=$(git -C ~/jarvis rev-parse dev)              # the commit being published
+   mkdir ~/allevia-public && git -C ~/jarvis archive "$SHA" | tar -x -C ~/allevia-public
+   cd ~/allevia-public
+   git init -b main
+   git config user.name "Ankit Vohra"
+   git config user.email "<GitHub noreply address>"   # Settings > Emails on GitHub; not a personal address
+   npm ci && (cd web && npm ci)
+   git add -A
+   ```
+   `git archive` exports tracked files only, so `data/`, `models/`, `node_modules/` and the env file cannot come
+   along.
+6. **Re-run the hygiene test on exactly what will be published** (it scans `git ls-files`, so the staged tree is what
+   it checks, and it also compares against the real vault when it is on this machine):
+   ```sh
+   npx vitest run tests/hygiene.test.ts
+   ```
+   Then a manual pass: `git grep -n -i -E 'ankit@|\.local\b|aws|ssh '` and read every hit.
+7. **Check the graph-facing docs for data you do not want public.** The eval reports (`docs/evals/`) quote the first
+   300 characters of real Aamdani answers, and screenshots show real Aamdani goal numbers. The founder approved real
+   numbers for the demo; confirm that includes the repo.
+8. **Commit and publish:**
+   ```sh
+   git commit -m "Allevia: Graph Hacks submission"
+   gh repo create Ankit-Vohra/allevia --public --source . --push --description "A done-for-you AI growth team for small businesses, with a company brain in FalkorDB"
+   ```
+9. Open the public repo in a logged-out browser: README renders (mermaid diagram, screenshots), no `data/` or
+   `models/` folder, one commit.
+
+## 3. Deployment (public read-only mode)
+
+The public deployment runs `ALLEVIA_PUBLIC_MODE=1`: the office, brain explorer, insights, approvals history and the
+90-day card read live from the graph; every write returns 403; Ask replays the recorded showcase turns. **No live
+model**: the agents run on a claude.ai subscription login, and Anthropic's consumer terms do not cover serving
+strangers on a personal plan. Live answers are shown in the demo video, and the README explains how an evaluator runs
+live mode with their own login.
+
+### What the deployment needs
+
+- The image from `Dockerfile` (verified locally: `docker build` succeeds, the container serves the web app and the
+  API, reports healthy, refuses writes in public mode, and runs the demo-seed quick start; about 1.6 GB).
+- FalkorDB 6.0.2 with append-only persistence and a volume, **not reachable from the internet**.
+- The graphs to show, loaded into that FalkorDB:
+  - `allevia_meta` (the registry), `allevia_aamdani` and `allevia_avs_atelier`, with the showcase turns marked
+    (`npm run cli -- showcase <tenant>` lists them: five for Aamdani, one for AVS Atelier at the time of writing).
+  - **Before exporting, `privacy-scan` must report 0 for each graph.** On 15 October `aamdani` reported 0 and
+    `avs_atelier` reported 10 hits: the studio's own contact email and phone number in a crawled contact-page chunk,
+    and Studio asset hashes that the scanner reads as secrets. Fix or accept each one before the AVS graph goes
+    public.
+  - Drop throwaway graphs (`allevia_test_*`, `allevia_demo_seed`) from the copy, not from the working server.
+- Optional: the Studio's images live in the data dir (`ALLEVIA_DATA_DIR`), not the graph: `data/assets/<tenant>`
+  (originals and variants), `data/studio/recorded` (the recorded generated edit) and `data/studio-demo/<tenant>` (the
+  demo sample). Copy them to the deployment's `/data` volume if the Studio page should show its last run. Nothing
+  else in `data/` is needed to serve the demo.
+
+### Moving the graphs
+
+FalkorDB stores graphs as Redis keys, so a snapshot moves them:
+
+```sh
+# snapshot the working server (read-only for it), then trim a copy; never delete graphs on the working server
+docker exec allevia-falkordb redis-cli BGSAVE                 # writes dump.rdb in /var/lib/falkordb/data
+docker cp allevia-falkordb:/var/lib/falkordb/data/dump.rdb ./dump.rdb
+docker run -d --name fdb-trim -v "$PWD":/var/lib/falkordb/data -e REDIS_ARGS="--appendonly no" falkordb/falkordb:6.0.2
+docker exec fdb-trim redis-cli GRAPH.LIST                     # then GRAPH.DELETE each graph that must not ship
+docker exec fdb-trim redis-cli SAVE && docker rm -f fdb-trim  # ./dump.rdb now holds only the graphs to publish
+```
+
+On the target, start FalkorDB once with `REDIS_ARGS="--appendonly no"` and `dump.rdb` in its data directory so it
+loads the snapshot, run `redis-cli CONFIG SET appendonly yes` (Redis rewrites the append-only file from memory), wait
+for `INFO persistence` to show `aof_rewrite_in_progress:0`, then restart with the compose file's
+`--appendonly yes`. Check with `npm run cli -- db:check` pointed at it.
+
+### Where to host
+
+| Option | How | Notes |
+|---|---|---|
+| **Railway** (spec default) | Two services from the repo: the app from `Dockerfile`, FalkorDB from the `falkordb/falkordb:6.0.2` image with a volume on `/var/lib/falkordb/data`. Set `ALLEVIA_FALKORDB_URL=redis://<falkordb service>.railway.internal:6379`, `ALLEVIA_PUBLIC_MODE=1`, `HOST=0.0.0.0`, `PORT` as Railway sets it. | Keep FalkorDB on private networking only (no public domain, no TCP proxy). Load the snapshot through the volume. |
+| **Fly.io** | Two apps (or one machine with both processes), a Fly volume for FalkorDB, `.internal` networking. | Same rules; no public port for FalkorDB. |
+| **A small VPS** (Hetzner, Lightsail) | `docker compose up -d` as committed, plus Caddy on the host proxying a domain to `127.0.0.1:8787` for TLS. | Simplest to reason about; the compose file already binds every port to 127.0.0.1. |
+
+Before sharing the URL:
+
+- [ ] `curl https://<host>/api/health` shows `"publicMode":true`.
+- [ ] A `POST` to an approval returns 403; the onboarding form refuses; the Studio upload refuses.
+- [ ] Ask lists only the showcase threads, and each replays to its answer and path.
+- [ ] FalkorDB's port is not reachable from outside (`nc -vz <host> 6379` fails).
+- [ ] No `CLAUDE_CODE_OAUTH_TOKEN`, Discord token or any other secret is set on the host.
+- [ ] `ALLEVIA_WEB_URL` is the public URL if the Discord bot links to it.
+
+## 4. Demo video
+
+Script: [`docs/demo-script.md`](demo-script.md) (nine scenes, 3 minutes).
+
+- [ ] Recorded locally in **live** mode on the real Aamdani and AVS Atelier graphs; replays only as a fallback.
+- [ ] Under 3:00, 1080p, readable at phone size; captions on.
+- [ ] Shows each judging point: the graph shaping the answer (the lit path), memory that compounds (learned rule,
+      first-pass curve), onboarding a second business from a URL, acting after one tap, FalkorDB under the hood.
+- [ ] Any sped-up part is labelled; simulated ad data is called simulated wherever it appears.
+- [ ] Frame-by-frame check: no token, email, phone, IP, private document title, terminal history or env file.
+- [ ] Music, if any, is licensed for the use (or none).
+- [ ] Uploaded to YouTube (unlisted is fine), link added to the README and the submission.
+
+## 5. Final pass (18 October)
+
+- [ ] `npm run typecheck`, `npm test` (against a throwaway FalkorDB: `ALLEVIA_FALKORDB_URL=redis://127.0.0.1:<port>`).
+- [ ] The README's test count and eval numbers match the latest run and `docs/evals/`.
+- [ ] Hygiene test passes on the published tree; the public repo has one commit.
+- [ ] Live URL, repo URL, video URL and blog URL all open logged out.
+- [ ] Submitted before 23:59 IST, with a screenshot of the confirmation.
