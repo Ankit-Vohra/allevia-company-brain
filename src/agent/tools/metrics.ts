@@ -62,7 +62,10 @@ export function suggestMetrics(asked: string, available: string[], limit = 40): 
 // Per subject, the newest `per` observations of the metric in range, oldest first, plus how many there are.
 async function seriesFor(ctx: ToolContext, p: Record<string, unknown>, sids: string[], per: number): Promise<Array<{ n: number; rows: Row[] }>> {
   const res = await ro<{ n: number; rows: Row[] }>(ctx,
-    `UNWIND $sids AS sid MATCH (s:Entity {id:sid}) WITH s MATCH (o:Observation)-[r:MEASURES]->(s) WHERE toLower(o.metric) = $m
+    // The series is found through the Observation indexes (subject, metricKey), then joined to its edge: the subject of a
+    // dense daily series has an in-edge per reading, and walking them all to filter by metric is what this avoids.
+    `UNWIND $sids AS sid MATCH (o:Observation {subject: sid}) WHERE o.metricKey = $m
+     WITH sid, o MATCH (o)-[r:MEASURES]->(s:Entity {id:sid}) WHERE ID(r) >= 0
      WITH s, o, r, coalesce(o.windowEnd, o.asOf) AS at WHERE ($from IS NULL OR at >= $from) AND ($to IS NULL OR at <= $to)
      WITH s, o, r, at ORDER BY at DESC, o.id DESC
      WITH s, count(o) AS n, collect({s: ${NODE("s")}, o: ${NODE("o")}, e: ${EDGE("r")}, value: o.value, unit: o.unit, ws: o.windowStart, at: at})[0..$per] AS rows
@@ -78,7 +81,7 @@ async function runTrend(args: { metric: string; subject?: string; from?: string;
   // Without a subject: every subject's latest value, ranked on the server (subjects x days can pass 10,000 rows), then
   // the top SUMMARY_SUBJECTS read in full.
   const [ranked] = subject ? [null] : await ro<{ subjects: number; top: string[] }>(ctx,
-    `MATCH (o:Observation)-[:MEASURES]->(s:Entity) WHERE toLower(o.metric) = $m
+    `MATCH (o:Observation)-[r:MEASURES]->(s:Entity) WHERE o.metricKey = $m AND ID(r) >= 0
      WITH s, o, coalesce(o.windowEnd, o.asOf) AS at WHERE ($from IS NULL OR at >= $from) AND ($to IS NULL OR at <= $to)
      WITH s, o, at ORDER BY at DESC, o.id DESC
      WITH s, head(collect(o.value)) AS last ORDER BY last DESC, s.id
@@ -88,7 +91,7 @@ async function runTrend(args: { metric: string; subject?: string; from?: string;
   const rows = read.flatMap((x) => x.rows);
   if (!rows.length) {
     const avail = await ro<{ m: string }>(ctx,
-      "MATCH (o:Observation)-[:MEASURES]->(s:Entity) WHERE $sid IS NULL OR s.id = $sid RETURN DISTINCT o.metric AS m ORDER BY m LIMIT 1000", p);
+      `${p.sid ? "MATCH (o:Observation {subject: $sid})" : "MATCH (o:Observation)"} RETURN DISTINCT o.metric AS m ORDER BY m LIMIT 1000`, p);
     const hint = suggestMetrics(args.metric, avail.map((a) => a.m).filter((m): m is string => typeof m === "string"));
     throw new InputError(`No ${JSON.stringify(args.metric)} observations${subject ? ` for ${subject.id}` : ""}${args.from || args.to ? " in that range" : ""}. ` +
       `Metrics available${hint.related ? " (closest first)" : ""}: ${hint.shown.join(", ") || "none"}${hint.more ? `, and ${hint.more} more` : ""}.`);

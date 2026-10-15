@@ -219,7 +219,7 @@ export async function sourceRows(ctx: ToolContext, ids: string[]): Promise<Sourc
     `UNWIND $ids AS oid MATCH (d:Entity {id:oid}) WHERE d:Document RETURN ${cols}
      UNION ALL
      UNWIND $ids AS oid MATCH (n:Entity {id:oid}) WITH oid, n MATCH (n)-[:SOURCED_FROM]->(d:Document) WITH oid, d ORDER BY d.asOf DESC, d.id
-     WITH oid, collect(d)[0..$per] AS ds UNWIND ds AS d RETURN ${cols}
+     WITH oid, collect(DISTINCT d)[0..$per] AS ds UNWIND ds AS d RETURN ${cols}
      UNION ALL
      UNWIND $ids AS oid MATCH (n:Entity {id:oid}) WHERE n.src IS NOT NULL WITH oid, n.src AS src MATCH (d:Entity {id:src}) WHERE d:Document RETURN ${cols}
      UNION ALL
@@ -332,7 +332,7 @@ export async function ftEntities(ctx: ToolContext, text: string, types: readonly
   const terms = ftTerms(text);
   if (!terms.length) return [];
   const hits = await ro<FtHit>(ctx,
-    `CALL db.idx.fulltext.queryNodes('Entity', $q) YIELD node, score
+    `CALL db.idx.fulltext.queryNodes('Searchable', $q) YIELD node, score
      WITH node, score WHERE any(l IN labels(node) WHERE l IN $types)
      RETURN ${NODE("node")} AS n, node.summary AS summary, score ORDER BY score DESC, node.id LIMIT $k`,
     { q: ftQuery(terms), types: [...types], k });

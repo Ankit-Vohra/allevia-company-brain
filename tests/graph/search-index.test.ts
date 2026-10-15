@@ -2,7 +2,7 @@
 // returned for the types search serves, and none of the per-reading names that crowd it.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
-import { dropLegacyEntityIndexes, ensureIndexes, listIndexes, VECTOR_DIM } from "../../src/graph/indexes.js";
+import { LEGACY_ENTITY_INDEXES, dropLegacyEntityIndexes, ensureIndexes, listIndexes, VECTOR_DIM } from "../../src/graph/indexes.js";
 import { SEARCHABLE } from "../../src/graph/schema.js";
 import { addObservation, upsertNode } from "../../src/graph/upsert.js";
 import { testGraph } from "../helpers/graph.js";
@@ -15,6 +15,7 @@ describe("search indexes on Searchable (integration)", () => {
   beforeAll(async () => {
     ({ g, cleanup } = await testGraph());
     await ensureIndexes(g);
+    await ensureIndexes(g, LEGACY_ENTITY_INDEXES); // no longer part of the schema: made here to compare with them
     await upsertNode(g, { type: "Business", id: "business:aamdani", name: "Aamdani", summary: "jobs platform" });
     await upsertNode(g, { type: "Decision", id: "decision:pause-stories", name: "Pause Aamdani daily stories", summary: "output stayed poor", embedding: unit(1) });
     await upsertNode(g, { type: "Channel", id: "channel:instagram", name: "Instagram", summary: "Aamdani account" });
@@ -74,6 +75,7 @@ describe("search indexes on Searchable (integration)", () => {
     const { g: g2, cleanup: c2 } = await testGraph();
     try {
       await ensureIndexes(g2);
+      await ensureIndexes(g2, LEGACY_ENTITY_INDEXES);
       expect((await listIndexes(g2)).filter((i) => i.label === "Entity").map((i) => i.prop).sort()).toEqual(["embedding", "id", "name", "summary"]);
       expect(await dropLegacyEntityIndexes(g2)).toBe(3);
       expect(await dropLegacyEntityIndexes(g2)).toBe(0);

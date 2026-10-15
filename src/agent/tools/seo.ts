@@ -29,8 +29,8 @@ async function runSeo(args: { limit?: number }, ctx: ToolContext) {
     packed<PageFails>(ctx, "MATCH (p:Page)-[f:FAILS]->(r:Entity) WHERE f.until IS NULL WITH p, collect({r: r.id, s: r.severity}) AS fails",
       "{pid: p.id, fails: fails}"),
     packed<PageObs>(ctx,
-      `MATCH (o:Observation)-[:MEASURES]->(p:Page) WHERE toLower(o.metric) IN $metrics
-       WITH p, toLower(o.metric) AS m, o ORDER BY coalesce(o.windowEnd, o.asOf) DESC, o.id DESC
+      `MATCH (o:Observation)-[r:MEASURES]->(p:Page) WHERE o.metricKey IN $metrics AND ID(r) >= 0
+       WITH p, o.metricKey AS m, o ORDER BY coalesce(o.windowEnd, o.asOf) DESC, o.id DESC
        WITH p, m, head(collect(o)) AS o`,
       "{pid: p.id, m: m, v: o.value, id: o.id, sim: o.simulated}", { metrics: SEO_METRICS }),
   ]);

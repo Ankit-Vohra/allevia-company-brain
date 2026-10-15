@@ -50,7 +50,7 @@ export const LEGACY_ENTITY_INDEXES: IndexSpec[] = [
   { label: "Entity", prop: "summary", type: "FULLTEXT" },
   { label: "Entity", prop: ENTITY_VECTOR_PROP, type: "VECTOR" },
 ];
-export const KEEP_LEGACY_ENTITY_SEARCH = true;
+export const KEEP_LEGACY_ENTITY_SEARCH = false;
 
 // What ensureIndexes() creates when it is not given a list.
 export const wantedIndexes = (): IndexSpec[] => (KEEP_LEGACY_ENTITY_SEARCH ? [...INDEXES, ...LEGACY_ENTITY_INDEXES] : INDEXES);

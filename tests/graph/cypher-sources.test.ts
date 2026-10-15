@@ -17,9 +17,9 @@ interface Found { where: string; text: string }
 // Files another branch is rewriting at the same time (the agent, the ingest pipeline and the librarian). Their id anchors
 // and edge aggregates are brought in line by the follow-up that lands with those branches; until then they are only held
 // to the count below, which can fall but not rise. Delete DEFERRED (and the ratchets) once they are clean.
-const DEFERRED = [/^src\/agent\//, /^src\/ingest\/pipeline\.ts:/, /^src\/ingest\/librarian\.ts:/];
-const DEFERRED_ANCHORS_MAX = 15;
-const DEFERRED_EDGE_AGGREGATES_MAX = 8;
+const DEFERRED: RegExp[] = [];
+const DEFERRED_ANCHORS_MAX = 0;
+const DEFERRED_EDGE_AGGREGATES_MAX = 0;
 
 // Every query-looking literal, not only the ones that sort.
 function allCypher(): Found[] {

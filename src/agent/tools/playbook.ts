@@ -38,15 +38,16 @@ async function runPlaybook(args: { topic?: string; kind?: string; channel?: stri
   let allowed: Set<string> | null = null;
   if (channel) {
     const rows = await ro<{ id: string }>(ctx,
-      `MATCH (r:Entity)-[a:APPLIES_TO]->(:Entity {id:$ch}) WHERE (r:Rule OR r:BrandRule) AND a.until IS NULL RETURN r.id AS id
+      `MATCH (ch:Entity {id:$ch}) WITH ch MATCH (r:Entity)-[a:APPLIES_TO]->(ch) WHERE (r:Rule OR r:BrandRule) AND a.until IS NULL RETURN r.id AS id
        UNION
-       MATCH (pb:Playbook)-[a:APPLIES_TO]->(:Entity {id:$ch}) MATCH (pb)-[i:INCLUDES]->(r:Entity) WHERE a.until IS NULL AND i.until IS NULL RETURN r.id AS id`,
+       MATCH (ch:Entity {id:$ch}) WITH ch MATCH (pb:Playbook)-[a:APPLIES_TO]->(ch) MATCH (pb)-[i:INCLUDES]->(r:Entity) WHERE a.until IS NULL AND i.until IS NULL RETURN r.id AS id`,
       { ch: channel.id });
     allowed = new Set(rows.map((r) => r.id));
   }
 
   const rules = await ro<RuleRow>(ctx,
-    `MATCH (r:Entity) WHERE (r:Rule OR r:BrandRule) AND ($ids IS NULL OR r.id IN $ids) AND ($allowed IS NULL OR r.id IN $allowed)
+    // Named rules are looked up by id; with no names it is a survey of every rule (there are tens), which is a scan by design.
+    `${order ? "UNWIND $ids AS rid MATCH (r:Entity {id:rid})" : "MATCH (r:Entity)"} WHERE (r:Rule OR r:BrandRule) AND ($allowed IS NULL OR r.id IN $allowed)
        AND ($kind IS NULL OR toLower(r.kind) = $kind)
      RETURN ${NODE("r")} AS r, r.kind AS kind, r.text AS text, r.severity AS severity, r.weight AS weight, r.template AS template,
        r.example AS example, r.howToFix AS howToFix, r.rank AS rank ORDER BY coalesce(rank, 0) DESC, r.name, r.id LIMIT 500`,

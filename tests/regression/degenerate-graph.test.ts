@@ -119,8 +119,8 @@ describe("every tool and query over a graph of ties, zeros and gaps (integration
     },
     {
       name: "vector scores that tie",
-      unsafe: `CALL db.idx.vector.queryNodes('Entity', 'embedding', 50, vecf32($v)) YIELD node, score RETURN {id: node.id, labels: labels(node), name: node.name, asOf: node.asOf, simulated: node.simulated} AS n, node.summary AS summary, score ORDER BY score ASC`,
-      safe: `CALL db.idx.vector.queryNodes('Entity', 'embedding', 50, vecf32($v)) YIELD node, score RETURN {id: node.id, labels: labels(node), name: node.name, asOf: node.asOf, simulated: node.simulated} AS n, node.summary AS summary, score ORDER BY score ASC, node.id`,
+      unsafe: `CALL db.idx.vector.queryNodes('Searchable', 'embedding', 50, vecf32($v)) YIELD node, score RETURN {id: node.id, labels: labels(node), name: node.name, asOf: node.asOf, simulated: node.simulated} AS n, node.summary AS summary, score ORDER BY score ASC`,
+      safe: `CALL db.idx.vector.queryNodes('Searchable', 'embedding', 50, vecf32($v)) YIELD node, score RETURN {id: node.id, labels: labels(node), name: node.name, asOf: node.asOf, simulated: node.simulated} AS n, node.summary AS summary, score ORDER BY score ASC, node.id`,
     },
     {
       name: "NaN (0 / 0) mixed with numbers in the sort key",

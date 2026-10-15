@@ -57,13 +57,13 @@ async function run(args: { query: string; types?: string[]; limit?: number }, ct
   if (!terms.length && !vec) throw new InputError("The query has no searchable words. Use nouns, e.g. 'instagram reels signups'.");
 
   const [ftE, ftC, vE, vC] = await Promise.all([
-    q && entityTypes.length ? safe(ro<EntRow>(ctx, `CALL db.idx.fulltext.queryNodes('Entity', $q) YIELD node, score ${typeFilter}
+    q && entityTypes.length ? safe(ro<EntRow>(ctx, `CALL db.idx.fulltext.queryNodes('Searchable', $q) YIELD node, score ${typeFilter}
       RETURN ${entCols} ORDER BY score DESC, node.id LIMIT $k`, { q, types: entityTypes, k }), errors, "full-text") : [],
     q && wantChunks ? safe(ro<ChunkRow>(ctx, `CALL db.idx.fulltext.queryNodes('Chunk', $q) YIELD node, score
       OPTIONAL MATCH (d:Document)-[:HAS_CHUNK]->(node) RETURN ${chunkCols} ORDER BY score DESC, node.id LIMIT $k`, { q, k }), errors, "chunk full-text") : [],
     // The `node.id` tiebreak is load-bearing: FalkorDB 6.0.2 panics (and restarts) sorting on score alone when two
     // scores tie and map columns are projected ("comparison function does not correctly implement a total order").
-    vec && entityTypes.length ? safe(ro<EntRow>(ctx, `CALL db.idx.vector.queryNodes('Entity', 'embedding', $k, vecf32($v)) YIELD node, score ${typeFilter}
+    vec && entityTypes.length ? safe(ro<EntRow>(ctx, `CALL db.idx.vector.queryNodes('Searchable', 'embedding', $k, vecf32($v)) YIELD node, score ${typeFilter}
       RETURN ${entCols} ORDER BY score ASC, node.id`, { v: vec, types: entityTypes, k: limit * 2 }), errors, "vector") : [],
     vec && wantChunks ? safe(ro<ChunkRow>(ctx, `CALL db.idx.vector.queryNodes('Chunk', 'textEmbedding', $k, vecf32($v)) YIELD node, score
       OPTIONAL MATCH (d:Document)-[:HAS_CHUNK]->(node) RETURN ${chunkCols} ORDER BY score ASC, node.id`, { v: vec, k: limit * 2 }), errors, "chunk vector") : [],

@@ -103,9 +103,9 @@ describe("get_entity, neighbors, history (integration)", () => {
       const day = (i: number) => new Date(Date.UTC(2026, 3, 1) + i * 86_400_000).toISOString().slice(0, 10);
       const rows = Array.from({ length: 210 }, (_, i) => ({ id: `obs:sessions:system:hub:${day(i)}`, at: day(i), v: i }));
       await g.query(`MATCH (h:Entity {id:'system:hub'}) UNWIND $rows AS r
-        CREATE (:Entity:Observation {id: r.id, name: r.id, metric: 'sessions', value: r.v, windowEnd: r.at, asOf: r.at})-[:MEASURES {since: 0}]->(h)`, { rows });
+        CREATE (:Entity:Observation {id: r.id, name: r.id, metric: 'sessions', metricKey: 'sessions', subject: 'system:hub', value: r.v, windowEnd: r.at, asOf: r.at})-[:MEASURES {since: 0}]->(h)`, { rows });
       await g.query(`MATCH (h:Entity {id:'system:hub'})
-        CREATE (:Entity:Observation {id: 'obs:uptime:system:hub:2025-01-01', name: 'uptime', metric: 'uptime', value: 99.9, asOf: '2025-01-01'})-[:MEASURES {since: 0}]->(h)`);
+        CREATE (:Entity:Observation {id: 'obs:uptime:system:hub:2025-01-01', name: 'uptime', metric: 'uptime', metricKey: 'uptime', subject: 'system:hub', value: 99.9, asOf: '2025-01-01'})-[:MEASURES {since: 0}]->(h)`);
     });
 
     it("get_entity: every relationship group counted in full, each listed briefly; every metric's latest number", async () => {

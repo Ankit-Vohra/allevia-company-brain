@@ -53,17 +53,17 @@ describe("tools on a tenant bigger than one result set", () => {
     await q("CREATE (:Entity:Channel {id:'channel:bulk-series', name:'Series'}), (:Entity:Channel {id:'channel:bulk-series-2', name:'Series 2'})");
     const series = Array.from({ length: 2500 }, (_, i) => ({ id: `obs:bulk_visits:channel:bulk-series:${day("2019-08-01", i)}`, at: day("2019-08-01", i), v: i }));
     await q(`MATCH (s:Entity {id:'channel:bulk-series'}) UNWIND $rows AS r
-      CREATE (:Entity:Observation {id: r.id, name: r.id, metric:'bulk_visits', value: r.v, windowStart: r.at, windowEnd: r.at, asOf: r.at})-[:MEASURES]->(s)`, { rows: series });
+      CREATE (:Entity:Observation {id: r.id, name: r.id, metric:'bulk_visits', metricKey:'bulk_visits', subject:'channel:bulk-series', value: r.v, windowStart: r.at, windowEnd: r.at, asOf: r.at})-[:MEASURES]->(s)`, { rows: series });
     const series2 = Array.from({ length: 10 }, (_, i) => ({ id: `obs:bulk_visits:channel:bulk-series-2:${day("2026-10-01", i)}`, at: day("2026-10-01", i), v: 1e6 + i }));
     await q(`MATCH (s:Entity {id:'channel:bulk-series-2'}) UNWIND $rows AS r
-      CREATE (:Entity:Observation {id: r.id, name: r.id, metric:'bulk_visits', value: r.v, windowStart: r.at, windowEnd: r.at, asOf: r.at})-[:MEASURES]->(s)`, { rows: series2 });
+      CREATE (:Entity:Observation {id: r.id, name: r.id, metric:'bulk_visits', metricKey:'bulk_visits', subject:'channel:bulk-series-2', value: r.v, windowStart: r.at, windowEnd: r.at, asOf: r.at})-[:MEASURES]->(s)`, { rows: series2 });
 
     // 3,000 pages failing one medium rule, then the worst page (two rules, 50,000 impressions), created last.
     await q(`MATCH (r:Entity {id:'rule:seo-h1'}) UNWIND range(1, 3000) AS i
       CREATE (:Entity:Page {id:'page:bulk.example/p' + toString(i), name:'P' + toString(i)})-[:FAILS {evidence:'no H1'}]->(r)`);
     await q(`MATCH (h:Entity {id:'rule:seo-h1'}), (m:Entity {id:'rule:seo-meta-description'})
       CREATE (p:Entity:Page {id:'page:bulk.example/worst', name:'Worst'}), (p)-[:FAILS]->(h), (p)-[:FAILS]->(m),
-        (:Entity:Observation {id:'obs:impressions:page:bulk.example/worst:2026-10-09', name:'imp', metric:'impressions', value: 50000,
+        (:Entity:Observation {id:'obs:impressions:page:bulk.example/worst:2026-10-09', name:'imp', metric:'impressions', metricKey:'impressions', subject:'page:bulk.example/worst', value: 50000,
           windowStart:'2026-09-12', windowEnd:'2026-10-09', asOf:'2026-10-10'})-[:MEASURES]->(p)`);
 
     // 40 campaigns x 30 days x 5 metrics = 6,000 observations inside ad_report's 30-day window.
@@ -71,7 +71,7 @@ describe("tools on a tenant bigger than one result set", () => {
     const adDays = Array.from({ length: 30 }, (_, i) => day("2026-09-16", i));
     await q(`UNWIND range(1, 40) AS c MATCH (k:Entity {id:'campaign:bulk-' + toString(c)}) UNWIND $days AS d
       UNWIND [['spend', 10, 'INR'], ['signups', 1, 'count'], ['conversions', 1, 'count'], ['impressions', 100, 'count'], ['clicks', 5, 'count']] AS m
-      CREATE (:Entity:Observation {id:'obs:' + m[0] + ':' + k.id + ':' + d, name: m[0], metric: m[0], value: m[1], unit: m[2], windowStart: d, windowEnd: d, asOf: d})-[:MEASURES]->(k)`,
+      CREATE (:Entity:Observation {id:'obs:' + m[0] + ':' + k.id + ':' + d, name: m[0], metric: m[0], metricKey: m[0], subject: k.id, value: m[1], unit: m[2], windowStart: d, windowEnd: d, asOf: d})-[:MEASURES]->(k)`,
       { days: adDays });
 
     // 600 reels on one hook (content_performance considers the newest 500), 10 daily view numbers each.
@@ -81,7 +81,7 @@ describe("tools on a tenant bigger than one result set", () => {
       CREATE (:Entity:Content {id: r.id, name: 'Bulk reel ' + r.id, format:'reel', publishedAt: r.at})-[:USES_RULE]->(h)`, { rows: reels });
     const contentObs = reels.flatMap((r, i) => Array.from({ length: 10 }, (_, k) => ({ c: r.id, at: day("2023-01-01", i + 1 + k), v: 100 + k })));
     await q(`UNWIND $rows AS r MATCH (c:Entity {id: r.c})
-      CREATE (:Entity:Observation {id:'obs:views:' + r.c + ':' + r.at, name:'views', metric:'views', value: r.v, windowEnd: r.at, asOf: r.at})-[:MEASURES]->(c)`,
+      CREATE (:Entity:Observation {id:'obs:views:' + r.c + ':' + r.at, name:'views', metric:'views', metricKey:'views', subject: r.c, value: r.v, windowEnd: r.at, asOf: r.at})-[:MEASURES]->(c)`,
       { rows: contentObs });
 
     // A decision based on 300 documents and affecting 200 others; a task with 120 versions.
@@ -102,7 +102,7 @@ describe("tools on a tenant bigger than one result set", () => {
       CREATE (:Entity:Turn {id:'turn:bulk-' + toString(i), name:'Q' + toString(i), question:'Q' + toString(i), at: i * 1000})-[:TOUCHED]->(t)`);
     await q(`MATCH (h:Entity {id:'system:bulk-hub-0'}) UNWIND [['a', '2026-01-01'], ['b', '2026-02-01'], ['c', '2026-03-01']] AS d
       CREATE (:Entity:Decision {id:'decision:bulk-' + d[0], name:'Decision ' + d[0], decidedAt: d[1]})-[:AFFECTS]->(h)`);
-  }, 180_000);
+  }, 420_000); // 12,000 documents with the Entity.id constraint; ~160 s alone, longer while other suites share the server
   afterAll(async () => cleanup());
 
   it("recall and trace_decision pick the latest by date, not by storage order", async () => {

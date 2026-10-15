@@ -154,7 +154,7 @@ describe("cypher", () => {
     it("refuses write procedures before they reach the server", async () => {
       const r = await call(cypher, { query: "CALL `db.idx.fulltext.drop`('Entity')" }, makeCtx(g));
       expect(r.data).toMatchObject({ refused: true });
-      const hits = await call(cypher, { query: "CALL db.idx.fulltext.queryNodes('Entity', 'instagram') YIELD node RETURN node.id AS id" }, makeCtx(g));
+      const hits = await call(cypher, { query: "CALL db.idx.fulltext.queryNodes('Searchable', 'instagram') YIELD node RETURN node.id AS id" }, makeCtx(g));
       expect(hits.data.rowCount).toBeGreaterThan(0);
     });
 

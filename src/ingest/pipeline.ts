@@ -158,10 +158,10 @@ export function mergeNodes(lists: NodeInput[][]): NodeInput[] {
 async function keepNewestReadings(g: GraphHandle, obs: ObservationInput[], docId: string): Promise<{ keep: ObservationInput[]; older: number }> {
   if (!obs.length) return { keep: obs, older: 0 };
   const rows = await g.roQuery<{ id: string; src: string | null; srcAsOf: string | null }>(
-    "MATCH (o:Observation) WHERE o.id IN $ids OPTIONAL MATCH (d:Document {id: o.src}) RETURN o.id AS id, o.src AS src, d.asOf AS srcAsOf",
+    "MATCH (o:Entity:Observation) WHERE o.id IN $ids OPTIONAL MATCH (d:Entity:Document {id: o.src}) RETURN o.id AS id, o.src AS src, d.asOf AS srcAsOf",
     { ids: obs.map(observationId) });
   const stored = new Map(rows.map((r) => [r.id, r]));
-  const [me] = await g.roQuery<{ asOf: string | null }>("MATCH (d:Document {id:$id}) RETURN d.asOf AS asOf", { id: docId });
+  const [me] = await g.roQuery<{ asOf: string | null }>("MATCH (d:Entity:Document {id:$id}) RETURN d.asOf AS asOf", { id: docId });
   const mine = me?.asOf ?? "";
   const keep = obs.filter((o) => {
     const s = stored.get(observationId(o));
@@ -240,7 +240,7 @@ function similarFn(g: GraphHandle, embed: EmbedFn) {
     const [vec] = await embed([entityText({ name, type })]);
     if (!vec) return null;
     const rows = await g.roQuery<{ id: string; d: number }>(
-      `CALL db.idx.vector.queryNodes('Entity', '${ENTITY_VECTOR_PROP}', 25, vecf32($v)) YIELD node, score
+      `CALL db.idx.vector.queryNodes('Searchable', '${ENTITY_VECTOR_PROP}', 25, vecf32($v)) YIELD node, score
        WITH node, score WHERE node:${type} RETURN node.id AS id, score AS d ORDER BY d ASC, id LIMIT 1`, { v: vec });
     return rows[0] ? { id: rows[0].id, score: 1 - rows[0].d } : null;
   };
@@ -278,7 +278,7 @@ async function embedNodes(g: GraphHandle, embed: EmbedFn, opts: { ids?: string[]
   if (opts.chunks) {
     for (let after = ""; ;) {
       const rows = await g.roQuery<{ id: string; text: string | null; key: string | null; has: boolean }>(
-        `MATCH (c:Chunk) WHERE c.id > $after RETURN c.id AS id, c.text AS text, c.embedKey AS key, c.${CHUNK_VECTOR_PROP} IS NOT NULL AS has ORDER BY c.id LIMIT $lim`,
+        `MATCH (c:Entity:Chunk) WHERE c.id > $after RETURN c.id AS id, c.text AS text, c.embedKey AS key, c.${CHUNK_VECTOR_PROP} IS NOT NULL AS has ORDER BY c.id LIMIT $lim`,
         { after, lim: MAX_PAGE });
       for (const r of rows) {
         if (!r.text) continue;
@@ -306,7 +306,7 @@ async function retireStructure(g: GraphHandle, docIds: string[], asserted: Set<s
   let closed = 0;
   for (let i = 0; i < docIds.length; i += MAX_PAGE) {
     const rows = await g.roQuery<{ from: string; type: "HAS_CHUNK" | "LINKS_TO"; to: string }>(
-      "MATCH (d:Document)-[r:HAS_CHUNK|LINKS_TO]->(x:Entity) WHERE d.id IN $ids AND r.until IS NULL RETURN d.id AS from, type(r) AS type, x.id AS to",
+      "MATCH (d:Entity:Document)-[r:HAS_CHUNK|LINKS_TO]->(x:Entity) WHERE d.id IN $ids AND r.until IS NULL RETURN d.id AS from, type(r) AS type, x.id AS to",
       { ids: docIds.slice(i, i + MAX_PAGE) });
     for (const r of rows) {
       if (!asserted.has(`${r.from}|${r.type}|${r.to}`)) closed += await closeEdge(g, r.from, r.type, r.to, now, "no longer in the document");
@@ -497,7 +497,7 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
       let closed = 0;
       if (retire) {
         const keep = new Set(write.edges.filter((e) => e.type === "MENTIONS" && e.from === d.id).map((e) => e.to));
-        const current = await g.roQuery<{ to: string }>("MATCH (:Document {id:$id})-[r:MENTIONS]->(x:Entity) WHERE r.until IS NULL RETURN x.id AS to", { id: d.id });
+        const current = await g.roQuery<{ to: string }>("MATCH (:Entity:Document {id:$id})-[r:MENTIONS]->(x:Entity) WHERE r.until IS NULL RETURN x.id AS to", { id: d.id });
         for (const r of current) if (!keep.has(r.to)) closed += await closeEdge(g, d.id, "MENTIONS", r.to, nowMs, "no longer in the document");
         report.retired.mentions += closed;
         totals.edgesClosed += closed;

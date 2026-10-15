@@ -61,7 +61,7 @@ export async function ensureRoster(g: GraphHandle, opts: { businessId?: string }
 const rosterReady = new Set<string>();
 async function rosterOnce(g: GraphHandle, now: number): Promise<void> {
   if (rosterReady.has(g.name)) return;
-  const have = await g.roQuery<{ c: number }>("MATCH (a:Agent) WHERE a.id IN $ids RETURN count(a) AS c", { ids: AGENTS.map((a) => agentNodeId(a.id)) });
+  const have = await g.roQuery<{ c: number }>("MATCH (a:Entity:Agent) WHERE a.id IN $ids RETURN count(a) AS c", { ids: AGENTS.map((a) => agentNodeId(a.id)) });
   if ((have[0]?.c ?? 0) < AGENTS.length) await ensureRoster(g, {}, now);
   rosterReady.add(g.name);
 }
@@ -139,10 +139,10 @@ const parseJson = <T>(s: unknown): T | null => {
 };
 
 export async function getSession(g: GraphHandle, id: string): Promise<(SessionInfo & { turns: TurnSummary[] }) | null> {
-  const rows = await g.roQuery<{ p: Record<string, unknown> }>("MATCH (s:Session {id:$id}) RETURN properties(s) AS p", { id });
+  const rows = await g.roQuery<{ p: Record<string, unknown> }>("MATCH (s:Entity:Session {id:$id}) RETURN properties(s) AS p", { id });
   if (!rows[0]) return null;
   const turns = await g.roQuery<{ id: string; q: string; a: string; at: number; status: string | null; checks: string | null; agents: string[] | null }>(
-    "MATCH (t:Turn)-[r:IN_SESSION]->(:Session {id:$id}) WHERE r.until IS NULL RETURN t.id AS id, t.question AS q, t.answer AS a, t.at AS at, t.status AS status, t.checks AS checks, t.agents AS agents ORDER BY t.at, t.id",
+    "MATCH (s:Entity:Session {id:$id}) WITH s MATCH (t:Turn)-[r:IN_SESSION]->(s) WHERE r.until IS NULL RETURN t.id AS id, t.question AS q, t.answer AS a, t.at AS at, t.status AS status, t.checks AS checks, t.agents AS agents ORDER BY t.at, t.id",
     { id });
   return {
     ...toSessionInfo(rows[0].p),
@@ -152,7 +152,7 @@ export async function getSession(g: GraphHandle, id: string): Promise<(SessionIn
 
 export async function listSessions(g: GraphHandle, o: { limit?: number } = {}): Promise<Array<SessionInfo & { lastAt: number; turnCount: number }>> {
   const rows = await g.roQuery<{ p: Record<string, unknown>; n: number; last: number | null }>(
-    `MATCH (s:Session) OPTIONAL MATCH (t:Turn)-[:IN_SESSION]->(s)
+    `MATCH (s:Session) OPTIONAL MATCH (t:Turn)-[it:IN_SESSION]->(s) WHERE it.until IS NULL
      WITH s, count(t) AS n, max(t.at) AS last
      RETURN properties(s) AS p, n, last ORDER BY coalesce(last, s.startedAt) DESC, s.id LIMIT $limit`,
     { limit: Math.max(1, Math.min(200, o.limit ?? 20)) });
@@ -163,7 +163,7 @@ export async function listSessions(g: GraphHandle, o: { limit?: number } = {}): 
 }
 
 export async function getTurnEvents(g: GraphHandle, turnId: string): Promise<AgentEvent[] | null> {
-  const rows = await g.roQuery<{ e: string | null }>("MATCH (t:Turn {id:$id}) RETURN t.events AS e", { id: turnId });
+  const rows = await g.roQuery<{ e: string | null }>("MATCH (t:Entity:Turn {id:$id}) RETURN t.events AS e", { id: turnId });
   return parseJson<AgentEvent[]>(rows[0]?.e);
 }
 
@@ -175,12 +175,12 @@ export interface ShowcaseTurn { id: string; question: string; at: number; showca
 
 export async function setShowcase(g: GraphHandle, turnId: string, on: boolean): Promise<ShowcaseTurn> {
   const rows = await g.roQuery<{ q: string | null; at: number | null; status: string | null; hasEvents: boolean }>(
-    "MATCH (t:Turn {id:$id}) RETURN t.question AS q, t.at AS at, t.status AS status, t.events IS NOT NULL AS hasEvents LIMIT 1", { id: turnId });
+    "MATCH (t:Entity:Turn {id:$id}) RETURN t.question AS q, t.at AS at, t.status AS status, t.events IS NOT NULL AS hasEvents LIMIT 1", { id: turnId });
   const t = rows[0];
   if (!t) throw new Error(`No turn ${turnId} in ${g.name}.`);
   if (on && (t.status ?? "ok") !== "ok") throw new Error(`${turnId} failed, so it can't be a showcase turn.`);
   if (on && !t.hasEvents) throw new Error(`${turnId} has no stored event log to replay.`);
-  await rawWrite(g, "MATCH (t:Turn {id:$id}) SET t.showcase = $on", { id: turnId, on });
+  await rawWrite(g, "MATCH (t:Entity:Turn {id:$id}) SET t.showcase = $on", { id: turnId, on });
   return { id: turnId, question: t.q ?? "", at: t.at ?? 0, showcase: on };
 }
 
@@ -220,7 +220,7 @@ const GUIDES = new Set(["Memory", "Rule", "BrandRule"]);
 export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTurnResult> {
   const now = t.at;
   await rosterOnce(g, now);
-  const session = await g.roQuery<{ c: number }>("MATCH (s:Session {id:$id}) RETURN count(s) AS c", { id: t.sessionId });
+  const session = await g.roQuery<{ c: number }>("MATCH (s:Entity:Session {id:$id}) RETURN count(s) AS c", { id: t.sessionId });
   if (!session[0]?.c) await startSession(g, { channel: "unknown", asker: t.asker, title: t.question, id: t.sessionId }, now);
   const askerOk = await ensurePerson(g, t.asker, now);
 
@@ -269,7 +269,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   }
 
   const s = await writeBatch(g, { nodes, edges }, now);
-  await rawWrite(g, "MATCH (s:Session {id:$id}) SET s.lastAt = CASE WHEN coalesce(s.lastAt, 0) > $at THEN s.lastAt ELSE $at END", { id: t.sessionId, at: t.at });
+  await rawWrite(g, "MATCH (s:Entity:Session {id:$id}) SET s.lastAt = CASE WHEN coalesce(s.lastAt, 0) > $at THEN s.lastAt ELSE $at END", { id: t.sessionId, at: t.at });
   await growKnowsAbout(g, t, cited, now);
   return {
     nodesCreated: s.nodesCreated, edgesCreated: s.edgesCreated,
@@ -320,7 +320,7 @@ export async function recallBrief(g: GraphHandle, o: { question: string; seedIds
   const ref = (id: string, label: string, name: string | null | undefined) => { if (!refs.has(id)) refs.set(id, { id, label, name: name || id }); };
 
   const thread: TurnRow[] = o.sessionId ? (await g.roQuery<TurnRow>(
-    `MATCH (t:Turn)-[r:IN_SESSION]->(:Session {id:$sid}) WHERE r.until IS NULL AND coalesce(t.status, 'ok') = 'ok'
+    `MATCH (s:Entity:Session {id:$sid}) WITH s MATCH (t:Turn)-[r:IN_SESSION]->(s) WHERE r.until IS NULL AND coalesce(t.status, 'ok') = 'ok'
      RETURN t.id AS id, t.question AS q, t.answer AS a, t.at AS at ORDER BY t.at DESC, t.id LIMIT 3`, { sid: o.sessionId })).reverse() : [];
   if (thread.length) {
     sections.push({ title: "This thread so far:", lines: thread.map(turnLine) });
@@ -330,7 +330,7 @@ export async function recallBrief(g: GraphHandle, o: { question: string; seedIds
   if (seeds.length) {
     const inThread = new Set(thread.map((r) => r.id));
     const turns = (await g.roQuery<TurnRow>(
-      `MATCH (t:Turn)-[:TOUCHED|CITED]->(x:Entity) WHERE x.id IN $ids AND coalesce(t.status, 'ok') = 'ok'
+      `MATCH (x:Entity) WHERE x.id IN $ids WITH x MATCH (t:Turn)-[:TOUCHED|CITED]->(x) WHERE coalesce(t.status, 'ok') = 'ok'
        WITH DISTINCT t RETURN t.id AS id, t.question AS q, t.answer AS a, t.at AS at ORDER BY t.at DESC, t.id LIMIT 8`, { ids: seeds }))
       .filter((r) => !inThread.has(r.id)).slice(0, 5);
     if (turns.length) {
@@ -348,9 +348,9 @@ export async function recallBrief(g: GraphHandle, o: { question: string; seedIds
     }
 
     const recs = await g.roQuery<{ id: string; name: string; status: string | null; approvals: string[] }>(
-      `MATCH (rec:Recommendation)-[r:BASED_ON|EVIDENCED_BY|AFFECTS]->(x:Entity) WHERE x.id IN $ids AND r.until IS NULL AND NOT coalesce(rec.status, 'open') IN $closed
+      `MATCH (x:Entity) WHERE x.id IN $ids WITH x MATCH (rec:Recommendation)-[r:BASED_ON|EVIDENCED_BY|AFFECTS]->(x) WHERE r.until IS NULL AND NOT coalesce(rec.status, 'open') IN $closed
        WITH DISTINCT rec
-       OPTIONAL MATCH (rec)-[:PROPOSES]->(ap:Approval) WHERE coalesce(ap.status, 'pending') = 'pending'
+       OPTIONAL MATCH (rec)-[pp:PROPOSES]->(ap:Approval) WHERE pp.until IS NULL AND coalesce(ap.status, 'pending') = 'pending'
        RETURN rec.id AS id, rec.name AS name, rec.status AS status, collect(ap.id) AS approvals LIMIT 8`, { ids: seeds, closed: CLOSED_STATUSES });
     if (recs.length) {
       sections.push({

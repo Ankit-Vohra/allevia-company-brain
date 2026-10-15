@@ -45,12 +45,12 @@ async function runGetEntity(args: { id: string; asOf?: string }, ctx: ToolContex
        RETURN dir, rel, c, items`, { ...p, cap: GROUP_CAP }),
     ro<{ type: string; c: number }>(ctx,
       `MATCH (n:Entity {id:$id})-[r]-(m:Entity) WHERE ${edgeAt("r", asOf)} AND any(l IN labels(m) WHERE l IN $hidden)
-       RETURN [l IN labels(m) WHERE l <> 'Entity'][0] AS type, count(DISTINCT m) AS c`, p),
-    ro<{ c: number }>(ctx, "MATCH (:Entity {id:$id})-[:HAD_VERSION]->(v) RETURN count(v) AS c", p),
+       RETURN [l IN labels(m) WHERE NOT l IN ['Entity', 'Searchable']][0] AS type, count(DISTINCT m) AS c`, p),
+    ro<{ c: number }>(ctx, "MATCH (:Entity {id:$id})-[e:HAD_VERSION]->(v) WHERE ID(e) >= 0 RETURN count(v) AS c", p),
     ro<ObsRow>(ctx,
-      `MATCH (o:Observation)-[r:MEASURES]->(:Entity {id:$id}) WITH o, r, coalesce(o.windowEnd, o.asOf) AS at
+      `MATCH (o:Observation {subject: $id})-[r:MEASURES]->(:Entity {id:$id}) WHERE ID(r) >= 0 WITH o, r, coalesce(o.windowEnd, o.asOf) AS at
        WHERE $asOfDate IS NULL OR at <= $asOfDate
-       WITH toLower(o.metric) AS key, collect({o: ${NODE("o")}, e: ${EDGE("r")}, metric: o.metric, value: o.value, unit: o.unit,
+       WITH o.metricKey AS key, collect({o: ${NODE("o")}, e: ${EDGE("r")}, metric: o.metric, value: o.value, unit: o.unit,
          ws: o.windowStart, we: o.windowEnd, at: at}) AS all
        WITH key, reduce(b = null, x IN all | CASE WHEN b IS NULL OR x.at > b.at OR (x.at = b.at AND x.o.id > b.o.id) THEN x ELSE b END) AS x
        RETURN x.o AS o, x.e AS e, x.metric AS metric, x.value AS value, x.unit AS unit, x.ws AS ws, x.we AS we, x.at AS at
@@ -122,7 +122,8 @@ async function runNeighbors(args: { id: string; rels?: string[]; direction?: "ou
   // On the server: the shortest route to each neighbour, neighbours by hop then name, and the exact total. One row
   // comes back, however many neighbours a hub has.
   const [res] = await ro<{ total: number; items: PathRow[] }>(ctx,
-    `MATCH p = (n:Entity {id:$id})${pat}(m:Entity)
+    `MATCH (n:Entity {id:$id}) WITH n
+     MATCH p = (n)${pat}(m:Entity)
      WHERE m.id <> $id AND ALL(r IN relationships(p) WHERE ${edgeAt("r", asOf)} AND ${rels ? "type(r) IN $rels" : "NOT type(r) IN $mem"})
        AND NONE(x IN nodes(p) WHERE any(l IN labels(x) WHERE l IN $hidden))
      WITH m, collect(p) AS ps
@@ -195,7 +196,7 @@ async function runHistory(args: { id: string }, ctx: ToolContext) {
       `MATCH (:Entity {id:$id})-[r]-(m:Entity) WHERE r.until IS NOT NULL AND type(r) <> 'HAD_VERSION'
        RETURN ${EDGE("r")} AS e, ${NODE("m")} AS m, r.closeReason AS reason ORDER BY r.until DESC, id(r) LIMIT $cap`, { ...p, cap: EVENT_CAP }),
     ro<{ versions: number; closed: number }>(ctx,
-      `MATCH (n:Entity {id:$id}) OPTIONAL MATCH (n)-[:HAD_VERSION]->(v:Version) WITH n, count(v) AS versions
+      `MATCH (n:Entity {id:$id}) OPTIONAL MATCH (n)-[hv:HAD_VERSION]->(v:Version) WHERE ID(hv) >= 0 WITH n, count(v) AS versions
        OPTIONAL MATCH (n)-[r]-(:Entity) WHERE r.until IS NOT NULL AND type(r) <> 'HAD_VERSION' RETURN versions, count(r) AS closed`, p),
   ]);
   const versions = [...newest].reverse();

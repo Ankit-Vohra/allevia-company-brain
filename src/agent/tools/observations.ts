@@ -25,13 +25,16 @@ const METRICS_PER_SUBJECT = 20;
 // cannot push another subject's numbers out of the result. One row per subject comes back. `metrics` filters.
 export async function latestFor(ctx: ToolContext, subjects: string[], metrics?: readonly string[]): Promise<ObsRow[]> {
   if (!subjects.length) return [];
+  // Found through the Observation indexes (subject, and metricKey when asked for some metrics), then joined to the edge:
+  // walking the subject's in-edges to filter them is a read of every reading it has ever had.
   const rows = await ro<{ s: string; xs: Array<Omit<ObsRow, "s">> }>(ctx,
-    `UNWIND $ids AS sid MATCH (s:Entity {id:sid}) WITH sid, s MATCH (o:Observation)-[r:MEASURES]->(s)
-     WITH sid, o, r, coalesce(o.windowEnd, o.asOf) AS at WHERE $metrics IS NULL OR toLower(o.metric) IN $metrics
-     WITH sid, toLower(o.metric) AS key, o, r, at ORDER BY at DESC, o.id DESC
+    `UNWIND $ids AS sid MATCH (o:Observation {subject: sid}) ${metrics ? "WHERE o.metricKey IN $metrics" : ""}
+     WITH sid, o MATCH (o)-[r:MEASURES]->(s:Entity {id:sid}) WHERE ID(r) >= 0
+     WITH sid, o, r, coalesce(o.windowEnd, o.asOf) AS at
+     WITH sid, o.metricKey AS key, o, r, at ORDER BY at DESC, o.id DESC
      WITH sid, key, head(collect(${OBS_ROW})) AS x ORDER BY x.at DESC, key, sid
      RETURN sid AS s, collect(x)[0..$per] AS xs`,
-    { ids: subjects, metrics: metrics?.map((m) => m.toLowerCase()) ?? null, per: METRICS_PER_SUBJECT });
+    { ids: subjects, ...(metrics ? { metrics: metrics.map((m) => m.toLowerCase()) } : {}), per: METRICS_PER_SUBJECT });
   return rows.flatMap((r) => r.xs.map((x) => ({ s: r.s, ...x })));
 }
 
@@ -45,10 +48,11 @@ export interface ObsTotal {
 export async function totalsFor(ctx: ToolContext, subjects: string[], opts: { metrics: readonly string[]; from?: string | null; to?: string | null; keep?: number }): Promise<ObsTotal[]> {
   if (!subjects.length) return [];
   return ro<ObsTotal>(ctx,
-    `UNWIND $ids AS sid MATCH (s:Entity {id:sid}) WITH sid, s MATCH (o:Observation)-[r:MEASURES]->(s)
+    `UNWIND $ids AS sid MATCH (o:Observation {subject: sid}) WHERE o.metricKey IN $metrics
+     WITH sid, o MATCH (o)-[r:MEASURES]->(s:Entity {id:sid}) WHERE ID(r) >= 0
      WITH sid, o, r, coalesce(o.windowEnd, o.asOf) AS at
-     WHERE toLower(o.metric) IN $metrics AND ($from IS NULL OR at >= $from) AND ($to IS NULL OR at <= $to)
-     WITH sid, toLower(o.metric) AS metric, o, r, at ORDER BY at DESC, o.id DESC
+     WHERE ($from IS NULL OR at >= $from) AND ($to IS NULL OR at <= $to)
+     WITH sid, o.metricKey AS metric, o, r, at ORDER BY at DESC, o.id DESC
      WITH sid, metric, count(o) AS n, sum(o.value) AS sum, collect({o: ${NODE("o")}, e: ${EDGE("r")}, v: o.value, unit: o.unit,
        ws: o.windowStart, sim: o.simulated}) AS xs
      RETURN sid AS s, metric, xs[0].unit AS unit, n, sum, xs[0].v AS last, all(x IN xs WHERE x.ws IS NOT NULL) AS windowed,
@@ -108,7 +112,7 @@ export function aggregate(kind: Aggregate, rows: Array<{ value: number }>): numb
 export async function resolveChannel(ctx: ToolContext, channel: string): Promise<NodeRow> {
   const key = channel.trim().toLowerCase();
   const rows = await ro<{ c: NodeRow }>(ctx,
-    `MATCH (c:Channel) WHERE c.id = $raw OR c.id = 'channel:' + $key OR toLower(c.name) = $key OR toLower(c.platform) = $key
+    `MATCH (c:Entity:Channel) WHERE c.id = $raw OR c.id = 'channel:' + $key OR toLower(c.name) = $key OR toLower(c.platform) = $key
      RETURN ${NODE("c")} AS c ORDER BY c.id LIMIT 1`, { raw: channel.trim(), key });
   if (rows[0]) return rows[0].c;
   const all = await ro<{ id: string }>(ctx, "MATCH (c:Channel) RETURN c.id AS id ORDER BY id LIMIT 30");
