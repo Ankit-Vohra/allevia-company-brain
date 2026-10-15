@@ -3,6 +3,7 @@
 // demo still runs offline.
 import type { AgentEvent, AgentId, OnboardEvent } from "@shared/contracts";
 import { ApiError, errorFrom, postSse, postSseForm } from "./lib/sse";
+import { consumeLinkInAddressBar } from "./lib/link";
 
 const STUDIO_LIVE_ONLY = "The Studio needs the live server: the photos, Tara's and Nisha's checks and the edits all run there.";
 
@@ -75,22 +76,34 @@ async function withTimeout<T>(ms: number, fn: (signal: AbortSignal) => Promise<T
   }
 }
 
+/** What the app starts with. `needsLink`: the server asks for an owner link (ALLEVIA_AUTH=1) and none is open in this browser. */
+export interface Startup { mode: ApiMode; tenants: Tenant[]; needsLink?: { failed: boolean } }
+
 /** Decide live vs mock once, at startup: live unless ?mock=1, or the API's health check fails. */
-export async function detectMode(): Promise<{ mode: ApiMode; tenants: Tenant[] }> {
+export async function detectMode(): Promise<Startup> {
   const params = new URLSearchParams(location.search);
-  const useMock = async () => {
+  const useMock = async (): Promise<Startup> => {
     mode = "mock";
     return { mode, tenants: await (await mock()).tenants() };
   };
   if (params.get("mock") === "1") return useMock();
+  // An owner link in the address bar (#key=…) is opened first, so the list below already includes that business.
+  const link = await consumeLinkInAddressBar();
   try {
-    const health = await withTimeout(2500, (signal) => getJson<{ ok: boolean; publicMode?: boolean }>("/api/health", { signal }));
+    const health = await withTimeout(2500, (signal) => getJson<{ ok: boolean; publicMode?: boolean; authRequired?: boolean }>("/api/health", { signal }));
     if (!health.ok) throw new Error("unhealthy");
     publicMode = health.publicMode === true;
     const tenants = await withTimeout(8000, (signal) => getJson<Tenant[]>("/api/tenants", { signal }));
+    // With owner links on, a browser that has opened none sees only the demo businesses; with none at all it is asked for its link.
+    if (health.authRequired && (!Array.isArray(tenants) || tenants.length === 0)) {
+      mode = "live";
+      return { mode, tenants: [], needsLink: { failed: link.seen && !link.opened } };
+    }
     // A live server with no business yet still needs one to show: the demo data stands in until onboarding adds one.
     if (!Array.isArray(tenants) || tenants.length === 0) return useMock();
     mode = "live";
+    // Still no business of its own and a link was tried and failed: say so rather than quietly showing the demo.
+    if (health.authRequired && link.seen && !link.opened) return { mode, tenants, needsLink: { failed: true } };
     return { mode, tenants };
   } catch {
     return useMock();
