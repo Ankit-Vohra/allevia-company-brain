@@ -128,10 +128,15 @@ const adminMetrics: Mapper = (b, { data: d }) => {
     const latest = obj(m.latest);
     const asOf = str(latest.day);
     if (!isDate(asOf)) continue;
-    // A window in the key ("users.engaged_seekers_7d") moves to windowStart/windowEnd.
-    const days = /_(\d{1,3})d$/.exec(key);
-    const name = `coe_${snake(days ? key.slice(0, -days[0].length) : key)}`;
-    const w = { asOf, ...(days ? lastDays(asOf, Number(days[1])) : {}) };
+    // A window in the key ("users.engaged_seekers_7d", "agents.calls_48h") moves to windowStart/windowEnd (whole IST
+    // days). An age threshold ("health.verifications_pending_48h", labelled "pending >48h") is part of what is
+    // counted, so it stays in the name, spelled as one: coe_health_verifications_pending_over_48h.
+    const suffix = /_(\d{1,3})([dh])$/.exec(key);
+    const threshold = suffix?.[2] === "h" && /[>≥]|\bover\b|\bolder\b|more than/i.test(str(m.label) ?? "");
+    const base = `coe_${snake(suffix ? key.slice(0, -suffix[0].length) : key)}`;
+    const name = threshold ? `${base}_over_${suffix![1]}h` : base;
+    const windowDays = suffix && !threshold ? (suffix[2] === "d" ? Number(suffix[1]) : Math.ceil(Number(suffix[1]) / 24)) : 0;
+    const w = { asOf, ...(windowDays ? lastDays(asOf, windowDays) : {}) };
     const unit = (str(m.unit) ?? "").toLowerCase();
     if (unit === "ratio" || unit === "share") {
       const v = numOf(latest.value);

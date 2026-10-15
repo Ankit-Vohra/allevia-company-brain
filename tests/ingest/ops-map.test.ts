@@ -82,8 +82,8 @@ describe("mapSnapshot: shape and invariants", () => {
 
   it("percentages end in _pct and are 0-100 with unit %; windows live in windowStart/windowEnd, not in names", () => {
     for (const o of observations) {
-      // (an age threshold such as review_queue_older_than_30_days is a definition, not a window)
-      expect(o.metric, o.metric).not.toMatch(/_\d+d(_|$)|_last_?\d+|_share$|_ctr$|_rate$/);
+      // (an age threshold such as review_queue_older_than_30_days or _over_48h is a definition, not a window)
+      expect(o.metric, o.metric).not.toMatch(/_\d+d(_|$)|(?<!_over)_\d+h(_|$)|_last_?\d+|_share$|_ctr$|_rate$/);
       if (o.metric.endsWith("_pct")) {
         expect(o.unit, o.metric).toBe("%");
         expect(o.value, o.metric).toBeGreaterThanOrEqual(0);
@@ -359,6 +359,18 @@ describe("mapSnapshot: the business and app health", () => {
       value: Math.round(metric("health.screening_failure_rate").latest.value * 1000) / 10, unit: "%",
     });
     expect(obs(BIZ, "coe_health_refresh_ok")).toBeUndefined(); // no reading in the window
+  });
+
+  it("an hours suffix is an age threshold when the label says so, else a window; never left as a bare _48h", () => {
+    const m = (key: string, label: string) => ({ key, label, category: "health", unit: "count", tabs: ["overview"], latest: { day: "2026-10-14", value: 3 } });
+    const dir = snap({ "admin_metrics.json": env("admin_metrics", { metrics: [
+      m("health.verifications_pending_48h", "Verifications pending >48h"),
+      m("agents.calls_48h", "Calls in the last 48 hours"),
+    ] }) });
+    const out = mapSnapshot(dir, ctx).write.observations;
+    expect(out.map((o) => o.metric).sort()).toEqual(["coe_agents_calls", "coe_health_verifications_pending_over_48h"]);
+    expect(out.find((o) => o.metric === "coe_health_verifications_pending_over_48h")).not.toHaveProperty("windowStart");
+    expect(out.find((o) => o.metric === "coe_agents_calls")).toMatchObject({ windowStart: "2026-10-13", windowEnd: "2026-10-14" });
   });
 });
 

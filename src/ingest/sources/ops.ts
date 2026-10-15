@@ -395,7 +395,7 @@ export function snapshotDir(cfg: AlleviaConfig, date: string): string {
 }
 
 /**
- * One live, read-only snapshot over SSH (used by `npm run cli -- ingest aamdani --sources ops`). `via` overrides the
+ * One live, read-only snapshot over SSH (scripts/ops-snapshot.ts; not yet wired into the ingest CLI). `via` overrides the
  * config's ssh alias (opsSsh.via, default aamdani-box). Aborting `signal` closes the connection (which ends the remote
  * server) and the snapshot stops before its next call.
  */

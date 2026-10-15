@@ -234,6 +234,39 @@ describe("snapshot()", () => {
     for (const t of ["account_reach", "facebook_reels", "youtube_stats", "connectors_status"]) expect(calls, t).not.toContain(t);
   });
 
+  it("stops when reels_performance answers ok with the Graph error only in its warnings", async () => {
+    const dir = tempDir();
+    const { caller, calls } = fakeCaller([...READ_TOOLS], (name) =>
+      name === "reels_performance" ? { ...ok(name, { reels: [] }), warnings: ["insights: Graph error (#4) Application request limit reached"] } : ok(name));
+    const manifest = await snapshot(caller, dir, { now });
+    expect(manifest.calls.reels_performance!.status).toBe("ok");
+    for (const t of ["account_reach", "facebook_reels", "youtube_stats", "connectors_status"]) {
+      expect(calls, t).not.toContain(t);
+      expect(manifest.skipped[t], t).toMatch(/rate limit hit by reels_performance/);
+    }
+  });
+
+  it("stops at account_reach's ok-with-warnings answer, after reels_performance went through", async () => {
+    const dir = tempDir();
+    const { caller, calls } = fakeCaller([...READ_TOOLS], (name) =>
+      name === "account_reach" ? { ...ok(name, { account: {} }), warnings: ["last7d: (#17) User request limit reached"] } : ok(name));
+    const manifest = await snapshot(caller, dir, { now });
+    expect(calls).toContain("reels_performance");
+    expect(manifest.calls.account_reach!.status).toBe("ok");
+    for (const t of ["facebook_reels", "youtube_stats", "connectors_status"]) {
+      expect(calls, t).not.toContain(t);
+      expect(manifest.skipped[t], t).toMatch(/rate limit hit by account_reach/);
+    }
+  });
+
+  it("a warning that is not a rate limit does not stop the Instagram group", async () => {
+    const dir = tempDir();
+    const { caller, calls } = fakeCaller([...READ_TOOLS], (name) =>
+      name === "reels_performance" ? { ...ok(name), warnings: ["follower history unavailable: table missing"] } : ok(name));
+    await snapshot(caller, dir, { now });
+    for (const t of ["account_reach", "facebook_reels", "youtube_stats", "connectors_status"]) expect(calls, t).toContain(t);
+  });
+
   it("records a thrown call (a timeout) as an error and carries on", async () => {
     const dir = tempDir();
     const caller: OpsCaller = {
