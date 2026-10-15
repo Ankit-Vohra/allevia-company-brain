@@ -11,18 +11,27 @@ working demo video. Coding assistants are allowed, and the team must be able to 
 
 ## 1. What to submit
 
+Status as of 15 October 2026: **done** (ready in the repo), **open** (still to do), **blocked** (waiting on something
+named). Nothing is submitted yet.
+
 | Item | Where it comes from | Status |
 |---|---|---|
-| Project name and one-line pitch | README first lines: "A done-for-you AI growth team for small businesses, with a company brain in FalkorDB behind every answer." | [ ] |
-| Tracks | All three: 01 Act on connected data, 02 Agent memory and coordination, 03 Company brain (README "Tracks") | [ ] |
-| Public repository URL | Section 2 below. **Not** the existing private repo. | [ ] |
-| Live demo URL | Section 3 below (public read-only mode) | [ ] |
-| Demo video URL | Section 4 below (YouTube, unlisted or public) | [ ] |
-| Description | README "The problem", "What it does", "How FalkorDB is central" | [ ] |
-| How FalkorDB is used | README "How FalkorDB is central" table | [ ] |
-| Team members | Every member registered in the team panel (prizes go to every member) | [ ] |
-| Blog post (side prize) | `docs/blog-post.md`, published on a public platform (dev.to, Hashnode or Medium), link submitted | [ ] |
-| Screenshots | `docs/screenshots/` (README uses a selection) | [ ] |
+| Project name and one-line pitch | README first lines: "A done-for-you AI growth team for small businesses, with a company brain in FalkorDB behind every answer." | done |
+| Tracks | All three, verbatim in the form: "Agents That Act on Connected Data", "Agent Memory and Coordination", "Company Brain" (README "Tracks", with what fits each and its limits) | done in README; open in the form |
+| README with setup steps | README "Run it" (Docker demo, live mode, development setup) | done |
+| Graph data model | README "The graph data model" (Mermaid diagram and the three patterns) | done |
+| Cypher queries and graph algorithms the product depends on | [`docs/falkordb-queries.md`](falkordb-queries.md), each with file:line, held to the code by `tests/graph/queries-doc.test.ts` | done |
+| The graph doing real work, visible | Brain page, "What breaks if something stops": depth 1 vs depth 4 with paths, owner, PageRank, communities; "not in your records" vs "not mapped" | done |
+| AI-tool disclosure | README "AI tools used" (Claude Code with subagents, Claude on the subscription at runtime, Higgsfield, local embeddings; what the founder decided) | done |
+| Data rules (public, synthetic or own data only) | Public copy ships only the synthetic demo company; real-business eval reports and trial notes are left out by `scripts/export-public.sh`. Screenshots of the real businesses need the founder's yes (§2 step 7) | open (screenshots decision) |
+| Public repository URL | Section 2 below. **Not** the existing private repo. | open |
+| Live demo URL | Section 3 below (public read-only mode) | blocked: deployment comes later; until then the README's full local setup stands in |
+| Demo video URL | Section 4 below (YouTube, unlisted or public) | blocked: not recorded yet; the founder holds it until the product is ready |
+| Description | README "The problem", "What it does", "How FalkorDB is central" | done |
+| How FalkorDB is used | README "How FalkorDB is central" table and the queries doc | done |
+| Team members | Every member registered in the team panel (prizes go to every member) | open |
+| Blog post (side prize) | `docs/blog-post.md`, published on a public platform (dev.to, Hashnode or Medium), link submitted | open |
+| Screenshots | `docs/screenshots/` (README uses a selection) | done; see the data-rules row |
 
 ## 2. Make the repository public (fresh history only)
 
@@ -31,24 +40,33 @@ and early commits contain values that were later removed from the code by the hy
 "no real infra/company identifiers in code or docs"). Commit metadata also carries a local machine name. GitHub keeps
 old commits reachable by SHA after a force-push, so rewriting that repo is not enough either.
 
-Publish a **new repository from one squashed commit** instead.
+Publish a **new repository from one squashed commit** instead. `scripts/export-public.sh` does steps 3 to 6 in one go:
+it exports the tracked tree of a commit into a new temporary directory, leaves out `data/`, models, env files, the
+eval reports about the real businesses (`docs/evals/2026-*`, `evals/aamdani.yaml`, `evals/avs.yaml`) and the notes
+written from private copies of their graphs, adds an MIT `LICENSE`, runs a secrets scan and the hygiene test on exactly
+that copy, commits it once and prints what it left out. It never pushes and never touches this repository's history
+(`tests/export-public.test.ts`). `--drop-screenshots` also leaves out `docs/screenshots/`.
 
-1. **Rotate the Discord bot token first.** It has lived in the local env file during development and the bot has run
+```sh
+scripts/export-public.sh --ref dev                 # prints the directory, e.g. /tmp/allevia-public.XXXXXX
+```
+
+1. [ ] (open) **Rotate the Discord bot token first.** It has lived in the local env file during development and the bot has run
    on the demo server. Reset it in the Discord developer portal, put the new one in `~/.config/allevia/allevia.env`,
    and restart the bot. Do the same for any other token in that file that was ever pasted into a chat, log or
    terminal recording (the AVS Instagram token).
-2. **Decide the private repo's fate.** Rename it (for example `allevia-dev-history`) and keep it private, so the
+2. [ ] (open) **Decide the private repo's fate.** Rename it (for example `allevia-dev-history`) and keep it private, so the
    public repo can take the name `allevia`. Then point `ALLEVIA_ACTION_REPO` at a **private** repo: the `github_issue`
    executor writes business findings into issues, and issues in a public repo are public.
-3. **Check `.env.example` has no values.** Every line must be `NAME=` followed only by spaces and a comment:
+3. [x] (done by the export script) **Check `.env.example` has no values.** Every line must be `NAME=` followed only by spaces and a comment:
    ```sh
    grep -nE '^[A-Z_]+=[^[:space:]#]' .env.example   # must print nothing
    ```
    The comments document defaults; review them once more for anything that should not be public (a username, an SSH
    alias, a path).
-4. **Choose a licence** for Allevia's own code and add `LICENSE` (the repo has none yet; without one, the code is
-   all rights reserved). Vendored data keeps its own licences in `vendor/playbooks/` and `.claude/skills/brag-slim/`.
-5. **Export the tree without history and commit it once:**
+4. [x] (done by the export script: MIT, unless the tree already has a `LICENSE`) **Choose a licence** for Allevia's own
+   code. Vendored data keeps its own licences in `vendor/playbooks/` and `.claude/skills/brag-slim/`.
+5. [x] (done by the export script; the manual steps, for reference) **Export the tree without history and commit it once:**
    ```sh
    SHA=$(git -C ~/jarvis rev-parse dev)              # the commit being published
    mkdir ~/allevia-public && git -C ~/jarvis archive "$SHA" | tar -x -C ~/allevia-public
@@ -61,24 +79,29 @@ Publish a **new repository from one squashed commit** instead.
    ```
    `git archive` exports tracked files only, so `data/`, `models/`, `node_modules/` and the env file cannot come
    along.
-6. **Re-run the hygiene test on exactly what will be published** (it scans `git ls-files`, so the staged tree is what
+6. [x] (done by the export script) **Re-run the hygiene test on exactly what will be published** (it scans `git ls-files`, so the staged tree is what
    it checks, and it also compares against the real vault when it is on this machine):
    ```sh
    npx vitest run tests/hygiene.test.ts
    ```
    Then a manual pass: `git grep -n -i -E 'ankit@|\.local\b|aws|ssh '` and read every hit.
-7. **Check the graph-facing docs for data you do not want public.** The eval reports (`docs/evals/`) quote the first
+7. [ ] (open, the founder's call) **Check the graph-facing docs for data you do not want public.** The export leaves
+   out the eval reports and trial notes; the screenshots stay unless `--drop-screenshots`. The eval reports (`docs/evals/`) quote the first
    300 characters of real Aamdani answers, and screenshots show real Aamdani goal numbers. The founder approved real
    numbers for the demo; confirm that includes the repo.
-8. **Commit and publish:**
+8. [ ] (open; the export script commits, publishing is manual) **Commit and publish:**
    ```sh
    git commit -m "Allevia: Graph Hacks submission"
    gh repo create Ankit-Vohra/allevia --public --source . --push --description "A done-for-you AI growth team for small businesses, with a company brain in FalkorDB"
    ```
-9. Open the public repo in a logged-out browser: README renders (mermaid diagram, screenshots), no `data/` or
+9. [ ] (open) Open the public repo in a logged-out browser: README renders (mermaid diagram, screenshots), no `data/` or
    `models/` folder, one commit.
 
 ## 3. Deployment (public read-only mode)
+
+**Status: later.** The founder's direction is product and hackathon focus now; deployment follows. Until it exists, the
+submission relies on the rule's other path: complete local setup instructions (README "Run it") and a working demo
+video (§4, also not recorded yet). The public deployment must serve only the synthetic demo company.
 
 The public deployment runs `ALLEVIA_PUBLIC_MODE=1`: the office, brain explorer, insights, approvals history and the
 90-day card read live from the graph; every write returns 403; Ask replays the recorded showcase turns. **No live
@@ -141,12 +164,16 @@ Before sharing the URL:
 
 ## 4. Demo video
 
-Script: [`docs/demo-script.md`](demo-script.md) (nine scenes, 3 minutes).
+**Status: blocked.** Not recorded yet; the founder holds it until the product is ready.
 
-- [ ] Recorded locally in **live** mode on the real Aamdani and AVS Atelier graphs; replays only as a fallback.
+Script: [`docs/demo-script.md`](demo-script.md): the five live scenarios (onboard from a URL; an unscripted question on
+Discord with its path; a poster with the owner's logo, blocked on the creative tools; a bad photo turned into good
+content; the team noticing something and drafting it). Live first; a recorded replay only as a labelled fallback.
+
+- [ ] Recorded as a **live** run of the five scenarios; any replay is labelled on screen.
 - [ ] Under 3:00, 1080p, readable at phone size; captions on.
-- [ ] Shows each judging point: the graph shaping the answer (the lit path), memory that compounds (learned rule,
-      first-pass curve), onboarding a second business from a URL, acting after one tap, FalkorDB under the hood.
+- [ ] Shows each judging point: the graph shaping the answer (the lit path, depth 1 vs depth 4), memory that compounds
+      (learned rule), onboarding a business from a URL, acting after one tap, FalkorDB under the hood.
 - [ ] Any sped-up part is labelled; simulated ad data is called simulated wherever it appears.
 - [ ] Frame-by-frame check: no token, email, phone, IP, private document title, terminal history or env file.
 - [ ] Music, if any, is licensed for the use (or none).

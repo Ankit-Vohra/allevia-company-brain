@@ -1,128 +1,78 @@
-# Demo video script (3 minutes)
+# Demo script: live first
 
-Nine scenes, about 450 words of narration at a calm pace. Recorded locally in live mode on the real Aamdani and AVS
-Atelier graphs, 1440×900, light theme. Times are targets; the narration for each scene fits its time when read
-aloud. Anything sped up in the edit gets an on-screen "2× speed" tag, so nothing on screen pretends to be faster than
-it is (a multi-desk answer takes 30–60 s).
+The demo is run **live**: real requests, real agents on the Claude subscription, real graph queries, nothing pre-played.
+Five scenarios, each started by hand in front of the viewer and judged by what happens. A recorded replay is only a
+fallback when something outside the product fails (the network, the subscription's limits), and it is **labelled on
+screen as a replay** every time it is used.
 
-## Before recording
+Status (15 October 2026): the demo video is **not recorded yet**; the founder holds it until the product is ready.
+Scenario 3 (a poster with the owner's logo) depends on the creative tools another builder is finishing; until they land
+it is skipped, not faked.
 
-- [ ] FalkorDB up, `npm run cli -- db:check` lists `aamdani` and `avs_atelier`; `npm run cli -- privacy-scan aamdani`
-      and `privacy-scan avs_atelier` both report 0.
+## Before going live
+
+- [ ] FalkorDB up; `npm run cli -- db:check` lists the businesses; `npm run cli -- privacy-scan <tenant>` reports 0 for
+      each business that will be on screen.
 - [ ] Web app built (`cd web && npm run build`), server in **live** mode: `npm run cli -- serve` (not `--public`).
-      Claude Code is logged in with the claude.ai account; nothing else is using the subscription during the take.
+      Claude Code is logged in with the claude.ai account; nothing else is using the subscription during the demo.
+- [ ] Discord bot running for the business on screen (`npm run cli -- discord`); a fresh thread channel is open.
 - [ ] Executors stay dry runs (`ALLEVIA_ACTIONS_LIVE` unset): approving a card records it, nothing is posted.
-- [ ] Rehearsal threads exist for the "why" question (showcase `turn:2026-10-15-41ee662e`), so a failed live take
-      can fall back to **Replay last request**, which replays the stored work log at real pace.
-- [ ] An AVS Atelier content draft is pending with a word the owner would change. In rehearsal: "villa", which the
-      owner edits to "home". Check with `npm run cli -- approvals avs_atelier`.
-- [ ] Studio: the demo sample (a degraded copy of the studio's own website photo of Retreat, made by
-      `scripts/studio-demo.ts rough`) and the recorded generated variant are in the data dir. Set
-      `ALLEVIA_STUDIO_CACHE_ONLY=1` so Tara's and Nisha's recorded answers replay and no model is called.
-- [ ] For scene 5, onboard AVS Atelier into a **fresh slug** (for example `avs_atelier_demo`) so the real tenant is
-      untouched, or play back the earlier onboarding recording.
-- [ ] Browser zoom 100%, notifications off, bookmarks bar hidden. FalkorDB Browser open in a second tab on
-      `http://127.0.0.1:3090`.
-- [ ] Nothing on screen shows a token, an email address, a phone number or a server address (terminal history
-      cleared, env file closed).
+- [ ] Onboarding goes into a **fresh slug** (for example `avs_atelier_demo`), never over a real business.
+- [ ] Fallbacks ready, each with its on-screen label: the office's **Replay the last request** (shows "Replay" in the
+      work log), an earlier onboarding recording, the last Studio run.
+- [ ] Nothing on screen shows a token, an email address, a phone number or a server address (terminal history cleared,
+      env file closed). Simulated ad numbers are called simulated wherever they show.
 
-## Scenes
+## The five live scenarios
 
-### 1. The problem (0:00–0:15)
+### 1. Onboard a company from its URL
 
-**On screen:** the marketing site hero (`site/`, home), then a slow push-in on the line "One setup. A whole team.
-Better every week."
+**Do:** Add a business, type its name and website (a public site), start. **Watch:** the stages stream (reading pages,
+brand kit, search checks, understanding services and audiences, goals, what the team can see) while the graph grows.
+**Point at:** the Brain page afterwards: the business's own graph, built from one URL, and nothing posted anywhere.
+**Graph at work:** the new business is its own graph (`allevia_<slug>`); nothing from another business is visible.
+**Fallback (labelled "Recording"):** the earlier onboarding of the same site.
 
-**Narration:** "Most small business owners have tried AI. Very few have AI doing a job in their business. In the US,
-three in four engaged owners use it; one in seven has it running their operations. The missing piece isn't the
-model. It's someone setting it up and keeping it running."
+### 2. An unscripted question on Discord, answered with its path
 
-### 2. The office (0:15–0:30)
+**Do:** let the viewer type their own question in the business's Discord thread (for example "what breaks if the
+Instagram connector goes down?" or "why did we pause daily stories?"). **Watch:** the live work log in the thread:
+Meera plans, a desk works, tool calls stream. **Point at:** the answer's citations as labels, the checks as badges, and
+the link to the web path view, where the path behind the answer is lit node by node.
+**Graph at work:** on the Brain page, **What breaks if something stops** for the same system: depth 1 (what a table
+lookup sees) against depth 4, with the path to each far item and who looks after it. Then type a name the business
+does not have ("Payroll gateway"): the answer is "I don't have that in your records", not an empty list.
+**Fallback (labelled "Replay"):** Replay the last request in the office.
 
-**On screen:** Aamdani's office. Pan across the eight rooms; hover Meera, then click Isha to open her profile drawer
-(role, tools, what she knows, recent findings). Close it.
+### 3. A poster with the owner's logo
 
-**Narration:** "This is Allevia: twelve AI staff in eight departments, set up for one business. Meera runs the office.
-Isha checks every number. Each of them is a node in this company's own graph in FalkorDB, so what they know and what
-they've done is something you can look at."
+**Do:** ask the team for a poster for this week's offer. **Watch:** the brand kit from onboarding (logo, colours) is
+used, the draft comes back as an approval card. **Point at:** the asset's lineage in the graph (`DERIVED_FROM`, who
+produced it). **Status:** blocked until the creative tools land on `dev`; skip it rather than show a mock.
 
-### 3. Ask "why", and the path lights up (0:30–1:05)
+### 4. A bad photo turned into good content
 
-**On screen:** type "Why did we pause daily stories and image posts?" in the office's ask box. Meera's bubble:
-"Recalling what we know". The plan appears; Sara (Library) starts typing at her desk; tool chips stream in the work log
-(`trace_decision`, `search`). Cut to Ask: the answer streams with citation chips, the checks row turns green, and
-the path behind the answer lights up gold in the graph: founder → decision → the evidence it was based on. Click
-one citation chip to open the source document. Optional two-second flash: the same question asked in Hindi,
-answered in Hindi.
+**Do:** drop a dark, tilted phone photo into Studio with a one-line note. **Watch:** Tara marks what is wrong on the
+original; two versions come back (a local fix and a generated edit); Nisha compares each with the original and marks
+any added or removed detail; Dev writes the caption. **Point at:** "Enhance, never invent": the version that changed the
+real place is held back. **Graph at work:** each version is an `Asset` `DERIVED_FROM` the original, with the step that
+made it. **Fallback (labelled "Last run"):** the last Studio run.
 
-**Narration:** "Ask why something happened. Meera plans who should answer, Sara traces the decision, and every
-claim cites a node in the graph. The server checks that each citation was actually read in this turn and that every
-number came from a tool result. If anything doesn't check out, the answer says 'unverified'. And this is the path
-through the graph that proves it: who decided, based on what, and when."
+### 5. The team notices something and drafts it
 
-### 4. It learns you: "villa" becomes "home" (1:05–1:30)
+**Do:** run the detectors (`npm run cli -- insights <tenant>`, or `POST /api/<tenant>/insights/run`). **Watch:** findings appear
+with their numbers and evidence ids from the graph, and one becomes an approval card with a draft. **Point at:** edit a
+word in the draft and approve: the edit becomes a learned rule linked to that approval, and the next draft uses it.
+**Graph at work:** `Recommendation -[:PROPOSES]-> Approval`, `Rule -[:LEARNED_FROM]-> Approval`, evidence one hop away.
+**Fallback:** none needed (the detectors are deterministic, no model call).
 
-**On screen:** Approvals for AVS Atelier. Open the pending content draft, change "villa" to "home", approve. The card
-shows "Approved with your edits" and the chip "Learned: say 'home', not 'villa' · applied to future drafts". Cut to
-the office: a new book appears on Sara's shelf; click it to show the rule's `LEARNED_FROM` path to this approval.
-Back on the 90-days card: first-pass approvals and "Rules learned 1".
+## Under the hood (30 seconds, optional)
 
-**Narration:** "When the owner edits a draft, the edit becomes a rule, linked to the approval it came from. The next
-draft uses it without being told. We track one number for this: the share of drafts approved without an edit. It
-should climb every week, and the owner can see exactly why."
+FalkorDB Browser (`http://127.0.0.1:3090`): the graph list (one graph per business), then a decision with its
+`BASED_ON` evidence expanded. The queries behind each scenario are in [`falkordb-queries.md`](falkordb-queries.md).
 
-### 5. Onboarding from a URL (1:30–1:55)
+## Recording the video (later, when the founder says go)
 
-**On screen:** "Add a business", type "AVS Atelier" and `avsatelier.in`, start. The stages stream (reading pages,
-brand kit, SEO checks, understanding, goals, baseline, capabilities) while the graph grows on the right. End on
-"What we did for you" with the counts. *2× speed tag during the crawl.*
-
-**Narration:** "Any business starts from its website. Allevia reads it politely, picks out the brand, runs search
-checks, maps services, audiences and what they need, and sets three goals with a Day-0 baseline. Nothing is posted or
-changed anywhere. AVS Atelier, an architecture studio, got its whole team from this one URL."
-
-### 6. Studio: enhance, never invent (1:55–2:20)
-
-**On screen:** AVS Studio. Drop the dark, tilted phone photo of Retreat with the note "the pool and the arched guest
-rooms". Tara's boxes appear on the original (tilt, exposure, clutter). Variant A (straightened, relit locally) and
-variant B (generated edit) side by side. Nisha's badge on B: **changed**, listing what she found added, including an
-air-conditioner unit that isn't in the photo. Variant A: **unchanged**. Dev's caption under A. Approve A.
-
-**Narration:** "Owners send phone photos. Tara plans the post, the studio makes two versions, and Nisha, our fact
-checker, compares each one with the original. Here the AI version looks better, but Nisha caught it adding things
-to a real building, including an air conditioner that isn't there. So we recommend the honest version. Enhance,
-never invent."
-
-### 7. The 90-day scorecard (2:20–2:35)
-
-**On screen:** Aamdani's office, the "Your 90 days" card: Day N of 90, checkpoints at 30, 60 and 90, goals against
-their Day-0 baselines with the owning agent beside each, the first-pass curve, rules learned, and "What your team can
-see" (each source's access mode).
-
-**Narration:** "Every business runs a 90-day program. Goals are locked against real Day-0 numbers. Nothing is
-backfilled. Each goal has an owner on the team, and every data source says honestly how it's connected."
-
-### 8. Pricing and the black box (2:35–2:45)
-
-**On screen:** `site/pricing`, toggle USD → GBP → AED → AUD. Rest on Allevia 90 and Growth.
-
-**Narration:** "Allevia 90 is a done-for-you start at fourteen ninety, then a monthly plan. One setup, a team in India
-that keeps it running, and an owner who should need about ninety seconds a day."
-
-### 9. FalkorDB under the hood (2:45–3:00)
-
-**On screen:** FalkorDB Browser: the graph list (`allevia_meta`, `allevia_aamdani`, `allevia_avs_atelier`), then
-`allevia_aamdani` with a decision and its `BASED_ON` evidence expanded. Overlay three lines, one at a time: "One graph
-per business", "Facts with valid time and sources", "Paths, PageRank, communities as agent tools". End card: Allevia
-logo, repo URL, "Built on FalkorDB".
-
-**Narration:** "Under the hood, every business is its own graph in FalkorDB. Facts carry when they were true and
-where they came from, and the agents' tools are graph queries and graph algorithms. That's why every answer can show
-its path. Allevia: a growth team with receipts."
-
-## After recording
-
-- [ ] Watch it once with the sound off: every claim on screen should be readable without the narration.
-- [ ] Freeze-frame check for identifiers: no email, phone, token, address or private document title in any frame.
-- [ ] Export 1080p, under 3:00, captions burned in or as an `.srt`.
-- [ ] Upload unlisted first, then add the link to the submission and the README.
+Record a live run of the five scenarios, not a script read over replays. Under 3:00, 1080p, captions on. Anything sped
+up gets a "2× speed" tag; any fallback keeps its "Replay" or "Recording" label. Frame-by-frame check for tokens, email
+addresses, phone numbers, server addresses and private document titles before uploading (unlisted first).
