@@ -23,7 +23,7 @@ import { CachedVision, ClaudeVision } from "../../src/studio/vision.js";
 import { HiggsfieldTextEngine } from "./hf-text-engine.js";
 
 const { values: a } = parseArgs({ options: {
-  tenant: { type: "string" }, site: { type: "string" }, out: { type: "string" }, cap: { type: "string" }, ask: { type: "string", multiple: true }, data: { type: "string" }, model: { type: "string" }, quality: { type: "string" },
+  tenant: { type: "string" }, site: { type: "string" }, out: { type: "string" }, cap: { type: "string" }, ask: { type: "string", multiple: true }, data: { type: "string" }, "same-session": { type: "boolean" }, model: { type: "string" }, quality: { type: "string" },
 } });
 if (!a.tenant || !a.site || !a.out || !a.ask?.length) throw new Error("usage: --tenant slug --site url --out dir --ask sentence [--ask ...] [--cap 10]");
 const tenant = a.tenant;
@@ -63,13 +63,15 @@ const deps = await createAskDeps({ tenant }, {
   creative: { store, vision, engine, maxCreditsPerRequest: 6, research: new ClaudeResearch(), fonts: { fetchMissing: true } },
 });
 const report: Array<Record<string, unknown>> = [];
+let session: string | undefined;
 for (const [i, question] of a.ask.entries()) {
   const t0 = Date.now();
   const events: AgentEvent[] = [];
-  const res = await ask({ tenant, question, channel: "web" }, deps, (e) => {
+  const res = await ask({ tenant, question, channel: "web", ...(a["same-session"] && session ? { sessionId: session } : {}) }, deps, (e) => {
     events.push(e);
     if (e.type === "agent_status" || e.type === "tool_call") console.log(`${((Date.now() - t0) / 1000).toFixed(1)}s ${e.type === "tool_call" ? `tool ${e.name} ${JSON.stringify(e.args).slice(0, 300)}` : `${e.agent}: ${e.text}`}`);
   });
+  session = res.sessionId;
   const secs = (Date.now() - t0) / 1000;
   const made = events.filter((e): e is Extract<AgentEvent, { type: "deliverable" }> => e.type === "deliverable");
   const files: string[] = [];

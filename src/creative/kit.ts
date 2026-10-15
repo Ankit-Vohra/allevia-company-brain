@@ -3,6 +3,7 @@
 // when allowed, else the house fallback with a note), the real logo file, and the facts the business holds (name, city,
 // website, handles) that a poster's words may be grounded in. Everything here is per business: one graph, one tenant dir.
 import { readFileSync } from "node:fs";
+import sharp from "sharp";
 import { join } from "node:path";
 import { activeLogo, listBrandAssets, readAssetFile, type BrandAssetRow } from "../brand/library.js";
 import { googleFont, defaultBrandFetch, type BrandFetch } from "../brand/website.js";
@@ -15,6 +16,21 @@ import type { BrandForCompose, FontPair } from "./compose/compose.js";
 
 const VENDOR_FONTS = new URL("../../vendor/fonts/", import.meta.url);
 const fallback = (n: string): LoadedFont | null => { try { return loadFont(readFileSync(join(VENDOR_FONTS.pathname, n))); } catch { return null; } };
+
+// The palette of a logo file: its darkest ink, its most colourful colour, on a neutral warm paper.
+export async function logoPalette(png: Buffer): Promise<Palette | null> {
+  const { data, info } = await sharp(png).ensureAlpha().resize(96, 96, { fit: "inside" }).raw().toBuffer({ resolveWithObject: true });
+  const px: Array<{ r: number; g: number; b: number }> = [];
+  for (let i = 0; i < data.length; i += info.channels) if (data[i + 3]! > 200) px.push({ r: data[i]!, g: data[i + 1]!, b: data[i + 2]! });
+  if (px.length < 20) return null;
+  const lum = (c: { r: number; g: number; b: number }) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  const chroma = (c: { r: number; g: number; b: number }) => Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b);
+  const dark = [...px].sort((a, b) => lum(a) - lum(b))[Math.floor(px.length * 0.05)]!;
+  const vivid = [...px].sort((a, b) => chroma(b) - chroma(a))[Math.floor(px.length * 0.03)]!;
+  const hex = (c: { r: number; g: number; b: number }) => `#${[c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+  if (chroma(vivid) < 40) return paletteFrom({ paper: "#f7f4ee", ink: hex(dark) });
+  return paletteFrom({ paper: "#f7f4ee", ink: hex(dark), accent: hex(vivid) });
+}
 
 export interface ComposeKit {
   brand: BrandForCompose;
@@ -76,7 +92,7 @@ export async function loadComposeKit(g: GraphHandle, businessId: string, deps: K
   const ctx = await loadStudioContext(g, businessId);
   const assets = await listBrandAssets(g);
   const extra = [...new Set(assets.flatMap((a) => (a.kind === "palette" || a.kind === "guide" ? a.colours : [])).filter((c) => HEX6.test(c)))];
-  const palette: Palette = paletteFrom({ ...(ctx.brand.paper !== undefined && ctx.brand.ids.length ? { paper: ctx.brand.paper } : {}), ...(ctx.brand.ink ? { ink: ctx.brand.ink } : {}), ...(ctx.brand.accent ? { accent: ctx.brand.accent } : {}), ...(ctx.brand.neutral ? { neutral: ctx.brand.neutral } : {}), extra });
+  let palette: Palette = paletteFrom({ ...(ctx.brand.paper !== undefined && ctx.brand.ids.length ? { paper: ctx.brand.paper } : {}), ...(ctx.brand.ink ? { ink: ctx.brand.ink } : {}), ...(ctx.brand.accent ? { accent: ctx.brand.accent } : {}), ...(ctx.brand.neutral ? { neutral: ctx.brand.neutral } : {}), extra });
   const notes: string[] = [];
   const fontIds: string[] = [];
   const roles = await fontRoles(g);
@@ -89,6 +105,14 @@ export async function loadComposeKit(g: GraphHandle, businessId: string, deps: K
   if (!logoRow) notes.push("I don't have a logo file for you yet, so the poster shows your name in your brand font. Send your logo in your team's channel and I'll use it on every poster.");
   else if (logoRow.needsBetter) notes.push(`Your logo file is ${logoRow.w ? `small or soft (${logoRow.w} px wide)` : "small or soft"}: it may look a little soft on a poster. A bigger file, an SVG or a PDF logo would fix that.`);
   if (!logoBytes) logoBytes = null;
+  // no brand colours on record but a logo file: the poster takes its colours from the logo (said so), never another brand's
+  if (palette.source === "default" && logoBytes) {
+    const fromLogo = await logoPalette(logoBytes).catch(() => null);
+    if (fromLogo) {
+      palette = fromLogo;
+      notes.push("I have no exact brand colours on record, so the poster uses the colours of your logo. Tell me your colour codes to use them instead.");
+    }
+  } else if (palette.source === "default") notes.push("I have no brand colours on record, so the poster uses neutral warm colours. Tell me your colour codes to use them instead.");
 
   const brand: BrandForCompose = {
     businessName: ctx.business.name, palette, heading, body,

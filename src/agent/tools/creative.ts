@@ -41,7 +41,7 @@ const SAY = "Tell the owner, in plain words: what you made and how many options,
 const BRIEF = z.object({
   goal: z.string().max(40).optional().describe("sell | offer | announce | awareness"),
   promoting: z.string().max(120).optional().describe("What it sells: a product or feature id from the graph (product:...) or its name"),
-  audience: z.string().max(120).optional().describe("Who it is for"),
+  audience: z.string().max(120).optional().describe("Who will SEE it and should act: customers or users (an audience from the record), not the team who asked for it"),
   message: z.string().max(140).optional().describe("The one thing it says, the owner's words exactly (the headline)"),
   cta: z.string().max(80).optional().describe("What the viewer should do, exactly (a website or handle only if the owner gave it or the record holds it)"),
   placement: z.string().max(40).optional().describe("insta_post | insta_story | reel | flyer"),

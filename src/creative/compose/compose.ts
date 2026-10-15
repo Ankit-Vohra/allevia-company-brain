@@ -276,7 +276,7 @@ async function placeLogo(c: Ctx, base: Buffer, spot: LogoSpot): Promise<{ overla
     // its own background is its plate (rounded to sit softly) unless that would disappear into the backdrop: then a contrasting one
     plate = contrast(cornerColor, back) >= 2 ? cornerColor
       : [p.paper, p.light, p.dark, "#ffffff", "#000000"].reduce((best, cand) => (Math.min(contrast(cand, cornerColor), contrast(cand, back)) > Math.min(contrast(best, cornerColor), contrast(best, back)) ? cand : best));
-  } else if (contrast(logoRgb, back) < 3) plate = [p.paper, p.light, p.dark, "#ffffff", "#000000"].reduce((best, cand) => (contrast(logoRgb, cand) > contrast(logoRgb, best) ? cand : best));
+  } else if (contrast(logoRgb, back) < 3 || Math.max(region.channels[0]!.stdev, region.channels[1]!.stdev, region.channels[2]!.stdev) > 38) plate = [p.paper, p.light, p.dark, "#ffffff", "#000000"].reduce((best, cand) => (contrast(logoRgb, cand) > contrast(logoRgb, best) ? cand : best));
   const overlays: OverlayOptions[] = [];
   let box: Rect = { x: lx, y: ly, w: lw, h: lh };
   if (plate) {
