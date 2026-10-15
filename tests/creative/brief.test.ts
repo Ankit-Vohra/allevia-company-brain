@@ -119,13 +119,15 @@ describe("the brief", () => {
     expect(first.buttons!.map((b) => b.label)).toEqual(["Interior Design", "Site visit"]);
     expect((qs[1]!.first as Exclude<Outgoing, string>).content).toMatch(/Reply here in your own words/);
     const updates: Outgoing[] = [];
-    const press: ButtonPort = { customId: first.buttons![1]!.customId, guildId: "g", userId: "u", isOwner: true, async reply() {}, async update(x) { updates.push(x); } };
+    const press: ButtonPort = { customId: first.buttons![1]!.customId, guildId: "g", threadParentId: "c", thread: () => thread, userId: "u", isOwner: true, async reply() {}, async update(x) { updates.push(x); } };
     await bot.onButton(press);
     expect(asked).toEqual(["I want a poster for Insta with my logo", "Site visit"]);
-    expect(typeof updates[0] === "string" ? updates[0] : updates[0]!.content).toMatch(/You chose: Site visit/);
-    // a stranger cannot answer for the owner
+    expect(typeof updates[0] === "string" ? updates[0] : updates[0]!.content).toMatch(/Your answer: \*\*Site visit\*\*/);
+    // a tap from another server, or outside the thread, is not an answer
     const replies: string[] = [];
-    await bot.onButton({ ...press, customId: first.buttons![0]!.customId, isOwner: false, async reply(t) { replies.push(t); } });
-    expect(replies[0]).toMatch(/Only the owner/);
+    await bot.onButton({ ...press, guildId: "other", async reply(t) { replies.push(t); } });
+    await bot.onButton({ ...press, thread: () => null, async reply(t) { replies.push(t); } });
+    expect(replies).toHaveLength(2);
+    expect(asked).toHaveLength(2);
   }, 60_000);
 });

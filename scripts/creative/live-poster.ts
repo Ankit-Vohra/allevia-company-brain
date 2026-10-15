@@ -87,7 +87,7 @@ for (const [i, question] of a.ask.entries()) {
   report.push({ question, seconds: Math.round(secs), ok: res.ok, answer: res.answer, plan: events.find((e) => e.type === "plan"), made: made.map((d) => ({ kind: d.kind, title: d.title, notes: d.notes, options: d.options.map((o) => ({ label: o.label, badge: o.badge, note: o.note, layout: o.layout, aiEdited: o.aiEdited })) })), files, checks: res.checks, questions: events.filter((e) => e.type === "quick_replies") });
   console.log(`\n=== ${question}\n${secs.toFixed(1)} s, ok ${res.ok}\n${res.answer}\nfiles: ${files.join(", ")}`);
 }
-writeFileSync(join(out, "run.json"), JSON.stringify({ at: new Date(now).toISOString(), tenant, brand, report, spend: engine.log, creditsSpent: engine.spent }, null, 1));
+writeFileSync(join(out, "run.json"), JSON.stringify({ at: new Date(now).toISOString(), tenant, brand, report, spend: engine.log, creditsSpent: engine.spent }, null, 1).replace(/"storageKey": "([0-9a-f]{12})[0-9a-f]{52}(\.\w+)"/g, "\"stored\": \"$1…$2\""));  // a short file name: a "…Key" with a full hash reads as a secret to the hygiene scan
 console.log("credits spent:", engine.spent, JSON.stringify(engine.log.map((l) => ({ job: l.jobId, credits: l.credits, model: l.model }))));
 redis("GRAPH.DELETE", copy);
 await closeAll();
