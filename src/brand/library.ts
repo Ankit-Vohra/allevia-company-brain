@@ -3,7 +3,7 @@
 import type { GraphHandle } from "../graph/client.js";
 import type { AssetStore } from "../studio/store.js";
 
-export type BrandKind = "logo" | "palette" | "font" | "font-sample" | "product-photo" | "past-design" | "guide" | "colour" | "other";
+export type BrandKind = "logo" | "palette" | "font" | "font-sample" | "product-photo" | "app-screen" | "past-design" | "guide" | "colour" | "other";
 
 export interface BrandAssetRow {
   id: string;

@@ -12,6 +12,7 @@ import type { DeliverableOption, ToolResult } from "../../../shared/contracts.js
 import { goalOccasion, placementFormat, resolveBrief, type BriefInput, type NeedsBrief } from "../../creative/brief.js";
 import { makeImages, type Aspect } from "../../creative/image.js";
 import { makePoster, PosterRefused } from "../../creative/poster.js";
+import { LAYOUT_KEYS } from "../../creative/design/layouts.js";
 import { makeReel } from "../../creative/reel.js";
 import type { SavedDeliverable } from "../../creative/deliverable.js";
 import { businessId } from "../../graph/tenants.js";
@@ -63,6 +64,7 @@ function needsBrief(n: NeedsBrief) {
 async function runPoster(a: {
   brief: BriefInput; eyebrow?: string; subline?: string; details?: string[]; scene?: string[] | string;
   artwork?: string; photo_asset_id?: string; options?: number; caption?: string; square?: boolean;
+  layouts?: string[]; pictures?: string[]; quote?: { text: string; by?: string; illustrative?: boolean };
 }, ctx: ToolContext): Promise<ToolResult> {
   refuseIfReadOnly(ctx, "make_poster");
   refuseIfStopped(ctx, "make_poster");
@@ -78,11 +80,12 @@ async function runPoster(a: {
     const r = await makePoster(ctx.graph, {
       tenant: ctx.tenant, businessId: businessId(ctx.tenant), agentId: ctx.agentId, turnId: ctx.turnId, now: ctx.now, question: ctx.question ?? "",
       content: {
-        headline: brief.message, eyebrow: a.eyebrow ?? brief.promoting.name, ...(a.subline ? { subline: a.subline } : {}), ...(brief.offer ? { offer: brief.offer } : {}),
+        headline: brief.message, ...(a.eyebrow ? { eyebrow: a.eyebrow } : {}), ...(a.subline ? { subline: a.subline } : {}), ...(brief.offer ? { offer: brief.offer } : {}),
         cta: brief.cta, ...(a.details?.length ? { details: a.details } : {}),
       },
       format, occasion: goalOccasion(brief.goal), count: a.options ?? 2, ...(scenes.length ? { scenes } : {}), artwork, ...(a.caption ? { caption: a.caption } : {}),
-      promoted: brief.promoting, audience: brief.audience,
+      promoted: brief.promoting, audience: brief.audience, goal: brief.goal,
+      ...(a.layouts?.length ? { layouts: a.layouts } : {}), ...(a.pictures?.length ? { pictures: a.pictures } : {}), ...(a.quote ? { quote: a.quote } : {}),
     }, d);
     const ids = [...r.saved.options.map((o) => o.assetId), r.saved.approvalId, ...(brief.promoting.id ? [brief.promoting.id] : [])];
     const col = await nodesFor(ctx, ids);
@@ -102,11 +105,11 @@ async function runPoster(a: {
 export const makePosterTool = defineTool({
   name: "make_poster",
   description:
-    "Make a poster or ad that sells something, live: AI artwork of the thing promoted, the real logo and exact words by code, offer badge, call-to-action strip. Needs a brief; if part is missing it returns questions to ask. 2 checked options; waits for the owner's OK. Example: {\"brief\":{\"goal\":\"sell\",\"promoting\":\"product:interior-design\",\"message\":\"Homes that feel like you\",\"cta\":\"Book a visit\"}}",
+    "Make a poster or ad that sells ONE thing, agency-grade: real photos and app screens first, a layout picked by the brief, real logo and exact words by code, reviewed. message <= 7 words, one subline, one cta, no phrase twice. Missing brief: asks. Waits for OK. Example: {\"brief\":{\"goal\":\"sell\",\"promoting\":\"product:interior-design\",\"message\":\"Homes that feel like you\",\"cta\":\"Book a visit\"}}",
   input: {
     brief: BRIEF,
-    eyebrow: z.string().max(60).optional().describe("A small line above the headline (default: the thing promoted)"),
-    subline: z.string().max(200).optional(),
+    eyebrow: z.string().max(60).optional().describe("A small line above the headline, only when it adds a fact the headline lacks"),
+    subline: z.string().max(200).optional().describe("ONE supporting line: the proof or the how, not a repeat of the headline"),
     details: z.array(z.string().max(100)).max(3).optional().describe("Date, time or place, exactly as given"),
     scene: z.union([z.string().max(300), z.array(z.string().max(300)).max(3)]).optional().describe("What the artwork shows (default: the thing promoted). No words in it"),
     artwork: z.enum(["generate", "none", "photo"]).optional().describe("generate (default), none (brand-colour ground), photo (the owner's photo, with photo_asset_id)"),
@@ -114,6 +117,9 @@ export const makePosterTool = defineTool({
     options: z.number().int().min(1).max(3).optional().describe("How many options (default 2: each costs image credits)"),
     square: z.boolean().optional().describe("A square post instead of portrait"),
     caption: z.string().max(1500).optional(),
+    layouts: z.array(z.enum(LAYOUT_KEYS as [string, ...string[]])).max(3).optional().describe("Layouts to prefer, best first (default: chosen from the brief). device-hero, scene-device, feature-callout need an app screen; gallery-trio needs 3 own photos; offer-card an offer; quote-card a quote"),
+    pictures: z.array(z.string()).max(6).optional().describe("The business's own pictures to use (BrandAsset or approved Asset ids), in order; default: the best matches from the brand library"),
+    quote: z.object({ text: z.string().max(220), by: z.string().max(80).optional(), illustrative: z.boolean().optional() }).optional().describe("A customer's words the owner gave (illustrative: true when it is an example, and it is marked so)"),
   },
   writes: true,
   external: true,

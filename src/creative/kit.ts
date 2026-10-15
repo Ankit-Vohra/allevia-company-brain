@@ -59,7 +59,7 @@ export async function businessFacts(g: GraphHandle, ctx: StudioContext): Promise
 
 const fontRoles = async (g: GraphHandle): Promise<{ heading?: string; body?: string }> => {
   const rows = await g.roQuery<{ value: string | null; role: string | null }>(
-    "MATCH (a:BrandAsset) WHERE a.kind = 'font' AND a.value IS NOT NULL RETURN a.value AS value, a.role AS role ORDER BY a.id LIMIT 20").catch(() => []);
+    "MATCH (a:BrandAsset) WHERE a.kind = 'font' AND coalesce(a.value, a.family) IS NOT NULL AND coalesce(a.status, 'active') <> 'superseded' RETURN coalesce(a.value, a.family) AS value, a.role AS role ORDER BY a.id LIMIT 20").catch(() => []);
   const first = (role: string) => rows.find((r) => r.role === role)?.value ?? undefined;
   const any = rows.map((r) => r.value).find((v): v is string => !!v);
   const heading = first("heading") ?? any, body = first("body") ?? any;
@@ -71,7 +71,7 @@ async function pairFor(g: GraphHandle, deps: KitDeps, family: string | undefined
     const read = (r: BrandAssetRow | undefined): LoadedFont | null => { const b = r ? readAssetFile(deps.store, deps.tenant, r) : null; return b ? loadFont(b) : null; };
     const mine = rows.filter((r) => (r.family ?? "").toLowerCase() === (family ?? "").toLowerCase());
     const regular = mine.find((r) => r.weight === 400) ?? mine.find((r) => r.origin === "upload") ?? mine.find((r) => !r.weight) ?? mine[0];
-    const bold = mine.find((r) => r.weight === 700) ?? regular;
+    const bold = mine.find((r) => r.weight === 700) ?? mine.find((r) => (r.weight ?? 0) >= 600) ?? regular;
     ids.push(...[regular, bold].filter((r): r is BrandAssetRow => !!r).map((r) => r.id));
     return { regular: read(regular), bold: read(bold) };
   };

@@ -57,7 +57,7 @@ export async function screenPicture(bytes: Buffer, o: { id?: string; label?: str
 
 export interface MaterialRow {
   id: string; kind: string; name: string | null; summary: string | null; storageKey: string | null;
-  crop: string | null; focus: string | null; containsPerson: boolean | null; status: string | null;
+  crop: string | null; focus: string | null; containsPerson: boolean | null; status: string | null; note?: string | null;
 }
 
 export interface Material { photos: Picture[]; screens: Picture[]; used: string[]; notes: string[] }
@@ -69,7 +69,7 @@ const json = <T,>(s: string | null): T | undefined => { try { return s ? (JSON.p
 // a stranger's face on an ad needs their consent, which the library does not record.
 export function rankMaterial(rows: MaterialRow[], about: string): MaterialRow[] {
   const want = new Set(words(about));
-  const score = (r: MaterialRow) => words(`${r.name ?? ""} ${r.summary ?? ""}`).filter((w) => want.has(w)).length - (r.containsPerson ? 5 : 0) + (r.status === "approved" ? 1 : 0);
+  const score = (r: MaterialRow) => words(`${r.name ?? ""} ${r.summary ?? ""} ${r.note ?? ""}`).filter((w) => want.has(w)).length - (r.containsPerson ? 5 : 0) + (r.status === "approved" ? 1 : 0);
   return [...rows].sort((a, b) => score(b) - score(a) || a.id.localeCompare(b.id));
 }
 
@@ -77,7 +77,7 @@ export function rankMaterial(rows: MaterialRow[], about: string): MaterialRow[] 
 export async function findMaterial(g: Pick<GraphHandle, "roQuery">, store: AssetStore, tenant: string, o: { about: string; maxPhotos?: number; maxScreens?: number; include?: string[] }): Promise<Material> {
   const rows = await g.roQuery<MaterialRow>(
     `MATCH (a:BrandAsset) WHERE a.kind IN ['product-photo', 'past-design', 'app-screen'] AND a.storageKey IS NOT NULL AND coalesce(a.status, 'active') <> 'superseded'
-     RETURN a.id AS id, a.kind AS kind, a.name AS name, a.summary AS summary, a.storageKey AS storageKey, a.crop AS crop, a.focus AS focus, a.containsPerson AS containsPerson, a.status AS status
+     RETURN a.id AS id, a.kind AS kind, a.name AS name, a.summary AS summary, a.storageKey AS storageKey, a.crop AS crop, a.focus AS focus, a.containsPerson AS containsPerson, a.status AS status, a.note AS note
      ORDER BY a.id LIMIT 60`).catch(() => [] as MaterialRow[]);
   const approved = await g.roQuery<MaterialRow>(
     `MATCH (a:Asset) WHERE a.status = 'approved' AND a.kind IN ['original', 'variant', 'image'] AND a.storageKey IS NOT NULL
@@ -93,7 +93,9 @@ export async function findMaterial(g: Pick<GraphHandle, "roQuery">, store: Asset
   for (const r of photoRows.slice(0, o.maxPhotos ?? 4)) {
     const bytes = r.storageKey ? store.get(tenant, r.storageKey) : null;
     if (!bytes) continue;
-    out.photos.push(await photoPicture(bytes, { id: r.id, ...(r.name ? { label: cleanLabel(r.name) } : {}) }));
+    // the caption under a photo is the owner's own words for it (a project's name), never the librarian's description
+    const label = r.note && r.note.trim().length <= 40 ? r.note.trim() : undefined;
+    out.photos.push(await photoPicture(bytes, { id: r.id, ...(label ? { label } : {}) }));
     out.used.push(r.id);
   }
   for (const r of screenRows.slice(0, o.maxScreens ?? 2)) {

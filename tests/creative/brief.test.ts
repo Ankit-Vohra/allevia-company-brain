@@ -87,7 +87,7 @@ describe("the brief", () => {
     const texts = (JSON.parse(m!.m) as { texts: Array<{ role: string; shown: string }> }).texts;
     expect(texts.find((t) => t.role === "cta")?.shown).toBe("Book a visit");
     expect(texts.find((t) => t.role === "headline")?.shown).toBe("See what your home could be");
-    expect(texts.find((t) => t.role === "eyebrow")?.shown).toBe("Site visit"); // sentence case: no tracked all-caps eyebrow (docs/design-research.md)
+    expect(texts.find((t) => t.role === "eyebrow")).toBeUndefined(); // no default label over the headline: one idea, nothing competing (docs/design-research.md)
   }, 60_000);
 
   it("the questions become a quick_replies event, at most three, options clipped", () => {
