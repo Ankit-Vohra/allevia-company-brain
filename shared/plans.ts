@@ -13,8 +13,8 @@ export const isCurrency = (s: string): s is Currency => (CURRENCIES as readonly 
 
 export type PlanId = "essentials" | "growth" | "pro" | "pause";
 
-// What a plan gates (§4.1: "we gate volume, sources, locations, seats and human time"; every plan has all 10 agents
-// and 8 departments).
+// What a plan gates (§4.1: "we gate volume, sources, locations, seats and human time"; every plan has every agent in
+// every department of shared/roster.ts).
 export interface PlanAllowances {
   studioCreditsPerMonth: number;
   answersPerMonth: number;                       // fair use

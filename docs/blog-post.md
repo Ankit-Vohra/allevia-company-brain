@@ -46,13 +46,13 @@ application code.
 
 ## The agent company
 
-The product is not a chatbot. It is ten agents in eight departments, drawn as a pixel-art office, because owners
+The product is not a chatbot. It is twelve agents in eight departments, drawn as a pixel-art office, because owners
 understand "a team" much faster than they understand "an AI tool".
 
 Meera, the Chief of Staff, takes every request. Before planning, the server recalls from the graph what is already
 known: earlier threads that touched the same entities, the owner's notes, open approvals. Meera then returns a
 structured plan of one to three desks: Kabir (Analytics), Rohan (Marketing), Tara, Dev and Nisha (Content Studio:
-write, edit, fact-check), Arjun (Tech), Vikram (Operations), Sara (Library), and Isha (Center of Excellence), who
+write, edit, fact-check), Arjun, Zoya and Imran (Tech: lead, on-call, release), Vikram (Operations), Sara (Library), and Isha (Center of Excellence), who
 checks every figure before it reaches the owner.
 
 Each desk runs as its own Claude Agent SDK query with only its own tools, and ends by writing a **Finding** into the

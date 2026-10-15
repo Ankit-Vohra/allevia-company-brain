@@ -484,7 +484,7 @@ marketing, content and so on". He pointed to pixel-agents-hq/pixel-agents and ha
 the visual reference.
 
 ### 16.1 Departments and agents (`shared/roster.ts`)
-There are 8 departments and 10 agents. Each agent has a name, a title, tools, a model tier and a pixel sprite palette.
+There are 8 departments and 12 agents. Each agent has a name, a title, tools, a model tier and a pixel sprite palette.
 
 | Department | Agents |
 |---|---|
@@ -493,7 +493,7 @@ There are 8 departments and 10 agents. Each agent has a name, a title, tools, a 
 | Analytics | Kabir, Data Analyst |
 | Marketing | Rohan, Growth Marketer |
 | Content Studio | Tara, Content Strategist → Dev, Brand & Copy Editor → Nisha, Fact Checker (Aamdani's reel-expert pattern) |
-| Tech | Arjun, Tech Lead |
+| Tech | Arjun, Tech Lead → Imran, QA & Release Manager (reviews Arjun on releases and app health); Zoya, On-call Engineer (Sentry, crashes, uptime) |
 | Operations | Vikram, Ops Manager |
 | Library | Sara, Librarian |
 

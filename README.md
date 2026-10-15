@@ -2,7 +2,7 @@
 
 **A done-for-you AI growth team for small businesses, with a company brain in FalkorDB behind every answer.**
 
-Ten AI staff in eight departments share one knowledge graph per business. They answer "why" with the path through
+Twelve AI staff in eight departments share one knowledge graph per business. They answer "why" with the path through
 the graph that proves it, remember what the owner taught them, and turn findings into one-tap approvals. Built in
 India for owner-run businesses in the US, UK, UAE and Australia.
 
@@ -36,9 +36,11 @@ running), give the owner a team instead of a tool, and make every answer carry i
 
 ## What it does
 
-- **A ten-person company in a pixel office.** Meera (Chief of Staff) plans each request and sends it to the right
+- **A twelve-person company in a pixel office.** Meera (Chief of Staff) plans each request and sends it to the right
   desks: Isha (Center of Excellence, checks every number), Kabir (Analytics), Rohan (Marketing), Tara, Dev and Nisha
-  (Content Studio: strategist, copy editor, fact checker), Arjun (Tech), Vikram (Operations) and Sara (Library). Every
+  (Content Studio: strategist, copy editor, fact checker), Arjun, Zoya and Imran (Tech: tech lead, on-call engineer for
+  Sentry errors and crashes, QA and release manager for builds and the app stores), Vikram (Operations) and Sara
+  (Library). Every
   agent is an `Agent` node in the graph, every step streams to the office and the work log, and every handoff is
   visible. The roster is [`shared/roster.ts`](shared/roster.ts).
 - **Every answer comes with its graph path.** The answer cites node ids; the server checks each citation was returned
@@ -99,7 +101,7 @@ and held out of `src/` by a static test.
 | Track | Where it shows |
 |---|---|
 | **01 Agents that act on connected data** | 21 graph tools (paths, PageRank, communities, impact with betweenness, decisions, ownership, metrics, SEO, ads, playbooks, read-only Cypher); recommendations backed by graph evidence, approval cards, executors that record an `Action`; MCP server. |
-| **02 Agent memory and coordination** | Episodic (Session, Turn, Approval, Action), semantic (the company graph and the owner's Memory notes) and procedural (vendored playbook Rules plus learned Rules) memory; ten agents coordinating through Findings in a shared graph; one graph per tenant. |
+| **02 Agent memory and coordination** | Episodic (Session, Turn, Approval, Action), semantic (the company graph and the owner's Memory notes) and procedural (vendored playbook Rules plus learned Rules) memory; twelve agents coordinating through Findings in a shared graph; one graph per tenant. |
 | **03 Company brain** | A real company's vault, decisions, pending list, GitHub issues and Allevia's own threads in one graph; `OWNS` and `KNOWS_ABOUT` for who owns and who knows; `trace_decision` from a decision to its evidence and deciders; bi-temporal facts and a librarian that closes contradicted ones; answers with checked citations. |
 
 ## Architecture

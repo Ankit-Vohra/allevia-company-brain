@@ -56,6 +56,8 @@ const ALIASES: Record<string, string[]> = {
   "copy-editor": ["copy editor", "brand editor", "editor"],
   "fact-checker": ["fact checker"],
   "tech-lead": ["tech lead"],
+  "oncall-engineer": ["on-call engineer", "on call engineer", "oncall engineer", "on-call", "on call"],
+  "qa-release": ["release manager", "qa manager", "qa", "release desk"],
   "ops-manager": ["ops manager", "operations manager"],
   "librarian": ["librarian"],
 };
@@ -303,7 +305,7 @@ export function directiveSystemPrompt(channels: Array<{ id: string; name: string
 - brand_rule.add: a rule for everything the brand says or shows. text, ruleKind (voice or visual).`,
     `Rules:
 - chief-of-staff can never be switched off.
-- Posts and content go to content-strategist (copy-editor checks them); ads, budgets and campaigns to growth-marketer; the website and anything technical to tech-lead; numbers to data-analyst; follow-ups to ops-manager.
+- Posts and content go to content-strategist (copy-editor checks them); ads, budgets and campaigns to growth-marketer; the website and anything technical to tech-lead; app errors, crashes, Sentry and incidents to oncall-engineer; releases, builds and the app stores to qa-release; numbers to data-analyst; follow-ups to ops-manager.
 - Make a patch only for what the owner clearly asked. Anything unclear goes in "unclear", quoted.
 - Never invent desks; keep every text short and in the owner's words.`,
   ].join("\n\n");

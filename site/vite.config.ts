@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from "vite";
 import { fileURLToPath } from "node:url";
-import { BLOCKS } from "./src/render/blocks.ts";
+import { BLOCKS, PAGE_TOKENS } from "./src/render/blocks.ts";
 import { CONTACT_URL } from "./src/content.ts";
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
@@ -28,7 +28,8 @@ function smartQuotes(html: string): string {
     .join("");
 }
 
-// Swaps `<!-- @render name -->` in the pages for HTML built from shared/plans.ts and shared/roster.ts.
+// Swaps `<!-- @render name -->` in the pages for HTML built from shared/plans.ts and shared/roster.ts, and the
+// team-size tokens (__STAFF_WORD__ and the rest, see PAGE_TOKENS) for the roster's counts.
 function renderBlocks(): Plugin {
   return {
     name: "allevia-render-blocks",
@@ -40,7 +41,8 @@ function renderBlocks(): Plugin {
           return block();
         })
         .replaceAll("__CONTACT_URL__", CONTACT_URL);
-      return smartQuotes(out);
+      const sized = Object.entries(PAGE_TOKENS).reduce((h, [token, value]) => h.replaceAll(token, value), out);
+      return smartQuotes(sized);
     },
   };
 }

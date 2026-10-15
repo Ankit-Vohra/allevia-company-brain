@@ -101,7 +101,7 @@ export function refuseIfStopped(ctx: ToolContext, tool: string): void {
 //   sort silently does nothing. Order by a RETURNed alias (`v.until AS until … ORDER BY until`).
 
 // FalkorDB refuses a query outright ("Max pending queries exceeded") when its queue is full (MAX_QUEUED_QUERIES):
-// ten agents reading in parallel can get there. Such a read waits and tries again, BUSY_RETRIES times, about 1.5 s
+// a dozen agents reading in parallel can get there. Such a read waits and tries again, BUSY_RETRIES times, about 1.5 s
 // in all; any other error is thrown at once.
 const BUSY = /max pending queries/i;
 const BUSY_RETRIES = 4;

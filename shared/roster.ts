@@ -94,6 +94,23 @@ export const AGENTS: AgentDef[] = [
     tools: ["impact_of", "get_entity", "neighbors", "seo_report", "search", "cypher", "propose_action"],
     sprite: { skin: "#C68B59", hair: "#1C1C1C", shirt: "#2D6A4F", accent: "#B7E4C7" },
   },
+  // The founder, 2026-10-15: "we need a bigger tech team, one to observe issues from sentry and all who would be tech
+  // on call person". Zoya watches errors, crashes and uptime; Imran owns releases and the app stores.
+  {
+    id: "oncall-engineer", name: "Zoya", title: "On-call Engineer", department: "tech", model: "sonnet",
+    persona: "Watches errors, crashes and uptime around the clock; triages each new issue, ties it to what changed, and pages the right desk.",
+    handles: ["app errors", "crashes", "Sentry issues", "is the app or site down", "incidents"],
+    tools: ["metric_trend", "impact_of", "get_entity", "neighbors", "history", "search", "cypher", "propose_action"],
+    sprite: { skin: "#8D5524", hair: "#120E0B", shirt: "#1B4332", accent: "#F28482" },
+  },
+  {
+    id: "qa-release", name: "Imran", title: "QA & Release Manager", department: "tech", model: "haiku",
+    persona: "Owns every app release: build status, Play and App Store review, store ratings, and crash-free rates before and after each release.",
+    handles: ["releases", "app store review", "play store", "ratings", "did the last release break anything"],
+    tools: ["metric_trend", "history", "get_entity", "search", "cypher", "propose_action"],
+    reviews: ["tech-lead"],
+    sprite: { skin: "#E0AC69", hair: "#2B2B2B", shirt: "#40916C", accent: "#FFE8A3" },
+  },
   {
     id: "ops-manager", name: "Vikram", title: "Ops Manager", department: "ops", model: "haiku",
     persona: "Tracks what's pending, who owns it, and what is waiting on the owner.",
@@ -112,3 +129,12 @@ export const AGENTS: AgentDef[] = [
 
 export const agentById = (id: string): AgentDef | undefined => AGENTS.find((a) => a.id === id);
 export const departmentById = (id: string): DepartmentDef | undefined => DEPARTMENTS.find((d) => d.id === id);
+
+// The roster's size, for copy that says how big the team is ("twelve staff in eight departments"). Derived, so the
+// copy can't drift when a desk is added.
+export const STAFF_COUNT = AGENTS.length;
+export const DEPARTMENT_COUNT = DEPARTMENTS.length;
+const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+  "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"];
+/** A count as a word ("twelve"), or digits past twenty. */
+export const numberWord = (n: number): string => NUMBER_WORDS[n] ?? String(n);

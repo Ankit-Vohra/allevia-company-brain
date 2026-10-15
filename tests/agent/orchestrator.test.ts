@@ -133,7 +133,27 @@ describe("reviewersFor (relevance rules)", () => {
     expect(reviewersFor("content-strategist", "3 hooks [[content:reel-1]]", { checked: true }).map((a) => a.id)).toEqual(["copy-editor", "fact-checker"]);
   });
   it("desks nobody reviews get no reviewers", () => {
+    expect(ids("oncall-engineer", "Sentry shows 14 new issues since 2026-10-14 [[metric:sentry-new-issues]].")).toEqual([]);
+    expect(ids("librarian", "We paused stories on 2026-10-10 [[decision:pause-stories]].")).toEqual([]);
+  });
+  it("the QA & Release Manager reviews the Tech Lead only on releases or app health", () => {
+    // Site, SEO and dependency findings are not his: no reviewer.
     expect(ids("tech-lead", "The sitemap returns 404.")).toEqual([]);
+    expect(ids("tech-lead", "The reel publisher [[system:reel-publisher]] depends on the connector [[system:ig-connector]].")).toEqual([]);
+    expect(ids("tech-lead", "Technical SEO: 12 pages have no canonical tag [[page:jobs]].")).toEqual([]);
+    // Releases, store review, crashes and ANRs are.
+    for (const t of [
+      "Version 4.2.0 went out on 2026-10-12 and the checkout screen broke [[release:4-2-0]].",
+      "The iOS build is stuck in App Store review [[system:app-store]].",
+      "Crash-free sessions fell after the last release [[metric:crash-free]].",
+      "The ANR rate on Play is close to the bad-behaviour threshold [[metric:play-anr-rate]].",
+      "The Android app crashes on launch for Samsung devices [[system:android-app]].",
+      "Roll back the hotfix: Sentry errors doubled [[metric:sentry-events]].",
+    ]) expect(ids("tech-lead", t), t).toEqual(["qa-release"]);
+  });
+  it("the QA & Release Manager reviews no one but the Tech Lead", () => {
+    const release = "Version 4.2.0 crashed on launch [[release:4-2-0]].";
+    for (const a of AGENTS.filter((x) => x.id !== "tech-lead")) expect(ids(a.id, release)).not.toContain("qa-release");
   });
   it("never more than MAX_REVIEWERS (2) per finding", () => {
     expect(MAX_REVIEWERS).toBe(2);

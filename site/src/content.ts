@@ -1,6 +1,7 @@
 // Copy and reference data the site needs that is not billing data. Every line traces to the product design spec
 // (docs/superpowers/specs/2026-10-15-allevia-product-design.md); the section is noted beside each block. Prices, credits,
-// allowances and guarantee numbers are NOT here: they come from shared/plans.ts.
+// allowances and guarantee numbers are NOT here: they come from shared/plans.ts. The team's size comes from the roster.
+import { AGENTS } from "../../shared/roster.ts";
 
 /** Where every "Get a Brain Snapshot" button goes. The founder sets the real destination before launch. */
 export const CONTACT_URL = "https://allevia-ai.in/#contact";
@@ -10,7 +11,7 @@ export const WHO_DOES_WHAT: { when: string; you: string; software: string; team:
   {
     when: "Setup, day 0",
     you: "A 15-minute setup: your website, Instagram handle, Google listing and country. You confirm about 15 brand cards and pick 1–3 goals. An optional 30-minute call, in your time zone, connects the rest.",
-    software: "Reads your site and public profiles and builds your company brain. Drafts your brand kit, records today's numbers as the baseline, sets up the 10 staff for your industry and country, and runs a Health Check.",
+    software: `Reads your site and public profiles and builds your company brain. Drafts your brand kit, records today's numbers as the baseline, sets up the ${AGENTS.length} staff for your industry and country, and runs a Health Check.`,
     team: "Our Setup Desk spends about 45 minutes on it within 24 hours: checks the brand kit, answers compliance questions and finishes the account connections with you.",
   },
   {

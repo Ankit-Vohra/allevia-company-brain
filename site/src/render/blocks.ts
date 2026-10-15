@@ -2,7 +2,7 @@
 // vite.config.ts swaps each `<!-- @render name -->` comment in the pages for the matching block below, so the shipped
 // HTML is complete without JavaScript and a price can never drift from shared/plans.ts.
 import { ALLEVIA_90, CREDIT_COSTS, CREDIT_RULES, CURRENCIES, PLANS, PLAN_BY_ID, type Plan } from "../../../shared/plans.ts";
-import { AGENTS, DEPARTMENTS } from "../../../shared/roster.ts";
+import { AGENTS, DEPARTMENTS, numberWord } from "../../../shared/roster.ts";
 import { FAQ, FIRST_WEEK_PROMISES, HIRE_BASIS, PROGRAM_TIMELINE, RHYTHM, WHO_DOES_WHAT } from "../content.ts";
 import { CURRENCY_LABEL, formatMoney, moneySpan } from "../money.ts";
 import { spriteSvg } from "./sprites.ts";
@@ -42,6 +42,16 @@ const rhythmHtml = (p: Plan) =>
   esc(p.rhythm.replace(/\s*\(§[\d.]+\)/, "")).replace("The full operating rhythm", `The <a href="#rhythm">full rhythm</a>`);
 
 // ---------- shared pieces ----------
+
+const cap = (s: string) => `${s[0]!.toUpperCase()}${s.slice(1)}`;
+/** Words the static pages say about the team's size, swapped in at build time (vite.config.ts) from the roster. */
+export const PAGE_TOKENS: Record<string, string> = {
+  __STAFF_COUNT__: String(AGENTS.length),
+  __DEPARTMENT_COUNT__: String(DEPARTMENTS.length),
+  __STAFF_WORD__: numberWord(AGENTS.length),
+  __STAFF_WORD_CAP__: cap(numberWord(AGENTS.length)),
+  __DEPARTMENT_WORD__: numberWord(DEPARTMENTS.length),
+};
 
 export function currencyToggle(id: string): string {
   const opts = CURRENCIES.map(
@@ -104,7 +114,7 @@ export function pricingTeaser(): string {
   const g = P.growth;
   return `<div class="teaser">
   <div class="teaser__row teaser__row--lead"><p class="teaser__label">${esc(P90.name)}, the first ${P90.days} days</p><p class="teaser__price">${moneySpan(P90.upfront)}</p><p class="teaser__note">upfront, or ${P90.instalments.count} × ${moneySpan(P90.instalments.each)}. Setup, weekly tuning, strategist reviews on days ${P90.reviewDays.join(", ").replace(/, (\d+)$/, " and $1")}, and ${g.name}-level allowances.</p></div>
-  <div class="teaser__row"><p class="teaser__label">Then ${esc(g.name)}, the default</p><p class="teaser__price">${moneySpan(g.price.monthly)}<span class="per">/month</span></p><p class="teaser__note">All 10 staff, a named Growth Partner, and every month ${postsAndReels(g.allowances.studioCreditsPerMonth).replace(/^Up/, "up")}.</p></div>
+  <div class="teaser__row"><p class="teaser__label">Then ${esc(g.name)}, the default</p><p class="teaser__price">${moneySpan(g.price.monthly)}<span class="per">/month</span></p><p class="teaser__note">All ${AGENTS.length} staff, a named Growth Partner, and every month ${postsAndReels(g.allowances.studioCreditsPerMonth).replace(/^Up/, "up")}.</p></div>
   <div class="teaser__row"><p class="teaser__label">Founding ${P90.founding.seats}</p><p class="teaser__price">${moneySpan(P90.founding.upfront)}</p><p class="teaser__note">for the program, for our first ${P90.founding.seats} customers, in exchange for case-study rights. ${g.name} then stays at ${moneySpan(P90.founding.growthLocked)}/month for ${P90.founding.growthLockMonths} months.</p></div>
 </div>`;
 }
@@ -137,7 +147,7 @@ export function programOffer(): string {
     <li>The done-for-you setup: the 15-minute wizard, the optional connect call, and our Setup Desk</li>
     <li>${g.name}-level allowances for all ${P90.days} days: ${postsAndReels(g.allowances.studioCreditsPerMonth).toLowerCase()} each month (${g.allowances.studioCreditsPerMonth} Studio credits)</li>
     <li>Weekly tuning, and strategist reviews on days ${P90.reviewDays.join(", ").replace(/, (\d+)$/, " and $1")}</li>
-    <li>All 10 staff in all 8 departments</li>
+    <li>All ${AGENTS.length} staff in all ${DEPARTMENTS.length} departments</li>
   </ul>
   <div class="offer__founding">
     <p class="offer__founding-title">Founding ${P90.founding.seats}</p>

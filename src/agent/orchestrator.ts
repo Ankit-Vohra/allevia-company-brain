@@ -207,12 +207,13 @@ export function normalisePlan(raw: unknown, question: string, opts: { disabled?:
 
 // Reviewers whose roster `reviews` covers the producer and who are relevant to this finding: the copy editor only for
 // content; the fact checker for content and for marketing/analytics findings with numbers; the CoE lead only when the
-// finding has numbers. When the automatic check already passed (`checked`: every cited id and number found in this
-// turn's tool data), one numbers reviewer is enough: the CoE lead, not the fact checker as well. A desk the owner
-// switched off never reviews. At most MAX_REVIEWERS, in roster order.
+// finding has numbers; the QA & Release Manager only on a Tech Lead finding about a release or the app's health. When
+// the automatic check already passed (`checked`: every cited id and number found in this turn's tool data), one
+// numbers reviewer is enough: the CoE lead, not the fact checker as well. A desk the owner switched off never reviews.
+// At most MAX_REVIEWERS, in roster order.
 export function reviewersFor(producerId: string, text: string, opts: { checked?: boolean; disabled?: ReadonlySet<string> } = {}): AgentDef[] {
   const numbers = hasNumbers(text);
-  let rs = AGENTS.filter((r) => r.id !== producerId && !opts.disabled?.has(r.id) && r.reviews?.includes(producerId) && relevantReviewer(r.id, producerId, numbers));
+  let rs = AGENTS.filter((r) => r.id !== producerId && !opts.disabled?.has(r.id) && r.reviews?.includes(producerId) && relevantReviewer(r.id, producerId, numbers, text));
   if (opts.checked && rs.some((r) => r.id === "coe-lead")) rs = rs.filter((r) => r.id !== "fact-checker");
   return rs.slice(0, MAX_REVIEWERS);
 }
@@ -329,11 +330,23 @@ export class Hold {
   }
 }
 
-function relevantReviewer(reviewer: string, producer: string, numbers: boolean): boolean {
+// A finding about a release or the app's health (builds, store review, crashes, ANRs, error spikes, rollbacks): the
+// QA & Release Manager reviews the Tech Lead on these only, not on site, SEO or dependency findings.
+const RELEASE_OR_APP_HEALTH = new RegExp([
+  String.raw`\breleas(?:e|es|ed|ing)\b`, String.raw`\brollouts?\b`, String.raw`\broll(?:ed|ing)? (?:out|back)\b`, String.raw`\brollbacks?\b`,
+  String.raw`\bhotfix(?:es)?\b`, String.raw`\bbuilds?\b`, String.raw`\bversion \d`, String.raw`\bv\d+\.\d+`, String.raw`\bdeploy(?:s|ed|ment|ments)?\b`,
+  String.raw`\bapp ?store\b`, String.raw`\bplay (?:store|console|vitals)\b`, String.raw`\bgoogle play\b`, String.raw`\btestflight\b`,
+  String.raw`\bcrash(?:es|ed|ing)?\b`, String.raw`\bcrash-free\b`, String.raw`\banrs?\b`, String.raw`\bsentry\b`, String.raw`\bapp health\b`,
+  String.raw`\b(?:android|ios|mobile) app\b`, String.raw`\bthe app (?:is )?(?:down|broken|failing|slow|freez)`,
+].join("|"), "i");
+export const concernsReleaseOrAppHealth = (text: string): boolean => RELEASE_OR_APP_HEALTH.test(text);
+
+function relevantReviewer(reviewer: string, producer: string, numbers: boolean, text: string): boolean {
   switch (reviewer) {
     case "copy-editor": return producer === "content-strategist";
     case "fact-checker": return producer === "content-strategist" || numbers;
     case "coe-lead": return numbers;
+    case "qa-release": return concernsReleaseOrAppHealth(text);
     default: return true;
   }
 }

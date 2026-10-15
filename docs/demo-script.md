@@ -42,7 +42,7 @@ model. It's someone setting it up and keeping it running."
 **On screen:** Aamdani's office. Pan across the eight rooms; hover Meera, then click Isha to open her profile drawer
 (role, tools, what she knows, recent findings). Close it.
 
-**Narration:** "This is Allevia: ten AI staff in eight departments, set up for one business. Meera runs the office.
+**Narration:** "This is Allevia: twelve AI staff in eight departments, set up for one business. Meera runs the office.
 Isha checks every number. Each of them is a node in this company's own graph in FalkorDB, so what they know and what
 they've done is something you can look at."
 

@@ -82,6 +82,8 @@ describe("parseDirective (deterministic rules)", () => {
   it("finds desks and channels by any of their names", () => {
     expect(agentsIn("ask the copy editor and Nisha")).toEqual(["copy-editor", "fact-checker"]);
     expect(agentsIn("restart the dev server")).toEqual([]); // "Dev" only capitalised
+    expect(agentsIn("the on-call engineer and the release manager")).toEqual(["oncall-engineer", "qa-release"]);
+    expect(agentsIn("Zoya, page me on every crash; Imran owns QA")).toEqual(["oncall-engineer", "qa-release"]);
     expect(channelRef("linked in")).toEqual({ id: "channel:linkedin", name: "LinkedIn" });
     expect(channelRef("insta")).toEqual({ id: "channel:instagram", name: "Instagram" });
     expect(channelRef("Houzz")).toEqual({ id: "channel:houzz", name: "Houzz" });

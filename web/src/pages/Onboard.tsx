@@ -4,7 +4,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import type { EdgeRef, NodeRef, OnboardEvent } from "@shared/contracts";
-import { AGENTS, DEPARTMENTS } from "@shared/roster";
+import { AGENTS, DEPARTMENTS, numberWord } from "@shared/roster";
 import { api } from "../api";
 import { AgentAvatar } from "../components/bits";
 import { Icon } from "../components/Icon";
@@ -17,6 +17,7 @@ import "./onboard.css";
 const GraphView = lazy(() => import("../components/GraphView"));
 
 type Stage = Extract<OnboardEvent, { type: "stage" }>["stage"];
+const STAFF = numberWord(AGENTS.length);
 const STAGES: { id: Stage; title: string; idle: string }[] = [
   { id: "crawl", title: "Read the website", idle: "Every public page, as a visitor sees it" },
   { id: "brand", title: "Pick out the brand", idle: "Colours, type and the voice you write in" },
@@ -24,7 +25,7 @@ const STAGES: { id: Stage; title: string; idle: string }[] = [
   { id: "understand", title: "Understand the business", idle: "Who you serve, what you sell, what they need" },
   { id: "playbooks", title: "Attach playbooks", idle: "Proven methods for your kind of business" },
   { id: "index", title: "Index for search", idle: "So every answer can cite a source" },
-  { id: "done", title: "Brief the team", idle: "Ten staff, eight departments, one brain" },
+  { id: "done", title: "Brief the team", idle: `${STAFF[0]!.toUpperCase()}${STAFF.slice(1)} staff, ${numberWord(DEPARTMENTS.length)} departments, one brain` },
 ];
 
 const REGIONS = [
@@ -147,7 +148,7 @@ export default function OnboardPage() {
         <header>
           <h1 className="page-title">Brief a new team</h1>
           <p className="page-lede">
-            Paste the website. Allevia reads it, builds the company brain and briefs ten staff in about two minutes.
+            Paste the website. Allevia reads it, builds the company brain and briefs {STAFF} staff in about two minutes.
             Nothing is posted or changed anywhere.
           </p>
         </header>

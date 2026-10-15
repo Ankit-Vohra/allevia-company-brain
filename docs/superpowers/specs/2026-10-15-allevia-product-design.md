@@ -17,7 +17,7 @@ on the live [Claude pricing page](https://platform.claude.com/docs/en/about-clau
 | Category | A done-for-you **AI growth team**. Not "an AI tool" and not "an agency". |
 | Pitch | "Allevia is the growth team every founder needs: set up for you once, it knows your business, does the marketing work with sources, and gets better every week, from 1/20th the cost of a hire." |
 | Front door | **Allevia 90**: a 90-day program at **$1,490** upfront or 3 × $529. The first 20 "founding" customers pay **$990**, the founder's figure, in exchange for case-study rights. |
-| Plans after day 90 | **Essentials $199**, **Growth $449** (the default), **Pro $999**, and **Pause $29**. All 10 agents and 8 departments are on every plan. |
+| Plans after day 90 | **Essentials $199**, **Growth $449** (the default), **Pro $999**, and **Pause $29**. All 12 agents and 8 departments are on every plan. |
 | Credits | One visible unit, the **Studio credit**. It is spent only when the owner approves a finished image or reel. Questions, briefs, drafts, revisions and text work never use credits. |
 | Margins | Typical gross margin is 76–79% on software plans, and 69–71% at heavy use. Allevia 90 is 63% at list (target ≥ 50%) and 47% at the founding price, which is treated as acquisition cost. |
 | Owner's time | One 15-minute setup plus an optional 30-minute connect call. After that, at most 90 s a day and 10 min on Mondays. |
@@ -69,7 +69,7 @@ market on the conservative numbers (Census, ONS, Pemo), never on the 76%.
 
 | | The owner | Allevia (software) | The Allevia team (India) |
 |---|---|---|---|
-| **Setup (day 0)** | **15-minute wizard** (§2.1): website, Instagram handle, Google listing, country; confirms about 15 brand cards; picks 1–3 goals; drops in 10–30 phone photos. **Optional 30-minute connect call** in their own time zone. | Crawls the site and public profiles and builds the tenant graph. Drafts the brand kit and sets the Day-0 baseline. Configures the 10 agents for the industry and country, compiles each agent's context from the graph, and generates 15 "golden questions" as nightly evals. Runs the Health Check. Makes 3 drafts from the owner's own photos. | The Setup Desk spends about 45 min within 24 h: QA of the brand kit, compliance answers and drafts, plus finishing the delegated connections (GBP, GA4/GSC, Meta partner access). |
+| **Setup (day 0)** | **15-minute wizard** (§2.1): website, Instagram handle, Google listing, country; confirms about 15 brand cards; picks 1–3 goals; drops in 10–30 phone photos. **Optional 30-minute connect call** in their own time zone. | Crawls the site and public profiles and builds the tenant graph. Drafts the brand kit and sets the Day-0 baseline. Configures the 12 agents for the industry and country, compiles each agent's context from the graph, and generates 15 "golden questions" as nightly evals. Runs the Health Check. Makes 3 drafts from the owner's own photos. | The Setup Desk spends about 45 min within 24 h: QA of the brand kit, compliance answers and drafts, plus finishing the delegated connections (GBP, GA4/GSC, Meta partner access). |
 | **Daily** | Reads the morning brief (≤ 90 s) and taps up to 3 approvals. | Runs detectors, the brief, alerts, review-reply drafts and follow-ups. | Nothing visible. |
 | **Weekly** | Approves the Monday pack (≤ 10 min). | Content autopilot: Tara, then Dev, then Nisha, plus a weekly growth review. | 100% QA in weeks 1–4, then a 20% sample. Escalations follow the time-zone shift plan in §2.5. |
 | **Monthly / quarterly** | Reads the report (≤ 15 min) and approves the next quarter's goals. | Scorecard, learning feed, autonomy promotions. | A 30-min async review on Growth, or a live call on Pro. |
@@ -312,7 +312,7 @@ The program costs $1,490 upfront or 3 × $529, and $990 for the first 20 foundin
 | Extras | — | WhatsApp delivery (Phase 2) | Ads execution after approval (Phase 3); EU/UK data-residency addendum | — |
 
 **Packaging rules:**
-- **All 10 agents and 8 departments are on every plan.** The brain is the product. We gate volume, sources, locations,
+- **All 12 agents and 8 departments are on every plan.** The brain is the product. We gate volume, sources, locations,
   seats and human time.
 - **At launch, everyone enters through Allevia 90.** Essentials is open only to graduates until onboarding is fully
   automated and activation is at least 60% without human help (Phase 3). Agency and franchise "Partner" pricing comes
@@ -444,6 +444,8 @@ Meera routes each request in two stages:
 | "Reply to the new 2-star review" | Dev drafts, Nisha checks | Review Content, BrandRule | Approval card, never sent automatically |
 | "Should we run ads for Ramadan?" | Rohan, with Isha | `ad_report`, `playbook`, `Event{season}` | A budget proposal |
 | "The contact form is broken" | Arjun | `impact_of`, `seo_report` | A GitHub issue, or a fix brief Task for the web designer |
+| "The app keeps crashing" / "is the site down?" | Zoya (on call) | `metric_trend`, `impact_of`, `history` | A triaged incident with what changed, and a GitHub issue |
+| "Did the last release break anything?" | Imran, reviewing Arjun | `metric_trend`, `history` | Crash-free and store status before and after the release |
 | "Remind Priya to send site photos by Friday" | Vikram | `who_owns`, Task | An assignment Approval, then a no-login nudge |
 | "What did we decide about pricing?" | Sara | `trace_decision` | Answer with sources |
 | "How are we doing?" | Isha | `important`, `metric_trend`, Goal | A goal pulse |

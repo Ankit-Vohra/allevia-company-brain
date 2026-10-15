@@ -12,6 +12,7 @@ import { templateFor } from "../../src/onboard/templates.js";
 import { baselinesWrite, checkpointWrite, programAndGoalsWrite, programGoals } from "../../src/program/program.js";
 import { ensureAgentNode } from "../../src/actions/shared.js";
 import { SEED_NOW } from "../fixtures/seed-graph.js";
+import { AGENTS } from "../../shared/roster.js";
 import { harness, post, TENANT, type Harness } from "./harness.js";
 
 const NOW = SEED_NOW + 3_600_000; // the harness clock
@@ -66,7 +67,8 @@ describe("server: product endpoints (integration)", () => {
 
   it("agents: stats merged with settings; PATCH switches a desk off (old state kept as a Version) and refuses what it can't do", async () => {
     const list = await json<AgentViewDto[]>(await h.app.request("/api/mini/agents"));
-    expect(list).toHaveLength(10);
+    expect(list.map((a) => a.id)).toEqual(AGENTS.map((a) => a.id)); // every roster desk, in roster order
+    expect(list.map((a) => a.id)).toEqual(expect.arrayContaining(["oncall-engineer", "qa-release"]));
     expect(list.find((a) => a.id === "tech-lead")).toMatchObject({ stats: expect.any(Object), knows: expect.any(Number), enabled: true, mode: "full", autonomy: 0, instructions: [], learnedRules: [] });
 
     const off = await json<AgentViewDto>(await req(h.app, "PATCH", "/api/mini/agents/tech-lead", { enabled: false, statusNote: "till the new site launches" }));
