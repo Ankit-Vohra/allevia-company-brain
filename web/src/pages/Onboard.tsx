@@ -3,10 +3,11 @@
 // happening"). The run ends with one clear next step, and the three goals we suggest to start with.
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
-import type { EdgeRef, NodeRef, OnboardEvent } from "@shared/contracts";
+import type { DiscordInfo, EdgeRef, NodeRef, OnboardEvent } from "@shared/contracts";
 import { AGENTS } from "@shared/roster";
 import { api } from "../api";
 import { AgentAvatar } from "../components/bits";
+import { DiscordJoin } from "../components/DiscordCard";
 import { Icon } from "../components/Icon";
 import { Reveal } from "../components/Reveal";
 import { SuggestedRow } from "../components/SuggestedGoal";
@@ -83,7 +84,7 @@ interface RunState {
   pages: { url: string; title: string }[];
   nodes: NodeRef[];
   edges: EdgeRef[];
-  done?: { tenant: string; counts: Record<string, number> };
+  done?: { tenant: string; counts: Record<string, number>; discord?: DiscordInfo };
   error?: string;
   startedAt: number;
   endedAt?: number;
@@ -135,7 +136,7 @@ export default function OnboardPage() {
         fresh.forEach((n) => seen.add(n.id));
         state.nodes = [...state.nodes, ...fresh];
         state.edges = [...state.edges, ...e.edges];
-      } else if (e.type === "done") { state.done = { tenant: e.tenant, counts: e.counts }; state.endedAt = Date.now(); }
+      } else if (e.type === "done") { state.done = { tenant: e.tenant, counts: e.counts, ...(e.discord ? { discord: e.discord } : {}) }; state.endedAt = Date.now(); }
       else if (e.type === "error") { state.error = e.message; state.endedAt = Date.now(); }
       setRun({ ...state });
     };
@@ -247,6 +248,7 @@ export default function OnboardPage() {
         <Ready
           host={hostOf(url)}
           counts={run.done.counts}
+          discord={run.done.discord}
           pages={run.pages.length}
           goals={goals}
           tenantId={doneTenant}
@@ -296,7 +298,7 @@ export default function OnboardPage() {
 
 // ---------------------------------------------------------------- done
 
-function Ready({ host, counts, pages, goals, tenantId, onGoal, onOpen }: { host: string; counts: Record<string, number>; pages: number; goals: GoalSetup[]; tenantId?: string; onGoal: () => void; onOpen: (path: string) => void }) {
+function Ready({ host, counts, discord, pages, goals, tenantId, onGoal, onOpen }: { host: string; counts: Record<string, number>; discord?: DiscordInfo; pages: number; goals: GoalSetup[]; tenantId?: string; onGoal: () => void; onOpen: (path: string) => void }) {
   const read = counts.Page ?? pages;
   return (
     <section className="ob-ready" aria-labelledby="ob-ready-line">
@@ -304,6 +306,8 @@ function Ready({ host, counts, pages, goals, tenantId, onGoal, onOpen }: { host:
         Your team read {plural("Page", read)} of {host}, learned what you sell and who you serve, and has been briefed. {AGENTS.length} people are ready to work.
       </p>
       <span className="ob-avatars" aria-hidden="true">{AGENTS.map((a) => <AgentAvatar key={a.id} id={a.id} size={28} />)}</span>
+
+      <DiscordJoin info={discord} />
 
       {goals.length > 0 && tenantId && (
         <div className="ob-goals owner-suggest">

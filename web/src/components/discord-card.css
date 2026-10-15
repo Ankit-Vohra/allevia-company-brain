@@ -1,0 +1,15 @@
+/* Join your team on Discord: one calm card, a heading, one line, one button */
+.discord-card {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-sm) var(--space-md);
+  padding: var(--space-md); border-radius: var(--radius-md); background: var(--color-card); border: var(--rule);
+}
+.discord-card.is-quiet { box-shadow: none; border-color: var(--color-rule-2); padding: var(--space-sm) var(--space-md); }
+.discord-text { display: grid; gap: 2px; min-width: 0; flex: 1 1 220px; }
+.discord-title { font-family: var(--font-display); font-size: var(--text-md); font-weight: 500; line-height: 1.25; }
+.discord-sub { font-size: var(--text-sm); color: var(--color-ink-2); max-width: 52ch; text-wrap: pretty; }
+.discord-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; min-height: 44px; }
+.discord-error { flex-basis: 100%; font-size: var(--text-sm); color: var(--color-danger, var(--color-ink-2)); }
+@media (max-width: 700px) {
+  .discord-card { flex-direction: column; align-items: stretch; }
+  .discord-btn { justify-content: center; }
+}
