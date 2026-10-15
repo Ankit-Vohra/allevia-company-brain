@@ -58,7 +58,8 @@ const credentialShaped = (m: string): boolean =>
 
 // The detectors over-redact on purpose, and they are tuned to prose: on source code they also fire on `cacheKey = f(x)`.
 // A hit is fine when it is one of these:
-//   ipv4             loopback, the unspecified address, the RFC 5737 documentation ranges (192.0.2.x, 198.51.100.x, 203.0.113.x)
+//   ipv4             reserved and special-purpose ranges (loopback, RFC 1918, link-local, CGNAT, documentation, benchmarking,
+//                    multicast/reserved) and the public resolvers 8.8.8.8 / 1.1.1.1
 //   email            an example.* domain, a reserved example TLD, a made-up or one-letter domain, the commit-trailer address
 //   phone            patterned digits (9876543210), 555-01xx, +44 7700 900xxx, 020 7946 0xxx
 //   cin, duns, apple-team-id, aws-id, supabase-ref   patterned (U12345…, 987654321, ABCDE12345, i-0123456789abcdef0)
@@ -68,7 +69,10 @@ const credentialShaped = (m: string): boolean =>
 export function isClearlyFake(h: Hit): boolean {
   const m = h.match;
   switch (h.kind) {
-    case "ipv4": return /^(?:127\.|0\.0\.0\.0$|192\.0\.2\.|198\.51\.100\.|203\.0\.113\.)/.test(m);
+    // Reserved and special-purpose ranges identify nothing (an SSRF guard has to name them): loopback, 0/8, RFC 1918,
+    // link-local (incl. the cloud metadata address), CGNAT, IETF/documentation/benchmarking, multicast and reserved,
+    // plus the two well-known public resolvers. A real host's public address still fails.
+    case "ipv4": return /^(?:127\.|0\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|192\.0\.0\.|192\.0\.2\.|198\.1[89]\.|198\.51\.100\.|203\.0\.113\.|2(?:2[4-9]|[3-5]\d)\.|8\.8\.8\.8$|1\.1\.1\.1$)/.test(m);
     case "email": {
       const domain = m.slice(m.lastIndexOf("@") + 1).replace(/^.*%40/, "").toLowerCase().replace(/\.$/, "");
       const labels = domain.split(".");
@@ -87,6 +91,8 @@ export function isClearlyFake(h: Hit): boolean {
 
 // Exact matches that are neither patterned nor made up, but are documented: not real. Keep this list short.
 const ALLOWED_VALUES: Array<{ match: string; why: string }> = [
+  { match: "172.32.0.1", why: "SSRF boundary test: the first address just outside RFC 1918 172.16/12" },
+  { match: "+441174960000", why: "Ofcom reserved drama range (0117 496 0xxx), never assigned" },
   { match: "~/.config/…", why: "docs name the kind of path the privacy filter drops" },
   { match: "/home/u/…/secrets/…", why: "the detector's comment names the kind of path it drops" },
   { match: "https://u:p@host", why: "plan: example input for the url-credentials test" },

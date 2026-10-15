@@ -64,7 +64,7 @@ describe("guardedFetch (local server)", () => {
   it("refuses a public-looking name that resolves to a private address, at connect time", async () => {
     const resolver = async () => [{ address: "127.0.0.1", family: 4 }];
     await expect(guardedFetch(`http://rebind.example.com:${site.port}/`, { resolver })).rejects.toThrow(/resolves to a private/);
-    const mixed = async () => [{ address: "93.184.215.14", family: 4 }, { address: "10.0.0.7", family: 4 }];
+    const mixed = async () => [{ address: "8.8.8.8", family: 4 }, { address: "10.0.0.7", family: 4 }];
     await expect(guardedFetch(`http://mixed.example.com:${site.port}/`, { resolver: mixed })).rejects.toThrow(/resolves to a private/);
   });
 
