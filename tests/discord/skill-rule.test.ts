@@ -24,6 +24,7 @@ describe("isSkillRule", () => {
     expect(isSkillRule("Should our posts always end with a question?")).toBe(false);
     expect(isSkillRule("Switch Arjun off")).toBe(false);
     expect(isSkillRule("make the captions punchier")).toBe(false);
+    expect(isSkillRule("Write two posts for next week")).toBe(false); // a request to make something now, not a rule
     expect(isSkillRule("No emojis on LinkedIn posts")).toBe(false);
   });
 });

@@ -178,9 +178,9 @@ const MODE = [
 const AUTONOMY = /\bautonomy\b(?:\s+(?:level|to|at|of))*\s+(?:level\s+|l)?(?<n>[0-3])\b|\b(?:level|l)\s?(?<m>[0-3])\s+autonomy\b/i;
 const ALWAYS = /^(?:please\s+)?(?:always|make sure to|make sure you|every time)\b/i;
 const NEVER_SAY = /^(?:please\s+)?(?:never|don'?t|do not)\s+(?:say|use the words?|use the phrase|call us|write)\b|^no\s+\S/i;
-const RULE_START = /^(?:please\s+)?(?:no|never|don'?t|do not|avoid|always|only|stop|keep|make sure|every time|use|mention|include|quote|end|start|begin|open|close|sign off|spell|write)\b/i;
+const RULE_START = /^(?:please\s+)?(?:no|never|don'?t|do not|avoid|always|only|stop|keep|make sure|every time|use|mention|include|quote|sign off|spell)\b/i;
 
-const STYLE_RULE = /^(?:please\s+)?(?:never|don'?t|do not|avoid|quote|end|start|begin|sign off|spell|write|use|keep)\b/i;
+const STYLE_RULE = /^(?:please\s+)?(?:never|don'?t|do not|avoid|quote|sign off|spell)\b/i;
 
 interface ClauseResult { patches: DirectivePatch[]; notes: string[] }
 
@@ -223,7 +223,8 @@ function modeOrAutonomy(clause: string, to: string[]): ClauseResult | undefined 
 // Only for a sentence that is a rule (it starts like one, or says always/never) and names what the skill is about
 // (posts, reels, carousels, ads…); anything else stays a standing instruction.
 function skillRuleClause(rest: string, to: string[], text: string): ClauseResult | undefined {
-  if (!(RULE_START.test(rest) || /\b(?:always|never)\b/i.test(rest))) return undefined;
+  // a standing rule, not a request to make something now ("write two posts" is a request)
+  if (!/\b(?:always|never|every|each|from now on|don'?t|do not|no)\b/i.test(rest)) return undefined;
   const hits = targetsIn(rest, to);
   if (!hits.length) return undefined;
   const patches: DirectivePatch[] = hits.map((h) => ({ kind: "skill.rule", agents: h.agents, skill: h.skill, text }));

@@ -14,7 +14,6 @@ export const SKILL_TARGETS: readonly SkillTarget[] = [
   { skill: "carousel-post", agents: ["content-strategist"], words: /\b(?:carousels?|slides?|swipe posts?)\b/i },
   { skill: "campaign-brief", agents: ["content-strategist"], words: /\b(?:campaigns?|festival|festivals|diwali|eid|christmas|black friday)\b/i },
   { skill: "photo-to-ad-brief", agents: ["content-strategist"], words: /\b(?:ads?|posters?|creatives?|banners?)\b/i },
-  { skill: "brand-voice-check", agents: ["copy-editor"], words: /\b(?:voice|tone|wording)\b/i },
   { skill: "ad-budget-check", agents: ["growth-marketer"], words: /\b(?:ad spend|ad budget|budget|ad campaigns?)\b/i },
   { skill: "offer-test-plan", agents: ["growth-marketer"], words: /\b(?:offers?|discounts?|promotions?)\b/i },
   { skill: "channel-mix", agents: ["growth-marketer"], words: /\bchannels?\b/i },

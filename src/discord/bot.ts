@@ -130,6 +130,8 @@ export const quickReplyId = (option: string): string => `${BUTTON_PREFIX}:qr:${o
 // question"): not a question, and the rules (no model) read all of it as skill rules or skills.
 export function isSkillRule(text: string): boolean {
   if (text.includes("?") || text.length > 600) return false;
+  // a standing rule says so ("always", "never", "every post"); "Write two posts" is a request, asked of the team as usual
+  if (!/\b(?:always|never|every|each|from now on|don'?t|do not|no|add a skill)\b/i.test(text)) return false;
   const p = parseDirective(text);
   return p.patches.length > 0 && p.unparsed.length === 0 && p.patches.every((x) => x.kind === "skill.rule" || x.kind === "skill.add");
 }
