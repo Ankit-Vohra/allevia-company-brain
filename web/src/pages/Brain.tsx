@@ -1,5 +1,6 @@
 // "What your team knows": a plain summary first (how much your team knows, from where, how fresh), a few readable
-// groups, the recent decisions and what comes up most. Search finds anything. The map ("Explore") sits behind a button
+// groups, the recent decisions and what comes up most, and what breaks if something stops (GraphAtWork: depth 1 vs
+// depth 4 with the path, the owner, PageRank and communities, from the business's own graph). Search finds anything. The map ("Explore") sits behind a button
 // and loads only when asked for; ?node=<id> links (from Ask, Insights and a team member's profile) open that thing's
 // readable card, with "Explore around it" to see it on the map.
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
@@ -7,6 +8,7 @@ import { useSearchParams } from "react-router";
 import { api } from "../api";
 import { NodeCard, SearchBox } from "../components/brain-card";
 import { BRAIN_GROUPS, GROUPED_LABELS, NOT_HEADLINES, groupHue, kindName, thingsCount, tidyName, whenWords } from "../components/brain-words";
+import { GraphAtWorkPanel } from "../components/GraphAtWork";
 import { Icon } from "../components/Icon";
 import { Reveal } from "../components/Reveal";
 import { fmtNum } from "../lib/format";
@@ -197,6 +199,8 @@ function Summary({ tenantId, tenantName, overview, nodes, graphLoading, onPick, 
           )}
         </div>
       )}
+
+      <GraphAtWorkPanel tenantId={tenantId} onPick={onPick} />
 
       <section className="bs-section" aria-labelledby="bs-groups">
         <h2 id="bs-groups" className="bs-section-title">Everything, by kind</h2>

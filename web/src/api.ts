@@ -141,6 +141,10 @@ export const api = {
   async graph(t: string, focus: string, depth = 1): Promise<GraphData> {
     return mode === "mock" ? (await mock()).graph(t, focus, depth) : getJson(`/api/${enc(t)}/graph?focus=${enc(focus)}&depth=${depth}`);
   },
+  /** GET /api/:t/graph/at-work: the Brain page's "graph at work" panel. Live server only (null in mock mode). */
+  async graphAtWork(t: string, focus?: string): Promise<import("./components/GraphAtWork").GraphAtWork | null> {
+    return mode === "mock" ? null : getJson(`/api/${enc(t)}/graph/at-work${focus ? `?focus=${enc(focus)}` : ""}`);
+  },
   async graphOverview(t: string): Promise<GraphData> {
     return mode === "mock" ? (await mock()).graphOverview(t) : getJson(`/api/${enc(t)}/graph/overview`);
   },

@@ -82,7 +82,12 @@ running), give the owner a team instead of a tool, and make every answer carry i
 ## How FalkorDB is central
 
 The agents cannot answer without walking the graph: every tool is a graph query or a graph algorithm, and the answer's
-path is checked against the graph before it is drawn.
+path is checked against the graph before it is drawn. Take FalkorDB away and no tool has anything to answer from.
+
+**The queries and algorithms the product depends on**, each with its file and line, parameters, why a table would not
+do, and a plan or timing note: [`docs/falkordb-queries.md`](docs/falkordb-queries.md) (a test keeps it in step with
+the code). The quickest way to see the graph do work: the Brain page's **What breaks if something stops**, which shows
+what fails one step away against what fails up to four steps away, with the path to each.
 
 | FalkorDB capability | How Allevia uses it |
 |---|---|
@@ -97,8 +102,65 @@ path is checked against the graph before it is drawn.
 | **MCP** | `npm run cli -- mcp --tenant <slug>` serves 11 read-only graph tools for one tenant over stdio or Streamable HTTP, so another agent can use the company brain ([`docs/jarvis-integration.md`](docs/jarvis-integration.md)). |
 | **FalkorDB Browser** | The compose file publishes it on 127.0.0.1:3090 for exploring the tenant graphs directly. |
 
-The ontology has 38 node types and 54 relationship types ([`src/graph/schema.ts`](src/graph/schema.ts)). On
-15 October the Aamdani graph held about 3,700 nodes and 11,300 edges, and AVS Atelier's about 460 nodes and 2,000
+### The graph data model
+
+Every node has the base label `Entity` and a unique `id` (`<type>:<slug>`, range index plus UNIQUE and MANDATORY
+constraints); the types search can return also carry `Searchable`, which holds the full-text and vector indexes. Every
+relationship carries `since`/`until` (when it was true) and `recordedAt`/`retiredAt` (when we learned it), plus `src`
+and `asOf` (where it came from). The main types and relationships (all 38 node types and 54 relationship types, with the
+triples each allows, are in [`src/graph/schema.ts`](src/graph/schema.ts)):
+
+```mermaid
+flowchart LR
+  subgraph Company
+    B[Business]; P[Person]; A[Agent]; T[Team]
+  end
+  subgraph Work
+    S[System]; C[Channel]; K[Task]; D[Decision]; G[Goal]
+  end
+  subgraph Knowledge
+    Doc[Document]; Ch[Chunk]; O[Observation]; V[Version]
+  end
+  subgraph Memory
+    Tu[Turn]; F[Finding]; M[Memory]; R[Rule]; Ap[Approval]; Rec[Recommendation]
+  end
+  P -- MEMBER_OF --> T
+  P -- OWNS --> K
+  T -- OWNS --> S
+  S -- DEPENDS_ON --> S
+  C -- DEPENDS_ON --> S
+  K -- DEPENDS_ON --> S
+  S -- BLOCKS --> K
+  D -- AFFECTS --> C
+  P -- DECIDED --> D
+  D -- BASED_ON --> O
+  D -- SUPERSEDES --> D
+  O -- MEASURES --> C
+  O -- SOURCED_FROM --> Doc
+  Doc -- HAS_CHUNK --> Ch
+  Doc -- MENTIONS --> S
+  B -- PURSUES --> G
+  A -- KNOWS_ABOUT --> C
+  Tu -- CITED --> D
+  F -- PART_OF --> Tu
+  A -- PRODUCED --> F
+  F -- BASED_ON --> F
+  M -- ABOUT --> C
+  Rec -- PROPOSES --> Ap
+  R -- LEARNED_FROM --> Ap
+  K -- HAD_VERSION --> V
+```
+
+Three patterns carry most of the weight:
+
+- **Facts with two clocks.** Nothing is deleted. A fact that ends gets `until`; a contradicted claim is stored closed
+  with a reason; a fact that comes back is a new edge beside the closed one. Every tool takes `asOf`.
+- **Versions one hop away.** When a tracked property changes (a task's status, a reading's value), the old state is
+  written as a `Version` in the same statement, behind `HAD_VERSION`.
+- **Functional slots.** Some relationships have one holder at a time ("a task has one current owner", "an asset has one
+  parent"): a new holder closes the old edge instead of adding a second.
+
+On 15 October the Aamdani graph held about 3,700 nodes and 11,300 edges, and AVS Atelier's about 460 nodes and 2,000
 edges.
 
 We built on FalkorDB 6.0.2 and found two query shapes that crash it (a tied full sort over rows with nullable maps,
@@ -108,11 +170,14 @@ and held out of `src/` by a static test.
 
 ## Tracks
 
-| Track | Where it shows |
-|---|---|
-| **01 Agents that act on connected data** | 21 graph tools (paths, PageRank, communities, impact with betweenness, decisions, ownership, metrics, SEO, ads, playbooks, read-only Cypher); recommendations backed by graph evidence, approval cards, executors that record an `Action`; MCP server. |
-| **02 Agent memory and coordination** | Episodic (Session, Turn, Approval, Action), semantic (the company graph and the owner's Memory notes) and procedural (vendored playbook Rules plus learned Rules) memory; twelve agents coordinating through Findings in a shared graph; one graph per tenant. |
-| **03 Company brain** | A real company's vault, decisions, pending list, GitHub issues and Allevia's own threads in one graph; `OWNS` and `KNOWS_ABOUT` for who owns and who knows; `trace_decision` from a decision to its evidence and deciders; bi-temporal facts and a librarian that closes contradicted ones; answers with checked citations. |
+Entered in all three: **Agents That Act on Connected Data**, **Agent Memory and Coordination**, **Company Brain**. What
+fits each, and where it is thinner:
+
+| Track | What fits | Honest limits |
+|---|---|---|
+| **Agents That Act on Connected Data** | 21 graph tools (impact at depth 1 to 4, shortest paths, PageRank, communities, decisions, ownership, metrics, SEO, read-only Cypher); findings become approval cards with graph evidence; approved actions are recorded as `Action` nodes; an MCP server lets other agents use the same tools. | GitHub issues and Discord posts are dry runs unless switched on; ad changes are simulated; content is drafted, never published by us. |
+| **Agent Memory and Coordination** | Twelve agents hand work to each other through `Finding` nodes in one shared graph (`BASED_ON` is the handoff); each turn's citations, the owner's notes and learned rules are written back and recalled by traversal on the next question; an owner's edit becomes a `Rule` linked to the approval it came from. | Memory is per business (by design); there is no memory across businesses. |
+| **Company Brain** | Decisions with their evidence and deciders, who owns and who knows what, facts with valid time and sources, versions one hop away, "what breaks if this stops" with the path. | Proven on two real businesses and a synthetic demo company; the connectors that would feed it daily are read-only and few. |
 
 ## Architecture
 
@@ -348,6 +413,23 @@ edges nothing refers to; the suite holds both rules (see Tests).
 - Libraries: FalkorDB and its Node client, the Claude Agent SDK, Hono, React, Vite, transformers.js, sharp,
   Playwright, discord.js and the MCP SDK, each under its own licence.
 
+## AI tools used
+
+- **Claude Code** (with subagents working in parallel git worktrees) wrote most of the code, tests and docs, under the
+  founder's direction and review.
+- **Claude, through a claude.ai subscription login** (the Claude Agent SDK), runs the twelve agents at runtime. No API
+  key is used or accepted.
+- **Higgsfield** made the website's illustrations, hero loop and social card, and the Studio demo's generated photo
+  variant; every generation is logged in [`docs/higgsfield-spend.md`](docs/higgsfield-spend.md).
+- **Local embeddings** (multilingual e5, run on the machine) for vector search.
+
+What the founder decided and checked: the product (a done-for-you team for owner-run businesses, not a tool), who it is
+for and the pricing; that FalkorDB is the company brain and one graph per business; the data rules (read-only
+connectors, a privacy filter before anything is stored, actions as dry runs until approved, subscription only); which
+businesses to use (his own, Aamdani, and AVS Atelier; the public demo uses synthetic data only);
+the plain-words, owner-first style; and that the demo must be run live. He reviewed the agents' answers and the screens,
+and can explain the graph model and the queries above.
+
 ## Built during the event
 
 All of Allevia's code was written during the hackathon, which opened on 15 October 2026 at 00:01 IST. The
@@ -357,5 +439,5 @@ commit of the result. We can show the full history to the organisers on request.
 
 Reused, not written here: npm libraries, the vendored third-party data and the brag-slim skill (credited above), and
 the founder's existing systems, which Allevia reads as a service (a read-only connector over SSH) without copying
-their code. The design spec, the plan and the decisions are in [`docs/superpowers/`](docs/superpowers). The code was
-written with Claude Code, under the founder's direction.
+their code. The design spec, the plan and the decisions are in [`docs/superpowers/`](docs/superpowers). How AI tools
+were used is above.

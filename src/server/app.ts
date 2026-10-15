@@ -17,7 +17,7 @@
 //   use: the real executors, with GitHub issues and Discord posts as a dry run unless ALLEVIA_ACTIONS_LIVE=1. The
 //   answer is the card plus `learned` (the learned-rule AgentEvents, in the JSON) and `action`.
 // Focused route files: routes/program.ts (program, capabilities, learning), routes/team.ts (agents, directives),
-// routes/goals.ts (the owner says OK to the suggested goals), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page).
+// routes/goals.ts (the owner says OK to the suggested goals), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/graph-work.ts (the Brain page's "what breaks if something stops").
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
@@ -43,6 +43,7 @@ import { registerTeamRoutes } from "./routes/team.js";
 import { LinkTooSoon, type HubService } from "../discord/hub-service.js";
 import { registerUsageRoutes } from "./routes/usage.js";
 import { registerWorkRoutes } from "./routes/work.js";
+import { registerGraphWorkRoutes } from "./routes/graph-work.js";
 import * as reads from "./reads.js";
 import { sse } from "./sse.js";
 import { LiveTurns, type LiveTurn, type LiveTurnsOpts } from "./turns.js";
@@ -562,6 +563,7 @@ export function createApp(deps: ServerDeps): Hono {
   registerProgramRoutes(app, routeCtx);
   registerGoalRoutes(app, routeCtx);
   registerWorkRoutes(app, routeCtx);
+  registerGraphWorkRoutes(app, routeCtx);
   registerUsageRoutes(app, routeCtx, { actionsLive: () => deps.actions?.live ?? loadConfig().actionsLive });
 
   app.get("/api/:t/agents/:id", async (c) => {

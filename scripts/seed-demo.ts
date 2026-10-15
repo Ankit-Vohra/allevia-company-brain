@@ -9,6 +9,7 @@ import { typeOfLabels } from "../src/graph/schema.js";
 import { ensureTenant } from "../src/graph/tenants.js";
 import { localEmbedder } from "../src/agent/wiring.js";
 import { seedMini } from "../tests/fixtures/seed-graph.js";
+import { seedDepthChain } from "../tests/fixtures/seed-depth.js";
 
 const args = process.argv.slice(2);
 const register = args.includes("--register");
@@ -33,6 +34,7 @@ try {
   const g = await openGraph(tenant);
   if ((await listGraphs()).includes(name)) await g.drop();
   await seedMini(g);
+  await seedDepthChain(g); // the hop-3 and hop-4 dependents the Brain page's depth 1 vs depth 4 view shows
   const [row] = await g.roQuery<{ n: number }>("MATCH (n:Entity) RETURN count(n) AS n");
   const vectors = await realVectors(g);
   console.log(`Seeded ${name}: ${row?.n ?? 0} nodes; ${vectors ? `${vectors} real e5 vectors` : "stand-in vectors (no local model)"}.`);

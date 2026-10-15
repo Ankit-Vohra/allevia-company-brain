@@ -40,5 +40,6 @@ describe("impact_of (integration)", () => {
     const leaf = await call(impactOf, { id: "system:reel-scheduler" }, makeCtx(g));
     expect(leaf.data.total).toBe(0);
     expect(leaf.note).toMatch(/Nothing current depends on/);
+    expect(leaf.data.status).toBe("nothing_depends");
   });
 });

@@ -47,7 +47,7 @@ describe("get_entity, neighbors, history (integration)", () => {
 
   it("get_entity: an unknown id comes back as an error with suggestions", async () => {
     const r = await call(getEntity, { id: "decision:pause-stories" }, makeCtx(g));
-    expect(r.data.error).toMatch(/No entity with id decision:pause-stories/);
+    expect(r.data.error).toMatch(/I don.t have "decision:pause-stories" in your records/);
     expect(r.data.suggestions.map((s: { id: string }) => s.id)).toContain("decision:007-pause-daily-stories");
     expect(r.nodes).toEqual([]);
   });
