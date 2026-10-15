@@ -52,7 +52,9 @@ const toMs = (v: unknown): number | null => {
   return Number.isFinite(t) ? t : null;
 };
 
-async function findBusiness(g: GraphHandle, given?: string): Promise<string | null> {
+// The tenant's own Business node: the given id, else business:<slug> for an allevia_<slug> graph, else the Business the
+// most things are PART_OF. null when there is none.
+export async function findBusiness(g: GraphHandle, given?: string): Promise<string | null> {
   const own = given ?? (g.name.startsWith("allevia_") ? tenantBusinessId(g.name.slice("allevia_".length)) : undefined);
   if (own) {
     const rows = await g.roQuery<{ id: string }>("MATCH (b:Business {id:$id}) RETURN b.id AS id", { id: own });
@@ -67,7 +69,8 @@ async function findBusiness(g: GraphHandle, given?: string): Promise<string | nu
 
 async function readFacts(g: GraphHandle, businessId?: string): Promise<LadderFacts> {
   const ids = [...new Set(CAPABILITIES.flatMap((c) => [...c.systems, ...c.channels]))];
-  const [biz, src, obs, [counts], bench] = await Promise.all([
+  const n = async (cypher: string): Promise<number> => (await g.roQuery<{ c: number }>(cypher))[0]?.c ?? 0;
+  const [biz, src, obs, seoChecks, crawledPages, brandAssets, originals, bench] = await Promise.all([
     findBusiness(g, businessId),
     g.roQuery<{ id: string; status: string | null; access: string | null; mode: string | null; asOf: string | null; at: number | null }>(
       `UNWIND $ids AS id MATCH (n:Entity {id:id}) WHERE n:System OR n:Channel
@@ -78,11 +81,11 @@ async function readFacts(g: GraphHandle, businessId?: string): Promise<LadderFac
             CASE WHEN o.subject STARTS WITH 'channel:' THEN o.subject ELSE split(coalesce(o.subject, ''), ':')[0] + ':' END AS subject,
             coalesce(o.simulated, false) AS simulated, coalesce(o.conf, 1.0) < 1.0 AS reported, o.src AS src, o.asOf AS asOf
        RETURN metric, subject, simulated, reported, src, max(asOf) AS newest`),
-    g.roQuery<{ seo: number; pages: number; brand: number; originals: number }>(
-      `OPTIONAL MATCH (:Page)-[f:FAILS|PASSES]->(:Rule) WHERE f.until IS NULL WITH count(f) AS seo
-       OPTIONAL MATCH (p:Page)-[r:PART_OF]->(:Channel {id:'channel:website'}) WHERE r.until IS NULL WITH seo, count(p) AS pages
-       OPTIONAL MATCH (b:BrandAsset) WITH seo, pages, count(b) AS brand
-       OPTIONAL MATCH (a:Asset) WHERE a.kind = 'original' RETURN seo, pages, brand, count(a) AS originals`),
+    // separate plain counts (FalkorDB has crashed on long OPTIONAL MATCH … WITH chains)
+    n("MATCH (:Page)-[f:FAILS|PASSES]->(:Rule) WHERE f.until IS NULL RETURN count(f) AS c"),
+    n("MATCH (:Page)-[r:PART_OF]->(:Channel {id:'channel:website'}) WHERE r.until IS NULL RETURN count(r) AS c"),
+    n("MATCH (b:BrandAsset) RETURN count(b) AS c"),
+    n("MATCH (a:Asset) WHERE a.kind = 'original' RETURN count(a) AS c"),
     g.roQuery<{ id: string }>(
       `MATCH (r:Rule)-[e:APPLIES_TO]->(c:Channel) WHERE e.until IS NULL AND (r.kind = 'benchmark' OR r.id STARTS WITH 'rule:benchmark-')
        RETURN DISTINCT c.id AS id`),
@@ -97,7 +100,7 @@ async function readFacts(g: GraphHandle, businessId?: string): Promise<LadderFac
     }])),
     obs: obs.filter((o) => typeof o.metric === "string"),
     uploadDocs: new Set(docs.filter((d) => UPLOAD_KINDS.has(lc(d.kind))).map((d) => d.id)),
-    seoChecks: counts?.seo ?? 0, crawledPages: counts?.pages ?? 0, brandAssets: counts?.brand ?? 0, originals: counts?.originals ?? 0,
+    seoChecks, crawledPages, brandAssets, originals,
     benchmarkChannels: new Set(bench.map((b) => b.id)),
   };
 }
