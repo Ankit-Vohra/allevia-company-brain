@@ -50,21 +50,29 @@ const EXTRA: Partial<Record<EntityType, Record<string, unknown>>> = {
 // A pattern that reaches any type ("*") is built for these only: the swarm is dense already.
 const REPRESENTATIVE: EntityType[] = ["Task", "System", "Channel", "Document"];
 
-function props(t: EntityType, id: string, hub: boolean): Record<string, unknown> {
+// Every sort key (dates, status, rank, order) is identical across satellites. What they show of themselves is not:
+// FalkorDB 6.0.2 only panicked when rows tied on the key but differed in the other columns, some null and some set
+// (`asOf` present or absent, `simulated` true or absent, a summary or none, three names), so the swarm has both.
+function props(t: EntityType, id: string, hub: boolean, i = 0): Record<string, unknown> {
   return {
-    id, name: hub ? "Swarm hub" : "Swarm item", summary: "Swarm item, one of many that look the same.", asOf: DAY, src: "document:swarm-hub",
-    createdAt: T0, updatedAt: T0, stateSince: T0, rev: 1, ...EXTRA[t],
+    id, name: hub ? "Swarm hub" : `Swarm item ${i % 3}`,
+    ...(i % 2 === 0 ? { summary: "Swarm item, one of many that look the same.", asOf: DAY } : {}),
+    ...(i % 3 === 0 ? { simulated: true } : {}),
+    src: "document:swarm-hub", createdAt: T0, updatedAt: T0, stateSince: T0, rev: 1, ...EXTRA[t],
   };
 }
 
 const chunks = <X>(xs: X[], n: number): X[][] => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, (i + 1) * n));
 
+// Vectors: most satellites share one vector (their scores tie exactly); every fourth has another, so a search sees one
+// big group of tied scores among a few distinct ones, as the seed graph's did.
 async function nodes(g: GraphHandle, label: EntityType, rows: Array<Record<string, unknown>>, vecProp?: string): Promise<void> {
-  const vec = vecProp ? Array.from(fakeEmbed(SWARM_TEXT)) : undefined;
+  const same = vecProp ? Array.from(fakeEmbed(SWARM_TEXT)) : undefined;
+  const other = vecProp ? Array.from(fakeEmbed("swarm other thing")) : undefined;
   for (const part of chunks(rows, 200)) {
     await g.query(
-      `UNWIND $rows AS r CREATE (n:Entity:${label}) SET n = r${vec && vecProp ? `, n.${vecProp} = vecf32($vec)` : ""}`,
-      vec ? { rows: part, vec } : { rows: part });
+      `UNWIND $rows AS r CREATE (n:Entity:${label}) SET n = r.props${vecProp ? `, n.${vecProp} = vecf32(CASE WHEN r.alt THEN $other ELSE $same END)` : ""}`,
+      { rows: part.map((props, i) => ({ props, alt: i % 4 === 3 })), ...(vecProp ? { same, other } : {}) });
   }
 }
 
@@ -85,7 +93,7 @@ export async function seedDegenerate(g: GraphHandle): Promise<void> {
 
   // ---- nodes: a hub and SWARM identical satellites of every type ----
   for (const t of SWARM_TYPES) {
-    const rows = [props(t, hubId(t), true), ...Array.from({ length: SWARM }, (_, i) => props(t, satId(t, i), false))];
+    const rows = [props(t, hubId(t), true), ...Array.from({ length: SWARM }, (_, i) => props(t, satId(t, i), false, i))];
     await nodes(g, t, rows, SEARCHABLE.includes(t) ? "embedding" : undefined);
   }
   // Versions of the Task hub, identical; passages of the Document hub, identical.

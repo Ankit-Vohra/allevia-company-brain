@@ -83,6 +83,9 @@ describe("nanRisks: a NaN in a sort key crashes the server", () => {
     "MATCH (n) RETURN n.id AS id, log(n.v) AS s ORDER BY s, id",
     "MATCH (n) RETURN n.id AS id, n.v ^ 0.5 AS s ORDER BY s, id",
     "MATCH (n) RETURN n.id AS id, CASE WHEN n.on THEN n.a / n.b ELSE 0 END AS r ORDER BY r, id",  // the CASE does not test the denominator
+    "MATCH (n) RETURN n.id AS id, CASE WHEN n.a > 0 THEN n.a / n.b ELSE 0 END AS r ORDER BY r, id", // it tests the numerator
+    "UNWIND range(1, 5) AS i WITH {id: toString(i)} AS n, CASE WHEN i % 5 = 0 THEN 0.0 / 0.0 ELSE 1.0 END AS g RETURN n.id AS id, g ORDER BY g, id", // a zero literal is NaN whatever the CASE says
+    "UNWIND range(0, 9) AS i WITH {id: toString(i)} AS n, toFloat(0) / toFloat(i % 5) AS g RETURN n.id AS id, g ORDER BY g, id",
   ];
   for (const q of risky) it(`flags ${q.slice(0, 80)}`, () => expect(nanRisks(q).length).toBeGreaterThan(0));
 
@@ -92,6 +95,7 @@ describe("nanRisks: a NaN in a sort key crashes the server", () => {
     "MATCH (n) WHERE n.b <> 0 RETURN n.id AS id, n.a / n.b AS r ORDER BY r, id",   // a filter on the denominator
     "MATCH (n) WHERE n.v = n.v RETURN n.id AS id, n.v AS v ORDER BY v, id",         // x = x drops NaN
     "MATCH (n) RETURN n.id AS id, n.a / 2 AS half ORDER BY half, id",               // a non-zero literal denominator
+    "UNWIND range(0, 9) AS i WITH {id: toString(i)} AS n, CASE WHEN i % 5 = 0 THEN null ELSE toFloat(0) / toFloat(i % 5) END AS g RETURN n.id AS id, g ORDER BY g, id", // the CASE tests the denominator's i
     "MATCH (n) RETURN n.id AS id, n.a / n.b AS r",                                  // not sorted: NaN in RETURN is harmless
     "MATCH (n) WHERE n.url = 'https://a/b' RETURN n.id AS id ORDER BY id",          // a slash in a string
     "MATCH (n) RETURN n.id AS id /* a / b */ ORDER BY id",

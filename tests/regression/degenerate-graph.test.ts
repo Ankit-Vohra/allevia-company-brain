@@ -7,12 +7,14 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { GraphHandle } from "../../src/graph/client.js";
 import { closeAll } from "../../src/graph/client.js";
+import { UnsafeQuery } from "../../src/graph/errors.js";
 import { SEARCHABLE } from "../../src/graph/schema.js";
 import { ALL_TOOLS } from "../../src/agent/tools/index.js";
 import { ensureRoster, getSession, listSessions, recallBrief } from "../../src/agent/memory.js";
 import { AGENTS } from "../../shared/roster.js";
 import * as reads from "../../src/server/reads.js";
-import { goalPulse } from "../../src/insights/brief.js";
+import { goalPulse, writeBrief } from "../../src/insights/brief.js";
+import { insightRecId, writeRecommendation } from "../../src/insights/recommend.js";
 import { runDetectors } from "../../src/insights/detectors.js";
 import { deriveCapabilities } from "../../src/capabilities/ladder.js";
 import { activeRules, learningMetrics } from "../../src/actions/learning.js";
@@ -22,7 +24,7 @@ import { scanGraph } from "../../src/ingest/privacy.js";
 import { listAgentsWithSettings, loadTeamSettings } from "../../src/settings/team.js";
 import { fakeEmbed, SEED_NOW } from "../fixtures/seed-graph.js";
 import { SWARM, SWARM_TYPES, hubId, satId, seedDegenerate } from "../fixtures/degenerate-graph.js";
-import { call, makeCtx, pause, whenFree } from "../helpers/tools.js";
+import { call, makeCtx, whenFree } from "../helpers/tools.js";
 import { testGraph } from "../helpers/graph.js";
 
 // What a client sees when the server dies under a query, and what is left after it restarts empty.
@@ -88,8 +90,46 @@ describe("every tool and query over a graph of ties, zeros and gaps (integration
       { hub: hubId("System") });
     expect(r!.live).toBeGreaterThanOrEqual(SWARM);
     expect(r!.closed).toBeGreaterThanOrEqual(SWARM);
-    expect(r!.names).toBeLessThanOrEqual(2); // "Swarm item" and "Swarm hub"
+    expect(r!.names).toBeLessThanOrEqual(4); // "Swarm item 0..2" and "Swarm hub"
     for (const t of SWARM_TYPES) expect((await g.roQuery("MATCH (n:Entity {id:$id}) RETURN n.id AS id", { id: hubId(t) })), t).toHaveLength(1);
+  });
+
+  // The shapes that crash FalkorDB 6.0.2 (docs/notes/falkordb-nan-crash.md), each beside the form that sorts the same
+  // rows and does not. On a throwaway 6.0.2 server the unsafe forms kill it over this very graph; here they are never
+  // sent (GraphHandle refuses them), and the safe forms must run. This test never sends an unsafe one to the shared server.
+  const NODE = "{id: n.id, labels: labels(n), name: n.name, asOf: n.asOf, simulated: n.simulated}";
+  const SHAPES: Array<{ name: string; unsafe: string; safe: string }> = [
+    {
+      name: "a constant sort key over rows that differ in other columns",
+      unsafe: `MATCH (n:Entity) WHERE NOT n:Chunk WITH n, 1.0 AS score RETURN ${NODE} AS n, n.summary AS summary, score ORDER BY score ASC`,
+      safe: `MATCH (n:Entity) WHERE NOT n:Chunk WITH n, 1.0 AS score RETURN ${NODE} AS n, n.summary AS summary, score ORDER BY score ASC, n.id`,
+    },
+    {
+      name: "a function of the row as the sort key",
+      unsafe: `MATCH (n:Entity) WHERE NOT n:Chunk RETURN ${NODE} AS n, n.summary AS summary, size(labels(n)) AS nl ORDER BY nl ASC`,
+      safe: `MATCH (n:Entity) WHERE NOT n:Chunk RETURN ${NODE} AS n, n.summary AS summary, size(labels(n)) AS nl ORDER BY nl ASC, n.id`,
+    },
+    {
+      name: "vector scores that tie",
+      unsafe: `CALL db.idx.vector.queryNodes('Entity', 'embedding', 50, vecf32($v)) YIELD node, score RETURN {id: node.id, labels: labels(node), name: node.name, asOf: node.asOf, simulated: node.simulated} AS n, node.summary AS summary, score ORDER BY score ASC`,
+      safe: `CALL db.idx.vector.queryNodes('Entity', 'embedding', 50, vecf32($v)) YIELD node, score RETURN {id: node.id, labels: labels(node), name: node.name, asOf: node.asOf, simulated: node.simulated} AS n, node.summary AS summary, score ORDER BY score ASC, node.id`,
+    },
+    {
+      name: "NaN (0 / 0) mixed with numbers in the sort key",
+      unsafe: "UNWIND range(0, 49) AS i WITH {id: 'n' + toString(i)} AS n, toFloat(0) / toFloat(i % 5) AS g RETURN n.id AS id, g ORDER BY g ASC, id",
+      safe: "UNWIND range(0, 49) AS i WITH {id: 'n' + toString(i)} AS n, CASE WHEN i % 5 = 0 THEN null ELSE toFloat(0) / toFloat(i % 5) END AS g RETURN n.id AS id, g ORDER BY g ASC, id",
+    },
+  ];
+
+  it("refuses each known crash shape before it is sent, and runs its safe form over the swarm", async () => {
+    const params = { v: fakeEmbed("swarm item") };
+    for (const s of SHAPES) {
+      await expect(g.roQuery(s.unsafe, params), s.name).rejects.toThrow(UnsafeQuery);
+      const rows = await g.roQuery(s.safe, params);
+      expect(rows.length, s.name).toBeGreaterThan(0);
+      await probe(s.name, async () => undefined); // and the server is still up
+    }
+    expect(crashes).toEqual([]);
   });
 
   it("answers every tool about every hub, including hubs with nothing useful attached", async () => {
@@ -187,7 +227,7 @@ describe("every tool and query over a graph of ties, zeros and gaps (integration
     await probe("freshness", () => reads.freshness(g, SEED_NOW));
     await probe("latestBrief", () => reads.latestBrief(g));
     await probe("sessions", () => reads.sessions(g, { showcaseOnly: false }));
-    await probe("sessionDetail", () => reads.sessionDetail(g, satId("Session", 0), { showcaseOnly: false }));
+    await probe("sessionDetail", () => reads.sessionDetail(g, hubId("Session"), { showcaseOnly: false })); // the hub has 24 turns
     await probe("turnEvents", () => reads.turnEvents(g, satId("Turn", 0), { showcaseOnly: false }));
     await probe("findShowcaseTurn", () => reads.findShowcaseTurn(g, { question: "Swarm question?" }));
     await probe("searchGraph", () => reads.searchGraph(g, "swarm", "swarm item", async (t) => fakeEmbed(t), SEED_NOW));
@@ -218,8 +258,22 @@ describe("every tool and query over a graph of ties, zeros and gaps (integration
     await probe("listApprovals", () => listApprovals(g, {}));
     await probe("getApproval", () => getApproval(g, satId("Approval", 0)));
     await probe("listSessions", () => listSessions(g));
-    await probe("getSession", () => getSession(g, satId("Session", 0)));
+    await probe("getSession", () => getSession(g, hubId("Session"))); // 24 turns, all at the same time
     await probe("recallBrief", () => recallBrief(g, { question: "swarm item", seedIds: [hubId("Task"), hubId("Channel"), satId("Decision", 1)], sessionId: satId("Session", 0) }));
+    await probe("writeBrief", () => writeBrief("swarm", { graph: g, now: SEED_NOW, since: 0 })); // every observation has earlier ones to compare with
+    await probe("writeRecommendation", async () => {
+      // A recommendation with 24 approvals, all created at the same time: the sort that picks the newest of them ties.
+      const t = SEED_NOW;
+      const rid = insightRecId("swarm.recommendation");
+      await g.query(
+        `MERGE (r:Entity:Recommendation {id:$rid}) ON CREATE SET r.name = 'Swarm recommendation', r.status = 'open', r.createdAt = $t, r.updatedAt = $t, r.stateSince = $t, r.rev = 1`, { rid, t });
+      await g.query(
+        `MATCH (r:Entity:Recommendation {id:$rid}), (a:Entity:Approval) WHERE a.id STARTS WITH 'approval:swarm-' CREATE (r)-[:PROPOSES {since: $t, recordedAt: $t}]->(a)`, { rid, t });
+      await writeRecommendation(g, {
+        key: "swarm.recommendation", detector: "ads.high_cpa", area: "ads", agent: "growth-marketer", title: "Swarm", why: "Swarm.", evidence: [satId("Campaign", 1)],
+        numbers: { spend: 0 }, score: 0.5, confidence: 0.5,
+      }, { now: SEED_NOW });
+    });
     await probe("listAgentsWithSettings", () => listAgentsWithSettings(g));
     await probe("loadTeamSettings", () => loadTeamSettings(g));
     expect(crashes).toEqual([]);
@@ -228,7 +282,6 @@ describe("every tool and query over a graph of ties, zeros and gaps (integration
   it("runs the librarian (PageRank, communities, KNOWS_ABOUT) and the privacy scan over it", async () => {
     await probe("runLibrarian", () => runLibrarian(g, { now: SEED_NOW }));
     await probe("scanGraph", () => scanGraph(g, { pageSize: 500 }));
-    await pause(0);
     expect(crashes).toEqual([]);
   }, 240_000);
 

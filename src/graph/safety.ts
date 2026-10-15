@@ -193,6 +193,28 @@ function enclosingCase(b: string, at: number): string | null {
   return open === undefined ? null : b.slice(open, at);
 }
 
+// The variables and property paths a denominator is made of: `n.b` -> [n.b], `toFloat(i % 5)` -> [i]. `rest` starts
+// right after the `/`.
+function denominatorNames(rest: string): string[] {
+  let i = 0;
+  while (/\s/.test(rest[i] ?? "")) i++;
+  let depth = 0;
+  let j = i;
+  for (; j < rest.length; j++) {
+    const c = rest[j]!;
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") {
+      if (depth === 0) break;
+      depth--;
+    } else if (depth === 0 && !/[\w.$]/.test(c)) break;
+  }
+  return [...rest.slice(i, j).matchAll(/(?<![\w.$`])([A-Za-z_$][\w$]*(?:\.[A-Za-z_]\w*)*)(?!\s*\(|[\w.$`])/g)].map((m) => m[1]!);
+}
+
+// True when the text names one of the variables (or when there are none to name: a constant denominator).
+const mentionsAny = (text: string, names: string[]): boolean =>
+  !names.length || names.some((n) => new RegExp(`(?<![\\w.$\`])${n.replace(/[.$]/g, "\\$&")}(?![\\w\`])`).test(text));
+
 // A comparison of a value with itself is false only for NaN (and null): `WHERE x = x` is the NaN filter.
 const SELF_EQUALITY = /(?<![\w.$`])([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*=\s*\1(?![\w.`])/;
 
@@ -206,10 +228,14 @@ export function nanRisks(cypher: string): string[] {
   for (let i = b.indexOf("/"); i >= 0; i = b.indexOf("/", i + 1)) {
     const rest = b.slice(i + 1);
     const lit = NONZERO_LITERAL.exec(rest);
-    if (lit && Number(lit[0]) !== 0) continue;
-    if (/(?<![\w.$`])WHERE\b[^]*?(?:<>|!=|>)\s*0/i.test(b)) continue; // a filter on the denominator
-    const kase = enclosingCase(b, i);
-    if (kase && ZERO_TEST.test(kase)) continue;
+    const zero = lit !== null && Number(lit[0]) === 0;
+    if (lit && !zero) continue;
+    if (!zero) {
+      if (/(?<![\w.$`])WHERE\b[^]*?(?:<>|!=|>)\s*0/i.test(b)) continue; // a filter on the denominator
+      const kase = enclosingCase(b, i);
+      // A CASE guards the division only if it tests the denominator: a zero-or-null test that names what it divides by.
+      if (kase && ZERO_TEST.test(kase) && mentionsAny(kase, denominatorNames(rest))) continue;
+    }
     risks.push(`division ${tidy(b.slice(Math.max(0, i - 24), i + 24))}`);
   }
   for (const m of b.matchAll(NAN_FUNCTIONS)) risks.push(`${m[1]!.toLowerCase()}()`);
