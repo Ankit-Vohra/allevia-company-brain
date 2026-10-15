@@ -1,0 +1,7 @@
+# Synthetic fixture: Kestrel & Oak Studio is a fictional practice.
+User-agent: *
+Disallow: /private/
+Allow: /private/press-kit
+
+User-agent: SomeOtherBot
+Disallow: /
