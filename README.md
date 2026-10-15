@@ -67,10 +67,15 @@ running), give the owner a team instead of a tool, and make every answer carry i
 - **Onboarding from a URL.** A polite, SSRF-safe crawler reads the site, builds the brand kit, runs SEO checks, maps
   services, audiences and needs, and enrols the business in a 90-day program with goals and Day-0 baselines
   ([`src/onboard/`](src/onboard), [`src/ingest/sources/website/`](src/ingest/sources/website)).
-- **Studio (thin slice).** A phone photo goes in with EXIF stripped; Tara assesses it, a local variant and a
-  generated variant come out, Nisha's fidelity check compares each against the original and marks any structural
-  change, Dev writes the caption, and the owner approves ([`src/studio/`](src/studio)). In the recorded demo Nisha
-  held back the generated edit because it added details that are not in the original photo.
+- **Studio.** A phone photo goes in with EXIF stripped; Tara assesses it and the owner gets two options: A, a free local
+  clean-up, and B, an AI edit from the real Higgsfield engine, quoted first in Studio credits (about 2) and refused above
+  the per-edit and daily caps. Nisha's fidelity check compares each against the original, marks any structural change
+  and picks "our pick"; a held-back AI edit gets one tighter retry. Under the options the owner asks for changes in plain
+  words: light and colour are free, "make it festive", "a different background", "remove the pole" and "make this into an ad
+  saying ..." use the AI editor, and a 5 second 9:16 clip is an explicit, priced extra. People in a photo are kept as they
+  are unless the business turns on "Blur people's faces in my content"; a photo with a child gets the free clean-up only.
+  Dev writes the caption and the owner approves ([`src/studio/`](src/studio)). Spend and the live check are in
+  [`docs/higgsfield-spend.md`](docs/higgsfield-spend.md).
 - **Other surfaces.** A Discord bot (a thread per conversation, live work log, approval buttons), a read-only MCP server
   for other agents, a CLI for everything, and a static marketing site with pricing in four currencies (`site/`).
 
@@ -308,7 +313,11 @@ edges nothing refers to; the suite holds both rules (see Tests).
 - **Subscription only:** no API key is used or accepted for model calls. Secrets live in
   `~/.config/allevia/allevia.env`, outside the repo; `.env.example` documents every name with no values.
 - **Studio:** photos are re-encoded without EXIF metadata on intake; edit prompts forbid text, numbers, logos and
-  added or removed structures, and Nisha's fidelity check fails closed.
+  added or removed structures (except what the owner asked for), and Nisha's fidelity check fails closed. The AI editor
+  runs on the founder's `higgsfield` CLI login (argument arrays, no shell, the photo in a private temp dir that is deleted),
+  is quoted before every generation, and is capped per edit (`ALLEVIA_STUDIO_RUN_CREDIT_CAP`, 5), per clip
+  (`ALLEVIA_STUDIO_CLIP_CREDIT_CAP`, 8) and per day (`ALLEVIA_STUDIO_DAILY_CREDIT_CAP`, 25) in a ledger kept in the data dir.
+  `ALLEVIA_STUDIO_ENGINE=recorded` turns the live editor off.
 
 ## Repository layout
 

@@ -6,7 +6,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Options, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { CachedVision, ClaudeVision, FakeVision, visionKey, type VisionInput, type VisionQueryFn } from "../../src/studio/vision.js";
-import { HiggsfieldEngine } from "../../src/studio/engine.js";
 
 const INPUT: VisionInput = {
   agent: "content-strategist", model: "sonnet", system: "You are Tara.", prompt: "Assess it.", schema: { type: "object" },
@@ -69,9 +68,5 @@ describe("studio vision", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  });
-
-  it("the Higgsfield engine is a Phase 2 stub that says so", async () => {
-    await expect(new HiggsfieldEngine().edit()).rejects.toThrow(/Phase 2/);
   });
 });

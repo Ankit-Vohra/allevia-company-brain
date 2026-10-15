@@ -286,6 +286,7 @@ export default function AskPage() {
                   onReplay={() => replay(t)}
                   onShowPath={() => { setPicked(t.key); setPathOpen(true); }}
                   onRetry={() => ask(t.question)}
+                  onFillIn={() => ask("Fill it in")}
                 />
               ))}
               {detail.loading && !turns.length && <li className="turn"><span className="skeleton" style={{ display: "block", height: 180 }} /></li>}
@@ -367,9 +368,9 @@ function ThreadList({ sessions, loading, activeId, onPick }: { sessions?: Sessio
   );
 }
 
-function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onReplay, onShowPath, onRetry }: {
+function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onReplay, onShowPath, onRetry, onFillIn }: {
   turn: TurnItem; view: RunView; caps?: CapabilityState[]; latest: boolean; activeCite?: string;
-  onCite: (id: string) => void; onNodes: (ids: string[]) => void; onReplay: () => void; onShowPath: () => void; onRetry: () => void;
+  onCite: (id: string) => void; onNodes: (ids: string[]) => void; onReplay: () => void; onShowPath: () => void; onRetry: () => void; onFillIn: () => void;
 }) {
   const live = turn.status === "running";
   const [how, setHow] = useState(false);
@@ -418,6 +419,13 @@ function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onRe
                     <Icon name={checksOk ? "check" : "warn"} size={14} />
                     <span>{checksOk ? "Sources checked" : "A few numbers could not be matched to a source"} · {agents.length} {agents.length === 1 ? "person" : "people"} · {fmtMs(view.final.ms)}</span>
                   </p>
+                  {latest && /\[suggested:/i.test(view.answer) && (
+                    <p className="answer-line fill-it-in" role="note">
+                      <Icon name="pen" size={14} />
+                      <span>The lines marked "suggested" come from your business profile.</span>
+                      <button type="button" className="btn btn-sm btn-gold" onClick={onFillIn}>Fill it in</button>
+                    </p>
+                  )}
                   {view.proposals.length > 0 && (
                     <ul className="proposals">
                       {view.proposals.map((p) => (

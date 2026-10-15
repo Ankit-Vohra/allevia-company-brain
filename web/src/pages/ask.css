@@ -322,3 +322,6 @@ dialog.drawer.sheet-left[open] { animation: sheet-in var(--dur-long) var(--ease-
   .ask-graph { top: 0; width: 100vw; z-index: 30; }
   .ask-title { visibility: visible; font-size: var(--text-md); }
 }
+
+.fill-it-in { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+.fill-it-in span { flex: 1 1 14em; }

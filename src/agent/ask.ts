@@ -9,6 +9,8 @@ import { openGraph, type GraphHandle } from "../graph/client.js";
 import { capabilityModes } from "../capabilities/ladder.js";
 import type { CapabilityModeInfo } from "../capabilities/modes.js";
 import { loadTeamSettings } from "../settings/team.js";
+import { loadLanguagePreference } from "./language.js";
+import { fillInFromSession, isFillItIn } from "./fillin.js";
 import { checkTurn, extractCitations } from "./checks.js";
 import { getSession, newSessionId, newTurnId, recallBrief, saveTurn, startSession } from "./memory.js";
 import { runTurn, type TurnOutcome } from "./orchestrator.js";
@@ -99,14 +101,33 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
     let team: TeamSettings | undefined;
     try { team = await loadTeamSettings(g); } catch (e) { out({ type: "error", message: `Could not read the team settings, so the whole team is on: ${message(e)}` }); }
 
-    outcome = await runTurn(
+    // "Fill it in": the owner accepts the draft's suggestions. Done in code on the draft already in this thread (fillin.ts):
+    // no desks run, nothing is re-invented, and the sources are the ones the draft already had.
+    const filled = continuing && isFillItIn(question) ? await fillInFromSession(g, sessionId, question).catch(() => null) : null;
+    if (filled) {
+      const touched = new TouchedSet();
+      touched.add({ data: filled.previous, nodes: filled.nodes, edges: [], sources: [] });
+      out({ type: "agent_start", agent: "chief-of-staff", task: "Write the suggestions into the copy" });
+      out({ type: "text", agent: "chief-of-staff", delta: filled.answer });
+      out({ type: "agent_done", agent: "chief-of-staff", ms: 0, ok: true });
+      outcome = {
+        ok: true, answer: filled.answer, plan: { steps: [{ agent: "chief-of-staff", task: "Fill in the suggestions" }], rationale: "The owner accepted the suggestions in the last draft." },
+        fastPath: true, findings: [], reviews: [], proposals: [], agents: ["chief-of-staff"], failed: [], touched, guidedBy: [],
+      };
+    }
+
+    // The business's own language setting (best-effort): absent, the answer follows the question's language.
+    let language: string | undefined;
+    if (!outcome) try { language = await loadLanguagePreference(g); } catch { language = undefined; }
+
+    if (!outcome) outcome = await runTurn(
       { tenant: input.tenant, question, sessionId, turnId, asker, recall },
       {
         runtime: deps.runtime, getTools: deps.getTools, graph: g, now,
         ...(deps.model ? { model: deps.model } : {}), ...(deps.agentTimeoutMs ? { agentTimeoutMs: deps.agentTimeoutMs } : {}),
         ...(deps.embedQuery ? { embedQuery: deps.embedQuery } : {}), ...(deps.readOnly !== undefined ? { readOnly: deps.readOnly } : {}),
         ...(deps.timeZone ? { timeZone: deps.timeZone } : {}), ...(deps.signal ? { signal: deps.signal } : {}),
-        ...(capabilities ? { capabilities } : {}), ...(team ? { team } : {}),
+        ...(capabilities ? { capabilities } : {}), ...(team ? { team } : {}), ...(language ? { language } : {}),
       },
       out);
     if (deps.signal?.aborted) failure = STOPPED_MESSAGE;

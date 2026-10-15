@@ -42,16 +42,26 @@ The owner can talk to the team in `#your-team` or in the web app. It is one conv
 ## Photos and videos in `#studio`
 
 The owner drops photos in `#studio` (or attaches one in `#your-team`). In a new thread the team does the Studio flow:
-Tara looks at the photo, makes options, Nisha checks the building is unchanged, Dev writes the caption. Each option comes
-back as an image with the caption and **Approve** and **Change** buttons.
+Tara looks at the photo, makes two options, Nisha checks the building is unchanged and picks "our pick", Dev writes the
+caption. Each option comes back as an image with the caption and **Approve** and **Change** buttons.
 
+- **Option A** is a free local clean-up. **Option B** is an AI edit made by the AI editor (Higgsfield), priced before it is
+  made and shown in Studio credits ("about 2 Studio credits"). If the editor is not signed in, the balance is low or a
+  daily or per-edit cap is reached, the owner still gets option A and one plain sentence says why.
 - **Approve** saves the option as a draft post (nothing is published) and records it, with where it came from, in the
-  graph. It is the same decision as approving on the web. It uses 1 Studio credit.
-- A text reply under the options ("make it warmer", "a bit darker", "more contrast") makes the next option, built on the
-  last one. These are the team's own light and colour tools. Asking to change what is IN the photo ("remove the bin") is
-  answered honestly: the team cannot do that yet.
-- A person in the photo is flagged and blurred in the options. No identity is stored, and EXIF (including location) is
-  removed from what is kept.
+  graph. It is the same decision as approving on the web.
+- A text reply under the options changes things. Light and colour ("make it warmer", "a bit darker") are free and local.
+  Anything else ("make it festive", "change the background", "remove the pole", "make this into an ad saying Free site
+  visit this week") goes to the AI editor with the business's brand rules, shows its price, and comes back as a new option
+  that Nisha checks with the owner's request allowed. If Nisha holds an AI edit back, a **Try again** button (with its
+  price) makes one more try with a tighter lock. "Make a short reel" offers a 5 second 9:16 clip with a **Make the clip**
+  button and its price (about 7.5 Studio credits); it is silent, has no text, and is cropped to the middle of the photo.
+- People in a photo are kept as they are. The one setting is "Blur people's faces in my content" (off by default): say
+  "blur faces from now on" or "stop blurring faces" in `#studio`, or change it on the web Studio page. A photo that seems
+  to include a child gets the free clean-up only (no AI edit, no clip), with faces blurred in what is kept, and one plain
+  sentence says so. No identity is stored, and EXIF (including location) is removed from what is kept.
+- In `#your-team`, "from now on always answer in English" (or Hindi, Hinglish, "in the language I write in") sets the
+  language of the team's answers; by default the answer follows the language the owner wrote in.
 - **Videos** (MP4, MOV, WebM, up to 25 MB) are kept as they are. If `ffmpeg` is installed on the server, the location and
   device details are removed from the file and Tara looks at the first frame. If it is not, the video is kept untouched and
   the owner is told in plain words that the team cannot look inside videos on this server yet. Nothing edits video today.

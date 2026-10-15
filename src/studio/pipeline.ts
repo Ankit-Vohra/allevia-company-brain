@@ -8,11 +8,12 @@ import type { GraphHandle } from "../graph/client.js";
 import { upsertEdge, upsertNode } from "../graph/upsert.js";
 import { ensureRoster } from "../agent/memory.js";
 import { assessPhoto, recordAssessment, TARA, type AssessContext, type PhotoAssessment } from "./assess.js";
-import { privacyNote, readPrivacy, STOP_MESSAGE } from "./privacy.js";
+import { CHILD_NOTICE, privacyNote, readPrivacy, STOP_MESSAGE } from "./privacy.js";
+import { loadStudioSettings } from "./settings.js";
 import { proposeStudioDraft } from "./approve.js";
 import { DEV, writeCaption, type Caption } from "./caption.js";
 import { loadStudioContext, type StudioContext } from "./context.js";
-import type { GenerationEngine } from "./engine.js";
+import { EngineDecline, type GenerationEngine } from "./engine.js";
 import { checkFidelity, NISHA, type FidelityResult } from "./fidelity.js";
 import { blurBoxes, estimateTilt, planCrop, straightenedBase, thumbnail, type CropPlan } from "./image.js";
 import { assetUrl, blockOriginal, intake, keepOriginal, type AssetRecord } from "./intake.js";
@@ -50,12 +51,17 @@ export interface StudioResult {
   recommendationId: string;
   approvalId: string;
   title: string;
-  // Set when the run ended without a card: Tara said reshoot, or privacy stopped it (a child, people who cannot be blurred).
-  // Then variants and fidelity are empty, there is no card (approvalId is ""), and `message` is what the owner is told.
+  // Set when the run ended without a card: Tara said reshoot, or privacy stopped it (the owner's setting blurs people's
+  // faces and Tara could not place them). Then variants and fidelity are empty, there is no card (approvalId is ""),
+  // and `message` is what the owner is told.
   stopped?: { reason: "reshoot" | "privacy"; message: string };
+  // What was done about the people and plates in the photo, for the owner's message.
+  privacy: { people: boolean; blurredPeople: boolean; minor: boolean; plates: boolean };
+  // Plain sentences the owner should read with the options (a child kept the run to a clean-up, no generative edit, ...).
+  notices: string[];
 }
 
-const CHECKS_NA: TurnChecks = { citationsValid: true, invalidCitations: [], numbersGrounded: true, ungroundedNumbers: [], simulatedDisclosed: true, freshnessDisclosed: true };
+export const CHECKS_NA: TurnChecks = { citationsValid: true, invalidCitations: [], numbersGrounded: true, ungroundedNumbers: [], simulatedDisclosed: true, freshnessDisclosed: true };
 
 export function assessContextFor(ctx: StudioContext, note: string, a: Pick<AssetRecord, "w" | "h">): AssessContext {
   return {
@@ -98,29 +104,40 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
   let original = got.asset;
   stopIfAborted();
 
-  // 2. Tara's assessment, then what privacy allows: a possible minor, or people who cannot be blurred, stop here with
-  // nothing kept; a person or a plate is blurred, in everything made and in the copy that is kept.
+  // 2. Tara's assessment, then what privacy allows. People are kept as they are unless the business setting blurs them;
+  // a plate or a number is always blurred; a child keeps the run to the free local clean-up (faces blurred, no AI edit);
+  // with the setting on, people Tara could not place stop the run, with nothing kept.
   status(TARA, "Looking at the photo: subject, light, clutter, what must not change");
   const assessment = await assessPhoto(g, original.id, got.normalized.buffer, assessContextFor(ctx, note, original), { vision: deps.vision, model: models.assess, now: now(), record: false });
   stopIfAborted();
-  const priv = readPrivacy(assessment);
+  const settings = await loadStudioSettings(g, input.businessId);
+  const priv = readPrivacy(assessment, { blurFaces: settings.blurFaces });
+  const notices: string[] = [];
+  const privacySummary: StudioResult["privacy"] = {
+    people: priv.people, blurredPeople: priv.people && priv.blurPeople, minor: priv.minor, plates: priv.boxes.length > priv.personBoxes.length,
+  };
   const emptyCaption: Caption = { caption: "", altText: "", hashtags: [], edits: [], lint: [], by: "facts" };
   const stoppedResult = (stopped: NonNullable<StudioResult["stopped"]>, tilt: StudioResult["tilt"], plan: CropPlan): StudioResult => ({
     original, assessment, tilt, plan, variants: [], fidelity: [], caption: emptyCaption, context: ctx, recommendationId: "", approvalId: "", title: "", stopped,
+    privacy: privacySummary, notices,
   });
   if (priv.stop) {
     const message = STOP_MESSAGE[priv.stop];
     await blockOriginal(g, { asset: original, reason: priv.stop, now: now() });
-    status(TARA, priv.stop === "minor" ? "A child is in the photo: not keeping it" : "People are in the photo and cannot be blurred: not keeping it");
+    status(TARA, "People are in the photo and cannot be blurred, as your setting asks: not keeping it");
     done(TARA, false);
     send({ type: "error", message });
     send({ type: "final", turnId: original.id, answer: message, citations: [], checks: CHECKS_NA, agents: [TARA], ms: Math.max(0, now() - t0) });
     return stoppedResult({ reason: "privacy", message }, { deg: 0, source: "level" }, planCrop({ w: original.w, h: original.h }, 0, []));
   }
-  const redacted = priv.boxes.length > 0;
-  const kept = redacted ? await blurBoxes(got.normalized.buffer, priv.boxes) : got.normalized.buffer;
-  if (priv.people) status(TARA, "A person is in the photo: blurring them everywhere, and the original with the person will not be kept");
-  else if (redacted) status(TARA, "A number plate or house number is in the photo: blurring it everywhere, including the copy we keep");
+  const redacted = priv.blur.length > 0;
+  const kept = redacted ? await blurBoxes(got.normalized.buffer, priv.blur) : got.normalized.buffer;
+  if (priv.minor) {
+    status(TARA, "A child is in the photo: a simple clean-up only, no AI edit, and faces are blurred in everything we keep");
+    notices.push(CHILD_NOTICE);
+  } else if (priv.people && priv.blurPeople) status(TARA, "A person is in the photo: blurring their face everywhere, as your setting asks");
+  else if (priv.people) status(TARA, "A person is in the photo: keeping them as they are");
+  if (!priv.people && redacted) status(TARA, "A number plate or house number is in the photo: blurring it everywhere, including the copy we keep");
   original = await keepOriginal(g, { tenant: input.tenant, asset: original, kept, redacted, containsPerson: priv.people, store: deps.store, now: now() });
   await recordAssessment(g, original.id, assessment, now());
   send(got.event); // after the copy exists, so its thumbnail is never a missing file
@@ -144,7 +161,7 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
   }
 
   status(TARA, tilt.deg ? `Straightening by ${Math.abs(tilt.deg).toFixed(1)}° and cropping to 4:5 around the building` : "Cropping to 4:5 around the building");
-  const privacy = priv.boxes;
+  const privacy = priv.blur;
   const base = await straightenedBase(got.normalized.buffer, plan, privacy);
   const variants: VariantRecord[] = [];
 
@@ -155,22 +172,33 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
   send({ type: "asset", agent: TARA, assetId: a.id, kind: "variant", parentId: original.id, thumb: assetUrl(input.tenant, a.id, 640) });
   stopIfAborted();
 
-  // 5. variant B, generative (prompted from the graph). A photo Tara says to post as it is gets no generative edit: it
-  // would cost a credit and could only risk what is already good.
+  // 5. variant B, generative (prompted from the graph): every photo gets one, quoted first and capped (credits.ts). A photo
+  // with a child in it never goes to the AI edit. When the engine declines (not signed in, a cap, low balance, a failed
+  // job) the owner still gets variant A, and is told why in one plain sentence.
   let b: VariantRecord | null = null;
-  if (assessment.verdict === "use") {
-    status(TARA, "This photo is good as it is: no generative edit is needed, so you can post it as it is (variant A only straightens and crops)");
+  if (priv.localOnly) {
+    status(TARA, "No AI edit for this photo (it has a child in it): variant A only");
   } else {
     const treatment = TREATMENTS["relight-clean-editorial"]!;
     const prompt = await buildEditPrompt(g, ctx, assessment, treatment, now());
     status(TARA, `Variant B: ${treatment.label.toLowerCase()}, prompt built from ${prompt.sources.length} brand and rule nodes`);
     try {
       // the engine is given the blurred copy: a person or a plate never leaves the studio unblurred
-      b = await makeVariantB(g, { store: deps.store, now: now(), engine: deps.engine }, input.tenant, original, kept, base, plan, privacy, treatment, prompt);
+      b = await makeVariantB(g, { store: deps.store, now: now(), engine: deps.engine }, input.tenant, original, kept, base, plan, privacy, treatment, prompt,
+        { onQuote: (q) => status(TARA, `Variant B: the AI edit costs ${q.words}`) });
     } catch (e) {
-      status(TARA, `Variant B skipped: ${(e as Error).message.slice(0, 90)}`);
+      if (e instanceof EngineDecline) {
+        notices.push(e.message);
+        status(TARA, e.message);
+      } else {
+        status(TARA, `Variant B skipped: ${(e as Error).message.slice(0, 90)}`);
+        notices.push("The AI edit didn't work for this photo, so you have the simple clean-up.");
+      }
     }
-    if (!b) status(TARA, "No generative edit for this photo yet: live edits arrive with the Higgsfield API in Phase 2");
+    if (!b && !notices.length) {
+      status(TARA, "No AI edit was made for this photo: the AI editor is not switched on here");
+      notices.push("The AI editor isn't switched on here, so I made the simple clean-up only.");
+    }
   }
   if (b) variants.push(b);
   if (b) send({ type: "asset", agent: TARA, assetId: b.id, kind: "variant", parentId: original.id, thumb: assetUrl(input.tenant, b.id, 640) });
@@ -203,6 +231,7 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
   const card = await proposeStudioDraft(g, {
     original, variants, fidelity, caption, ctx, assessment, now: now(),
     ...(redacted ? { privacy: { people: priv.people, redacted: true, note: privacyNote(priv) } } : {}),
+    ...(notices.length ? { notices } : {}),
   });
   send({ type: "proposal", agent: TARA, recommendationId: card.recommendationId, approvalId: card.approvalId, title: card.title, kind: "content_draft" });
 
@@ -211,6 +240,7 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
     `Tara: ${assessment.verdict} (${assessment.subject}).`,
     `${variants.length} variant${variants.length === 1 ? "" : "s"}; Nisha passed ${okCount} as "building unchanged".`,
     `Dev's caption is on the card, waiting for your approval (1 Studio credit when approved).`,
+    ...notices,
   ].join(" ");
   send({
     type: "final", turnId: original.id, answer, citations: [original.id, ...variants.map((v) => v.id), card.approvalId], checks: CHECKS_NA,
@@ -219,7 +249,7 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
 
   await keepRun(g, original.id, log, tilt, now(), card.approvalId);
 
-  return { original, assessment, tilt, plan, variants, fidelity, caption, context: ctx, ...card };
+  return { original, assessment, tilt, plan, variants, fidelity, caption, context: ctx, privacy: privacySummary, notices, ...card };
 }
 
 // Keeps the run on the original, for the page after a reload (and the public demo).

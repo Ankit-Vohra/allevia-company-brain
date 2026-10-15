@@ -61,8 +61,9 @@ describe("the answer shape reaches the Chief's synthesis and direct prompts", ()
     expect(p).toContain("Where this data comes from");
     expect(p).toContain("from your public profile or website");
   });
-  it("the answer language rule is unchanged: Hindi in, Hindi out (house rules)", () => {
-    expect(HOUSE_RULES).toMatch(/Reply in the language of the question, matching its spelling/);
+  it("the answer language rule: the question's own language and script, so Hindi in is Hindi out and English in is English out (house rules)", () => {
+    expect(HOUSE_RULES).toMatch(/Write in the language and script the owner wrote the question in/);
+    expect(HOUSE_RULES).toMatch(/never Hinglish/);
   });
 });
 

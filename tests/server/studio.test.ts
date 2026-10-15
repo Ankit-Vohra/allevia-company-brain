@@ -13,7 +13,7 @@ import { FakeEngine } from "../../src/studio/engine.js";
 import { AssetStore } from "../../src/studio/store.js";
 import { FakeVision } from "../../src/studio/vision.js";
 import { studioSample } from "../../src/studio/wiring.js";
-import { facadePhoto, nishaAnswer, TARA_ANSWER } from "../studio/fixtures.js";
+import { facadePhoto, TARA_ANSWER } from "../studio/fixtures.js";
 import { harness, post, sseEvents, type Harness } from "./harness.js";
 
 describe("server: studio (integration)", () => {
@@ -29,7 +29,7 @@ describe("server: studio (integration)", () => {
     wiring = {
       deps: {
         store: new AssetStore(dir),
-        vision: new FakeVision({ "content-strategist": TARA_ANSWER, "fact-checker": nishaAnswer(false) }),
+        vision: new FakeVision({ "content-strategist": TARA_ANSWER, "fact-checker": ((input: { images: Array<{ label: string }> }) => ({ variants: input.images.filter((i) => !["original", "frame"].includes(i.label)).map((i) => ({ label: i.label, sameBuilding: true, structuralChange: false, added: [], removed: [], note: "nothing added" })) })) as never }),
         engine: new FakeEngine(async (input) => sharp(input.image).modulate({ brightness: 1.3 }).jpeg().toBuffer()),
       },
       sample: (t) => studioSample(dir, t),
@@ -107,6 +107,82 @@ describe("server: studio (integration)", () => {
     expect((await upload(h.make({ studio: async () => wiring, publicMode: true }), await facadePhoto())).status).toBe(403);
     expect((await upload(h.make(), await facadePhoto())).status).toBe(501);
     expect((await post(h.make({ studio: async () => wiring }), "/api/mini/ask", { question: "x".repeat(70_000) })).status).toBe(413);
+  }, 60_000);
+
+  it("the owner's words on the web: light and colour are free, 'make it festive' goes to the AI editor, a retry and an ad ask for what they need", async () => {
+    const app = h.make({ studio: async () => wiring });
+    const events = sseEvents(await (await upload(app, await facadePhoto({ tilt: 2.2 }), "revise me")).text());
+    const proposal = events.find((e): e is Extract<AgentEvent, { type: "proposal" }> => e.type === "proposal")!;
+    const revise = async (body: unknown, a = app) => a.request("/api/mini/studio/revise", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const run = async (body: unknown) => sseEvents(await (await revise(body)).text());
+    const finalOf = (es: AgentEvent[]) => (es.find((e) => e.type === "final") as Extract<AgentEvent, { type: "final" }>).answer;
+
+    const warm = await run({ approvalId: proposal.approvalId, instruction: "make it a bit warmer" });
+    expect(warm.some((e) => e.type === "asset" && e.kind === "variant")).toBe(true);
+    expect(finalOf(warm)).toMatch(/free, made with the team's own light and colour tools/);
+
+    const festive = await run({ approvalId: proposal.approvalId, instruction: "make it festive for Diwali" });
+    const asset = festive.find((e): e is Extract<AgentEvent, { type: "asset" }> => e.type === "asset")!;
+    expect(asset).toBeTruthy();
+    expect(festive.some((e) => e.type === "review")).toBe(true);
+    expect(finalOf(festive)).toMatch(/is ready and Nisha checked it/);
+    const [step] = await h.g.roQuery<{ step: string; ai: boolean }>("MATCH (a:Asset {id:$id}) RETURN a.step AS step, a.aiEdited AS ai", { id: asset.assetId });
+    expect(step).toEqual({ step: "generative-request", ai: true });
+
+    expect(finalOf(await run({ approvalId: proposal.approvalId, instruction: "make this into an ad" }))).toMatch(/What should the ad say\?/);
+    expect(finalOf(await run({ approvalId: proposal.approvalId, instruction: "thanks" }))).toMatch(/Tell me what you would like changed/);
+    expect(finalOf(await run({ approvalId: proposal.approvalId, retryOf: "B" }))).toMatch(/nothing held back to try again/);
+    expect(finalOf(await run({ approvalId: "approval:nope", instruction: "make it festive" }))).toMatch(/can't find that photo's card/);
+
+    expect((await revise({ approvalId: proposal.approvalId })).status).toBe(400);
+    expect((await revise({ instruction: "make it festive" })).status).toBe(400);
+    expect((await revise({ approvalId: proposal.approvalId, instruction: "x" }, h.make({ studio: async () => wiring, publicMode: true }))).status).toBe(403);
+    expect((await app.request("/api/other/studio/revise", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ approvalId: "x", instruction: "y" }) })).status).toBe(404);
+  }, 90_000);
+
+  it("the clip option: a quote without confirm (nothing made), the clip with confirm; 501 when clips are off, 403 in public mode", async () => {
+    const calls: string[] = [];
+    const clip = {
+      offer: async () => { calls.push("offer"); return { ok: true as const, message: "A clip would use about 7.5 Studio credits.", label: "B", variantId: "v", credits: 7.5, words: "about 7.5 Studio credits" }; },
+      make: async () => { calls.push("make"); return { ok: true as const, message: "Here is your clip.", video: Buffer.from("x"), assetId: "asset:clip-1", credits: 7.5, jobId: "j" }; },
+    };
+    const app = h.make({ studio: async () => ({ ...wiring, clip }) });
+    const clipPost = (a: typeof app, body: unknown) => a.request("/api/mini/studio/clip", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const quote = await (await clipPost(app, { approvalId: "approval:x" })).json() as { ok: boolean; credits: number };
+    expect(quote).toMatchObject({ ok: true, credits: 7.5 });
+    expect(calls).toEqual(["offer"]);
+    const made = await (await clipPost(app, { approvalId: "approval:x", confirm: true })).json() as { ok: boolean; url: string; credits: number };
+    expect(made).toMatchObject({ ok: true, credits: 7.5, url: "/api/mini/assets/asset%3Aclip-1" });
+    expect(calls).toEqual(["offer", "make"]);
+    expect((await clipPost(app, {})).status).toBe(400);
+    expect((await clipPost(h.make({ studio: async () => wiring }), { approvalId: "a" })).status).toBe(501);
+    expect((await clipPost(h.make({ studio: async () => ({ ...wiring, clip }), publicMode: true }), { approvalId: "a" })).status).toBe(403);
+    // the revise route answers a "make a reel" ask with the offer, not a charge
+    const events = sseEvents(await (await upload(app, await facadePhoto({ tilt: 1.1 }), "clip me")).text());
+    const proposal = events.find((e): e is Extract<AgentEvent, { type: "proposal" }> => e.type === "proposal")!;
+    const res = await app.request("/api/mini/studio/revise", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ approvalId: proposal.approvalId, instruction: "make a reel from this" }) });
+    const final = sseEvents(await res.text()).find((e) => e.type === "final") as Extract<AgentEvent, { type: "final" }>;
+    expect(final.answer).toMatch(/would use about 7.5 Studio credits/);
+    expect(calls.filter((c) => c === "make")).toHaveLength(1);
+  }, 60_000);
+
+  it("the owner's settings: blur people's faces (off by default) and the language, per business, refused in public mode", async () => {
+    const app = h.make({ studio: async () => wiring });
+    const put = (a: typeof app, body: unknown) => a.request("/api/mini/studio/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    expect(await (await app.request("/api/mini/studio/settings")).json()).toEqual({ blurFaces: false, language: "auto" });
+    const on = await put(app, { blurFaces: true });
+    expect(await on.json()).toEqual({ blurFaces: true, language: "auto" });
+    expect(await (await put(app, { language: "Hindi" })).json()).toEqual({ blurFaces: true, language: "hindi" });
+    // a run now blurs the person Tara flagged, and says so on the card
+    const events = sseEvents(await (await upload(app, await facadePhoto({ tilt: 1 }), "blur on")).text());
+    const proposal = events.find((e): e is Extract<AgentEvent, { type: "proposal" }> => e.type === "proposal")!;
+    const [card] = await h.g.roQuery<{ p: string }>("MATCH (a:Approval {id:$id}) RETURN a.payload AS p", { id: proposal.approvalId });
+    expect(card!.p).toMatch(/your setting blurs people/);
+    expect(await (await put(app, { blurFaces: false, language: "auto" })).json()).toEqual({ blurFaces: false, language: "auto" });
+    expect((await put(app, {})).status).toBe(400);
+    expect((await put(app, { blurFaces: "yes" })).status).toBe(400);
+    expect((await put(h.make({ studio: async () => wiring, publicMode: true }), { blurFaces: true })).status).toBe(403);
+    expect((await app.request("/api/other/studio/settings")).status).toBe(404);
   }, 60_000);
 
   it("serves the prepared sample photo and its honest caption", async () => {

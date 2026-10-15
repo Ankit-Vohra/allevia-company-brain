@@ -19,7 +19,12 @@ import { approveStudioDraft, studioCard, type DecideFn } from "../studio/approve
 import type { PhotoAssessment } from "../studio/assess.js";
 import { ImageRejected } from "../studio/image.js";
 import { runStudio, type StudioDeps, type StudioResult } from "../studio/pipeline.js";
+import { parseStudioSetting, setBlurFaces, SETTING_REPLY } from "../studio/settings.js";
 import { reviseVariant, type ReviseResult } from "../studio/revise.js";
+import { generateVariant, type GenerateRequest, type GenerateResult } from "../studio/generate.js";
+import { creditsWords } from "../studio/credits.js";
+import { routeRequest } from "../studio/request.js";
+import type { ClipPort } from "../studio/clip.js";
 import { assessFirstFrame, storeVideo, VideoRejected, type Ffmpeg } from "../studio/video.js";
 import { downloadAttachment, AttachmentRejected, MAX_ATTACHMENTS, pickMedia, type AttachmentRef, type FetchFn } from "./attachments.js";
 import type { ButtonPort, ButtonSpec, MessagePort, ThreadPort } from "./bot.js";
@@ -27,8 +32,8 @@ import { threadName } from "./format.js";
 import { ThrottledEditor, WorkLogState } from "./worklog.js";
 
 const PREFIX = "allevia:studio";
-const BUTTON = new RegExp(`^${PREFIX}:(approve|change):(.+):([A-Z][A-Z0-9]*)$`);
-export const studioButtonId = (verb: "approve" | "change", approvalId: string, label: string): string => `${PREFIX}:${verb}:${approvalId}:${label}`;
+const BUTTON = new RegExp(`^${PREFIX}:(approve|change|retry|clip):(.+):([A-Z][A-Z0-9]*)$`);
+export const studioButtonId = (verb: "approve" | "change" | "retry" | "clip", approvalId: string, label: string): string => `${PREFIX}:${verb}:${approvalId}:${label}`;
 export const isStudioButton = (customId: string): boolean => customId.startsWith(`${PREFIX}:`);
 
 const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
@@ -68,6 +73,8 @@ export interface StudioBotDeps {
   studio: Omit<StudioDeps, "now" | "signal">;
   ffmpeg: Ffmpeg;
   gate: StudioGate;
+  /** The 5 second clip option (studio/clip.ts), when the live engine is on. */
+  clip?: ClipPort;
   fetch?: FetchFn;
   onDecision?: OnDecision;
   actions?: ActionOpts;
@@ -139,46 +146,83 @@ export class StudioDiscord {
 
   private async post(thread: ThreadPort, r: StudioResult): Promise<void> {
     const a = r.assessment;
-    const privacy = a.overlays.some((o) => o.kind === "privacy");
     await thread.send(clip([
       `Tara looked at your photo: ${VERDICT_WORDS[a.verdict]}. ${a.story}`.trim(),
       ...(a.verdict === "reshoot" && a.coaching ? [a.coaching] : []),
-      ...(privacy ? ["I spotted a person in it and blurred them in the options."] : []),
+      ...(r.privacy.blurredPeople && !r.privacy.minor ? ["Faces are blurred in the options, because your setting blurs people's faces."] : []),
+      ...r.notices,
     ].join("\n"), 1900));
     const caption = [r.caption.caption, r.caption.hashtags.join(" ")].filter(Boolean).join("\n\n");
-    const recommended = (await studioCard(this.d.graph, r.approvalId))?.payload.studio.recommended;
+    const card = await studioCard(this.d.graph, r.approvalId);
+    const recommended = card?.payload.studio.recommended;
     if (!r.variants.length) await thread.send("I could not make a usable option from this photo. Try a straighter, brighter one.");
     for (const v of r.variants) {
       const f = r.fidelity.find((x) => x.assetId === v.id);
-      const passed = f?.badge === "unchanged";
-      const flavour = v.label === "A" ? " (the safe one)" : v.label === "B" ? " (the bolder one, edited with AI)" : "";
-      const buttons: ButtonSpec[] = passed ? [
-        { customId: studioButtonId("approve", r.approvalId, v.label), label: "Approve", style: "success" },
-        { customId: studioButtonId("change", r.approvalId, v.label), label: "Change", style: "secondary" },
-      ] : [];
-      await thread.send({
-        content: clip([
-          `**Option ${v.label}**${flavour}${v.id === recommended ? " · our pick" : ""}`,
-          passed ? `Checked: ${f!.note.replace(/^Building unchanged\s*·?\s*/i, "the building is unchanged; ") || "the building is unchanged"}` : `Held back: ${f?.note ?? "it could not be checked"}`,
-          "", quote(clip(caption, 900)),
-        ].join("\n"), 1900),
-        buttons,
-        files: [{ name: `option-${v.label.toLowerCase()}.jpg`, data: v.buffer }],
+      const flavour = v.label === "A" ? " (the safe one: a free clean-up)" : v.label === "B" ? ` (the bolder one: edited with AI${v.credits !== undefined ? `, ${creditsWords(v.credits, { about: true })}` : ""})` : "";
+      await this.postOption(thread, r.approvalId, v, { badge: f?.badge ?? "unchecked", note: f?.note ?? "it could not be checked" }, {
+        head: `**Option ${v.label}**${flavour}${v.id === recommended ? " · our pick" : ""}`, caption,
+        canRetry: !!card?.payload.studio.variants.find((x) => x.id === v.id)?.canRetry,
       });
     }
-    await thread.send("Tap Approve on the one you like. It is saved as a draft and nothing is posted anywhere. To change one, reply here, for example \"make it warmer\". Approving uses 1 Studio credit.");
+    await thread.send("Tap Approve on the one you like. It is saved as a draft and nothing is posted anywhere. To change one, reply here. Light and colour changes are free, for example \"make it warmer\". A bigger change, like \"make it festive\", \"change the background\" or \"make this into an ad saying ...\", uses the AI editor, and I will tell you what it costs.");
+  }
+
+  // One option as a message: the picture, the check, the caption, and the buttons that fit (Approve and Change when Nisha passed
+  // it; Try again, with its price, when she held an AI edit back).
+  private async postOption(
+    thread: ThreadPort, approvalId: string, v: { label: string; buffer: Buffer }, check: { badge: string; note: string },
+    o: { head: string; caption?: string; canRetry?: boolean; credits?: number; extra?: string },
+  ): Promise<void> {
+    const passed = check.badge === "unchanged";
+    const buttons: ButtonSpec[] = passed ? [
+      { customId: studioButtonId("approve", approvalId, v.label), label: "Approve", style: "success" },
+      { customId: studioButtonId("change", approvalId, v.label), label: "Change", style: "secondary" },
+    ] : o.canRetry ? [
+      { customId: studioButtonId("retry", approvalId, v.label), label: `Try again${o.credits !== undefined ? ` (${creditsWords(o.credits, { about: true })})` : ""}`, style: "secondary" },
+    ] : [];
+    await thread.send({
+      content: clip([
+        o.head,
+        passed ? `Checked: ${check.note.replace(/^Building unchanged\s*·?\s*/i, "the building is unchanged; ") || "the building is unchanged"}` : `Held back: ${check.note}${o.canRetry ? " I can try once more with a tighter lock." : ""}`,
+        ...(o.extra ? [o.extra] : []),
+        ...(o.caption ? ["", quote(clip(o.caption, 900))] : []),
+      ].join("\n"), 1900),
+      buttons,
+      files: [{ name: `option-${v.label.toLowerCase()}.jpg`, data: v.buffer }],
+    });
   }
 
   // ----- a text reply under the options -----
 
+  // "blur faces from now on" / "stop blurring faces": the one Studio setting, by a plain reply. True when it was one.
+  async onSetting(words: string, say: (text: string) => Promise<unknown>): Promise<boolean> {
+    const s = parseStudioSetting(words);
+    if (!s) return false;
+    try {
+      await setBlurFaces(this.d.graph, this.d.businessId, s.blurFaces, this.now());
+      await say(SETTING_REPLY[s.blurFaces ? "on" : "off"]);
+    } catch (e) {
+      this.log(`${this.d.tenant}: setting failed: ${message(e)}`);
+      await say("I couldn't save that setting. Try again in a moment.");
+    }
+    return true;
+  }
+
   async onReply(m: MessagePort, thread: ThreadPort): Promise<void> {
     const words = m.content.trim();
     if (!words) return;
+    if (await this.onSetting(words, (t) => thread.send(t))) return;
     const [row] = await this.d.graph.roQuery<{ id: string; approval: string | null }>(
       `MATCH (a:Entity:Asset) WHERE a.kind = 'original' AND a.discordThreadId = $tid
        RETURN a.id AS id, a.approvalId AS approval ORDER BY coalesce(a.studioRunAt, 0) DESC, a.id LIMIT 1`, { tid: thread.id });
     if (!row?.approval) return void await thread.send("Drop a photo here and your team will make post options from it.");
     const approvalId = row.approval;
+    const req = routeRequest(words);
+    if (req.kind === "chat") return void await thread.send("Tell me what you would like changed, for example \"make it warmer\", \"make it festive\", \"a different background\", or \"make this into an ad saying ...\".");
+    if (req.kind === "clip") return void await this.d.gate.run(() => this.clip(thread, approvalId));
+    if (req.kind === "generate" || req.kind === "ad" || req.kind === "retry") {
+      return void await this.d.gate.run(() => this.generate(thread, approvalId, req.kind === "retry" ? { kind: "retry" } : req.kind === "ad" ? { kind: "ad", words: req.words, ...(req.headline ? { headline: req.headline } : {}), ...(req.sub ? { sub: req.sub } : {}) } : { kind: "request", words: req.words }));
+    }
     await this.d.gate.run(async () => {
       let r: ReviseResult;
       try {
@@ -192,7 +236,7 @@ export class StudioDiscord {
       await thread.send({
         content: clip([
           `**Option ${r.variant.label}**: ${r.adjustment.label}${passed ? " · our pick" : ""}`,
-          passed ? "Made with the team's own colour and light tools. Checked: the building is unchanged." : `Held back: ${r.fidelity.note}`,
+          passed ? "Made with the team's own colour and light tools (free). Checked: the building is unchanged." : `Held back: ${r.fidelity.note}`,
         ].join("\n"), 1900),
         buttons: passed ? [
           { customId: studioButtonId("approve", approvalId, r.variant.label), label: "Approve", style: "success" },
@@ -201,6 +245,35 @@ export class StudioDiscord {
         files: [{ name: `option-${r.variant.label.toLowerCase()}.jpg`, data: r.variant.buffer }],
       });
     });
+  }
+
+  // A request for the AI editor ("make it festive", an ad, "try again"): one work-log line for the price, then the new option.
+  private async generate(thread: ThreadPort, approvalId: string, request: GenerateRequest): Promise<void> {
+    const log = await thread.send(request.kind === "retry" ? "Trying the AI edit again..." : request.kind === "ad" ? "Styling your photo as an ad..." : "Asking the AI editor...");
+    const lines: string[] = [];
+    let r: GenerateResult;
+    try {
+      r = await generateVariant(this.d.graph, { tenant: this.d.tenant, businessId: this.d.businessId, approvalId, request },
+        { ...this.d.studio, now: this.now(), status: (t) => { lines.push(t); void log.edit(clip(`${lines.map((x) => `· ${x}`).join("\n")}`, 1900)).catch(() => undefined); } });
+    } catch (e) {
+      this.log(`${this.d.tenant}: generate failed: ${message(e)}`);
+      return void await thread.send(studioErrorMessage(e));
+    }
+    if (!r.ok) return void await thread.send(r.message);
+    const f = r.fidelity;
+    await this.postOption(thread, approvalId, r.variant, { badge: f.badge, note: f.note }, {
+      head: `**Option ${r.variant.label}** (edited with AI${r.variant.credits !== undefined ? `, ${creditsWords(r.variant.credits, { about: true })}` : ""}): ${clip(r.request, 120)}${r.passed ? " · our pick" : ""}`,
+      canRetry: r.canRetry, ...(r.variant.credits !== undefined ? { credits: r.variant.credits } : {}),
+    });
+  }
+
+  // "make a clip": a short video from the recommended option, priced first; nothing is spent until the button is pressed.
+  private async clip(thread: ThreadPort, approvalId: string): Promise<void> {
+    const c = this.d.clip;
+    if (!c) return void await thread.send("I can't make video clips here yet. I can make photos: ask for a change, or an ad.");
+    const r = await c.offer({ tenant: this.d.tenant, businessId: this.d.businessId, approvalId });
+    if (!r.ok) return void await thread.send(r.message);
+    await thread.send({ content: clip(r.message, 1900), buttons: [{ customId: studioButtonId("clip", approvalId, r.label), label: `Make the clip (${r.words})`, style: "secondary" }] });
   }
 
   // ----- the buttons -----
@@ -213,9 +286,32 @@ export class StudioDiscord {
       await b.reply("Only people on this business's team can say OK here.", { ephemeral: true });
       return true;
     }
-    const [, verb, approvalId, label] = m as unknown as [string, "approve" | "change", string, string];
+    const [, verb, approvalId, label] = m as unknown as [string, "approve" | "change" | "retry" | "clip", string, string];
     if (verb === "change") {
-      await b.reply("Tell me what to change in this thread, for example \"make it warmer\" or \"a bit darker\". I will make a new option.", { ephemeral: true });
+      await b.reply("Tell me what to change in this thread, for example \"make it warmer\", \"a bit darker\", \"make it festive\" or \"a different background\". I will make a new option.", { ephemeral: true });
+      return true;
+    }
+    if (verb === "clip") {
+      const c = this.d.clip;
+      const thread = b.thread?.();
+      if (!c || !thread) return void await b.reply("I can't make a clip here right now.", { ephemeral: true }), true;
+      await b.defer?.();
+      await b.update({ content: `Making a 5 second clip from option ${label}...`, buttons: [] });
+      await this.d.gate.run(async () => {
+        const card = await studioCard(this.d.graph, approvalId);
+        const v = card?.payload.studio.variants.find((x) => x.label === label);
+        const r = await c.make({ tenant: this.d.tenant, businessId: this.d.businessId, approvalId, ...(v ? { variantId: v.id } : {}) });
+        if (!r.ok) return void await thread.send(r.message);
+        await thread.send({ content: clip(r.message, 1900), files: [{ name: `clip-${label.toLowerCase()}.mp4`, data: r.video }] });
+      });
+      return true;
+    }
+    if (verb === "retry") {
+      const thread = b.thread?.();
+      if (!thread) return void await b.reply("Reply in the thread with \"try again\" and I will have another go.", { ephemeral: true }), true;
+      await b.defer?.();
+      await b.update({ content: `Option ${label} was held back. Trying again...`, buttons: [] });
+      await this.d.gate.run(() => this.generate(thread, approvalId, { kind: "retry", of: label }));
       return true;
     }
     try {

@@ -9,7 +9,7 @@ import { upsertEdge, upsertNode } from "../graph/upsert.js";
 import { agentNodeId } from "../agent/memory.js";
 import { entityId } from "../util/ids.js";
 import { TARA } from "./assess.js";
-import type { GenerationEngine } from "./engine.js";
+import type { EditOpts, GenerationEngine } from "./engine.js";
 import type { AssessmentOverlay } from "../../shared/contracts.js";
 import { blurBoxes, boxesInFrame, dhash, POST_SIZE, registerToFrame, renderVariantA, sha256Hex, type CropPlan } from "./image.js";
 import type { AssetRecord } from "./intake.js";
@@ -76,9 +76,10 @@ export async function makeVariantA(
 // says so instead of inventing one.
 export async function makeVariantB(
   g: GraphHandle, deps: { store: AssetStore; now: number; engine: GenerationEngine }, tenant: string, original: AssetRecord, originalBuffer: Buffer, base: Buffer,
-  plan: CropPlan, privacy: AssessmentOverlay[], treatment: EditTreatment, prompt: EditPrompt,
+  plan: CropPlan, privacy: AssessmentOverlay[], treatment: EditTreatment, prompt: EditPrompt, extra: { onQuote?: EditOpts["onQuote"] } = {},
 ): Promise<VariantRecord | null> {
-  const res = await deps.engine.edit({ image: originalBuffer, mime: "image/jpeg", originalSha256: original.sha256 }, prompt.prompt, { treatment: treatment.key, aspect: "same" });
+  const res = await deps.engine.edit({ image: originalBuffer, mime: "image/jpeg", originalSha256: original.sha256, tenant }, prompt.prompt,
+    { treatment: treatment.key, aspect: "same", ...(extra.onQuote ? { onQuote: extra.onQuote } : {}) });
   if (!res) return null;
   // Image models reframe and straighten on their own: find the frame inside the edit rather than trusting its geometry.
   const editMeta = await sharp(res.image).metadata();

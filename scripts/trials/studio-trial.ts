@@ -49,7 +49,7 @@ async function main(): Promise<void> {
   const t = await getTenant(tenant);
   if (!t) throw new Error(`no tenant ${tenant}`);
   const g = await openGraph(tenant);
-  const deps = productionStudioDeps(cfg.dataDir);
+  const deps = productionStudioDeps(cfg.dataDir, { cacheOnly: /^(1|true|yes)$/i.test(process.env.ALLEVIA_STUDIO_CACHE_ONLY ?? ""), liveEngine: false }); // replays recordings only: these scripts never spend credits
 
   if (step === "plan") {
     const [photo] = rest;

@@ -116,6 +116,7 @@ export class HubBot {
         const t = m.thread();
         if (t) await studio.onReply(m, t);
       } else if (m.content.trim()) {
+        if (await studio.onSetting(m.content.trim(), (t) => m.reply(t))) return;
         await m.reply("Drop a photo or a video here. To ask your team a question, use #your-team.");
       }
       return;

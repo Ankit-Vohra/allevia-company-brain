@@ -137,6 +137,7 @@ export function buttonPort(i: ButtonInteraction): ButtonPort {
     isOwner: !!i.guild && i.guild.ownerId === i.user.id,
     memberRoleIds: roleIdsOf(i.member),
     defer: async () => { if (!i.deferred && !i.replied) await i.deferUpdate(); },
+    thread: () => (i.channel?.isThread() ? threadPort(i.channel as ThreadChannel) : null),
     createThread: async (name) => {
       const ch = i.channel;
       const parent = ch?.isThread() ? (ch as ThreadChannel).parent : ch;

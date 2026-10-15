@@ -41,9 +41,10 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
   const { onDecision, actions } = productionDeps({ publicMode: false });
   const shared = { live: 0 };
   const gate = new StudioGate();
-  const { productionStudioDeps } = await import("../studio/wiring.js");
+  const { productionStudioDeps, studioClip } = await import("../studio/wiring.js");
   const { realFfmpeg } = await import("../studio/video.js");
   const studioDeps = productionStudioDeps(cfg.dataDir);
+  const clip = studioClip(cfg.dataDir, (slug) => tenantGraph(slug), { log });
   const ffmpeg = realFfmpeg();
   if (!(await ffmpeg.available())) log("[hub] ffmpeg is not installed: videos are kept but not looked at (install ffmpeg to assess their first frame).");
 
@@ -61,6 +62,7 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
     },
     studioFor: async (area) => new StudioDiscord({
       tenant: area.slug, businessId: businessId(area.slug), graph: await tenantGraph(area.slug), studio: studioDeps, ffmpeg, gate,
+      ...(clip ? { clip } : {}),
       ...(onDecision ? { onDecision } : {}), ...(actions ? { actions } : {}), log,
     }),
   });

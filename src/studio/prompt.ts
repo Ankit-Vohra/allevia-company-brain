@@ -90,3 +90,58 @@ export async function buildEditPrompt(
   ].filter(Boolean).join("\n");
   return { prompt, sections, sources: [...sources] };
 }
+
+// ---------- the owner's own requests ("make it festive", "change the background", "turn it into an ad") ----------
+
+export type RequestMode = "request" | "ad" | "retry";
+
+export interface RequestPromptInput {
+  words: string;                      // what the owner asked for (data, quoted, never an instruction to the studio)
+  mode: RequestMode;
+  /** Retry: what Nisha found the last attempt added and removed, so the new attempt is told to leave those alone. */
+  retry?: { added: string[]; removed: string[] };
+}
+
+// The owner explicitly asked for a change, so the architectural locks of the default edit do not apply; the subject
+// itself, the framing, people and the brand still do.
+export const REQUEST_LOCKS = [
+  "Change only what the request names. Keep the subject itself (the building, product, room or place), its shape, proportions, materials and details exactly as they are, and keep the camera position, perspective and framing.",
+  "Do not invent logos, signs, lettering, brand marks or extra people. Never alter, replace or reshape any person's face, body or clothing.",
+];
+
+export function buildRequestPrompt(ctx: StudioContext, a: PhotoAssessment, o: RequestPromptInput): EditPrompt {
+  const b = ctx.brand;
+  const palette = [b.paper, b.ink, b.accent, b.neutral].filter(Boolean).join(", ");
+  const words = o.words.replace(/\s+/g, " ").trim().slice(0, 300);
+  const subject = ctx.project ? `${a.subject} (the ${ctx.project.name} project)` : a.subject;
+  const sections: EditPrompt["sections"] = {
+    lock: [
+      ...REQUEST_LOCKS,
+      a.locks.length ? `What must stay recognisable: ${a.locks.join("; ")}, except where the request changes it.` : "",
+      ...(o.retry && (o.retry.added.length || o.retry.removed.length)
+        ? [`The last attempt went wrong: it ${[o.retry.added.length ? `added ${o.retry.added.join(", ")}` : "", o.retry.removed.length ? `removed ${o.retry.removed.join(", ")}` : ""].filter(Boolean).join(" and ")}. This time keep those exactly as they are in the photo and change nothing beyond the request.`]
+        : []),
+    ].filter(Boolean).join(" "),
+    scope: o.mode === "ad"
+      ? `Make this a clean advertising image for ${ctx.business.name}: ${words}. Compose it so the bottom third is calm, plain space for a message that will be added afterwards (leave it completely empty: no letters, no numbers), with the subject sharp and unchanged above it.`
+      : `Apply this change and nothing else: ${words}.`,
+    style: [
+      palette ? `Where colour is free to change, lean toward the brand palette (${palette}): earthy and muted, never garish.` : "",
+      b.tone ? `The mood of the brand: ${clip(b.tone, 160)}` : "",
+      ...b.visualRules.slice(0, 3).map((r) => clip(r.text, 160)),
+    ].filter(Boolean).join(" "),
+    audience: `For people looking for ${ctx.business.industry ? `${/^[aeiou]/i.test(ctx.business.industry) ? "an" : "a"} ${ctx.business.industry}` : "a business like this"}${ctx.business.city ? ` in ${ctx.business.city}` : ""}.`,
+    season: "",
+    format: "Keep the input's framing and aspect ratio exactly; do not crop, extend or reframe.",
+    negatives: "No text, letters, numbers, logos, watermarks or borders. No extra people. No HDR halos, lens flare or oversharpening. The result must look like a real photograph of the same place.",
+  };
+  const prompt = [
+    `Edit this photo of ${subject} by ${ctx.business.name}.`,
+    `REQUEST: ${sections.scope}`,
+    `LOCK: ${sections.lock}`,
+    sections.style ? `STYLE: ${sections.style}` : "",
+    `FORMAT: ${sections.format}`,
+    `NEGATIVES: ${sections.negatives}`,
+  ].filter(Boolean).join("\n");
+  return { prompt, sections, sources: [...b.ids] };
+}

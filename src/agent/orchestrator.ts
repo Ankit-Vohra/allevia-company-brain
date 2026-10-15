@@ -37,6 +37,7 @@ import { modesUsed, type CapabilityModeInfo } from "../capabilities/modes.js";
 import { typeFromId } from "../util/ids.js";
 import { checkTurn, extractCitations, hasNumbers } from "./checks.js";
 import { clipToItem } from "./style.js";
+import { languageNote } from "./language.js";
 import {
   CHIEF, FINDING_SCHEMA, findingMaxChars, MAX_DESKS, MAX_DESKS_BROAD, REVIEW_SCHEMA, agentSystemPrompt, directPrompt, planSchema,
   planPrompt, planSystemPrompt, reviewPrompt, revisePrompt, synthesisPrompt, workPrompt, type FindingView, type PromptOpts, type ReviewEvidence,
@@ -91,6 +92,7 @@ export interface TurnDeps {
   draftWhileReviewing?: boolean;            // default true: the Chief drafts (held) while the last reviews finish
   capabilities?: CapabilityModeInfo[];      // the capability ladder: the Chief says where non-live data comes from
   team?: TeamSettings;                      // desks switched off or light, and the owner's standing instructions
+  language?: string;                        // the business's own language setting (language.ts); absent: follow the question
 }
 
 export interface Plan { steps: PlanStep[]; rationale: string; chiefTask?: string }
@@ -552,8 +554,11 @@ class Turn {
   }
 
   private get promptOpts(): PromptOpts {
-    return { now: this.deps.now, tenant: this.input.tenant, ...(this.deps.timeZone ? { timeZone: this.deps.timeZone } : {}) };
+    return { now: this.deps.now, tenant: this.input.tenant, ...(this.deps.timeZone ? { timeZone: this.deps.timeZone } : {}), language: this.languageNote };
   }
+
+  // The answer's language, decided from the question (and the business's own setting), told to every agent.
+  private get languageNote(): string { return languageNote(this.input.question, this.deps.language); }
 
   // Every prompt an agent gets carries the owner's standing instructions about it. What a prompt showed counts as seen
   // (like the recall brief): the agent may cite it.
@@ -773,7 +778,7 @@ class Turn {
       const tools = drafts.length ? gateWrites(own, () => this.draftsFinal(drafts)) : own;
       const out = await this.runAgent(agent, {
         phase: "work", system: this.system(agent, tools), tools, outputSchema: FINDING_SCHEMA, maxTurns: MAX_TURNS.work,
-        prompt: workPrompt({ question: this.input.question, task: s.task, recall: this.input.recall.text, inputs: inputs.map(this.view), failedDeps, toolRounds: toolRounds("work"), agent: agent.id }),
+        prompt: workPrompt({ question: this.input.question, task: s.task, recall: this.input.recall.text, inputs: inputs.map(this.view), failedDeps, toolRounds: toolRounds("work"), agent: agent.id, language: this.languageNote }),
       });
       const f = this.toFinding(out, { id: findingId(this.input.turnId, agent.id), agent: agent.id, task: s.task, depIds: inputs.map((x) => x.id) });
       this.findings.set(agent.id, f);
@@ -874,7 +879,7 @@ class Turn {
       const tools = this.tools(producer, "revise");
       const out = await this.runAgent(producer, {
         phase: "revise", system: this.system(producer, tools), tools, outputSchema: FINDING_SCHEMA, maxTurns: MAX_TURNS.revise,
-        prompt: revisePrompt({ question: this.input.question, task: f.task, finding: this.view(f), notes: notes.map((n) => ({ reviewer: n.reviewer, verdict: n.verdict, note: n.note })), toolRounds: toolRounds("revise"), agent: producer.id }),
+        prompt: revisePrompt({ question: this.input.question, task: f.task, finding: this.view(f), notes: notes.map((n) => ({ reviewer: n.reviewer, verdict: n.verdict, note: n.note })), toolRounds: toolRounds("revise"), agent: producer.id, language: this.languageNote }),
       });
       const next = this.toFinding(out, { id: f.id, agent: f.agent, task: f.task, depIds: f.basedOn });
       Object.assign(f, { text: next.text, citations: next.citations, basedOn: next.basedOn, proposals: next.proposals.length ? next.proposals : f.proposals, revised: true });
@@ -1007,9 +1012,9 @@ class Turn {
       res = await this.runAgent(chief, {
         phase, system: this.system(chief, tools), tools, streamText: true, maxTurns: lean ? MAX_TURNS.synthesis : MAX_TURNS.direct,
         prompt: fast
-          ? directPrompt({ question: this.input.question, recall: this.input.recall.text, task: plan.steps[0]!.task, toolRounds: toolRounds("direct"), sources })
+          ? directPrompt({ question: this.input.question, recall: this.input.recall.text, task: plan.steps[0]!.task, toolRounds: toolRounds("direct"), sources, language: this.languageNote })
           : synthesisPrompt({
-            question: this.input.question, recall: this.input.recall.text, findings: views, failed: this.failed, canLookUp: !lean, sources, guidance,
+            question: this.input.question, recall: this.input.recall.text, findings: views, failed: this.failed, canLookUp: !lean, sources, guidance, language: this.languageNote,
             ...(plan.chiefTask ? { chiefTask: plan.chiefTask } : {}),
           }),
         ...(held ? { abort: held.abort, onToolResult: this.toolResults(out, held.hold) } : {}),

@@ -16,6 +16,7 @@
 import type { AgentEvent, TurnChecks } from "../../shared/contracts.js";
 import { agentById } from "../../shared/roster.js";
 import type { AskInput, AskResult } from "../agent/ask.js";
+import { LANGUAGE_REPLY, parseLanguageSetting, setLanguagePreference } from "../agent/language.js";
 import type { GraphHandle } from "../graph/client.js";
 import { DecisionError, decideAndNotify, type ActionOpts, type OnDecision } from "../server/approvals.js";
 import { approvals as listApprovals, latestBrief, sessionDetail } from "../server/reads.js";
@@ -77,6 +78,7 @@ export interface ButtonPort {
   isOwner: boolean;
   memberRoleIds?: string[];                     // the user's roles in the guild (hub mode)
   defer?(): Promise<void>;                      // acknowledge before slow work (the card is edited later)
+  thread?(): ThreadPort | null;                 // the thread the card is in, when it is in one (a retry posts its new option there)
   createThread?(name: string): Promise<ThreadPort>; // a new public thread in the channel the card is in (for /continue)
   reply(text: string, opts?: { ephemeral?: boolean }): Promise<void>;
   update(m: Outgoing): Promise<void>;           // edit the card the button is on
@@ -157,6 +159,18 @@ export class AlleviaBot {
     const question = m.content.trim();
     if (!question) return;
     const asker = m.authorIsOwner ? FOUNDER : MEMBER;
+    // "always answer in English": the business's language setting, said in plain words (only the owner changes it)
+    const lang = m.authorIsOwner && (m.channelId === this.d.channelId || m.threadParentId === this.d.channelId) ? parseLanguageSetting(question) : null;
+    if (lang) {
+      try {
+        const pref = await setLanguagePreference(this.d.graph, lang.language, this.now());
+        await m.reply(LANGUAGE_REPLY(pref));
+      } catch (e) {
+        this.log(`language setting failed: ${message(e)}`);
+        await m.reply("I couldn't save that setting. Try again in a moment.");
+      }
+      return;
+    }
     if (m.channelId === this.d.channelId) {
       const thread = await m.startThread(threadName(question));
       await this.turn(thread, question, asker, () => this.openSession(thread.id, question, asker));

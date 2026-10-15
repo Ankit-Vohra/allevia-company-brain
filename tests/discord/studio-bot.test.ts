@@ -16,6 +16,8 @@ import { StudioDiscord, StudioGate, studioButtonId } from "../../src/discord/stu
 import type { AreaRecord } from "../../src/discord/hub-types.js";
 import type { AttachmentRef, FetchFn } from "../../src/discord/attachments.js";
 import { FakeEngine } from "../../src/studio/engine.js";
+import { loadStudioSettings } from "../../src/studio/settings.js";
+import { loadLanguagePreference } from "../../src/agent/language.js";
 import type { Ffmpeg } from "../../src/studio/video.js";
 import { AssetStore } from "../../src/studio/store.js";
 import { FakeVision } from "../../src/studio/vision.js";
@@ -124,7 +126,7 @@ describe("photos in the Studio on Discord", () => {
     expect(text(log!.first)).toMatch(/^\*\*Work log\*\*/);
     expect(log!.edits.length).toBeGreaterThan(0); // one message, edited as the team worked
     expect(text(tara!.first)).toMatch(/^Tara looked at your photo: it needs a little polish\./);
-    expect(text(tara!.first)).toContain("blurred them"); // the person Tara flagged
+    expect(text(tara!.first)).not.toMatch(/blurred/); // a person is kept as they are unless the business asked for blurring
     expect(text(tara!.first)).not.toMatch(/verdict|overlay|asset|graph/i);
 
     const options = thread.options();
@@ -143,7 +145,8 @@ describe("photos in the Studio on Discord", () => {
     approvalId = ids[0]!.replace(/^allevia:studio:approve:/, "").replace(/:A$/, "");
     expect(ids).toEqual([studioButtonId("approve", approvalId, "A"), studioButtonId("change", approvalId, "A")]);
     expect(ids.every((id) => id.length <= 100)).toBe(true); // Discord's custom_id limit
-    expect(text(rest.at(-1)!.first)).toMatch(/Approving uses 1 Studio credit/);
+    expect(text(rest.at(-1)!.first)).toMatch(/Light and colour changes are free/);
+    expect(text(rest.at(-1)!.first)).toMatch(/I will tell you what it costs/);
   });
 
   it("what is stored has no EXIF or location, and the original is in the graph with the thread it lives in", async () => {
@@ -177,11 +180,14 @@ describe("photos in the Studio on Discord", () => {
     expect(made.content).toMatch(/our pick/);
     expect(made.buttons![0]!.customId).toBe(studioButtonId("approve", approvalId, "C"));
     expect(made.files).toHaveLength(1);
-    // what it cannot do is said plainly, and nothing is made
+    // a change to what is IN the photo goes to the AI editor (no longer "not something the team can do yet")
     const before = thread.options().length;
     await w.studio.onReply(message("remove the bin on the left", [], { thread }), thread);
-    expect(thread.texts().at(-1)).toMatch(/Changing what is in the photo is not something the team can do yet/);
-    expect(thread.options()).toHaveLength(before);
+    expect(thread.options()).toHaveLength(before + 1);
+    const gen = thread.options().at(-1)!.first as Exclude<Outgoing, string>;
+    expect(gen.content).toContain("**Option D** (edited with AI");
+    expect(gen.content).toContain("remove the bin on the left");
+    expect(thread.texts().join("\n")).not.toMatch(/not something the team can do yet/);
     // a reply in a thread with no photo
     const lone = new FakeThread(snowflake(), "lone");
     await w.studio.onReply(message("make it warmer", [], { thread: lone }), lone);
@@ -288,6 +294,39 @@ describe("videos", () => {
 });
 
 describe("one Studio run at a time", () => {
+  it("'make a clip' is a priced offer with a button; nothing is made until it is pressed, and the clip comes back as a file", async () => {
+    const w = await world("kestrel_oak");
+    const made: string[] = [];
+    const clip = {
+      offer: async () => ({ ok: true as const, message: "I can make a 5 second clip from option B. It would use about 7.5 Studio credits. It is 5 seconds, silent.", label: "B", variantId: "v", credits: 7.5, words: "about 7.5 Studio credits" }),
+      make: async () => { made.push("made"); return { ok: true as const, message: "Here is your 5 second clip from option B. It used about 7.5 Studio credits.", video: Buffer.from("mp4"), assetId: "asset:clip", credits: 7.5, jobId: "j" }; },
+    };
+    const studio = new StudioDiscord({ ...(w.studio as unknown as { d: ConstructorParameters<typeof StudioDiscord>[0] }).d, clip });
+    const m = message("the harbour", [file("photo.jpg")]);
+    await studio.onMedia(m);
+    const thread = m.started[0]!;
+    await studio.onReply(message("can you make a short reel from this", [], { thread }), thread);
+    expect(made).toEqual([]);
+    const offer = thread.sent.at(-1)!.first as Exclude<Outgoing, string>;
+    expect(offer.content).toContain("about 7.5 Studio credits");
+    expect(offer.buttons![0]!.label).toBe("Make the clip (about 7.5 Studio credits)");
+    const approvalId = offer.buttons![0]!.customId.replace(/^allevia:studio:clip:/, "").replace(/:B$/, "");
+    const b = press(studioButtonId("clip", approvalId, "B"), { thread: () => thread });
+    expect(await studio.onButton(b)).toBe(true);
+    expect(made).toEqual(["made"]);
+    const sent = thread.sent.at(-1)!.first as Exclude<Outgoing, string>;
+    expect(sent.content).toContain("It used about 7.5 Studio credits.");
+    expect(sent.files![0]!.name).toBe("clip-b.mp4");
+    // only the team can press it
+    const stranger = press(studioButtonId("clip", approvalId, "B"), { isOwner: false, thread: () => thread });
+    await studio.onButton(stranger);
+    expect(made).toEqual(["made"]);
+    // with no clip service, the ask is answered honestly
+    await w.studio.onReply(message("make a reel", [], { thread }), thread);
+    expect(thread.texts().at(-1)).toMatch(/can't make video clips here yet/);
+    await w.cleanup();
+  });
+
   it("a second photo waits its turn and is told so", async () => {
     const w = await world("kestrel_oak");
     let active = 0;
@@ -402,6 +441,45 @@ describe("through the hub: a business reaches only its own Studio", () => {
     await bot.onMessage(msg("make it a bit cooler", [], A.channels.studio!, [A.roleId!], t));
     expect(t.options()).toHaveLength(before + 1);
     expect((t.options().at(-1)!.first as Exclude<Outgoing, string>).content).toContain("cooler");
+  });
+
+  it("'blur faces from now on' in #studio sets A's setting only, a reply in a thread turns it off, and nothing is asked per photo", async () => {
+    const on = msg("Blur faces from now on", [], A.channels.studio!, [A.roleId!]);
+    await bot.onMessage(on);
+    expect(on.replies[0]).toMatch(/From now on I will blur people's faces/);
+    expect(await loadStudioSettings(wa.g, BIZ)).toEqual({ blurFaces: true });
+    expect(await loadStudioSettings(wb.g, BIZ)).toEqual({ blurFaces: false });
+    // the next photo says so, plainly, and has no question or buttons about people
+    const m = msg("with the setting on", [file("photo.jpg")], A.channels.studio!, [A.roleId!]);
+    await bot.onMessage(m);
+    const t = m.started[0]!;
+    expect(t.texts().join("\n")).toContain("Faces are blurred in the options, because your setting blurs people's faces.");
+    expect(t.texts().join("\n")).not.toMatch(/Is it you|Keep them|Blur them/);
+    const off = msg("stop blurring faces", [], A.channels.studio!, [A.roleId!], t);
+    await bot.onMessage(off);
+    expect(t.texts().at(-1)).toMatch(/faces will be kept as they are/i);
+    expect(await loadStudioSettings(wa.g, BIZ)).toEqual({ blurFaces: false });
+    // someone from B cannot change A's setting
+    const stranger = msg("blur faces from now on", [], A.channels.studio!, [B.roleId!]);
+    await bot.onMessage(stranger);
+    expect(stranger.replies).toEqual([]);
+    expect(await loadStudioSettings(wa.g, BIZ)).toEqual({ blurFaces: false });
+  });
+
+  it("'always answer in English' in #your-team sets A's language only and is not sent to the team as a question", async () => {
+    const m = msg("From now on, always answer in English please", [], A.channels["your-team"]!, [A.roleId!]);
+    await bot.onMessage(m);
+    expect(m.replies[0]).toMatch(/From now on I will answer in English/);
+    expect(asked).toEqual([]);
+    expect(await loadLanguagePreference(wa.g)).toBe("english");
+    expect(await loadLanguagePreference(wb.g)).toBeUndefined();
+    const back = msg("From now on reply in the language I write in", [], A.channels["your-team"]!, [A.roleId!]);
+    await bot.onMessage(back);
+    expect(await loadLanguagePreference(wa.g)).toBeUndefined();
+    // an ordinary question that mentions a language is still a question
+    await bot.onMessage(msg("Can you write the Diwali post in Hindi?", [], A.channels["your-team"]!, [A.roleId!]));
+    expect(asked.map((a) => a.question)).toEqual(["Can you write the Diwali post in Hindi?"]);
+    expect(await loadLanguagePreference(wa.g)).toBeUndefined();
   });
 
   it("an Approve press decides A's card in A's graph; B's card id from A's thread finds nothing; B's role is turned away", async () => {

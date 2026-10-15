@@ -12,7 +12,7 @@ import type { GraphHandle } from "../../src/graph/client.js";
 import { closeAll } from "../../src/graph/client.js";
 import { approveStudioDraft, studioCard, type DecideFn } from "../../src/studio/approve.js";
 import { decide } from "../../src/server/approvals.js";
-import { FakeEngine, HiggsfieldEngine, RecordedEngine, recordingKey } from "../../src/studio/engine.js";
+import { EngineDecline, FakeEngine, RecordedEngine, recordingKey } from "../../src/studio/engine.js";
 import { chooseTilt, latestStudioRun, runStudio } from "../../src/studio/pipeline.js";
 import { AssetStore } from "../../src/studio/store.js";
 import { FakeVision } from "../../src/studio/vision.js";
@@ -176,7 +176,8 @@ describe("studio pipeline (integration)", () => {
     expect(r1.caption.caption).toBe("Seven tall windows let the afternoon in.\n\nHarbour House, Bristol");
     expect(r1.caption.edits.join("; ")).toMatch(/hard sell.*negative-parallelism|negative-parallelism.*hard sell|hard sell/);
     expect(r1.caption.altText).toBe(TARA_ANSWER.altText);
-    expect(events.some((e) => e.type === "agent_status" && /No generative edit for this photo yet/.test(e.text))).toBe(true);
+    expect(events.some((e) => e.type === "agent_status" && /AI editor is not switched on here/.test(e.text))).toBe(true);
+    expect(r1.notices).toEqual(["The AI editor isn't switched on here, so I made the simple clean-up only."]);
     expect(r1.context.project).toBeNull();
 
     // record an edit for this photo, and the next run uses it
@@ -203,8 +204,8 @@ describe("studio pipeline (integration)", () => {
   it("fails closed: when Nisha's look cannot run, every variant is 'unchecked' and none is recommended as passed", async () => {
     const vision = new FakeVision({ "content-strategist": TARA_ANSWER, "copy-editor": DEV_ANSWER }); // no answer for Nisha: it throws
     const r = await runStudio(g, { tenant: "kestrel_oak", businessId: BIZ, bytes: await facadePhoto({ tilt: 2 }), note: "" },
-      { store, vision, engine: new HiggsfieldEngine(), now }, () => undefined);
-    expect(r.variants.map((v) => v.label)).toEqual(["A"]); // the Phase 2 engine refuses; B is skipped, the run goes on
+      { store, vision, engine: { name: "declining", edit: async () => { throw new EngineDecline("not-logged-in", "The AI editor isn't signed in right now, so I made the simple clean-up only."); } }, now }, () => undefined);
+    expect(r.variants.map((v) => v.label)).toEqual(["A"]); // the engine declines; B is skipped, the run goes on
     expect(r.fidelity.map((f) => f.badge)).toEqual(["unchecked"]);
     const card = (await studioCard(g, r.approvalId))!;
     expect(card.payload.studio.variants[0]!.badge).toBe("unchecked");
