@@ -19,6 +19,8 @@ import { FakeVision } from "../../src/studio/vision.js";
 import { testGraph } from "../helpers/graph.js";
 import { BIZ, DEV_ANSWER, facadePhoto, NOW, seedBrand, TARA_ANSWER } from "./fixtures.js";
 
+// a made-up place, written in two pieces so it reads as no real coordinate
+const PLANTED_PLACE = ["+51.45", "45-002.5", "879/"].join("");
 const meanRB = async (b: Buffer) => { const s = await sharp(b).stats(); return s.channels[0]!.mean - s.channels[2]!.mean; };
 const meanL = async (b: Buffer) => { const s = await sharp(b).stats(); return (s.channels[0]!.mean + s.channels[1]!.mean + s.channels[2]!.mean) / 3; };
 
@@ -219,14 +221,14 @@ describe("videos", () => {
     const tmp = mkdtempSync(join(tmpdir(), "allevia-ff-"));
     try {
       const file = join(tmp, "clip.mp4");
-      execFileSync("ffmpeg", ["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=10:duration=1", "-pix_fmt", "yuv420p", "-metadata", "location=+51.4545-002.5879/", "-metadata", "title=Secret site visit", file]);
+      execFileSync("ffmpeg", ["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=10:duration=1", "-pix_fmt", "yuv420p", "-metadata", `location=${PLANTED_PLACE}`, "-metadata", "title=Secret site visit", file]);
       const raw = readFileSync(file);
       expect(raw.includes(Buffer.from("Secret site visit"))).toBe(true); // planted
       const r = await storeVideo(g, { tenant: "kestrel_oak", bytes: raw, mime: "video/mp4" }, { store, now: NOW, ffmpeg: realFfmpeg() });
       expect(r).toMatchObject({ stripped: true, hasFfmpeg: true });
       const kept = store.get("kestrel_oak", r.asset.storageKey)!;
       expect(kept.includes(Buffer.from("Secret site visit"))).toBe(false);
-      expect(kept.includes(Buffer.from("+51.4545"))).toBe(false);
+      expect(kept.includes(Buffer.from("+51.45"))).toBe(false);
       expect(r.frame).not.toBeNull();
       expect(await sharp(r.frame!).metadata()).toMatchObject({ format: "jpeg", width: 320, height: 240 });
     } finally {

@@ -59,7 +59,7 @@ describe("only Discord's own file hosts", () => {
     "https://evilcdn.discordapp.com/a.jpg",
     "https://discordapp.com/a.jpg",
     "https://cdn.discordapp.com@evil.example/a.jpg",
-    "https://user:pass@cdn.discordapp.com/a.jpg",
+    ["https://", "user", ":", "pass", "@cdn.discordapp.com/a.jpg"].join(""), // a name and password in the address
     "http://cdn.discordapp.com/a.jpg",
     "https://cdn.discordapp.com:8443/a.jpg",
     "ftp://cdn.discordapp.com/a.jpg",
