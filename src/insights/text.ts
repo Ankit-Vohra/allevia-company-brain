@@ -84,16 +84,17 @@ export function longDate(d: string): string {
 // First letter up: "home page: …" -> "Home page: …".
 export const cap1 = (s: string): string => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
 
-// "/jobs" for a Page ("home page" for "/"), else its name.
+// How the owner says a Page: "jobs page" for "/jobs", "home page" for "/", else its name. No slashes: an owner does not
+// think in URL paths.
 export function pageLabel(p: { path?: unknown; name?: unknown; id: string }): string {
   if (p.path === "/") return "home page";
-  if (typeof p.path === "string" && p.path) return p.path;
+  if (typeof p.path === "string" && p.path) return `${p.path.replace(/^\/+|\/+$/g, "")} page`;
   if (typeof p.name === "string" && p.name) return p.name;
   return p.id;
 }
 
-// "signup_funnel_otp_verified" -> "OTP verified"; "accounts_created" -> "Accounts created".
+// "signup_funnel_otp_verified" -> "Sign-up code verified"; "accounts_created" -> "Accounts created".
 export function humanise(key: string): string {
-  const s = key.replace(/[_.-]+/g, " ").trim().replace(/\botp\b/gi, "OTP").replace(/\bctr\b/gi, "CTR").replace(/\bcpa\b/gi, "CPA");
+  const s = key.replace(/[_.-]+/g, " ").trim().replace(/\bsignup funnel\b/gi, "sign-up").replace(/\botp\b/gi, "sign-up code").replace(/\bctr\b/gi, "CTR").replace(/\bcpa\b/gi, "CPA");
   return s ? s[0]!.toUpperCase() + s.slice(1) : s;
 }

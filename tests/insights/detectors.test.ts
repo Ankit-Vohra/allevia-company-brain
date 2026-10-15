@@ -45,7 +45,7 @@ describe("seo detectors", () => {
     expect(c.evidence).toEqual(expect.arrayContaining(["page:www.aamdani.ai/jobs", "rule:seo-meta-description"]));
     expect(c.evidence).not.toContain("rule:seo-h1"); // medium severity
     expect(c.numbers).toMatchObject({ failing: 1, impressions: 9000, clicks: 120 });
-    expect(c.title).toBe("Fix 1 high-severity SEO issue on /jobs");
+    expect(c.title).toBe("Fix 1 high-severity SEO issue on jobs page");
     expect(c.why).toContain("9,000 impressions");
     expect(c.suggestedAction).toMatchObject({ kind: "github_issue", payload: { targetId: "page:www.aamdani.ai/jobs" } });
     expect(c.suggestedAction!.payload.body).toContain("meta description");
@@ -67,7 +67,7 @@ describe("seo detectors", () => {
     expect(cs).toHaveLength(1);
     expect(cs[0]!.evidence).toEqual(["page:www.aamdani.ai/employers"]);
     expect(cs[0]!.numbers).toMatchObject({ pages: 1 });
-    expect(cs[0]!.why).toContain("/employers (Crawled - currently not indexed)");
+    expect(cs[0]!.why).toContain("employers page (Crawled - currently not indexed)");
   });
 
   it("sitemap errors and sitemap URLs Google has not indexed", async () => {
@@ -128,7 +128,7 @@ describe("funnel detector", () => {
     const c = cs[0]!;
     expect(c.key).toBe("funnel.biggest_drop:audience:job-seekers:signup_funnel");
     expect(c.numbers).toMatchObject({ from_users: 820, to_users: 410, drop_pct: 50, lost: 410, top_users: 1000, bottom_users: 300 });
-    expect(c.title).toBe("Job seekers in Raipur signup funnel: 50% drop from OTP verified to setup completed");
+    expect(c.title).toBe("Job seekers in Raipur sign-up: 50% drop from sign-up code verified to setup completed");
     expect(c.evidence).toHaveLength(3); // the audience and the two step observations
   });
 });

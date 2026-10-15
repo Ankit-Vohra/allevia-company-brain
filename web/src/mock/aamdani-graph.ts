@@ -68,12 +68,12 @@ export const aamdaniGraph = buildGraph(
     }],
     ["observation:ig-reach-wk41", "Observation", "Instagram reach, week 41: 18,420", { asOf: "2026-10-12", props: { metric: "reach", value: 18420, unit: "accounts" }, src: ["document:ig-insights-2026-10-12"] }],
     ["observation:signups-wk41", "Observation", "Signups, week 41: 312", { asOf: "2026-10-12", props: { metric: "signups", value: 312, unit: "users", delta: "+18% w/w" } }],
-    ["observation:gsc-jobs-clicks-2026-10", "Observation", "/jobs pages: 1,930 clicks, CTR 0.9%", {
+    ["observation:gsc-jobs-clicks-2026-10", "Observation", "job pages: 1,930 clicks, CTR 0.9%", {
       asOf: "2026-10-13", summary: "Search clicks to /jobs/* pages, 14 Sep–13 Oct: 1,930 clicks from 214,000 impressions (CTR 0.9%).",
       props: { metric: "clicks", value: 1930, impressions: 214000, ctr: 0.9 }, src: ["document:gsc-export-2026-10-13"],
     }],
-    ["observation:gsc-jobs-clicks-prev", "Observation", "/jobs pages, previous 28 days: 2,610 clicks", { asOf: "2026-09-13", props: { metric: "clicks", value: 2610 }, src: ["document:gsc-export-2026-10-13"] }],
-    ["observation:funnel-otp-drop-2026-10", "Observation", "Signup → verified: 41% drop at OTP", { asOf: "2026-10-12", props: { metric: "funnel_drop", value: 41, unit: "%" } }],
+    ["observation:gsc-jobs-clicks-prev", "Observation", "job pages, previous 28 days: 2,610 clicks", { asOf: "2026-09-13", props: { metric: "clicks", value: 2610 }, src: ["document:gsc-export-2026-10-13"] }],
+    ["observation:funnel-otp-drop-2026-10", "Observation", "Signup → verified: 41% drop at sign-up code", { asOf: "2026-10-12", props: { metric: "funnel_drop", value: 41, unit: "%" } }],
     ["observation:meta-cpa-seekers-broad", "Observation", "Meta 'seekers broad': CPA ₹96", { simulated: true, asOf: "2026-10-12", props: { metric: "cpa", value: 96, unit: "INR", accountMedian: 38 } }],
 
     ["rule:hook-salary-reveal", "Rule", "Hook · Salary reveal", { summary: "Open on the exact monthly figure, then show the work behind it.", props: { kind: "hook", source: "instagram-agent-skill" } }],
@@ -105,9 +105,9 @@ export const aamdaniGraph = buildGraph(
     ["query:security-guard-job-near-me", "Query", "security guard job near me", { props: { impressions: 26100, position: 11.8 } }],
     ["event:google-core-update-2026-09", "Event", "Google core update (Sep 2026)", { asOf: "2026-09-18", props: { kind: "algorithm_update", at: "2026-09-18" } }],
 
-    ["task:github-41-jobs-meta", "Task", "#41 Unique meta descriptions for /jobs pages", { props: { kind: "github_issue", status: "open" } }],
+    ["task:github-41-jobs-meta", "Task", "#41 Unique meta descriptions for job pages", { props: { kind: "github_issue", status: "open" } }],
     ["task:pending-employer-reels", "Task", "PENDING · Employer reel series", { props: { kind: "pending", status: "open" } }],
-    ["task:pending-otp-fallback", "Task", "PENDING · OTP fallback to WhatsApp", { props: { kind: "pending", status: "open" } }],
+    ["task:pending-otp-fallback", "Task", "PENDING · sign-up code fallback to WhatsApp", { props: { kind: "pending", status: "open" } }],
     ["system:reel-pipeline", "System", "Reel pipeline (script → edit → post)", { props: { kind: "pipeline", status: "ok" } }],
     ["system:instagram-sync", "System", "Instagram insights sync", { asOf: "2026-10-14", props: { kind: "connector", status: "ok" } }],
     ["system:search-console-sync", "System", "Search Console sync", { asOf: "2026-10-13", props: { kind: "connector", status: "ok" } }],

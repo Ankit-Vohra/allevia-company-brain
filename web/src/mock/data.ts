@@ -56,15 +56,15 @@ export function seedRecommendations(): Record<string, Recommendation[]> {
       }),
       rec(a, {
         id: "rec:jobs-meta", area: "seo", by: "tech-lead", status: "proposed", score: 0.86, confidence: 0.78,
-        title: "Unique titles and meta descriptions for 38 /jobs pages",
+        title: "Unique titles and meta descriptions for 38 job pages",
         why: "Clicks fell 26% while impressions held; 38 pages have no meta description [[observation:gsc-jobs-clicks-2026-10]] [[rule:seo-meta-description-missing]].",
         impact: "Recover ~680 clicks / 28 days", approvalId: "appr:gh-jobs-meta", createdAt: "2026-10-13T18:40:00+05:30",
         chain: ["observation:gsc-jobs-clicks-2026-10", "page:www.aamdani.ai/jobs", "page:www.aamdani.ai/jobs/raipur/driver", "rule:seo-meta-description-missing"],
       }),
       rec(a, {
         id: "rec:otp-fallback", area: "funnel", by: "data-analyst", status: "open", score: 0.8, confidence: 0.7,
-        title: "Add a WhatsApp fallback to the OTP step",
-        why: "41% of people who start signing up drop at OTP [[observation:funnel-otp-drop-2026-10]]; the fix is already in PENDING [[task:pending-otp-fallback]].",
+        title: "Add a WhatsApp fallback to the sign-up code step",
+        why: "41% of people who start signing up drop at sign-up code [[observation:funnel-otp-drop-2026-10]]; the fix is already in PENDING [[task:pending-otp-fallback]].",
         impact: "Up to +40 signups a week", createdAt: "2026-10-12T11:00:00+05:30",
         chain: ["observation:funnel-otp-drop-2026-10", "product:aamdani-app", "task:pending-otp-fallback", "person:founder"],
       }),
@@ -123,7 +123,7 @@ export function seedApprovals(): Record<string, Approval[]> {
       },
       {
         id: "appr:gh-jobs-meta", kind: "github_issue", status: "pending", by: "tech-lead", recommendationId: "rec:jobs-meta",
-        title: "Unique titles and meta descriptions for 38 /jobs pages", createdAt: "2026-10-13T18:42:00+05:30",
+        title: "Unique titles and meta descriptions for 38 job pages", createdAt: "2026-10-13T18:42:00+05:30",
         payload: {
           title: "SEO: unique title + meta description for /jobs/{city}/{role}",
           target: "Ankit-Vohra/allevia · label allevia-action",

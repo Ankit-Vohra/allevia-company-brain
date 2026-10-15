@@ -427,8 +427,15 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
     const root = overlayRef.current;
     if (!root) return;
     const els = [...root.querySelectorAll<HTMLElement>(".bubble")];
+    const signs = [...root.querySelectorAll<HTMLElement>(".zone-sign")].map((el) => el.getBoundingClientRect());
     const relayout = () => {
-      for (const el of els) el.style.setProperty("--lift", "0px");
+      for (const el of els) { el.style.setProperty("--lift", "0px"); el.style.visibility = ""; }
+      // a bit of office chat never covers a team's sign: it just waits for another moment
+      for (const el of els) {
+        if (!el.classList.contains("tone-chat")) continue;
+        const r = el.getBoundingClientRect();
+        if (signs.some((g) => r.left < g.right + 2 && r.right > g.left - 2 && r.top < g.bottom + 2 && r.bottom > g.top - 2)) el.style.visibility = "hidden";
+      }
       const placed: DOMRect[] = [];
       const sorted = els.map((el) => ({ el, r: el.getBoundingClientRect() })).sort((a, b) => b.r.top - a.r.top);
       for (const { el, r } of sorted) {

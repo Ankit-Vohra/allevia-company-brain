@@ -1,18 +1,20 @@
 // Add a business: paste the website and we do the setup. A short form, then a simple seven-step progress line while the
 // team reads the site (the live map of what it learns is a small card, and the technical log sits behind "Show what's
 // happening"). The run ends with one clear next step, and the three goals we suggest to start with.
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
-import type { EdgeRef, NodeRef, OnboardEvent, ProgramGoal } from "@shared/contracts";
+import type { EdgeRef, NodeRef, OnboardEvent } from "@shared/contracts";
 import { AGENTS } from "@shared/roster";
 import { api } from "../api";
 import { AgentAvatar } from "../components/bits";
 import { Icon } from "../components/Icon";
 import { Reveal } from "../components/Reveal";
+import { SuggestedRow } from "../components/SuggestedGoal";
 import { currencySymbol, fmtMs, fmtNum, guessRegion } from "../lib/format";
 import { hueFor } from "../lib/labels";
 import { useMedia } from "../lib/useMedia";
 import { useApp } from "../state/app";
+import type { GoalSetup } from "../types-ext";
 import "./onboard.css";
 
 const GraphView = lazy(() => import("../components/GraphView"));
@@ -91,7 +93,7 @@ export default function OnboardPage() {
   const [country, setCountry] = useState(() => params.get("country") ?? (params.get("url") ? guessRegion(params.get("url")!).country : "United Kingdom"));
   const countryTouched = useRef(!!params.get("country"));
   const [run, setRun] = useState<RunState | null>(null);
-  const [goals, setGoals] = useState<ProgramGoal[]>([]);
+  const [goals, setGoals] = useState<GoalSetup[]>([]);
   const abort = useRef<AbortController | null>(null);
   const narrow = useMedia("(max-width: 700px)");
 
@@ -151,12 +153,13 @@ export default function OnboardPage() {
 
   // the goals we suggest: read once the business exists (none yet is fine, the card is just left out)
   const doneTenant = run?.done?.tenant;
-  useEffect(() => {
-    if (!doneTenant) return;
+  const loadGoals = useCallback(() => {
+    if (!doneTenant) return () => {};
     let live = true;
-    api.program(doneTenant).then((p) => { if (live) setGoals(p?.goals.slice(0, 3) ?? []); }, () => {});
+    api.goalSetup(doneTenant).then((g) => { if (live) setGoals(g.slice(0, 3)); }, () => {});
     return () => { live = false; };
   }, [doneTenant]);
+  useEffect(() => loadGoals(), [loadGoals]);
 
   const onSubmit = (e: FormEvent) => { e.preventDefault(); void start(); };
   const openOffice = (path: string) => { if (run?.done) setTenant(run.done.tenant); nav(path); };
@@ -240,6 +243,8 @@ export default function OnboardPage() {
           counts={run.done.counts}
           pages={run.pages.length}
           goals={goals}
+          tenantId={doneTenant}
+          onGoal={loadGoals}
           onOpen={openOffice}
         />
       )}
@@ -285,12 +290,7 @@ export default function OnboardPage() {
 
 // ---------------------------------------------------------------- done
 
-function targetWords(g: ProgramGoal, v: number | null) {
-  if (v === null) return null;
-  return `${fmtNum(v)}${g.unit ? ` ${g.unit}` : ""} a ${g.period}`;
-}
-
-function Ready({ host, counts, pages, goals, onOpen }: { host: string; counts: Record<string, number>; pages: number; goals: ProgramGoal[]; onOpen: (path: string) => void }) {
+function Ready({ host, counts, pages, goals, tenantId, onGoal, onOpen }: { host: string; counts: Record<string, number>; pages: number; goals: GoalSetup[]; tenantId?: string; onGoal: () => void; onOpen: (path: string) => void }) {
   const read = counts.Page ?? pages;
   return (
     <section className="ob-ready" aria-labelledby="ob-ready-line">
@@ -299,24 +299,22 @@ function Ready({ host, counts, pages, goals, onOpen }: { host: string; counts: R
       </p>
       <span className="ob-avatars" aria-hidden="true">{AGENTS.map((a) => <AgentAvatar key={a.id} id={a.id} size={28} />)}</span>
 
-      {goals.length > 0 && (
-        <div className="ob-goals">
+      {goals.length > 0 && tenantId && (
+        <div className="ob-goals owner-suggest">
           <h2 className="ob-goals-title">{goals.length === 1 ? "A goal to start with" : `${goals.length} goals to start with`}</h2>
-          <p className="ob-goals-lede">This is where we think we can get you. You can change any of these later.</p>
-          <ul className="ob-goal-list">
-            {goals.map((g) => {
-              const now = targetWords(g, g.current ?? g.baseline);
-              return (
-                <li key={g.id} className="ob-goal">
-                  <h3 className="ob-goal-name">{g.name}</h3>
-                  <dl className="ob-goal-nums">
-                    <div><dt>Where you are now</dt><dd className={now ? "" : "is-soft"}>{now ?? "We'll know after your first full week"}</dd></div>
-                    <div><dt>Where we'll get you</dt><dd>{targetWords(g, g.target) ?? "We'll suggest this after your first week"}</dd></div>
-                  </dl>
-                  {g.owner && <p className="ob-goal-owner">{g.owner.name} leads this</p>}
-                </li>
-              );
-            })}
+          <p className="ob-goals-lede">This is where we think we can get you. Tap OK, or change a number if you want it higher or lower. That is the whole set-up.</p>
+          <ul className="owner-suggest-list">
+            {goals.map((g) => g.confirmed ? (
+              <li key={g.id} className="owner-suggest-row is-done">
+                <div className="owner-suggest-text">
+                  <span className="owner-card-name">{g.name}</span>
+                  <p className="owner-suggest-title">{g.target === null ? g.name : `Get to ${fmtNum(g.target)}${g.unit ? ` ${g.unit}` : ""} a ${g.period}`}</p>
+                </div>
+                <span className="ob-goal-ok"><Icon name="check" size={14} /> You said OK</span>
+              </li>
+            ) : (
+              <SuggestedRow key={g.id} s={g} tenantId={tenantId} onSet={onGoal} />
+            ))}
           </ul>
         </div>
       )}
