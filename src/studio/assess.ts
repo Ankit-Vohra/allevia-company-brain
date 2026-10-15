@@ -6,7 +6,7 @@ import type { AssessmentOverlay, AssessmentVerdict } from "../../shared/contract
 import type { GraphHandle } from "../graph/client.js";
 import { upsertEdge, upsertNode } from "../graph/upsert.js";
 import { agentNodeId } from "../agent/memory.js";
-import type { VisionRunner } from "./vision.js";
+import { visionForGraph, type VisionRunner } from "./vision.js";
 import { visionCopy } from "./image.js";
 
 export const TARA = "content-strategist";
@@ -188,7 +188,7 @@ export interface AssessDeps { vision: VisionRunner; model: string; now: number; 
 export async function assessPhoto(
   g: GraphHandle, assetId: string, buffer: Buffer, ctx: AssessContext, deps: AssessDeps,
 ): Promise<PhotoAssessment> {
-  const raw = await deps.vision.see({
+  const raw = await visionForGraph(deps.vision, g.name).see({
     agent: TARA, model: deps.model, system: assessSystem(ctx), prompt: assessPrompt(ctx), schema: ASSESSMENT_SCHEMA,
     images: [{ label: "the owner's photo", mime: "image/jpeg", data: await visionCopy(buffer) }],
   });

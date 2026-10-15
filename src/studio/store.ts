@@ -3,8 +3,8 @@
 // (<sha256>.jpg), so storing the same bytes twice is a no-op, and a key can never walk out of its tenant's directory.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
+import { isTenantSlug } from "../graph/slug.js";
 
-const TENANT = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
 const KEY = /^[0-9a-f]{64}\.(?:jpg|png|webp|mp4|mov|webm)$/;
 
 export class AssetStore {
@@ -14,7 +14,7 @@ export class AssetStore {
   }
 
   dir(tenant: string): string {
-    if (!TENANT.test(tenant)) throw new Error(`bad tenant slug ${JSON.stringify(tenant)}`);
+    if (!isTenantSlug(tenant)) throw new Error(`bad tenant slug ${JSON.stringify(tenant)}`);
     return join(this.root, tenant);
   }
 

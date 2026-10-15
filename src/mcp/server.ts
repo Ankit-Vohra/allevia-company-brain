@@ -105,7 +105,13 @@ export async function serveStdio(opts: McpServerOpts): Promise<void> {
 
 // ---------- Streamable HTTP ----------
 
+// Decides whether an HTTP request may use this server (the server is bound to one business, so this is "may it read that
+// business"). Absent: loopback-only is the whole guard (local development). The CLI passes a bearer-token check when
+// ALLEVIA_AUTH=1 (src/cli/mcp.ts).
+export type McpAuthorize = (req: Request) => Promise<boolean>;
+
 export interface McpHttpOpts extends McpServerOpts {
+  authorize?: McpAuthorize;
   port: number;
   host?: string; // default 127.0.0.1
   path?: string; // default /mcp
@@ -115,7 +121,7 @@ const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 // A Hono app serving MCP at `path`, stateless: each POST gets a fresh server and transport over the same graph.
 // Requests whose Host is not a loopback name (with this port) are refused, so a web page cannot rebind DNS onto it.
-export function createMcpHttpApp(opts: McpServerOpts & { port: number; path?: string }): Hono {
+export function createMcpHttpApp(opts: McpServerOpts & { port: number; path?: string; authorize?: McpAuthorize }): Hono {
   const path = opts.path ?? "/mcp";
   const allowed = new Set([...LOOPBACK].map((h) => `${h}:${opts.port}`));
   const app = new Hono();
@@ -127,6 +133,9 @@ export function createMcpHttpApp(opts: McpServerOpts & { port: number; path?: st
       let ok = false;
       try { ok = LOOPBACK.has(new URL(origin).hostname === "::1" ? "[::1]" : new URL(origin).hostname); } catch { ok = false; }
       if (!ok) return c.json({ error: "Cross-origin requests are not allowed." }, 403);
+    }
+    if (opts.authorize && !(await opts.authorize(c.req.raw))) {
+      return c.json({ error: "This business is private. Send its owner link as `Authorization: Bearer <token>`." }, 401);
     }
     await next();
   });

@@ -49,25 +49,38 @@ export function cacheKey(doc: Pick<RawDoc, "hash" | "kind">, business: BusinessC
   ].join("|"));
 }
 
-export interface ExtractOpts { runner: LlmRunner; model: string; cacheDir: string }
+// cacheDir is this business's own folder (util/cache.ts tenantCacheDir). legacyCacheDir is the shared folder of earlier versions,
+// given only to the founder's own businesses: a hit there is copied into cacheDir.
+export interface ExtractOpts { runner: LlmRunner; model: string; cacheDir: string; legacyCacheDir?: string }
 
 export async function extractDoc(doc: RawDoc, business: BusinessContext, opts: ExtractOpts): Promise<{ extraction: Extraction; cached: boolean }> {
   const key = cacheKey(doc, business, opts.model);
   const file = join(opts.cacheDir, `${key}.json`);
   const hit = readCache(file);
   if (hit) return { extraction: hit, cached: true };
+  if (opts.legacyCacheDir) {
+    const old = readCache(join(opts.legacyCacheDir, `${key}.json`));
+    if (old) {
+      writeCache(opts.cacheDir, file, { key, docId: doc.id, docHash: doc.hash, model: opts.model, copiedFrom: "shared cache", extraction: old });
+      return { extraction: old, cached: true };
+    }
+  }
 
   const { system, prompt } = extractionPrompt(doc, business);
   const raw = await opts.runner.structured({ system, prompt, schema: extractionSchema(), model: opts.model });
   const extraction = parseExtraction(raw);
-  mkdirSync(opts.cacheDir, { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify({
+  writeCache(opts.cacheDir, file, {
     key, docId: doc.id, docHash: doc.hash, model: opts.model, ontologyVersion: ONTOLOGY_VERSION, promptVersion: PROMPT_VERSION,
     createdAt: new Date().toISOString(), extraction,
-  }, null, 1));
-  renameSync(tmp, file);
+  });
   return { extraction, cached: false };
+}
+
+function writeCache(dir: string, file: string, body: Record<string, unknown>): void {
+  mkdirSync(dir, { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(body, null, 1));
+  renameSync(tmp, file);
 }
 
 function readCache(file: string): Extraction | null {

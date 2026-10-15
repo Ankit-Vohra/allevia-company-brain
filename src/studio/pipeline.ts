@@ -73,7 +73,9 @@ export function chooseTilt(edges: { deg: number; confidence: number }, tara: num
   return Math.abs(tara) < 0.3 ? { deg: 0, source: "level" } : { deg: tara, source: "tara" };
 }
 
-export async function runStudio(g: GraphHandle, input: StudioInput, deps: StudioDeps, emit: (e: AgentEvent) => void): Promise<StudioResult> {
+export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: StudioDeps, emit: (e: AgentEvent) => void): Promise<StudioResult> {
+  // This business's own view of the photo-reading cache (vision.ts CachedVision.forTenant)
+  const deps: StudioDeps = { ...rawDeps, vision: rawDeps.vision.forTenant?.(input.tenant) ?? rawDeps.vision };
   const now = deps.now ?? (() => Date.now());
   const models = { ...DEFAULT_MODELS, ...deps.models };
   const t0 = now();

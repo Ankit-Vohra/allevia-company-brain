@@ -14,6 +14,10 @@ import { createApp, type RegistryTenant, type ServerDeps } from "../../src/serve
 import { fakeEmbed, SEED_NOW } from "../fixtures/seed-graph.js";
 import { seededGraph } from "../helpers/tools.js";
 
+// "mini" stands for the founder's own business in these tests, which is the kind of business that may use the founder's GitHub
+// repo and Discord channel (src/actions/executors.ts); a business a customer onboarded may not. Set once per test file.
+process.env.ALLEVIA_ACTION_TENANTS = "mini";
+
 export const TENANT: RegistryTenant = {
   slug: "mini", name: "Mini Jobs", businessId: "business:aamdani", domain: "mini.example", industry: "jobs",
 };

@@ -3,6 +3,7 @@
 // (<dataDir>/studio/recorded/manifest.json) until the Higgsfield API engine lands in Phase 2.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { isTenantSlug } from "../graph/slug.js";
 import { RecordedEngine, recordingsManifest } from "./engine.js";
 import type { StudioDeps } from "./pipeline.js";
 import { AssetStore } from "./store.js";
@@ -28,7 +29,7 @@ export function productionStudioDeps(dataDir: string, o: { cacheOnly?: boolean }
 export interface StudioSample { file: string; note: string; caption: string }
 
 export function studioSample(dataDir: string, tenant: string): StudioSample | null {
-  if (!/^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(tenant)) return null;
+  if (!isTenantSlug(tenant)) return null;
   const dir = join(dataDir, "studio-demo", tenant);
   const file = join(dir, "rough.jpg");
   const meta = join(dir, "sample.json");

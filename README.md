@@ -266,6 +266,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 | `discord [--tenant aamdani]` | The Discord bot (needs a bot token in the env file); with `DISCORD_HUB_GUILD_ID` set it serves every customer on the hub |
 | `discord-hub status \| list \| provision <tenant> \| reinvite <tenant>` | The customer hub on Discord: read-only check and list, set a business up, a new join link ([setup](docs/discord-hub-setup.md)) |
 | `mcp --tenant <slug> [--http]` | The read-only MCP server for one tenant |
+| `auth:issue <tenant> [--days N]` / `auth:list` / `auth:revoke <id>` / `auth:demo <tenant>` | Owner links for `ALLEVIA_AUTH=1`: issue one (shown once), list them, revoke, mark a business as a public demo |
 | `eval <tenant> [--fake]` | Run the tenant's eval questions, score every turn, write `docs/evals/<date>-<tenant>.md` |
 | `showcase <tenant> [<turnId>]` | Mark a stored turn for public replay, or list the showcase turns |
 | `db:check` / `db:migrate [tenant…]` | Ping FalkorDB and compare its settings with `docker-compose.yml`; bring tenant graphs up to the current schema |
@@ -299,6 +300,11 @@ edges nothing refers to; the suite holds both rules (see Tests).
 - **Dry-run actions:** approved GitHub issues and Discord posts are recorded, not executed, unless
   `ALLEVIA_ACTIONS_LIVE=1`; ad changes are simulated; content is drafted, never published.
 - **Public mode:** every write route returns 403, and only turns marked as showcase are visible or replayable.
+- **Tenant isolation:** every business is its own graph (`allevia_<slug>`) and its own folders; the server binds a request
+  to one business, no tool or message can pick another, and a new business starts from code, never from another's data.
+  With `ALLEVIA_AUTH=1` every business needs its private owner link (random, hashed, revocable; `auth:issue`), and only
+  marked demo businesses open without one, read-only. Proof in `tests/security/`; findings and the ranked open items in
+  [`docs/tenant-isolation.md`](docs/tenant-isolation.md).
 - **Subscription only:** no API key is used or accepted for model calls. Secrets live in
   `~/.config/allevia/allevia.env`, outside the repo; `.env.example` documents every name with no values.
 - **Studio:** photos are re-encoded without EXIF metadata on intake; edit prompts forbid text, numbers, logos and
