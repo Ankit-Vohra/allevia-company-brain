@@ -167,6 +167,29 @@ export async function getTurnEvents(g: GraphHandle, turnId: string): Promise<Age
   return parseJson<AgentEvent[]>(rows[0]?.e);
 }
 
+// ---------- showcase (spec §11.3) ----------
+
+// The public demo replays only turns marked Turn.showcase = true. Only a finished turn with a stored event log can be
+// marked, because the replay is that log.
+export interface ShowcaseTurn { id: string; question: string; at: number; showcase: boolean }
+
+export async function setShowcase(g: GraphHandle, turnId: string, on: boolean): Promise<ShowcaseTurn> {
+  const rows = await g.roQuery<{ q: string | null; at: number | null; status: string | null; hasEvents: boolean }>(
+    "MATCH (t:Turn {id:$id}) RETURN t.question AS q, t.at AS at, t.status AS status, t.events IS NOT NULL AS hasEvents LIMIT 1", { id: turnId });
+  const t = rows[0];
+  if (!t) throw new Error(`No turn ${turnId} in ${g.name}.`);
+  if (on && (t.status ?? "ok") !== "ok") throw new Error(`${turnId} failed, so it can't be a showcase turn.`);
+  if (on && !t.hasEvents) throw new Error(`${turnId} has no stored event log to replay.`);
+  await rawWrite(g, "MATCH (t:Turn {id:$id}) SET t.showcase = $on", { id: turnId, on });
+  return { id: turnId, question: t.q ?? "", at: t.at ?? 0, showcase: on };
+}
+
+export async function listShowcase(g: GraphHandle): Promise<ShowcaseTurn[]> {
+  const rows = await g.roQuery<{ id: string; q: string | null; at: number | null }>(
+    "MATCH (t:Turn) WHERE t.showcase = true RETURN t.id AS id, t.question AS q, t.at AS at ORDER BY t.at, t.id");
+  return rows.map((r) => ({ id: r.id, question: r.q ?? "", at: r.at ?? 0, showcase: true }));
+}
+
 // ---------- turns ----------
 
 export interface SaveTurnInput {
