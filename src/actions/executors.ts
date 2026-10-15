@@ -89,7 +89,7 @@ export const actionIdFor = (approvalId: string): string => `action:${approvalId.
 // of its own yet, so its approved cards do not use them: a fix lands in its own tasks (target.ts), a post is skipped (a
 // connector passed in deps.config is used as given). Otherwise a customer's approved card would be filed on, or posted
 // into, an account that is not theirs.
-function usesFoundersAccounts(tenant: string): boolean {
+export function usesFoundersAccounts(tenant: string): boolean {
   return Object.hasOwn(TENANT_CONFIGS, tenant) || loadConfig().actionTenants.includes(tenant);
 }
 

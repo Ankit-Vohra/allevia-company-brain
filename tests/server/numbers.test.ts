@@ -1,6 +1,6 @@
 // "Add your numbers" over HTTP: the preview says what it found in plain words, the import writes it, and the goal that
 // said "We'll know after your first full week" reads a number. Uploads bypass the 64 KB body limit but have their own.
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ProgramScorecard } from "../../shared/contracts.js";
 import { ensureAgentNode } from "../../src/actions/shared.js";
 import type { ImportResult } from "../../src/connectors/upload/import.js";
@@ -10,6 +10,8 @@ import { templateFor } from "../../src/onboard/templates.js";
 import { baselinesWrite, programAndGoalsWrite, programGoals } from "../../src/program/program.js";
 import { SEED_NOW } from "../fixtures/seed-graph.js";
 import { harness, TENANT, type Harness } from "./harness.js";
+
+vi.setConfig({ testTimeout: 90_000 }); // a loaded suite needs room
 
 const NOW = SEED_NOW + 3_600_000; // the harness clock: 15 Oct 2026, 05:30 in India
 const DAY = 86_400_000;

@@ -4,6 +4,7 @@
 // A business can never choose Allevia's own repo (setActionTarget refuses it); only the operator's CLI can.
 import type { Hono } from "hono";
 import { z } from "zod";
+import { usesFoundersAccounts } from "../../actions/executors.js";
 import { ActionTargetError, APP_TARGET_LABEL, getActionTarget, setActionTarget, type ActionTarget } from "../../actions/target.js";
 import { loadConfig } from "../../config.js";
 import { HttpError, readBody, type RouteCtx } from "../http.js";
@@ -20,12 +21,12 @@ const dto = (t: ActionTarget): ActionTargetDto =>
     ? { target: "github", repo: t.repo, label: `GitHub issues on ${t.repo}` }
     : { target: "app", label: APP_TARGET_LABEL, ...(t.reason ? { note: t.reason } : {}) };
 
-export function registerActionRoutes(app: Hono, ctx: RouteCtx, opts: { serverRepo?: () => string | undefined } = {}): void {
-  const serverRepo = () => opts.serverRepo?.() ?? loadConfig().githubActionRepo;
+export function registerActionRoutes(app: Hono, ctx: RouteCtx): void {
+  const serverRepo = () => loadConfig().githubActionRepo; // Allevia's own tracker: what a business may not choose
 
   app.get("/api/:t/actions/target", async (c) => {
     const { reg, g } = await ctx.tenantOf(c);
-    return c.json(dto(await getActionTarget(g, reg.slug, { serverRepo: serverRepo(), businessId: reg.businessId })));
+    return c.json(dto(await getActionTarget(g, reg.slug, { serverRepo: serverRepo(), businessId: reg.businessId, founders: usesFoundersAccounts(reg.slug) })));
   });
 
   app.post("/api/:t/actions/target", async (c) => {

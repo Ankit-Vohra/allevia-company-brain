@@ -567,7 +567,7 @@ export function createApp(deps: ServerDeps): Hono {
   registerProgramRoutes(app, routeCtx);
   registerGoalRoutes(app, routeCtx);
   registerNumbersRoutes(app, routeCtx);
-  registerActionRoutes(app, routeCtx, { serverRepo: () => deps.actions?.config?.githubActionRepo });
+  registerActionRoutes(app, routeCtx);
   registerConnectorRoutes(app, routeCtx, { ...(deps.google ? { google: deps.google } : {}) });
   registerWorkRoutes(app, routeCtx);
   registerGraphWorkRoutes(app, routeCtx);

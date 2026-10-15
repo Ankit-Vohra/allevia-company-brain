@@ -4,13 +4,26 @@ import { harness, post, type Harness } from "./harness.js";
 
 describe("server: action target (integration)", () => {
   let h: Harness;
-  beforeAll(async () => { h = await harness(); }, 90_000);
-  afterAll(async () => h.cleanup());
+  const founders = process.env.ALLEVIA_ACTION_TENANTS;
+  beforeAll(async () => {
+    h = await harness();
+    delete process.env.ALLEVIA_ACTION_TENANTS; // the harness makes "mini" the founder's own business; these tests are about a customer's
+  }, 90_000);
+  afterAll(async () => { if (founders === undefined) delete process.env.ALLEVIA_ACTION_TENANTS; else process.env.ALLEVIA_ACTION_TENANTS = founders; await h.cleanup(); });
 
   const get = async () => (await h.app.request("/api/mini/actions/target")).json();
 
   it("is tasks inside the app and on Discord until a business says otherwise", async () => {
     expect(await get()).toEqual({ target: "app", label: "Tasks inside the app and on Discord" });
+  });
+
+  it("the founder's own business shows the founder's tracker until it chooses otherwise", async () => {
+    process.env.ALLEVIA_ACTION_TENANTS = "mini";
+    try {
+      expect(await get()).toMatchObject({ target: "github", label: expect.stringMatching(/^GitHub issues on /) });
+    } finally {
+      delete process.env.ALLEVIA_ACTION_TENANTS;
+    }
   });
 
   it("a business can choose its own repo, and go back", async () => {

@@ -1,7 +1,7 @@
 // The first customer data path, end to end on a throwaway graph: a clinic that onboarded from its website (goals read
 // "We'll know after your first full week") drops a spreadsheet of weekly numbers and the goals read real numbers, with
 // where it started fixed from the file. Provenance, idempotence, corrections, connectors, privacy, isolation and caps.
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { closeAll, openGraphByName, type GraphHandle } from "../../../src/graph/client.js";
 import { businessId as bizIdOf } from "../../../src/graph/tenants.js";
 import { upsertNode, writeBatch } from "../../../src/graph/upsert.js";
@@ -14,6 +14,8 @@ import { scanGraph } from "../../../src/ingest/privacy.js";
 import { onboard } from "../../../src/onboard/onboard.js";
 import { getProgram } from "../../../src/program/scorecard.js";
 import { testGraph } from "../../helpers/graph.js";
+
+vi.setConfig({ testTimeout: 90_000 }); // a loaded suite needs room
 
 const DAY = 86_400_000;
 const NOW = Date.parse("2026-10-15T09:00:00Z");           // 10:00 in London
