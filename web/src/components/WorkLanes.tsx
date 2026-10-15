@@ -55,7 +55,7 @@ function Lane({ lane, view, nodes, onCite, onNodes, activeCite }: {
   const hue = deptOf(lane.agent)?.hue ?? 265;
   const isAnswer = lane.key.endsWith("#answer");
   const isPlan = lane.agent === view.plan?.by && !isAnswer;
-  const steps = lane.steps.filter((s) => s.name !== "show_path");
+  const steps = lane.steps.filter((s) => s.name !== "show_path" && s.name !== "use_skill"); // opening a skill shows as "Using: …"
   const reviewsOfMine = lane.findings.flatMap((f) => f.reviews.map((r) => ({ ...r, findingId: f.id })));
   return (
     <article id={`lane-${lane.key.replace(/[^a-z0-9-]/gi, "-")}`} className={`lane is-${lane.phase}`} style={{ ["--hue" as string]: hue }}>
@@ -68,6 +68,11 @@ function Lane({ lane, view, nodes, onCite, onNodes, activeCite }: {
         <LanePhase lane={lane} />
       </header>
       {lane.task && <p className="lane-task">{lane.task}</p>}
+      {lane.skills.length > 0 && (
+        <p className="lane-skills" aria-label="Skills used">
+          <Icon name="sparkle" size={13} /> Using: {lane.skills.map((s) => s.name).join(", ")}
+        </p>
+      )}
 
       {isPlan && view.plan && (
         <ol className="lane-plan">

@@ -24,6 +24,7 @@ import { ensureAgentNode, existingIds, findBusinessId } from "../actions/shared.
 import { learningMetrics, type LearningMetrics } from "../actions/learning.js";
 import { DAY_MS, cap1, clip, dayMs, dayOf, fmt, longDate, money, pct, plural, round, shortDate } from "./text.js";
 import { polishText } from "./polish.js";
+import { humanPass } from "../agent/humanize.js";
 
 type Read = Pick<GraphHandle, "roQuery">;
 
@@ -308,6 +309,8 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
     text = r.text;
     polished = r.polished;
   }
+  // the standing last pass (no model): chatbot wrappers, dashes and curly quotes out; nothing the note relies on moves
+  { const h = await humanPass(text, { skipModel: true }); text = h.text; }
 
   // ---- save ----
   const title = `Today's note, ${shortDate(date)}`;

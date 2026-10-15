@@ -10,6 +10,7 @@ import { voiceLint, type VoiceFinding } from "../ingest/sources/playbook-lint.js
 import type { PhotoAssessment } from "./assess.js";
 import type { StudioContext } from "./context.js";
 import type { VisionRunner } from "./vision.js";
+import { cleanDeterministic, sameFacts } from "../agent/humanize.js";
 
 export const DEV = "copy-editor";
 
@@ -131,6 +132,9 @@ export async function writeCaption(
       // Tara's draft stands
     }
   }
-  const cleaned = cleanVoice(text);
+  const voiced = cleanVoice(text);
+  // the standing last pass (no model): dashes, curly quotes and chatbot wrappers out, only if nothing a reader relies on moved
+  const human = cleanDeterministic(voiced.text);
+  const cleaned = sameFacts(voiced.text, human.text).length ? voiced : { ...voiced, text: human.text, edits: [...voiced.edits, ...human.edits] };
   return { caption: cleaned.text, altText, hashtags, edits: cleaned.edits, lint: cleaned.remaining, by };
 }

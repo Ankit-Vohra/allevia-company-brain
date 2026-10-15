@@ -160,7 +160,8 @@ export function OfficePage() {
     const lane = laneOf(view, a);
     const status = plain(lane?.status ?? lane?.task ?? "").replace(/[.…]+$/, "").trim();
     const nm = agentDef(a)?.name ?? "";
-    const text = !status ? `${nm} is on it…` : /^\w+ing\b/i.test(status) ? `${nm} is ${lowerFirst(status)}…` : `${nm}: ${lowerFirst(status)}…`;
+    // "Tara is using: Instagram post craft" already starts with the name
+    const text = !status ? `${nm} is on it…` : nm && status.startsWith(`${nm} is `) ? `${status}…` : /^\w+ing\b/i.test(status) ? `${nm} is ${lowerFirst(status)}…` : `${nm}: ${lowerFirst(status)}…`;
     return { agent: a, text, done: false };
   }, [view, record, working]);
 

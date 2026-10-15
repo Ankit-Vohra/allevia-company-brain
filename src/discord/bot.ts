@@ -18,6 +18,8 @@ import { agentById } from "../../shared/roster.js";
 import type { AskInput, AskResult } from "../agent/ask.js";
 import { LANGUAGE_REPLY, parseLanguageSetting, setLanguagePreference } from "../agent/language.js";
 import type { GraphHandle } from "../graph/client.js";
+import { applyDirective, getDirective, parseDirective, previewDirective } from "../settings/directives.js";
+import { quickReplies } from "../../shared/quick-replies.js";
 import { DecisionError, decideAndNotify, type ActionOpts, type OnDecision } from "../server/approvals.js";
 import { approvals as listApprovals, latestBrief, sessionDetail } from "../server/reads.js";
 import type { ApprovalDto } from "../server/types.js";
@@ -80,6 +82,7 @@ export interface ButtonPort {
   defer?(): Promise<void>;                      // acknowledge before slow work (the card is edited later)
   thread?(): ThreadPort | null;                 // the thread the card is in, when it is in one (a retry posts its new option there)
   createThread?(name: string): Promise<ThreadPort>; // a new public thread in the channel the card is in (for /continue)
+  thread?(): ThreadPort | null;                 // the thread the button is in (a quick reply carries the conversation on)
   reply(text: string, opts?: { ephemeral?: boolean }): Promise<void>;
   update(m: Outgoing): Promise<void>;           // edit the card the button is on
 }
@@ -119,6 +122,19 @@ const quote = (s: string): string => s.split("\n").map((l) => `> ${l}`).join("\n
 export const buttonId = (decision: "approve" | "reject", approvalId: string): string => `${BUTTON_PREFIX}:${decision}:${approvalId}`;
 const BUTTON = new RegExp(`^${BUTTON_PREFIX}:(approve|reject):(.+)$`);
 const CONTINUE = new RegExp(`^${BUTTON_PREFIX}:continue:(.+)$`);
+const RULE_BUTTON = new RegExp(`^${BUTTON_PREFIX}:rule:(apply|skip):(.+)$`);
+const QUICK_REPLY = new RegExp(`^${BUTTON_PREFIX}:qr:(.+)$`);
+export const quickReplyId = (option: string): string => `${BUTTON_PREFIX}:qr:${option}`.slice(0, 100);
+
+// A plain message that is clearly a standing rule for one of the team's skills ("Tara, our posts always end with a
+// question"): not a question, and the rules (no model) read all of it as skill rules or skills.
+export function isSkillRule(text: string): boolean {
+  if (text.includes("?") || text.length > 600) return false;
+  // a standing rule says so ("always", "never", "every post"); "Write two posts" is a request, asked of the team as usual
+  if (!/\b(?:always|never|every|each|from now on|don'?t|do not|no|add a skill)\b/i.test(text)) return false;
+  const p = parseDirective(text);
+  return p.patches.length > 0 && p.unparsed.length === 0 && p.patches.every((x) => x.kind === "skill.rule" || x.kind === "skill.add");
+}
 
 export function approvalCard(a: ApprovalDto, opts: { buttons?: boolean } = {}): { content: string; buttons: ButtonSpec[] } {
   const who = agentById(a.by)?.name ?? a.by;
@@ -171,6 +187,9 @@ export class AlleviaBot {
       }
       return;
     }
+    if (m.authorIsOwner && (m.channelId === this.d.channelId || m.threadParentId === this.d.channelId) && isSkillRule(question)) {
+      if (await this.offerRule(m, question)) return;
+    }
     if (m.channelId === this.d.channelId) {
       const thread = await m.startThread(threadName(question));
       await this.turn(thread, question, asker, () => this.openSession(thread.id, question, asker));
@@ -179,6 +198,56 @@ export class AlleviaBot {
       if (!thread) return;
       await this.turn(thread, question, asker, () => this.sessionFor(thread.id, question, asker));
     }
+  }
+
+  // A standing rule for a skill, said in plain words: show what would change and let the owner say yes (the same preview
+  // and apply as the web app's "Tell your team"). Nothing is written until the button is pressed.
+  private async offerRule(m: MessagePort, text: string): Promise<boolean> {
+    try {
+      const preview = await previewDirective(this.d.graph, { text, actor: FOUNDER }, { llm: null, now: this.now() });
+      if (!preview.patches.length || preview.unparsed.length) return false;
+      const lines = preview.diff.map((l) => `• ${l.label}: ${l.op === "same" ? "already set" : `"${clip(l.after, 200)}"`}`);
+      const fresh = preview.diff.some((l) => l.op !== "same");
+      await m.reply({
+        content: clip(`${fresh ? "I can set this up for your team:" : "Your team already works this way:"}\n${lines.join("\n")}${fresh ? "\nShall I?" : ""}`, 1900),
+        buttons: fresh ? [
+          { customId: `${BUTTON_PREFIX}:rule:apply:${preview.id}`, label: "Yes, set it up", style: "success" },
+          { customId: `${BUTTON_PREFIX}:rule:skip:${preview.id}`, label: "Not now", style: "secondary" },
+        ] : [],
+      });
+      return true;
+    } catch (e) {
+      this.log(`rule preview failed: ${message(e)}`);
+      return false; // asked as a question instead
+    }
+  }
+
+  private async ruleButton(b: ButtonPort, decision: "apply" | "skip", id: string): Promise<void> {
+    if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
+    if (!b.isOwner) return b.reply("Only the owner can change how the team works.", { ephemeral: true });
+    try {
+      await b.defer?.();
+      const d = await getDirective(this.d.graph, id);
+      if (!d) return b.reply("That change is no longer there. Say it again and I'll set it up.", { ephemeral: true });
+      if (decision === "skip") return b.update({ content: "Okay, nothing changed.", buttons: [] });
+      const done = await applyDirective(this.d.graph, id, { now: this.now() });
+      const lines = done.diff.map((l) => `• ${l.label}: "${clip(l.after, 200)}"`);
+      await b.update({ content: clip(`Done. Your team will work this way from the next request:\n${lines.join("\n")}${done.errors.length ? "\nSome of it did not save; try again in the web app." : ""}`, 1900), buttons: [] });
+    } catch (e) {
+      this.log(`rule ${decision} on ${id} failed: ${message(e)}`);
+      return b.reply("I couldn't save that. Try again, or use Your team in the web app.", { ephemeral: true });
+    }
+  }
+
+  // A tapped quick reply is the owner's next message in that thread.
+  private async quickReply(b: ButtonPort, option: string): Promise<void> {
+    if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
+    const thread = b.thread?.();
+    if (!thread || b.threadParentId !== this.d.channelId) return b.reply("Reply in the thread with your answer.", { ephemeral: true });
+    const asker = b.isOwner ? FOUNDER : MEMBER;
+    await b.defer?.();
+    await b.update({ content: `Your answer: **${clip(option, 100)}**`, buttons: [] });
+    await this.turn(thread, option, asker, () => this.sessionFor(thread.id, option, asker));
   }
 
   // ----- slash commands -----
@@ -281,6 +350,10 @@ export class AlleviaBot {
       if (!b.isOwner) return b.reply("Only the owner can carry a conversation on here.", { ephemeral: true });
       return this.continueButton(b, cont[1]!);
     }
+    const qr = QUICK_REPLY.exec(b.customId);
+    if (qr) return this.quickReply(b, qr[1]!);
+    const rule = RULE_BUTTON.exec(b.customId);
+    if (rule) return this.ruleButton(b, rule[1] as "apply" | "skip", rule[2]!);
     const m = BUTTON.exec(b.customId);
     if (!m) return;
     if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
@@ -366,6 +439,10 @@ export class AlleviaBot {
         url: pathViewUrl(this.d.webBase, this.d.tenant, sessionId), ...(lastError ? { error: lastError } : {}),
       });
       for (const p of parts) await thread.send(p);
+      // quick questions in the answer ("Quick question: What should this sell? [A] [B]") become buttons
+      for (const q of quickReplies(result?.answer ?? "")) {
+        await thread.send({ content: clip(q.question, 300), buttons: q.options.slice(0, 5).map((o) => ({ customId: quickReplyId(o), label: clip(o, 80), style: "secondary" as const })) });
+      }
       this.log(`thread ${thread.id}: ${result?.ok ? "answered" : "failed"} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     } finally {
       this.gate.live--;

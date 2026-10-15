@@ -20,6 +20,8 @@ export interface StepView {
 export interface ReviewView { by: AgentId; verdict: "ok" | "fix" | "reject"; note: string; at: number }
 export interface FindingView { id: string; agent: AgentId; text: string; citations: string[]; basedOn?: string[]; reviews: ReviewView[]; at: number }
 
+export interface SkillUseView { skillId: string; name: string; source: "code" | "business"; at: number }
+
 export interface LaneView {
   key: string;           // the agent id, or "<chief>#answer" for the Chief's answering phase
   agent: AgentId;
@@ -28,6 +30,7 @@ export interface LaneView {
   phase: Phase;
   status?: string;
   steps: StepView[];
+  skills: SkillUseView[];  // the skills this person opened ("Using: Instagram post craft")
   findings: FindingView[];
   reviewsGiven: (ReviewView & { findingId: string })[];
   handoffsOut: { to: AgentId; note: string; at: number }[];
@@ -73,7 +76,7 @@ const WEIGHT: Partial<Record<AgentEvent["type"], number>> = { text: 0.06, tool_r
 export const edgeKey = (e: EdgeRef) => `${e.from}|${e.type}|${e.to}`;
 
 function emptyLane(key: string, agent: AgentId): LaneView {
-  return { key, agent, phase: "planned", steps: [], findings: [], reviewsGiven: [], handoffsOut: [], depth: 1 };
+  return { key, agent, phase: "planned", steps: [], skills: [], findings: [], reviewsGiven: [], handoffsOut: [], depth: 1 };
 }
 
 export function deriveRun(events: AgentEvent[]): RunView {
@@ -158,6 +161,11 @@ export function deriveRun(events: AgentEvent[]): RunView {
         const step = l.steps.find((s) => s.id === e.id) ?? l.steps[l.steps.length - 1];
         if (step) Object.assign(step, { summary: e.summary, nodes: e.nodes, edges: e.edges, sources: e.sources, done: true });
         addNodes(e.nodes, e.edges, e.sources);
+        break;
+      }
+      case "skill_used": {
+        const l = lane(e.agent);
+        if (!l.skills.some((s) => s.skillId === e.skillId)) l.skills.push({ skillId: e.skillId, name: e.name, source: e.source, at: i });
         break;
       }
       case "handoff":

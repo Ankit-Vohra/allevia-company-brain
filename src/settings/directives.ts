@@ -11,8 +11,9 @@
 // - previewDirective writes the preview as Document{kind:'directive', status:'preview'} AUTHORED by the owner (so the
 //   API can apply it in a later request) and returns the diff; applyDirective writes the patches, each sourced to that
 //   Document: Agent enabled/mode/autonomy (TRACKED: the old state becomes a Version), Memory{kind:'instruction'} ABOUT
-//   the agents (and the channel when it exists) STATED by the owner, BrandRule APPLIES_TO the Business. Applying twice
-//   writes nothing more.
+//   the agents (and the channel when it exists) STATED by the owner, BrandRule APPLIES_TO the Business, and for a skill:
+//   Memory{kind:'skill_rule'} (a rule for one skill: "our posts always end with a question") or Memory{kind:'skill'} (the
+//   business's own skill) ABOUT the agents (src/agent/skills/business.ts). Applying twice writes nothing more.
 import { randomBytes } from "node:crypto";
 import { AGENTS, agentById } from "../../shared/roster.js";
 import type { AgentMode, AgentSettings, DirectiveDiffLine, DirectivePatch, DirectivePreview } from "../../shared/contracts.js";
@@ -21,7 +22,12 @@ import { upsertNode, writeBatch, type EdgeInput, type NodeInput, type Prim } fro
 import type { LlmRunner } from "../ingest/llm.js";
 import { findBusiness } from "../capabilities/ladder.js";
 import { agentNodeId, ensureRoster } from "../agent/memory.js";
-import { entityId } from "../util/ids.js";
+import { codeCatalog } from "../agent/skills/catalog.js";
+import { loadBusinessSkills, skillRuleWrite, skillWrite } from "../agent/skills/business.js";
+import type { SkillRule } from "../agent/skills/catalog.js";
+import { lintBusinessSkill, SKILL_ID } from "../agent/skills/format.js";
+import { targetsIn } from "../agent/skills/targets.js";
+import { entityId, sha256, slugify } from "../util/ids.js";
 import { isoDate, istDate } from "../util/time.js";
 import { AGENT_MODES, CHIEF, agentChangeRefusal, listAgentsWithSettings, setAgentSettings } from "./team.js";
 
@@ -30,6 +36,7 @@ export { listAgentsWithSettings, loadTeamSettings, setAgentSettings } from "./te
 export const DIRECTIVE_MODEL = "haiku";
 const MAX_TEXT = 2_000;
 const MAX_PATCH_TEXT = 300;
+const MAX_SKILL_TEXT = 1_500;
 const CONTENT_DESKS = ["content-strategist", "copy-editor"];               // who writes and checks posts
 const PROMO_DESKS = ["content-strategist", "copy-editor", "growth-marketer"]; // who writes anything that promotes
 const SPEND_DESKS = ["growth-marketer"];
@@ -171,7 +178,9 @@ const MODE = [
 const AUTONOMY = /\bautonomy\b(?:\s+(?:level|to|at|of))*\s+(?:level\s+|l)?(?<n>[0-3])\b|\b(?:level|l)\s?(?<m>[0-3])\s+autonomy\b/i;
 const ALWAYS = /^(?:please\s+)?(?:always|make sure to|make sure you|every time)\b/i;
 const NEVER_SAY = /^(?:please\s+)?(?:never|don'?t|do not)\s+(?:say|use the words?|use the phrase|call us|write)\b|^no\s+\S/i;
-const RULE_START = /^(?:please\s+)?(?:no|never|don'?t|do not|avoid|always|only|stop|keep|make sure|every time|use|mention|include)\b/i;
+const RULE_START = /^(?:please\s+)?(?:no|never|don'?t|do not|avoid|always|only|stop|keep|make sure|every time|use|mention|include|quote|sign off|spell)\b/i;
+
+const STYLE_RULE = /^(?:please\s+)?(?:never|don'?t|do not|avoid|quote|sign off|spell)\b/i;
 
 interface ClauseResult { patches: DirectivePatch[]; notes: string[] }
 
@@ -210,6 +219,38 @@ function modeOrAutonomy(clause: string, to: string[]): ClauseResult | undefined 
   return undefined;
 }
 
+// "our posts always end with a question" -> a rule for Tara's Instagram post craft (and Dev's voice check holds it too).
+// Only for a sentence that is a rule (it starts like one, or says always/never) and names what the skill is about
+// (posts, reels, carousels, ads…); anything else stays a standing instruction.
+function skillRuleClause(rest: string, to: string[], text: string): ClauseResult | undefined {
+  // a standing rule, not a request to make something now ("write two posts" is a request)
+  if (!/\b(?:always|never|every|each|from now on|don'?t|do not|no)\b/i.test(rest)) return undefined;
+  const hits = targetsIn(rest, to);
+  if (!hits.length) return undefined;
+  const patches: DirectivePatch[] = hits.map((h) => ({ kind: "skill.rule", agents: h.agents, skill: h.skill, text }));
+  if (hits.some((h) => h.agents.includes("content-strategist")) && (!to.length || to.includes("copy-editor") || to.includes("content-strategist"))) {
+    patches.push({ kind: "skill.rule", agents: ["copy-editor"], skill: "brand-voice-check", text });
+  }
+  return { patches, notes: [] };
+}
+
+// "Tara, add a skill called Festival post: always open with the greeting, then the offer" -> the business's own skill.
+const ADD_SKILL = /^(?:please\s+)?(?:add|create|teach|set up|make)\s+(?:a\s+|an\s+)?(?:new\s+)?skill\s+(?:called|named|for)?\s*["“']?(?<name>[^:"”']{3,60}?)["”']?\s*[:\-–]\s*(?<body>.{10,})$/i;
+
+export function skillIdFor(name: string): string {
+  const slug = slugify(name).replace(/[^a-z0-9-]+/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
+  if (SKILL_ID.test(slug)) return slug;
+  return slug ? `${slug}-skill` : `own-skill-${sha256(name).slice(0, 4)}`; // a name with no latin letters still gets an id
+}
+
+function addSkillClause(rest: string, to: string[]): ClauseResult | undefined {
+  const g = ADD_SKILL.exec(rest)?.groups;
+  if (!g?.name || !g.body) return undefined;
+  if (!to.length) return { patches: [], notes: ['Say who the skill is for, e.g. "Tara, add a skill called Festival post: …".'] };
+  const name = g.name.trim().replace(/^\w/, (c) => c.toUpperCase());
+  return { patches: [{ kind: "skill.add", agents: to, id: skillIdFor(name), name, when: clip(`When the request is about ${name.toLowerCase()}`, 140), text: clip(sentence(g.body), MAX_SKILL_TEXT) }], notes: [] };
+}
+
 // One clause -> patches, or undefined when the rules don't understand it.
 export function parseClause(clause: string): ClauseResult | undefined {
   const c = clause.trim();
@@ -224,14 +265,26 @@ export function parseClause(clause: string): ClauseResult | undefined {
   const t = toggle(c);
   if (t) return t;
 
+  const add = addSkillClause(rest, to);
+  if (add) return add;
   const cap = spendCap(rest);
   if (cap) {
     return { patches: [{ kind: "memory.instruction", agents: to.length ? to : SPEND_DESKS, text: sentence(rest), limit: { kind: "max_daily_spend", ...cap } }], notes: [] };
   }
-  if (!RULE_START.test(rest)) return undefined;
   const scope = SCOPE.exec(rest)?.groups?.ch;
   const channel = scope ? channelRef(scope) : undefined;
   const text = clip(sentence(rest), MAX_PATCH_TEXT);
+  // A rule for one kind of work ("our posts always end with a question"): a skill rule. Not when it is scoped to a channel.
+  if (!channel) {
+    const sr = skillRuleClause(rest, to, text);
+    if (sr) return sr;
+  }
+  if (!RULE_START.test(rest)) return undefined;
+  // A way of writing that names no particular kind of work ("never use emojis", "quote prices in AED"): it goes on all the
+  // skills of the desks that write (or of the desk addressed), where the Team page shows it. "Always …" stays an instruction.
+  if (!channel && STYLE_RULE.test(rest) && !NEVER_SAY.test(rest)) {
+    return { patches: [{ kind: "skill.rule", agents: to.length ? to : PROMO_DESKS, skill: "*", text }], notes: [] };
+  }
   const instruction = (agents: string[]): ClauseResult => ({
     patches: [{ kind: "memory.instruction", agents, text, ...(channel ? { channel: channel.id } : {}) }], notes: [],
   });
@@ -257,7 +310,7 @@ export function parseDirective(text: string): ParsedDirective {
 
 // ---------- the model, for what the rules leave ----------
 
-const PATCH_KINDS = ["agent.enabled", "agent.mode", "agent.autonomy", "memory.instruction", "brand_rule.add"] as const;
+const PATCH_KINDS = ["agent.enabled", "agent.mode", "agent.autonomy", "memory.instruction", "brand_rule.add", "skill.rule", "skill.add"] as const;
 
 export function directiveSchema(): object {
   return {
@@ -276,6 +329,9 @@ export function directiveSchema(): object {
             text: { type: "string" },
             channel: { type: "string" },
             note: { type: "string" },
+            skill: { type: "string" },
+            name: { type: "string" },
+            when: { type: "string" },
             ruleKind: { type: "string", enum: ["voice", "visual"] },
             limitAmount: { type: "number" },
             limitCurrency: { type: "string" },
@@ -302,7 +358,10 @@ export function directiveSystemPrompt(channels: Array<{ id: string; name: string
 - agent.mode: full, light (cheaper, shorter work) or off. agents, mode.
 - agent.autonomy: 0 draft only, 1 scheduled after approval, 2 auto-publish with a digest, 3 full. agents, autonomy.
 - memory.instruction: a standing instruction for particular desks, optionally on one channel. agents, text (one sentence, in the owner's words), channel (its name), and limitAmount + limitCurrency for a daily spend cap.
-- brand_rule.add: a rule for everything the brand says or shows. text, ruleKind (voice or visual).`,
+- brand_rule.add: a rule for everything the brand says or shows. text, ruleKind (voice or visual).
+- skill.rule: a rule for one way of working, e.g. "our posts always end with a question". agents, skill (a skill id from the list below, or * for all of those agents' skills), text, optionally channel.
+- skill.add: the business's own way of working. agents, skill (a new id of lowercase words joined by dashes, or a listed id to replace it), name, when (one plain line), text (the method, in the owner's words).`,
+    `Skills (id: name, for whom):\n${codeCatalog().skills.map((k) => `- ${k.id}: ${k.name} (${k.agents.join(", ")})`).join("\n")}`,
     `Rules:
 - chief-of-staff can never be switched off.
 - Posts and content go to content-strategist (copy-editor checks them); ads, budgets and campaigns to growth-marketer; the website and anything technical to tech-lead; app errors, crashes, Sentry and incidents to oncall-engineer; releases, builds and the app stores to qa-release; numbers to data-analyst; follow-ups to ops-manager.
@@ -357,6 +416,22 @@ export function patchesFromModel(raw: unknown): { patches: DirectivePatch[]; not
       case "brand_rule.add":
         if (text) out.patches.push({ kind: "brand_rule.add", text: sentence(text), ruleKind: o.ruleKind === "visual" ? "visual" : "voice" });
         break;
+      case "skill.rule": {
+        const skill = typeof o.skill === "string" ? o.skill.trim() : "";
+        const known = skill === "*" || codeCatalog().skills.some((k) => k.id === skill);
+        if (!text || !agents.length || !known) break;
+        const channel = typeof o.channel === "string" ? channelRef(o.channel) : undefined;
+        out.patches.push({ kind: "skill.rule", agents, skill, text: sentence(text), ...(channel ? { channel: channel.id } : {}) });
+        break;
+      }
+      case "skill.add": {
+        const name = str(o.name, 60);
+        const id = typeof o.skill === "string" && SKILL_ID.test(o.skill.trim()) ? o.skill.trim() : name ? skillIdFor(name) : "";
+        const body = str(o.text, MAX_SKILL_TEXT);
+        if (!name || !id || !body || !agents.length) break;
+        out.patches.push({ kind: "skill.add", agents, id, name, when: str(o.when, 140) ?? clip(`When the request is about ${name.toLowerCase()}`, 140), text: body });
+        break;
+      }
       default:
         break;
     }
@@ -387,9 +462,15 @@ export const brandRuleId = (text: string): string => entityId("BrandRule", `owne
 const norm = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 const state = (a: AgentSettings): string => (!a.enabled ? "off" : a.mode === "light" ? "on (light)" : "on");
+const skillLabel = (skill: string, agents: string[]): string => {
+  const who = agents.map((a) => agentById(a)?.name ?? a).join(", ");
+  if (skill === "*") return `${who}, all their skills`;
+  const k = codeCatalog().skills.find((x) => x.id === skill);
+  return `${who}'s ${k ? k.name : skill}`;
+};
 const agentLabel = (id: string): string => { const a = agentById(id); return a ? `${a.name} (${a.title})` : id; };
 
-function diffOf(patches: DirectivePatch[], agents: AgentSettings[], existingRules: Set<string>, previewId: string): DirectiveDiffLine[] {
+function diffOf(patches: DirectivePatch[], agents: AgentSettings[], existingRules: Set<string>, previewId: string, skillRules: readonly SkillRule[] = []): DirectiveDiffLine[] {
   const byId = new Map(agents.map((a) => [a.id, a]));
   return patches.map((p, i): DirectiveDiffLine => {
     switch (p.kind) {
@@ -415,6 +496,16 @@ function diffOf(patches: DirectivePatch[], agents: AgentSettings[], existingRule
       }
       case "brand_rule.add":
         return { patch: i, op: existingRules.has(brandRuleId(p.text)) ? "same" : "add", target: brandRuleId(p.text), label: `Brand rule (${p.ruleKind})`, after: p.text };
+      case "skill.rule": {
+        const has = p.agents.every((a) => skillRules.some((r) => r.agents.includes(a) && r.skillId === p.skill && norm(r.text) === norm(p.text)));
+        const ch = p.channel ? channelRef(p.channel) : undefined;
+        return { patch: i, op: has ? "same" : "add", target: instructionId(previewId, i), label: `Rule for ${skillLabel(p.skill, p.agents)}${ch ? ` on ${ch.name}` : ""}`, after: p.text };
+      }
+      case "skill.add": {
+        const shipped = codeCatalog().skills.some((k) => k.id === p.id);
+        const who = p.agents.map((a) => agentById(a)?.name ?? a).join(", ");
+        return { patch: i, op: "add", target: instructionId(previewId, i), label: `${shipped ? "New way of working for" : "New skill for"} ${who}: ${p.name}`, after: p.text };
+      }
     }
   });
 }
@@ -463,7 +554,8 @@ export async function previewDirective(g: GraphHandle, input: { text: string; ac
     g.roQuery<{ id: string }>("UNWIND $ids AS id MATCH (r:Entity:BrandRule {id:id}) RETURN r.id AS id",
       { ids: patches.filter((p) => p.kind === "brand_rule.add").map((p) => brandRuleId(p.text)) }),
   ]);
-  const diff = diffOf(patches, agents, new Set(rules.map((r) => r.id)), id);
+  const skillRules = patches.some((p) => p.kind === "skill.rule") ? (await loadBusinessSkills(g)).rules : [];
+  const diff = diffOf(patches, agents, new Set(rules.map((r) => r.id)), id, skillRules);
   const preview: DirectivePreview = { id, text, actor, status: "preview", patches, diff, unparsed: parsed.unparsed, notes: unique(parsed.notes), parser };
 
   const props: Record<string, Prim> = {
@@ -503,6 +595,9 @@ function validPatch(p: DirectivePatch): boolean {
     case "agent.autonomy": return !!agentById(p.agent) && !agentChangeRefusal(p.agent, { autonomy: p.autonomy });
     case "memory.instruction": return Array.isArray(p.agents) && p.agents.length > 0 && p.agents.every((a) => !!agentById(a)) && typeof p.text === "string" && !!p.text.trim();
     case "brand_rule.add": return typeof p.text === "string" && !!p.text.trim();
+    case "skill.rule": return Array.isArray(p.agents) && p.agents.length > 0 && p.agents.every((a) => !!agentById(a)) && typeof p.text === "string" && !!p.text.trim()
+      && (p.skill === "*" || SKILL_ID.test(p.skill));
+    case "skill.add": return Array.isArray(p.agents) && lintBusinessSkill({ id: p.id, name: p.name, when: p.when, body: p.text, agents: p.agents }, (a) => agentById(a)?.tools ?? undefined).length === 0;
     default: return false;
   }
 }
@@ -527,9 +622,14 @@ export async function applyDirective(g: GraphHandle, previewId: string, opts: { 
       else if (p.kind === "agent.mode") await setAgentSettings(g, p.agent, { mode: p.mode }, { now, src: previewId });
       else if (p.kind === "agent.autonomy") await setAgentSettings(g, p.agent, { autonomy: p.autonomy }, { now, src: previewId });
       else if (!same.has(i)) {
+        const actor = stated ? d.actor : undefined;
         const w = p.kind === "memory.instruction"
-          ? await instructionWrite(g, p, instructionId(previewId, i), previewId, stated ? d.actor : undefined, now)
-          : brandRuleWrite(p, previewId, businessId, now);
+          ? await instructionWrite(g, p, instructionId(previewId, i), previewId, actor, now)
+          : p.kind === "skill.rule"
+            ? await skillRuleWriteFor(g, p, instructionId(previewId, i), previewId, actor, now)
+            : p.kind === "skill.add"
+              ? skillWrite(p, instructionId(previewId, i), previewId, actor, now, isoDate(now))
+              : brandRuleWrite(p, previewId, businessId, now);
         const s = await writeBatch(g, w, now);
         if (s.errors.length) throw new Error(s.errors.map((e) => e.error).join("; "));
       }
@@ -560,6 +660,14 @@ async function instructionWrite(
       { from: id, type: "SOURCED_FROM", to: src, src },
     ],
   };
+}
+
+async function skillRuleWriteFor(
+  g: GraphHandle, p: Extract<DirectivePatch, { kind: "skill.rule" }>, id: string, src: string, actor: string | undefined, now: number,
+): Promise<{ nodes: NodeInput[]; edges: EdgeInput[] }> {
+  const ch = p.channel ? channelRef(p.channel) : undefined;
+  const chExists = ch ? !!(await g.roQuery<{ c: number }>("MATCH (c:Entity:Channel {id:$id}) RETURN count(c) AS c", { id: ch.id }))[0]?.c : false;
+  return skillRuleWrite({ agents: p.agents, skill: p.skill, text: p.text, channel: ch, channelExists: chExists }, id, src, actor, now, isoDate(now));
 }
 
 function brandRuleWrite(p: Extract<DirectivePatch, { kind: "brand_rule.add" }>, src: string, businessId: string | null, now: number): { nodes: NodeInput[]; edges: EdgeInput[] } {

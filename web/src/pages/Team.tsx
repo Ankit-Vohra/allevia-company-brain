@@ -75,6 +75,11 @@ export default function TeamPage() {
       throw e;
     }
   };
+  const removeNote = async (id: string) => {
+    await api.retireSkillNote(tenant.id, id);
+    team.reload();
+    changed();
+  };
   const retire = async (ruleId: string) => {
     await api.retireRule(tenant.id, ruleId);
     setAgents((xs) => xs?.map((a) => ({ ...a, learnedRules: a.learnedRules.filter((r) => r.id !== ruleId) })));
@@ -107,6 +112,7 @@ export default function TeamPage() {
                 onToggle={() => setOpenId(openId === a.id ? null : a.id)}
                 onPatch={patch}
                 onRetire={retire}
+                onRemoveNote={removeNote}
                 onTell={() => setPrefill({ text: `${a.name}, `, n: Date.now() })}
               />
             ))}
@@ -131,9 +137,9 @@ export default function TeamPage() {
 
 // ---------------------------------------------------------------- one person
 
-function PersonRow({ a, open, onToggle, onPatch, onRetire, onTell }: {
+function PersonRow({ a, open, onToggle, onPatch, onRetire, onRemoveNote, onTell }: {
   a: AgentView; open: boolean; onToggle: () => void;
-  onPatch: (id: string, p: AgentPatch) => Promise<void>; onRetire: (ruleId: string) => Promise<void>; onTell: () => void;
+  onPatch: (id: string, p: AgentPatch) => Promise<void>; onRetire: (ruleId: string) => Promise<void>; onRemoveNote: (id: string) => Promise<void>; onTell: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -234,6 +240,41 @@ function PersonRow({ a, open, onToggle, onPatch, onRetire, onTell }: {
             )}
             {!ro && <button type="button" className="btn btn-ghost btn-sm tm-tell" onClick={onTell}>Tell {a.name} something</button>}
           </section>
+
+          {a.skills && a.skills.length > 0 && (
+            <Reveal label={`How ${a.name} works`} summary={`${plural(a.skills.length, "skill", "skills")} · ${plural(a.tools?.length ?? 0, "thing", "things")} ${a.name} can use`}>
+              <ul className="tm-skills">
+                {a.skills.map((s) => (
+                  <li key={s.id}>
+                    <p className="tm-skill-name">{s.name}{s.source === "business" && <span className="tm-channel">your own</span>}</p>
+                    <p className="tm-help">{s.when}.</p>
+                    <p className="tm-skill-tags">
+                      {s.makes ? <span>Makes: {s.makes}</span> : <span>Looks and explains; makes nothing</span>}
+                      {s.needsOk && <span>Waits for your OK</span>}
+                    </p>
+                    {s.rules.length > 0 && (
+                      <ul className="tm-skill-rules" aria-label={`Your rules for ${s.name}`}>
+                        {s.rules.map((r) => (
+                          <li key={r.id}>
+                            <span>{r.text}{r.channel && <span className="tm-channel">{r.channel}</span>}</span>
+                            {!ro && <button type="button" className="btn btn-quiet btn-sm" onClick={() => onRemoveNote(r.id).catch((e) => setError((e as Error).message || "That did not save. Try again."))}>Remove</button>}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {s.learned.length > 0 && <p className="tm-help">Learned from your edits: {s.learned.join(" ")}</p>}
+                  </li>
+                ))}
+              </ul>
+              {a.tools && a.tools.length > 0 && (
+                <>
+                  <h3 className="tm-label">What {a.name} can look at and do</h3>
+                  <ul className="tm-tools">{a.tools.map((t) => <li key={t.name}>{t.words}</li>)}</ul>
+                </>
+              )}
+              {!ro && <button type="button" className="btn btn-ghost btn-sm tm-tell" onClick={onTell}>Change how {a.name} works</button>}
+            </Reveal>
+          )}
 
           <Reveal label={`Things ${a.name} learned from your edits`} summary={a.learnedRules.length ? String(a.learnedRules.length) : "none yet"}>
             {a.learnedRules.length ? (

@@ -41,6 +41,7 @@ export interface TurnRecordDto {
   ms: number;
   source?: Channel;             // the door it came through: "web" or "discord" (a thread can be continued from either)
   agents: AgentId[];
+  skills?: string[];            // the skills the team opened for it, "agent-id/skill-id" (Turn.skills)
   citations: string[];
   checks: TurnChecks;
   ended?: "stopped" | "failed"; // set only when the turn did not finish: stopped by the owner (or the time cap), or failed

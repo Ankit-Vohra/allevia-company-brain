@@ -24,7 +24,7 @@ import { subscriptionEnv } from "./sdk-env.js";
 import type { AlleviaTool, ToolContext } from "./tool.js";
 
 export type Emit = (e: AgentEvent) => void;
-export type RunPhase = "plan" | "work" | "review" | "revise" | "synthesis" | "direct";
+export type RunPhase = "plan" | "work" | "review" | "revise" | "synthesis" | "direct" | "polish";
 
 export interface RunInput {
   agentId: string;
@@ -100,6 +100,7 @@ const STATUS: Record<string, (a: unknown) => string> = {
   who_knows: phrase(["topic", "query", ...ID_KEYS], (x) => `Finding who knows about ${x}`, "Finding who knows"),
   trace_decision: phrase([...ID_KEYS, "query"], (x) => `Tracing the decision ${x}`, "Tracing a decision"),
   history: phrase(ID_KEYS, (x) => `Reading the history of ${x}`, "Reading the history"),
+  use_skill: phrase(["id"], (x) => `Opening how to do this: ${x}`, "Opening how to do this"),
 };
 
 export function statusLine(name: string, args: unknown): string {
@@ -138,6 +139,7 @@ export function forModel(r: ToolResult): string {
   if (r.sources.length) body.sources = r.sources;
   if (r.nodes.some((n) => n.simulated)) body.simulated = r.nodes.filter((n) => n.simulated).map((n) => n.id);
   if (r.note) body.note = r.note;
+  if (r.guidance) body.guidance = r.guidance;
   const s = JSON.stringify(body);
   return s.length <= MAX_MODEL_JSON ? s : `${s.slice(0, MAX_MODEL_JSON)}… [truncated: ask for fewer rows]`;
 }

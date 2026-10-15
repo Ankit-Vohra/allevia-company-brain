@@ -5,6 +5,8 @@
 // - graph: the tenant's graph (allevia_<tenant>), which must already exist: asking must not create a tenant by accident.
 // - embedQuery: the local e5-small model when its files are in MODELS_DIR. Without them there is no embedder and search
 //   runs on full-text alone (nothing is downloaded). If the model fails to load, vector search is off for the process.
+// - skills: the shipped skill packs (skills/), each agent's way of working; ALLEVIA_SKILLS=off turns them off. ask() lays
+//   the business's own skills and skill rules over them each turn.
 // - seedSearch: the search tool itself, read-only, so recall starts from the hits an agent would see first.
 // Stopping: ask() hands deps.signal to every agent run, invokeTool gives the run's signal to each tool as ctx.signal,
 // and the write tools (remember, propose_action) refuse once it is aborted. Graph algorithms run under the tools' own
@@ -15,6 +17,7 @@ import { z } from "zod";
 import { graphName, listGraphs, openGraph, type GraphHandle } from "../graph/client.js";
 import type { AgentWiring, AskDeps } from "./ask.js";
 import { ClaudeAgentSdkRuntime, type AgentRuntime, type SdkRuntimeOpts } from "./runtime.js";
+import { codeCatalog, skillsEnabled } from "./skills/catalog.js";
 import { assertSubscription } from "./sdk-env.js";
 import { TouchedSet, type ToolContext } from "./tool.js";
 import { toolsByName } from "./tools/index.js";
@@ -89,6 +92,8 @@ export async function createAskDeps(opts: { tenant: string; model?: string }, ov
     seedSearch: searchSeeds(graph, opts.tenant, embedQuery),
     ...(embedQuery ? { embedQuery } : {}),
     ...(opts.model ? { model: opts.model } : {}),
+    // The shipped skill packs, unless ALLEVIA_SKILLS=off (how the quality trials run the team without them).
+    ...(skillsEnabled() ? { skills: codeCatalog() } : {}),
   };
 }
 

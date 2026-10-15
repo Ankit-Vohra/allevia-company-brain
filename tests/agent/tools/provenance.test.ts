@@ -26,7 +26,8 @@ describe("provenance (integration)", () => {
 
   it("covers every read tool", () => {
     const named = new Set(CALLS.map(([n]) => n));
-    expect(ALL_TOOLS.filter((t) => !t.writes && !named.has(t.name)).map((t) => t.name)).toEqual([]);
+    // use_skill opens a skill (a way of working), not the graph: it returns no nodes, edges or sources to attribute.
+    expect(ALL_TOOLS.filter((t) => !t.writes && t.name !== "use_skill" && !named.has(t.name)).map((t) => t.name)).toEqual([]);
   });
 
   it("every returned node with a source brings one, and every edge's src document comes back", async () => {

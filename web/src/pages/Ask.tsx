@@ -10,6 +10,7 @@ import { AnswerModes } from "../components/Capabilities";
 import { Icon, type IconName } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { Reveal } from "../components/Reveal";
+import { quickReplies } from "@shared/quick-replies";
 import { RunTimeline } from "../components/RunTimeline";
 import { WorkLanes } from "../components/WorkLanes";
 import { modesUsed } from "../lib/capabilities";
@@ -287,6 +288,7 @@ export default function AskPage() {
                   onShowPath={() => { setPicked(t.key); setPathOpen(true); }}
                   onRetry={() => ask(t.question)}
                   onFillIn={() => ask("Fill it in")}
+                  onQuickReply={(text) => ask(text)}
                 />
               ))}
               {detail.loading && !turns.length && <li className="turn"><span className="skeleton" style={{ display: "block", height: 180 }} /></li>}
@@ -368,9 +370,9 @@ function ThreadList({ sessions, loading, activeId, onPick }: { sessions?: Sessio
   );
 }
 
-function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onReplay, onShowPath, onRetry, onFillIn }: {
+function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onReplay, onShowPath, onRetry, onFillIn, onQuickReply }: {
   turn: TurnItem; view: RunView; caps?: CapabilityState[]; latest: boolean; activeCite?: string;
-  onCite: (id: string) => void; onNodes: (ids: string[]) => void; onReplay: () => void; onShowPath: () => void; onRetry: () => void; onFillIn: () => void;
+  onCite: (id: string) => void; onNodes: (ids: string[]) => void; onReplay: () => void; onShowPath: () => void; onRetry: () => void; onFillIn: () => void; onQuickReply: (text: string) => void;
 }) {
   const live = turn.status === "running";
   const [how, setHow] = useState(false);
@@ -389,7 +391,7 @@ function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onRe
   const lane = working ? laneOf(view, working) : undefined;
   const status = plain(lane?.status ?? lane?.task ?? "").replace(/[.…]+$/, "").trim();
   const nm = working ? agentDef(working)?.name : undefined;
-  const workingLine = !live ? "" : !nm ? "Meera is reading your question…" : !status ? `${nm} is on it…` : /^\w+ing\b/i.test(status) ? `${nm} is ${status.charAt(0).toLowerCase()}${status.slice(1)}…` : `${nm}: ${status.charAt(0).toLowerCase()}${status.slice(1)}…`;
+  const workingLine = !live ? "" : !nm ? "Meera is reading your question…" : !status ? `${nm} is on it…` : status.startsWith(`${nm} is `) ? `${status}…` : /^\w+ing\b/i.test(status) ? `${nm} is ${status.charAt(0).toLowerCase()}${status.slice(1)}…` : `${nm}: ${status.charAt(0).toLowerCase()}${status.slice(1)}…`;
 
   return (
     <li className={`turn${live ? " is-live" : ""}`}>
@@ -413,6 +415,12 @@ function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onRe
                 <span><b>Meera</b></span>
               </div>
               <Markdown text={view.answer} nodes={view.nodes} onCite={(id) => { onCite(id); }} activeId={activeCite} className="answer-md" />
+              {view.final && latest && quickReplies(view.answer).map((q) => (
+                <div key={q.question} className="quick-replies" role="group" aria-label={q.question}>
+                  <span className="quick-q">{q.question}</span>
+                  {q.options.map((o) => <button key={o} type="button" className="btn btn-ghost btn-sm" onClick={() => onQuickReply(o)}>{o}</button>)}
+                </div>
+              ))}
               {view.final && (
                 <>
                   <p className={`answer-line${checksOk ? "" : " is-warn"}`}>

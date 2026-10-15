@@ -211,6 +211,7 @@ export interface SaveTurnInput {
   findings: FindingRecord[];
   reviews: ReviewRecord[];
   guidedBy?: string[];              // the owner's instructions (Memory, Rule, BrandRule ids) the turn worked under
+  skills?: Array<{ agent: string; skillId: string }>; // the skills agents opened (saved as Turn.skills: "agent/skill-id")
 }
 
 export interface SaveTurnResult { nodesCreated: number; edgesCreated: number; errors: string[] }
@@ -241,6 +242,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   if (t.source) turnProps.source = t.source;
   if (t.ms !== undefined) turnProps.ms = t.ms;
   if (t.error) turnProps.error = t.error;
+  if (t.skills?.length) turnProps.skills = unique(t.skills.map((s) => `${s.agent}/${s.skillId}`));
   const nodes: NodeInput[] = [{ type: "Turn", id: t.turnId, name: clip(oneLine(t.question), 120) || t.turnId, summary: clip(t.answer, 600), props: turnProps }];
   const edges: EdgeInput[] = [{ from: t.turnId, type: "IN_SESSION", to: t.sessionId }];
   if (askerOk) edges.push({ from: t.asker, type: "ASKED", to: t.turnId });
@@ -255,7 +257,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
       type: "Finding", id: f.id, name: clip(oneLine(`${who?.name ?? f.agent}: ${f.task}`), 120), summary: clip(f.text, 600),
       props: {
         text: f.text, agent: f.agent, task: f.task, turnId: t.turnId, citations: f.citations, basedOn: f.basedOn, proposals: f.proposals,
-        revised: f.revised, rejected: f.rejected, partial: f.partial === true,
+        revised: f.revised, rejected: f.rejected, partial: f.partial === true, ...(f.skills?.length ? { skills: f.skills } : {}),
       },
     });
     edges.push({ from: f.id, type: "PART_OF", to: t.turnId });

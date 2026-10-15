@@ -104,6 +104,13 @@
 .tm-when { flex: none; font-size: var(--text-xs); color: var(--color-muted); }
 .tm-tell { justify-self: start; }
 .tm-rules { list-style: none; display: grid; border-top: 1px solid var(--color-rule-2); }
+.tm-skills { list-style: none; display: grid; gap: 14px; }
+.tm-skills > li { display: grid; gap: 3px; padding-bottom: 12px; border-bottom: 1px solid var(--color-rule-2); }
+.tm-skill-name { font-weight: 600; font-size: var(--text-sm); }
+.tm-skill-tags { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--text-xs); color: var(--color-muted); }
+.tm-skill-rules { list-style: none; display: grid; gap: 4px; margin-top: 4px; font-size: var(--text-sm); }
+.tm-skill-rules li { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tm-tools { list-style: disc; padding-left: 18px; display: grid; gap: 2px; font-size: var(--text-sm); color: var(--color-ink-2); }
 .tm-empty { font-size: var(--text-sm); color: var(--color-muted); text-wrap: pretty; }
 .tm-foot { font-size: var(--text-xs); color: var(--color-muted); }
 

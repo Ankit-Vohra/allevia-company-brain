@@ -54,6 +54,7 @@ COPY shared ./shared
 COPY src ./src
 COPY scripts ./scripts
 COPY vendor ./vendor
+COPY skills ./skills
 # scripts/seed-demo.ts builds the synthetic demo company from this fixture (no model needed)
 COPY tests/fixtures/seed-graph.ts ./tests/fixtures/seed-graph.ts
 COPY --from=web /app/web/dist ./web/dist

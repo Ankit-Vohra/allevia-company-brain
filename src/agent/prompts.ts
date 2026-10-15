@@ -6,7 +6,11 @@
 // orchestrator also enforces as the run's maxTurns.
 import { AGENTS, agentById, departmentById, type AgentDef } from "../../shared/roster.js";
 import { MODE_PHRASE, type CapabilityModeInfo } from "../capabilities/modes.js";
+import { VOICE_RULES } from "./humanize.js";
 import { ANSWER_SHAPE, CONTENT_SHAPE, DESK_SHAPE, OWNER_WORDS_RULE } from "./style.js";
+import type { SkillCatalog } from "./skills/catalog.js";
+import type { Skill } from "./skills/format.js";
+import { skillNames, skillsBlock } from "./skills/render.js";
 import type { AlleviaTool } from "./tool.js";
 import type { InstructionNote } from "./types.js";
 
@@ -55,7 +59,7 @@ export const HOUSE_RULES = `House rules (every Allevia agent):
 
 // What each reviewer looks for when it checks someone else's finding.
 const REVIEW_FOCUS: Record<string, string> = {
-  "copy-editor": "Hold it to the brand's voice rules (look them up with playbook) and strip AI-sounding phrasing. If the owner asked for this kind of writing (a sale post, an offer, an announcement), don't send it back for being promotional: ask only for plain, human wording, and keep the owner's own request and wording. Facts are the fact checker's job; a \"[suggested: …]\" spot is meant to be there. A caption that is only a label (a name, a place, a year) is not on brand either: it needs a hook line and a sentence a person would say; send it back.",
+  "copy-editor": "Hold it to the brand's voice rules (look them up with playbook) and strip AI-sounding phrasing. If the owner asked for this kind of writing (a sale post, an offer, an announcement), don't send it back for being promotional: ask only for plain, human wording, and keep the owner's own request and wording. Facts are the fact checker's job; a \"[suggested: …]\" spot is meant to be there. A caption that is only a label (a name, a place, a year) is not on brand either: it needs a hook line and a sentence a person would say; send it back. Copy that sounds machine-written (\"not just X, but Y\", \"Let's dive in\", stock words, a dash in every sentence) goes back too, with each phrase quoted and its plain replacement (your skill make-it-sound-human).",
   "fact-checker": "Check every claim and number against the graph (open the cited ids). Anything unsupported goes back. What counts as a claim: names, places, dates, numbers, awards, materials, results, and what the business does or offers. A mood or a way of framing is not a claim, so leave it to the copy editor; a \"Film:\" direction is not a claim (it tells the owner what to shoot); a \"[suggested: …]\" spot is the writer's clearly marked proposal for the owner to accept, not a claim, so don't reject it for being absent from the record; reject it only if it states a number, award, price, date, result or named person as if it were fact, or contradicts the record. A \"[you tell us: …]\" placeholder is the right way to mark a missing hard fact, not a gap.",
   "coe-lead": "Check every figure: the right number, the right period, the right comparison. Anything not in the data goes back.",
 };
@@ -75,7 +79,12 @@ export function instructionsBlock(notes: readonly InstructionNote[]): string {
   return `Standing instructions from the owner, for you. Follow them in everything you write; they come before your own habits but never before the house rules above. Cite the id when one shapes your work:\n${lines.join("\n")}`;
 }
 
-export function agentSystemPrompt(agent: AgentDef, tools: AlleviaTool[], opts: PromptOpts & { instructions?: readonly InstructionNote[] }): string {
+// `skills`: the agent's skills when it can open them (use_skill is among its tools). Only each one's name and when to use it
+// go in the prompt; the text loads when the agent opens one.
+export function agentSystemPrompt(
+  agent: AgentDef, tools: AlleviaTool[],
+  opts: PromptOpts & { instructions?: readonly InstructionNote[]; skills?: readonly Skill[]; skillPhase?: "plan" | "review" | "other" },
+): string {
   const dept = departmentById(agent.department);
   return [
     `You are ${agent.name}, ${agent.title} in ${dept ? `the ${dept.name} department` : "the team"} of Allevia, the AI staff that runs the company brain of the business "${opts.tenant}".`,
@@ -84,6 +93,7 @@ export function agentSystemPrompt(agent: AgentDef, tools: AlleviaTool[], opts: P
     `You handle: ${agent.handles.join(", ")}.`,
     `Today is ${localDate(opts.now, opts.timeZone)} (${localStamp(opts.now, opts.timeZone)}).`,
     `Your tools (read the company graph; nothing you do changes the business without the owner's approval):\n${toolList(tools)}`,
+    skillsBlock(opts.skills ?? [], { phase: opts.skillPhase ?? "other" }),
     HOUSE_RULES,
     OWNER_WORDS_RULE,
     opts.language ?? "",
@@ -198,18 +208,22 @@ const rounds = (n: number, what = "rounds of tool calls"): string => `You have a
 
 // ---------- PLAN (Chief of Staff, structured, no tools) ----------
 
-export function planSystemPrompt(opts: PromptOpts & { disabled?: readonly string[] }): string {
+export function planSystemPrompt(opts: PromptOpts & { disabled?: readonly string[]; skills?: SkillCatalog; chiefCanOpenSkills?: boolean }): string {
   const off = new Set((opts.disabled ?? []).filter((id) => id !== CHIEF));
   const desks = AGENTS.filter((a) => a.id !== CHIEF && !off.has(a.id)).map((a) => {
     const dept = departmentById(a.department)?.name ?? a.department;
     const reviews = a.reviews?.length ? ` Reviews ${a.reviews.join(", ")} automatically.` : "";
-    return `- ${a.id}: ${a.name}, ${a.title} (${dept}). Handles ${a.handles.join(", ")}. Tools: ${a.tools.join(", ")}.${reviews}`;
+    const sk = opts.skills?.forAgent(a.id) ?? [];
+    const skills = sk.length ? ` Skills: ${skillNames(sk)}.` : "";
+    return `- ${a.id}: ${a.name}, ${a.title} (${dept}). Handles ${a.handles.join(", ")}. Tools: ${a.tools.join(", ")}.${skills}${reviews}`;
   }).join("\n");
+  const mine = opts.chiefCanOpenSkills ? skillsBlock(opts.skills?.forAgent(CHIEF) ?? [], { phase: "plan" }) : "";
   const chief = agentById(CHIEF)!;
   return [
     `You are ${chief.name}, Chief of Staff of Allevia, the AI staff that runs the company brain of the business "${opts.tenant}". Right now you only PLAN who does what; you do not answer yet.`,
     `Today is ${localDate(opts.now, opts.timeZone)}.`,
     `The desks:\n${desks}\n- ${CHIEF}: you. Tools: ${chief.tools.join(", ")}. Take a quick lookup yourself.`,
+    mine,
     `How to plan (the fewest desks wins: every extra desk makes the owner wait):
 - Default to ONE step. If a quick lookup answers it (a fact, an entity, a decision, what we already know), plan only "${CHIEF}".
 - Add a second desk only when the question clearly needs another department's work. At most ${MAX_DESKS} desks for any ordinary question; up to ${MAX_DESKS_BROAD} only for a broad review of the whole business (a weekly brief, "how is the business doing overall").
@@ -239,7 +253,7 @@ export function workPrompt(o: { question: string; task: string; recall: string; 
   }
   if (o.failedDeps.length) parts.push(`${o.failedDeps.map(who).join(" and ")} could not finish; work without that finding and say what is missing.`);
   parts.push(`Do the task with your tools${o.toolRounds !== undefined ? ` (${rounds(o.toolRounds)}; several tools in one round is fine)` : ""}, then return your Finding:
-- text: at most ${findingMaxChars(o.agent)} characters of plain markdown. Every claim cited as [[id]]; every number with its date or period; "not recorded" where the graph has nothing. ${o.agent === CONTENT_DESK ? CONTENT_SHAPE : DESK_SHAPE}
+- text: at most ${findingMaxChars(o.agent)} characters of plain markdown. Every claim cited as [[id]]; every number with its date or period; "not recorded" where the graph has nothing. ${o.agent === CONTENT_DESK ? `${CONTENT_SHAPE}\n${VOICE_RULES}` : DESK_SHAPE}
 - citations: every id you cited.
 - basedOn: the finding ids above that you built on (empty if none).
 - proposals: actions you would suggest, one line each (optional). Do not execute anything.`);
@@ -293,6 +307,8 @@ const ANSWER_RULES = `Write the answer to the owner now.
 ${ANSWER_SHAPE}
 
 ${OWNER_WORDS_RULE}
+
+${VOICE_RULES}
 
 Keep these rules too:
 - Write nothing before your lookups are done: no working notes, no "let me check", no plan. Everything you write is shown to the owner as the answer.

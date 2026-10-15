@@ -17,10 +17,12 @@ import { playbook } from "./playbook.js";
 import { recall, remember } from "./memory.js";
 import { proposeAction } from "./actions.js";
 import { cypher } from "./cypher.js";
+import { useSkill } from "./skills.js";
 
 export const ALL_TOOLS: AlleviaTool[] = [
   search, getEntity, neighbors, findPaths, traceDecision, whoOwns, whoKnows, impactOf, important, topics, metricTrend,
   contentPerformance, seoReport, adReport, playbook, history, recall, cypher, remember, proposeAction, showPath,
+  useSkill,
 ];
 
 const BY_NAME = new Map(ALL_TOOLS.map((t) => [t.name, t]));

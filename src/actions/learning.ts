@@ -19,6 +19,7 @@ import type { LlmRunner } from "../ingest/llm.js";
 import { entityId } from "../util/ids.js";
 import { isoDate } from "../util/time.js";
 import { addDays, clip } from "../insights/text.js";
+import { skillsForLearnedRule } from "../agent/skills/business.js";
 import { ensureAgentNode, existingIds } from "./shared.js";
 
 type Read = Pick<GraphHandle, "roQuery">;
@@ -324,6 +325,7 @@ export async function learnFromEdit(g: GraphHandle, input: LearnInput, deps: Lea
   const date = isoDate(now);
   const out: LearnedRule[] = [];
   for (const s of specs) {
+    const skills = skillsForLearnedRule({ agentId: input.agentId, draft: orig, op: s.op });
     const [old] = await g.roQuery<{ confidence: number | null; status: string | null; n: number | null; applied: number | null }>(
       "MATCH (r:Entity:Rule {id:$id}) RETURN r.confidence AS confidence, r.status AS status, r.learnedCount AS n, r.appliedCount AS applied", { id: s.id });
     const confidence = old ? Math.min(0.95, Math.round(((old.confidence ?? s.confidence) + 0.1) * 100) / 100) : s.confidence;
@@ -333,6 +335,8 @@ export async function learnFromEdit(g: GraphHandle, input: LearnInput, deps: Lea
       props: {
         kind: "learned", text: s.text, op: s.op, confidence, status: "active", appliedCount: old?.applied ?? 0,
         learnedCount: (old?.n ?? 0) + 1, learnedAt: now,
+        // the skills it belongs to, so use_skill shows it with the right skill (Tara's post craft, Dev's voice check)
+        ...(skills.length ? { skills } : {}),
         ...(s.find ? { find: s.find } : {}), ...(s.replace !== undefined ? { replace: s.replace } : {}),
         ...(s.words ? { words: s.words } : {}), ...(s.max !== undefined ? { max: s.max } : {}),
       },
