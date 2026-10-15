@@ -264,6 +264,23 @@ export function createApp(deps: ServerDeps): Hono {
     allowHeaders: ["content-type", "accept", "authorization"],
     maxAge: 600,
   }));
+  // With owner links on, the browser carries the credential in a cookie, so a page on another site must not be able to make
+  // it send a change (SameSite=Strict already keeps the cookie from other sites; this also covers a sibling subdomain, and
+  // the "login CSRF" of posting an attacker's own link to /api/auth/open). A change that names an Origin must be from this
+  // app's own origin (or the dev server's); one without an Origin (a script, curl, the CLI) must not be a cross-site fetch.
+  app.use("/api/*", async (c, next) => {
+    if (!authOn || ["GET", "HEAD", "OPTIONS"].includes(c.req.method)) return next();
+    const origin = c.req.header("origin");
+    const site = c.req.header("sec-fetch-site");
+    let ownOrigin = false;
+    if (origin) {
+      try { ownOrigin = new URL(origin).host === (c.req.header("host") ?? new URL(c.req.url).host); } catch { ownOrigin = false; }
+      if (!ownOrigin && !origins.includes(origin)) throw new HttpError(403, "That request came from another site, so it was not made.");
+    } else if (site && site !== "same-origin" && site !== "none") {
+      throw new HttpError(403, "That request came from another site, so it was not made.");
+    }
+    return next();
+  });
   // The door (ALLEVIA_AUTH=1): before any body is read or any route runs, a request for a business needs that business's
   // owner token, or the business must be a demo, and then it is the read-only public view. Reserved first segments
   // (health, tenants, plans, onboard, auth) are the global routes below; a first segment that is not a slug is a 404 later.

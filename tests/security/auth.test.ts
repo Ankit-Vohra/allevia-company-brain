@@ -287,6 +287,45 @@ describe("opening a business with its link", () => {
   });
 });
 
+describe("a page on another site cannot make the browser change or open anything", () => {
+  const send = (path: string, headers: Record<string, string>, body: unknown = { decision: "reject" }) =>
+    app.request(path, { method: "POST", headers: { "content-type": "text/plain", ...headers }, body: JSON.stringify(body) });
+  const jar = (): Record<string, string> => ({ cookie: `allevia_k_tenant_b=${tokenB}` });
+
+  it("a cookie-carrying write with a foreign Origin or a cross-site fetch is refused, and changes nothing", async () => {
+    await b.query("MATCH (a:Approval {id:'approval:b-only-1'}) SET a.status = 'pending'");
+    const attempts: Array<Record<string, string>> = [
+      { origin: "https://evil.example" }, { origin: "null" }, { "sec-fetch-site": "cross-site" }, { "sec-fetch-site": "same-site" },
+      { origin: "https://evil.example", "sec-fetch-site": "cross-site" }, { origin: "http://tenant-b.example.com.evil.example" },
+    ];
+    for (const headers of attempts) {
+      const res = await send("/api/tenant_b/approvals/approval%3Ab-only-1", { ...jar(), ...headers });
+      expect(res.status, JSON.stringify(headers)).toBe(403);
+    }
+    expect(await b.roQuery("MATCH (a:Approval {id:'approval:b-only-1'}) RETURN a.status AS s")).toEqual([{ s: "pending" }]);
+  });
+
+  it("the same write from the app's own origin (or the dev server's) goes through, and so does a script with no Origin at all", async () => {
+    expect((await send("/api/tenant_b/directives", { ...jar(), origin: "http://localhost", host: "localhost", "sec-fetch-site": "same-origin" }, { text: "no emojis" })).status).toBe(200);
+    expect((await send("/api/tenant_b/directives", { ...jar(), origin: "http://localhost:5173" }, { text: "no emojis" })).status).toBe(200);
+    expect((await send("/api/tenant_b/directives", { authorization: `Bearer ${tokenB}` }, { text: "no emojis" })).status).toBe(200);
+  });
+
+  it("opening or closing a business, and onboarding, are not doors for a form on another site either", async () => {
+    for (const path of ["/api/auth/open", "/api/auth/close", "/api/onboard"]) {
+      const res = await send(path, { origin: "https://evil.example" }, { token: tokenB, tenant: "tenant_b", name: "x", url: "x.example" });
+      expect(res.status, path).toBe(403);
+      expect(res.headers.get("set-cookie"), path).toBeNull();
+    }
+  });
+
+  it("reads are not affected (they carry no change, and SameSite=Strict keeps the cookie from other sites)", async () => {
+    const res = await app.request("/api/tenant_b/overview", { headers: { ...jar(), origin: "https://evil.example" } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBeNull(); // so that page cannot read it
+  });
+});
+
 describe("onboarding with the flag on", () => {
   const start = (body: Record<string, unknown>, init?: RequestInit) => post(app, "/api/onboard", body, init);
 
