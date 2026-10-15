@@ -177,20 +177,36 @@ const readingObservation = (goal: string, metricKey: string, unit: string | null
 // goal (SOURCED_FROM where the numbers came from), the goal's first reading, and baseline/target on the Goal. A goal
 // with no reading gets baseline null and baselineConf 'unknown', and the template's target. A goal already locked is
 // left as it is.
-export async function baselinesWrite(g: GraphHandle, o: { goals: GoalRow[]; businessId: string; today: string }): Promise<{ write: GraphWrite; results: BaselineResult[] }> {
+//
+// `relock` is for numbers that arrive after Day 0 (a spreadsheet the owner uploads): a goal that was locked 'unknown' is
+// locked now, from the period that ended on or before the program's start date when the data reaches back that far
+// (where the business really started), else from the newest complete period. A goal that already has a baseline is never
+// moved, and the owner's own target (`keepTarget`: goals they said OK to or changed) stays as they set it.
+export interface Relock { program: string; startDate: string; keepTarget: ReadonlySet<string> }
+
+export async function baselinesWrite(g: GraphHandle, o: { goals: GoalRow[]; businessId: string; today: string; relock?: Relock }): Promise<{ write: GraphWrite; results: BaselineResult[] }> {
   const w: GraphWrite = { nodes: [], edges: [], observations: [] };
   const results: BaselineResult[] = [];
   const docs = new Set<string>();
+  const checkpoint0 = o.relock ? checkpointId(o.relock.program, 0) : null;
+  const hasCheckpoint0 = checkpoint0 ? (await g.roQuery<{ id: string }>("MATCH (c:Entity:Checkpoint {id:$id}) RETURN c.id AS id", { id: checkpoint0 })).length > 0 : false;
   for (const gl of o.goals) {
-    if (gl.baselineConf) continue; // locked on an earlier run
-    const r = await readGoal(g, gl.sources, { businessId: o.businessId, period: gl.period, today: o.today });
+    const relocking = !!o.relock && gl.baselineConf === "unknown";
+    if (gl.baselineConf && !relocking) continue; // locked on an earlier run
+    const ropts = { businessId: o.businessId, period: gl.period, today: o.today };
+    let r: Reading | null;
+    if (relocking) {
+      r = (await readGoal(g, gl.sources, { ...ropts, until: o.relock!.startDate, maxAgeDays: 3650 })) ?? (await readGoal(g, gl.sources, ropts));
+      if (!r) continue; // still nothing to read: it stays unknown, and nothing is written
+    } else r = await readGoal(g, gl.sources, ropts);
     const baseline = r ? r.value : null;
     const conf: BaselineResult["conf"] = !r ? "unknown" : r.conf !== null && r.conf < 1 ? "reported" : "measured";
     const { target, basis } = targetFor({ lift: gl.lift ?? 0.5, minTarget: gl.minTarget ?? 0 }, baseline);
+    const keep = relocking && o.relock!.keepTarget.has(gl.id);
     w.nodes.push({
       type: "Goal", id: gl.id, name: gl.name,
       props: {
-        baseline, baselineConf: conf, baselineAt: r ? r.windowEnd : null, target, targetBasis: basis,
+        baseline, baselineConf: conf, baselineAt: r ? r.windowEnd : null, ...(keep ? {} : { target, targetBasis: basis }),
         status: r ? "on_track" : "no_data", ...(r ? { baselineEvidence: r.evidence } : {}),
       },
     });
@@ -204,10 +220,11 @@ export async function baselinesWrite(g: GraphHandle, o: { goals: GoalRow[]; busi
         },
       });
       w.edges.push({ from: bid, type: "MEASURES", to: gl.id, src: r.src || PROGRAM_SRC, asOf: r.asOf });
+      if (relocking && hasCheckpoint0) w.edges.push({ from: bid, type: "MEASURES", to: checkpoint0! }); // where the business started, on the Day-0 checkpoint
       if (r.src) { docs.add(r.src); w.edges.push({ from: bid, type: "SOURCED_FROM", to: r.src, asOf: r.asOf }); }
       w.observations.push(readingObservation(gl.id, gl.metricKey, gl.unit, r));
     }
-    results.push({ goal: gl.id, name: gl.name, baseline, conf, target, targetBasis: basis, ...(r ? { reading: r } : {}) });
+    results.push({ goal: gl.id, name: gl.name, baseline, conf, target: keep ? (gl.target ?? target) : target, targetBasis: basis, ...(r ? { reading: r } : {}) });
   }
   // A source document that is not in the graph: the edge would fail; the observation's src prop still names it.
   if (docs.size) {

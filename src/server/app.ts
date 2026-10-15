@@ -17,7 +17,7 @@
 //   use: the real executors, with GitHub issues and Discord posts as a dry run unless ALLEVIA_ACTIONS_LIVE=1. The
 //   answer is the card plus `learned` (the learned-rule AgentEvents, in the JSON) and `action`.
 // Focused route files: routes/program.ts (program, capabilities, learning), routes/team.ts (agents, directives),
-// routes/goals.ts (the owner says OK to the suggested goals), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/graph-work.ts (the Brain page's "what breaks if something stops").
+// routes/goals.ts (the owner says OK to the suggested goals), routes/numbers.ts (the owner adds a spreadsheet of their numbers), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/graph-work.ts (the Brain page's "what breaks if something stops").
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
@@ -38,6 +38,7 @@ import { DecisionError, decide, type ActionOpts, type OnDecision } from "./appro
 import { PRIVATE_MESSAGE, authorize, clearSession, presentedTokens, requestView, scopesOf, setSession, type AuthDeps } from "./auth.js";
 import { HttpError, readBody, type RouteCtx } from "./http.js";
 import { registerGoalRoutes } from "./routes/goals.js";
+import { NUMBERS_UPLOAD_PATH, registerNumbersRoutes } from "./routes/numbers.js";
 import { registerProgramRoutes } from "./routes/program.js";
 import { registerTeamRoutes } from "./routes/team.js";
 import { LinkTooSoon, type HubService } from "../discord/hub-service.js";
@@ -293,9 +294,9 @@ export function createApp(deps: ServerDeps): Hono {
     if (reg?.demo === true) return requestView.run({ publicView: true }, next);
     throw new HttpError(401, PRIVATE_MESSAGE); // the same answer for a business that exists and one that does not
   });
-  // 64 KB everywhere except the Studio's photo upload, which sets its own limit (studio.ts)
+  // 64 KB everywhere except the Studio's photo upload (studio.ts) and the spreadsheet upload (routes/numbers.ts), which set their own limits
   const smallBodies = bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: "The request body is too large." }, 413) });
-  app.use("/api/*", (c, next) => (c.req.method === "POST" && STUDIO_UPLOAD_PATH.test(c.req.path) ? next() : smallBodies(c, next)));
+  app.use("/api/*", (c, next) => (c.req.method === "POST" && (STUDIO_UPLOAD_PATH.test(c.req.path) || NUMBERS_UPLOAD_PATH.test(c.req.path)) ? next() : smallBodies(c, next)));
   app.use("/api/*", async (c, next) => {
     await next();
     if (!c.res.headers.get("cache-control")) c.header("Cache-Control", "no-store");
@@ -562,6 +563,7 @@ export function createApp(deps: ServerDeps): Hono {
   registerTeamRoutes(app, routeCtx, deps.directiveLlm !== undefined ? { directiveLlm: deps.directiveLlm } : {});
   registerProgramRoutes(app, routeCtx);
   registerGoalRoutes(app, routeCtx);
+  registerNumbersRoutes(app, routeCtx);
   registerWorkRoutes(app, routeCtx);
   registerGraphWorkRoutes(app, routeCtx);
   registerUsageRoutes(app, routeCtx, { actionsLive: () => deps.actions?.live ?? loadConfig().actionsLive });

@@ -212,3 +212,62 @@ export interface GoalSetup {
   why: string | null;
   confirmed: boolean;
 }
+
+// ---- "Add your numbers": the spreadsheet upload (POST /api/:t/numbers/preview and /import). They mirror
+// src/connectors/upload/types.ts and src/connectors/upload/import.ts; change both together. ----
+
+export type NumbersCadence = "day" | "week" | "month";
+
+/** What the owner confirms. `metric` is a key from `metricOptions`, "skip", "other" (named in `label`), or null while it still needs an answer. */
+export interface NumbersPlanColumn { index: number; metric: string | null; label?: string }
+export interface NumbersPlan {
+  dateColumn: number;
+  dateOrder: "dmy" | "mdy";
+  cadence: NumbersCadence | "ranges" | null;
+  weekAnchor: "start" | "end";
+  columns: NumbersPlanColumn[];
+}
+export interface NumbersPreviewColumn {
+  index: number;
+  letter: string;
+  header: string;
+  sample: string[];
+  guess: { metric: string | null; label: string | null; sure: boolean };
+}
+export interface NumbersPreview {
+  fileName: string;
+  fileHash: string;
+  sheet?: string;
+  rowCount: number;
+  dateColumn: { index: number; letter: string; header: string };
+  dateOrderGuessed: boolean;
+  cadence: NumbersCadence | null;
+  from: string;
+  to: string;
+  columns: NumbersPreviewColumn[];
+  leftOut: Array<{ index: number; header: string; reason: string }>;
+  headline: string;
+  sentences: string[];
+  sampleRows: string[][];
+  questions: Array<"date_order" | "cadence" | "metrics">;
+  metricOptions: Array<{ key: string; label: string }>;
+  plan: NumbersPlan;
+  feedsGoals?: Array<{ id: string; name: string }>;
+}
+export interface NumbersGoalOutcome {
+  id: string;
+  name: string;
+  current: number | null;
+  baseline: number | null;
+  status: string;
+  sentence: string;
+  newlyMeasured: boolean;
+}
+export interface NumbersImportResult {
+  status: "imported" | "already_added" | "replaced_earlier";
+  fileName: string;
+  written: number;
+  goals: NumbersGoalOutcome[];
+  capabilities: Array<{ key: string; name: string; from: string; to: string }>;
+  sentences: string[];
+}
