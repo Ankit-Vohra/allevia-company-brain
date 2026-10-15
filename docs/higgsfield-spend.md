@@ -10,9 +10,14 @@ through the Higgsfield API under its own agreement, not this account.
 | 2026-10-15 | Marketing site (`site/`) | `kling3_0`, std, 5 s, sound off, start frame = end frame | 7.5 | A silent 5-second hero loop from the hero illustration (job 659c4095), shipped as a 341 KB MP4. The still drawing is the first paint and the reduced-motion fallback, and the loop can be paused. `seedance_2_5` 5 s quoted 35, so not used. | 634.05 | 626.55 |
 | 2026-10-15 | Studio thin slice (product design §9 item 4) | `nano_banana_2_1`, 2k, one image edit with the photo as reference | 2 | Variant B for the Studio demo: the "rough phone photo" of Retreat (a degraded copy of the studio's own website photo) relit and cleaned, with the prompt built from the AVS graph. Generated once; replayed by `RecordedEngine` from the data dir (not committed). Cost checks first: `nano_banana_2_1` 1k 1.5 credits, 2k 2 credits; `flux_3_image` 1.5k 2 credits. | 626.55 | 624.55 |
 | 2026-10-15 | Content trials (`docs/content-trials.md`), Studio test cap 30 | `nano_banana_2_1`, 2k, 2 image edits | 4 (2 each) | Variant B for two trial photos from AVS Atelier's own website photos: P1 the bedroom (clean photo, job 54906f35) and P2 the director's desk (a degraded copy, job 74bb210d). Same graph-built prompt as the demo, photo as reference. Replayed by `RecordedEngine`. Cost check first (`get_cost`): 2 credits at 2k. | 624.55 | 620.55 |
+| 2026-10-15 | Content trials (`docs/content-trials.md`), Studio test cap 30 | `kling3_0`, std, 5 s, sound off, start image = the approved variant B of P2, 9:16 asked | 7.5 | One 5-second reel clip, camera push-in only (job d3c475dd). Quoted first with `get_cost` (7.5). Not used for posting. The model kept the photo's 4:5 shape (856x1072) instead of 9:16, and a book with garbled lettering appeared at the frame edge by the end. Declined the "IN THE DARK" preset the tool suggested. | 620.55 | 613.05 |
 
 Marketing site total: 24 of its 150-credit cap. No generated image shows text or a brand mark; one stray pseudo-brand
 on a drawn camera (the before/after image) was painted out locally, at no credit cost.
+
+Studio test total (thin slice 2 + content trials 4 + 7.5 = 13.5): 13.5 of its 30-credit cap, 16.5 left. Balance now 613.05.
+No retry was generated for the trial photo whose edit Nisha held back (P1): a retry would cost 2 more credits and another live
+Claude check, and the finding was already the point.
 
 Studio thin slice total: 2 of its 30-credit cap. Nisha's fidelity check held this edit back ("changed": details such as
 an air-conditioner unit, striped linen and a tiled pool band that she did not see in the dark original), so the demo

@@ -24,7 +24,7 @@ try {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1 });
     const page = await ctx.newPage();
     await page.goto(`${base}/studio?tenant=avs_atelier`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(3500);
     const fresh = page.getByRole("button", { name: /New photo/ });
     if (await fresh.count()) await fresh.first().click();
     await page.locator("input[type=file]").setInputFiles(join(photos, FILES[c]));

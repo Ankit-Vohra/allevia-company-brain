@@ -22,6 +22,7 @@ interface Folded {
   log: { agent: string; text: string }[];
   done: boolean;
   error?: string;
+  answer?: string;      // the run's last word: for a run that ended without a card, what the owner is told and what to do
 }
 
 function fold(events: AgentEvent[]): Folded {
@@ -32,7 +33,7 @@ function fold(events: AgentEvent[]): Folded {
     else if (e.type === "review") f.reviews[e.findingId] = { verdict: e.verdict, note: e.note.replace(/^Variant [A-Z]: /, "") };
     else if (e.type === "proposal") f.proposal = { approvalId: e.approvalId, title: e.title };
     else if (e.type === "agent_status") f.log.push({ agent: e.agent, text: e.text });
-    else if (e.type === "final") f.done = true;
+    else if (e.type === "final") { f.done = true; f.answer = e.answer; }
     else if (e.type === "error") f.error = e.message;
   }
   return f;
@@ -42,7 +43,7 @@ interface Assessment {
   subject: string; angle: string; lighting: string; clutter: string; resolution: string; verdict: string; coaching?: string;
   salvageable: string[]; locks: string[]; story: string; quality: { tiltDeg: number; exposure: string; cast: string; sharpness: string };
 }
-interface Payload { title: string; body: string; studio: { recommended: string; altText: string; credits: number; variants: { id: string; label: string; badge: string; note: string; aiEdited: boolean }[] } }
+interface Payload { title: string; body: string; studio: { recommended: string; altText: string; credits: number; privacy?: { people: boolean; note: string }; variants: { id: string; label: string; badge: string; note: string; aiEdited: boolean }[] } }
 
 const parse = <T,>(v: unknown): T | null => { try { return typeof v === "string" ? (JSON.parse(v) as T) : null; } catch { return null; } };
 const assetSrc = (t: string, id: string, w: number) => `/api/${encodeURIComponent(t)}/assets/${encodeURIComponent(id)}?w=${w}`;
@@ -125,6 +126,10 @@ export default function StudioPage() {
     setPreview(sample.url);
   };
   useEffect(() => { if (record && record.status !== "running") { void loadLatest(); } }, [record?.status, loadLatest]);
+  // A photo the studio refused (a child, people it could not blur) is not kept: the page lets go of its preview too.
+  useEffect(() => {
+    if (f.done && !f.originalId && f.answer) { setFile(null); setPreview((p) => { if (p) URL.revokeObjectURL(p); return null; }); }
+  }, [f.done, f.originalId, f.answer]);
 
   const approve = async () => {
     if (!f.proposal || !chosen) return;
@@ -267,6 +272,9 @@ export default function StudioPage() {
             </ol>
           )}
           {record?.status === "error" && <p className="studio-error" role="alert"><Icon name="warn" size={16} /> {record.error}</p>}
+          {f.done && !f.proposal && f.answer && (
+            <p className="studio-stop" role="status"><Icon name="warn" size={16} /> {f.answer}</p>
+          )}
 
           {f.variants.length > 0 && (
             <div className="variants" role="radiogroup" aria-label="Pick the version to post">
@@ -313,6 +321,7 @@ export default function StudioPage() {
                 <textarea rows={6} value={caption} disabled={!!decided} onChange={(e) => setCaption(e.target.value)} />
               </label>
               <p className="alt"><b>Alt text</b> {payload.studio.altText}</p>
+              {payload.studio.privacy && <p className="studio-stop" role="note"><Icon name="warn" size={16} /> {payload.studio.privacy.note}</p>}
               {decided ? (
                 <p className="approved" role="status">
                   <Icon name="check" size={16} /> Approved{approved?.label ? ` variant ${approved.label}` : ""}: saved as a draft post, not published.
