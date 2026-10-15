@@ -20,6 +20,8 @@ import { keyPagePriority, pageDocId, sectionOf, socialProfile, type SocialProfil
 
 export const UNDERSTAND_PAGES = 12;
 const MIN_WORDS = 30;
+// What a website cannot tell us: a blog post about a past choice is not a Decision the team made, a job advert is not a Task.
+const NOT_FROM_A_WEBSITE = new Set<string>(["Decision", "Task"]);
 const SECTION_SHARE = 3;   // pages one section (a catalogue, a blog) may take of the ones read
 
 // The pages worth reading, best first: key pages by path, then the shorter path; working HTML pages with some text.
@@ -81,7 +83,11 @@ export async function extractPages(pages: PageData[], o: UnderstandOpts): Promis
       if (!r.ok) throw new Error(`extraction failed: ${r.error}`);
       const { extraction, cached } = r;
       const droppedObservations = extraction.observations.length;
-      const { write, dropped } = await resolveExtraction({ ...extraction, observations: [] }, {
+      // a public page states claims, not internal work: no Decisions or Tasks, and no relation that touches one
+      const keep = { ...extraction, observations: [] as typeof extraction.observations,
+        entities: extraction.entities.filter((e) => !NOT_FROM_A_WEBSITE.has(e.type)),
+        relations: extraction.relations.filter((r) => !NOT_FROM_A_WEBSITE.has(r.fromType) && !NOT_FROM_A_WEBSITE.has(r.toType)) };
+      const { write, dropped } = await resolveExtraction(keep, {
         docId: doc.id, text: doc.text, asOf: doc.asOf, existing: o.existing,
       });
       const own = remapOwnWebsite(write, { business: o.business.name, host: o.websiteHost ?? new URL(page.finalUrl).hostname });
