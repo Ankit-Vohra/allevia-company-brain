@@ -152,7 +152,7 @@ export interface FindingView {
   reviews?: Array<{ reviewer: string; verdict: string; note: string }>;
   rejected?: boolean;
   revised?: boolean;    // the text is the revision that answers its reviewers' notes
-  unchecked?: string[]; // reviewers (roster ids) that could not run, even after a second try
+  unreviewed?: string[]; // reviewers (roster ids) that could not run, even after a second try
   autoCheck?: string;   // the deterministic check of its citations and numbers against this turn's tool results
   draft?: boolean;      // handed over before its review finished
   partial?: boolean;    // its desk ran out of turns before finishing
@@ -186,8 +186,8 @@ function findingBlock(f: FindingView, withReviews: boolean): string {
     const label = f.revised ? "Reviews of the earlier draft (the text above is the revised version that already addresses them)" : "Reviews";
     lines.push(`${label}: ${f.reviews.map((r) => `${who(r.reviewer)}: ${r.verdict}, ${r.note}`).join(" | ")}`);
   }
-  if (withReviews && f.unchecked?.length) {
-    lines.push(`${f.unchecked.map(who).join(" and ")} could not check this finding (the check did not run, even after a second try): say plainly that it ${f.unchecked.includes("fact-checker") ? "was not fact-checked" : "was not fully reviewed"}, in the owner's words, and don't present it as checked.`);
+  if (withReviews && f.unreviewed?.length) {
+    lines.push(`${f.unreviewed.map(who).join(" and ")} could not check this finding (the check did not run, even after a second try): say plainly that it ${f.unreviewed.includes("fact-checker") ? "was not fact-checked" : "was not fully reviewed"}, in the owner's words, and don't present it as checked.`);
   }
   if (f.caveat) lines.push(`Caveat: ${f.caveat}`);
   return lines.join("\n");

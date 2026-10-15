@@ -880,7 +880,7 @@ describe("runTurn: a reviewer that did not run", () => {
     expect(runtime.runs.find((r) => r.phase === "synthesis")!.prompt).not.toContain("could not check");
   });
 
-  it("if it still cannot run, the Chief is told the finding is unchecked and must say so (the check fails closed, not silent)", async () => {
+  it("if it still cannot run, the Chief is told the finding is unreviewed and must say so (the check fails closed, not silent)", async () => {
     const { run, runtime, events } = setup(scripts({ fail: "Claude Code process terminated by signal SIGSEGV" }));
     const out = await run();
     expect(runtime.runs.filter((r) => r.agentId === "fact-checker" && r.phase === "review")).toHaveLength(2);

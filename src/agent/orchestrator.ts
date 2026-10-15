@@ -504,7 +504,7 @@ class Turn {
   private readonly drafts = new Map<string, string[]>(); // agent -> finding ids it was handed as drafts
   private readonly gates = new Map<string, WorkGates>(); // agent -> its step's gates
   private readonly early = new Set<string>();            // finding ids handed on before their review ended
-  private readonly unchecked = new Map<string, Set<string>>(); // finding id -> reviewers that could not run, even on a second try
+  private readonly unreviewed = new Map<string, Set<string>>(); // finding id -> reviewers that could not run, even on a second try
   private readonly results: Array<{ agent: string; name: string; data: unknown; ids: string[] }> = []; // every tool result
   private readonly listeners = new Set<() => void>();    // told when a finding is sent back or settles
   private readonly prompted = new Map<string, Set<string>>(); // agent -> the owner's instruction ids its prompts carried
@@ -835,7 +835,7 @@ class Turn {
   }
 
   // A reviewer whose run dies (content trial 2026-10-15: the Claude Code process crashed under load) gets one more try,
-  // unless it timed out or the turn was stopped. If it still cannot run, the finding is marked unchecked, and the Chief is
+  // unless it timed out or the turn was stopped. If it still cannot run, the finding is marked unreviewed, and the Chief is
   // told to say so: a missing fact check must never read as a passed one.
   private async runReview(reviewer: AgentDef, f: FindingRecord, producer: AgentDef): Promise<ReviewRecord | undefined> {
     let failure: unknown;
@@ -862,9 +862,9 @@ class Turn {
     const message = failure instanceof Error ? failure.message : String(failure ?? "");
     if (!r && !this.deps.signal?.aborted && !/timed out|was stopped|set aside/i.test(message)) r = await attempt();
     if (!r && !this.deps.signal?.aborted) {
-      const set = this.unchecked.get(f.id) ?? new Set<string>();
+      const set = this.unreviewed.get(f.id) ?? new Set<string>();
       set.add(reviewer.id);
-      this.unchecked.set(f.id, set);
+      this.unreviewed.set(f.id, set);
     }
     return r;
   }
@@ -886,7 +886,7 @@ class Turn {
     const caveat = this.draftCaveat(f.agent);
     return {
       id: f.id, agent: f.agent, text: f.text, citations: f.citations, proposals: f.proposals, rejected: f.rejected, ...(f.partial ? { partial: true } : {}),
-      ...(f.revised ? { revised: true } : {}), ...(this.unchecked.get(f.id)?.size ? { unchecked: [...this.unchecked.get(f.id)!] } : {}),
+      ...(f.revised ? { revised: true } : {}), ...(this.unreviewed.get(f.id)?.size ? { unreviewed: [...this.unreviewed.get(f.id)!] } : {}),
       reviews: this.reviews.filter((r) => r.findingId === f.id).map((r) => ({ reviewer: r.reviewer, verdict: r.verdict, note: r.note })),
       autoCheck: this.autoCheck(f.text),
       ...(this.settled.has(f.id) ? {} : { draft: true }), ...(caveat ? { caveat } : {}),
