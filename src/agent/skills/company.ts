@@ -93,7 +93,7 @@ export async function companyFacts(g: GraphHandle, tenant: string, now: number =
 
 export interface GeneratedSkill { id: string; name: string; when: string; agents: string[]; base?: string; text: string }
 
-const bullets = (xs: string[], none: string, n = 8): string => (xs.length ? xs.slice(0, n).map((x) => `- ${clip(x, 220)}`).join("\n") : `- ${none}`);
+const bullets = (xs: string[], none: string, n = 8): string => (xs.length ? xs.slice(0, n).map((x) => `- ${clip(x, 170)}`).join("\n") : `- ${none}`);
 
 export function companySkills(f: CompanyFacts): GeneratedSkill[] {
   const n = f.name;
@@ -108,10 +108,10 @@ ${who}
 ${bullets(f.tone, "Not recorded: write plainly and warmly, and ask the owner how they sound.")}
 
 ## Do
-${bullets(f.dos, "No do-rules recorded yet.", 12)}
+${bullets(f.dos, "No do-rules recorded yet.", 25)}
 
 ## Never
-${bullets(f.donts, "No don't-rules recorded yet; never invent facts, numbers or promises.", 12)}
+${bullets(f.donts, "No don't-rules recorded yet; never invent facts, numbers or promises.", 25)}
 
 ## Words the owner corrected (use the right one every time)
 ${bullets(f.sayInstead, "None yet: they appear here as the owner edits drafts.")}
