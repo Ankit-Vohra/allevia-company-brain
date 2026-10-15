@@ -72,7 +72,7 @@
   transition: color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out);
 }
 .topnav-link:hover { color: var(--color-band-ink); background: oklch(from var(--color-band-ink) l c h / 0.06); }
-.topnav-link.active { color: var(--color-band-ink); }
+.topnav-link.active { color: var(--color-band-ink); font-weight: 600; }
 .topnav-link.active::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -10px; height: 2px; background: var(--color-accent); border-radius: 2px; }
 .topnav-add { margin-left: 6px; border: 1px dashed var(--color-band-rule); }
 .count {
@@ -82,7 +82,7 @@
 }
 .mode-pill {
   display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px;
-  border: 1px dashed var(--color-band-rule); border-radius: 13px;
+  border: 1px solid var(--color-band-rule); border-radius: 13px;
   font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-band-muted); white-space: nowrap;
 }
 .mode-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent); }
@@ -279,3 +279,28 @@
 @media (max-width: 760px) {
   .more-item .switcher-domain { display: block; }
 }
+
+/* ---------- Reveal: progressive disclosure, like Claude's "thinking" line ---------- */
+.reveal { display: grid; gap: var(--space-sm); min-width: 0; }
+.reveal-btn {
+  justify-self: start; display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 4px 8px 4px 4px; margin-left: -4px; border: 0; border-radius: var(--radius-sm); background: transparent;
+  font-size: var(--text-sm); font-weight: 500; color: var(--color-muted); cursor: pointer; text-align: left;
+  transition: color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out);
+}
+.reveal-btn:hover { color: var(--color-ink); background: var(--color-paper-2); }
+.reveal-chevron { flex: none; transition: transform var(--dur-short) var(--ease-out); }
+.reveal.is-open > .reveal-btn .reveal-chevron { transform: rotate(90deg); }
+.reveal.is-open > .reveal-btn { color: var(--color-ink-2); }
+.reveal-label { min-width: 0; }
+.reveal-summary { color: var(--color-muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.reveal-summary::before { content: "·"; margin-right: 6px; }
+.reveal-body { min-width: 0; animation: reveal-in var(--dur-short) var(--ease-out); }
+@keyframes reveal-in { from { opacity: 0; transform: translateY(-3px); } }
+.reveal-row > .reveal-btn { justify-self: stretch; margin-left: 0; padding: 10px 4px; border-radius: 0; border-top: 1px solid var(--color-rule-2); }
+.reveal-row > .reveal-btn:hover { background: transparent; }
+
+/* theme menu: anchored to the right edge of the bar */
+.theme-menu { left: auto; right: 0; min-width: 280px; }
+.more-item.is-soon { opacity: 0.8; }
+.topnav-link .count { margin-left: 2px; }

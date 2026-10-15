@@ -30,12 +30,12 @@ export const FRESHNESS: Record<string, Freshness[]> = {
 };
 
 export const BRIEF: Record<string, string> = {
-  aamdani: `**Good morning.** Reels are carrying Instagram: weekly reach reached 18,420 in week 41 [[observation:ig-reach-wk41]], and signups rose 18% to 312 [[observation:signups-wk41]].
+  aamdani: `**Good morning.** Reels are carrying Instagram: weekly reach hit 18,420 last week [[observation:ig-reach-wk41]], and signups rose 18% to 312 [[observation:signups-wk41]].
 
-- /jobs pages lost 26% of search clicks while impressions held [[observation:gsc-jobs-clicks-2026-10]].
-- 41% of signups still drop at OTP [[observation:funnel-otp-drop-2026-10]].
-- 3 approvals wait on you.`,
-  "avs-atelier": `**Set up from avsatelier.in.** We read 4 pages, 4 brand rules and 28 days of Search Console. The home page ranks on page 2 for "architect in raipur" [[observation:gsc-architect-raipur-2026-10]].`,
+- Your job pages lost 26% of their clicks from Google while the number of people seeing them held [[observation:gsc-jobs-clicks-2026-10]].
+- 41% of people still give up at the sign-up code step [[observation:funnel-otp-drop-2026-10]].
+- 3 things are waiting for your OK.`,
+  "avs-atelier": `**Set up from avsatelier.in.** We read 4 pages, 4 brand rules and 28 days of Google search data. The home page ranks on page 2 for "architect in raipur" [[observation:gsc-architect-raipur-2026-10]].`,
 };
 
 function rec(g: MockGraph, r: Omit<Recommendation, "evidence" | "evidenceEdges"> & { chain: string[] }): Recommendation {

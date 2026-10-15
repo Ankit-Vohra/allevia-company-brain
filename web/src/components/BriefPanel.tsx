@@ -26,7 +26,7 @@ export function parseBrief(text: string): { heading?: string; sections: Section[
     if (item) {
       if (!sections.length) sections.push({ title: "", lines: [] });
       sections[sections.length - 1]!.lines.push({ ...(item[1] ? { n: item[1] } : {}), text: item[2]! });
-    } else if (!heading && !sections.length && /^morning brief\b/i.test(line)) {
+    } else if (!heading && !sections.length && /^today.s note\b/i.test(line)) {
       heading = line;
     } else {
       sections.push({ title: line, lines: [] });
@@ -109,13 +109,13 @@ export function BriefPanel({ tenantId, onRan }: { tenantId: string; onRan?: () =
       <header className="brief-card-head">
         <AgentAvatar id="chief-of-staff" size={32} />
         <div>
-          <h2 id="brief-card-title" className="section-title">Morning brief</h2>
+          <h2 id="brief-card-title" className="section-title">Today's note</h2>
           <p className="small muted">
             From Meera{b ? <> · {fresh ? fmtAgo(fresh.at) : fmtDate(b.asOf ?? b.date)}</> : null}
           </p>
         </div>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={run} disabled={busy || ro} title={ro ? "Turned off in the public demo" : "Bring the goals up to date and write today's brief"}>
-          <Icon name="replay" size={14} /> {busy ? "Writing…" : "Run today's brief"}
+        <button type="button" className="btn btn-ghost btn-sm" onClick={run} disabled={busy || ro} title={ro ? "Turned off in the public demo" : "Bring the goals up to date and write today's note"}>
+          <Icon name="replay" size={14} /> {busy ? "Writing…" : "Refresh the note"}
         </button>
       </header>
       {error && <p className="notice notice-bad" role="alert">{error}</p>}
@@ -123,14 +123,14 @@ export function BriefPanel({ tenantId, onRan }: { tenantId: string; onRan?: () =
       {brief.loading && !b ? (
         <span className="skeleton" style={{ display: "block", height: 160 }} />
       ) : !parsed || !parsed.sections.length ? (
-        <p className="brief-none">No brief yet today. Run it to see the goal pulse, what changed and what waits on you.</p>
+        <p className="brief-none">No note yet today. Refresh it to see how your goals are going, what changed and what waits for your OK.</p>
       ) : (
         <div className="brief-body">
           {parsed.sections.map((s, i) => {
-            const goals = /^goals?$/i.test(s.title);
+            const goals = /^(?:your )?goals?$/i.test(s.title);
             return (
               <div key={`${s.title}-${i}`} className={`brief-sec${goals ? " is-goals" : ""}`}>
-                {s.title && <h3 className="brief-sec-title">{goals ? "Goal pulse" : s.title}</h3>}
+                {s.title && <h3 className="brief-sec-title">{goals ? "How your goals are going" : s.title}</h3>}
                 <ul className="brief-lines">
                   {s.lines.map((l, j) => {
                     const p = goals ? pulseOf(l.text) : undefined;

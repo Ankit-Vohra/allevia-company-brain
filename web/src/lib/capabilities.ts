@@ -8,17 +8,17 @@ export const MODE_ORDER: readonly AccessMode[] = ["api", "delegated", "upload", 
 /** The rung, in an owner's words: short for a chip, long for a sentence. */
 export const MODE: Record<AccessMode, { chip: string; long: string; tone: "live" | "partial" | "proxy" | "none" }> = {
   api: { chip: "Live", long: "live, from your connected account", tone: "live" },
-  delegated: { chip: "Delegated", long: "live, through access you delegated to us", tone: "live" },
+  delegated: { chip: "Connected for you", long: "live, through access you gave us", tone: "live" },
   upload: { chip: "Your uploads", long: "from files you uploaded", tone: "partial" },
-  public: { chip: "Public data", long: "from your public website or profile", tone: "proxy" },
-  benchmark: { chip: "Benchmark", long: "industry benchmarks, not your own numbers", tone: "proxy" },
+  public: { chip: "Public pages", long: "from your public website or profile", tone: "proxy" },
+  benchmark: { chip: "Industry guess", long: "typical numbers for your industry, not your own", tone: "proxy" },
   none: { chip: "Not connected", long: "not connected yet", tone: "none" },
 };
 
 export const STATUS_NOTE: Record<CapabilityStatus, string | null> = {
   ok: null,
-  stale: "data over 7 days old",
-  down: "connection broken",
+  stale: "over a week old",
+  down: "connection lost",
   not_connected: null,
 };
 

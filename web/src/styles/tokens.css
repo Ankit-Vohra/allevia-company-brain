@@ -1,29 +1,32 @@
 /* Allevia tokens: "ledger paper, indigo ink, one gold mark" (from allevia-ai-website/tokens.css), plus an
- * "indigo night office" dark theme. Gold is the single highlight: the lit path, the active speaker, the file in flight. */
+ * "indigo night office" dark theme. Gold is the single highlight: the lit path, the active speaker, the file in flight.
+ * Light is the default for everyone: warm ledger paper, indigo ink, one gold mark. Dark ("night office") is an explicit
+ * choice in the theme menu, never inherited from the OS. */
 :root {
   color-scheme: light;
-  --color-paper: oklch(97.6% 0.006 265);
-  --color-paper-2: oklch(94.6% 0.010 265);
-  --color-card: oklch(99.3% 0.003 265);
-  --color-rule: oklch(85% 0.014 265);
-  --color-rule-2: oklch(91% 0.010 265);
-  --color-muted: oklch(47% 0.032 268);
+  --color-paper: oklch(98.2% 0.0065 85);
+  --color-paper-2: oklch(95.9% 0.0095 85);
+  --color-card: oklch(99.6% 0.003 85);
+  --color-rule: oklch(88.5% 0.012 80);
+  --color-rule-2: oklch(93.2% 0.009 80);
+  --color-muted: oklch(49% 0.03 268);
   --color-ink: oklch(23% 0.070 270);
-  --color-ink-2: oklch(33% 0.060 270);
-  --color-band: oklch(27% 0.088 270);
-  --color-band-ink: oklch(95% 0.012 265);
-  --color-band-muted: oklch(78% 0.030 265);
-  --color-band-rule: oklch(38% 0.070 270);
+  --color-ink-2: oklch(34% 0.055 270);
+  /* the top bar is paper too: the indigo lives in the ink, not in a band */
+  --color-band: oklch(98.9% 0.005 85);
+  --color-band-ink: oklch(23% 0.070 270);
+  --color-band-muted: oklch(45% 0.035 268);
+  --color-band-rule: oklch(91% 0.01 80);
   --color-accent: oklch(72% 0.125 85);
-  --color-accent-soft: oklch(93% 0.045 88);
-  --color-accent-ink: oklch(52% 0.110 80);
+  --color-accent-soft: oklch(94.5% 0.04 88);
+  --color-accent-ink: oklch(50% 0.110 78);
   --color-focus: oklch(48% 0.160 268);
   --color-ok: oklch(50% 0.115 152);
-  --color-ok-soft: oklch(94% 0.035 152);
+  --color-ok-soft: oklch(95% 0.032 152);
   --color-warn: oklch(55% 0.140 60);
-  --color-warn-soft: oklch(94% 0.045 75);
+  --color-warn-soft: oklch(95% 0.04 75);
   --color-bad: oklch(51% 0.160 27);
-  --color-bad-soft: oklch(94% 0.030 27);
+  --color-bad-soft: oklch(95% 0.028 27);
   --room-l: 93.5%;
   --room-c: 0.028;
 
@@ -52,8 +55,8 @@
   --radius-sm: 4px;
   --radius-md: 10px;
   --rule: 1px solid var(--color-rule);
-  --shadow-whisper: 0 1px 2px oklch(23% 0.07 270 / 0.08);
-  --shadow-lift: 0 2px 4px oklch(23% 0.07 270 / 0.06), 0 12px 32px -8px oklch(23% 0.07 270 / 0.18);
+  --shadow-whisper: 0 1px 2px oklch(30% 0.04 70 / 0.07);
+  --shadow-lift: 0 2px 4px oklch(30% 0.04 70 / 0.05), 0 14px 36px -10px oklch(25% 0.05 270 / 0.18);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
   --dur-micro: 120ms;
@@ -94,34 +97,14 @@
   --shadow-lift: 0 2px 4px oklch(5% 0.02 270 / 0.35), 0 16px 40px -8px oklch(5% 0.02 270 / 0.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --color-paper: oklch(18.5% 0.045 272);
-    --color-paper-2: oklch(22.5% 0.052 272);
-    --color-card: oklch(21% 0.05 272);
-    --color-rule: oklch(35% 0.055 270);
-    --color-rule-2: oklch(28% 0.05 270);
-    --color-muted: oklch(74% 0.035 266);
-    --color-ink: oklch(95% 0.014 265);
-    --color-ink-2: oklch(86% 0.022 265);
-    --color-band: oklch(14.5% 0.04 272);
-    --color-band-ink: oklch(95% 0.012 265);
-    --color-band-muted: oklch(76% 0.03 265);
-    --color-band-rule: oklch(30% 0.05 270);
-    --color-accent: oklch(79% 0.13 85);
-    --color-accent-soft: oklch(32% 0.06 80);
-    --color-accent-ink: oklch(83% 0.12 86);
-    --color-focus: oklch(76% 0.12 268);
-    --color-ok: oklch(78% 0.13 152);
-    --color-ok-soft: oklch(30% 0.05 152);
-    --color-warn: oklch(80% 0.13 70);
-    --color-warn-soft: oklch(32% 0.06 70);
-    --color-bad: oklch(74% 0.14 27);
-    --color-bad-soft: oklch(30% 0.06 27);
-    --room-l: 27%;
-    --room-c: 0.045;
-    --shadow-whisper: 0 1px 2px oklch(5% 0.02 270 / 0.5);
-    --shadow-lift: 0 2px 4px oklch(5% 0.02 270 / 0.35), 0 16px 40px -8px oklch(5% 0.02 270 / 0.6);
-  }
+
+/* "Follows the office clock": after golden hour the paper dims a touch and warms, like a room with the lamps on. The
+ * office canvas does the real lighting; the chrome only leans with it. Night switches to the dark theme. */
+:root[data-dusk="1"]:not([data-theme="dark"]) {
+  --color-paper: oklch(95.4% 0.014 75);
+  --color-paper-2: oklch(92.8% 0.017 75);
+  --color-card: oklch(97.4% 0.01 78);
+  --color-band: oklch(96.4% 0.013 75);
+  --color-rule: oklch(86% 0.016 72);
+  --color-rule-2: oklch(90.5% 0.014 72);
 }

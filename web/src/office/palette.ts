@@ -42,18 +42,30 @@ export interface OfficePalette {
   glass: string;
   lampGlow: string;
   rug: string;
+  plank: string;
+  plankLine: string;
+  plankAlt: string;
+  lane: string;
+  laneEdge: string;
+  laneDash: string;
+  tileA: string;
+  tileB: string;
+  rugFill: (hue: number) => string;
+  rugEdge: (hue: number) => string;
+  carpet: (hue: number) => string;
+  sky: string;
 }
 
-export function officePalette(dark: boolean): OfficePalette {
-  if (!dark) {
+export function officePalette(): OfficePalette {
+  {
     const ink = oklch(0.25, 0.075, 270);
     return {
-      dark,
+      dark: false,
       bg: oklch(0.955, 0.009, 265),
       corridor: oklch(0.975, 0.006, 265),
       corridorRule: oklch(0.915, 0.014, 255),
       corridorMargin: oklch(0.8, 0.07, 25),
-      wallCap: ink,
+      wallCap: oklch(0.45, 0.045, 270),
       wallFace: oklch(0.885, 0.018, 265),
       wallFaceLine: oklch(0.85, 0.02, 265),
       wallShadow: oklch(0.8, 0.02, 265, 0.5),
@@ -88,51 +100,20 @@ export function officePalette(dark: boolean): OfficePalette {
       glass: oklch(0.88, 0.04, 230),
       lampGlow: oklch(0.95, 0.06, 90),
       rug: oklch(0.36, 0.08, 270),
+      plank: oklch(0.915, 0.03, 80),
+      plankLine: oklch(0.885, 0.034, 76),
+      plankAlt: oklch(0.905, 0.032, 84),
+      lane: oklch(0.965, 0.012, 85),
+      laneEdge: oklch(0.86, 0.025, 80),
+      laneDash: oklch(0.9, 0.03, 85),
+      tileA: oklch(0.975, 0.01, 90),
+      tileB: oklch(0.948, 0.02, 80),
+      rugFill: (h) => oklch(0.88, 0.06, h),
+      rugEdge: (h) => oklch(0.72, 0.1, h),
+      carpet: (h) => oklch(0.865, 0.045, h),
+      sky: oklch(0.88, 0.06, 235),
     };
   }
-  const ink = oklch(0.12, 0.04, 272);
-  return {
-    dark,
-    bg: oklch(0.15, 0.04, 272),
-    corridor: oklch(0.22, 0.045, 272),
-    corridorRule: oklch(0.26, 0.05, 268),
-    corridorMargin: oklch(0.4, 0.08, 25),
-    wallCap: ink,
-    wallFace: oklch(0.3, 0.055, 270),
-    wallFaceLine: oklch(0.27, 0.05, 270),
-    wallShadow: oklch(0.08, 0.03, 270, 0.45),
-    floor: (h) => oklch(0.27, 0.045, h),
-    floorAlt: (h) => oklch(0.25, 0.045, h),
-    roomEdge: (h) => oklch(0.33, 0.06, h),
-    ink: oklch(0.1, 0.035, 272),
-    ink2: oklch(0.2, 0.05, 270),
-    deskTop: oklch(0.42, 0.04, 265),
-    deskFront: oklch(0.32, 0.04, 265),
-    deskEdge: oklch(0.14, 0.04, 270),
-    chair: oklch(0.2, 0.06, 270),
-    chairShade: oklch(0.15, 0.05, 270),
-    paper: oklch(0.9, 0.02, 85),
-    paperShade: oklch(0.75, 0.03, 85),
-    gold: oklch(0.79, 0.13, 85),
-    goldDark: oklch(0.6, 0.12, 80),
-    goldLight: oklch(0.9, 0.1, 90),
-    leaf: oklch(0.52, 0.11, 150),
-    leafDark: oklch(0.38, 0.09, 155),
-    pot: oklch(0.45, 0.08, 45),
-    screen: oklch(0.16, 0.05, 265),
-    screenGlow: oklch(0.8, 0.1, 230),
-    screenOff: oklch(0.25, 0.04, 265),
-    metal: oklch(0.5, 0.02, 265),
-    metalDark: oklch(0.36, 0.02, 265),
-    wood: oklch(0.45, 0.05, 70),
-    woodDark: oklch(0.34, 0.05, 60),
-    ok: oklch(0.75, 0.14, 152),
-    bad: oklch(0.7, 0.16, 27),
-    warn: oklch(0.8, 0.14, 70),
-    glass: oklch(0.35, 0.06, 250),
-    lampGlow: oklch(0.6, 0.09, 85),
-    rug: oklch(0.2, 0.06, 270),
-  };
 }
 
 export { darken, lighten };

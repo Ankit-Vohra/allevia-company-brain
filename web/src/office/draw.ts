@@ -2,7 +2,7 @@
 // pieces (desks, screens, whiteboard, notes, flying files). Everything is fillRect on integer logical pixels.
 import { DEPARTMENTS } from "@shared/roster";
 import { oklch, withAlpha } from "../lib/color";
-import { type DeskSpot, FACE, type FloorKind, type Item, type OfficeLayout, type Rect, type RoomLayout, WALL, type WallKind } from "./layout";
+import { type DeskSpot, FACE, type FloorKind, type Item, type Rect, type WallKind } from "./layout";
 import type { OfficePalette } from "./palette";
 
 type Ctx = CanvasRenderingContext2D;
@@ -11,116 +11,17 @@ export const R = (c: Ctx, x: number, y: number, w: number, h: number, col: strin
   c.fillStyle = col;
   c.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
 };
-const P = (c: Ctx, x: number, y: number, col: string) => R(c, x, y, 1, 1, col);
-const box = (c: Ctx, r: Rect, fill: string, edge: string) => {
+export const P = (c: Ctx, x: number, y: number, col: string) => R(c, x, y, 1, 1, col);
+export const box = (c: Ctx, r: Rect, fill: string, edge: string) => {
   R(c, r.x, r.y, r.w, r.h, edge);
   R(c, r.x + 1, r.y + 1, r.w - 2, r.h - 2, fill);
 };
 
 const hueOf = (dept: string) => DEPARTMENTS.find((d) => d.id === dept)?.hue ?? 265;
 
-// ---------------------------------------------------------------- static layer
+// ---------------------------------------------------------------- items (the static scene lives in scene.ts)
 
-export function drawStatic(c: Ctx, L: OfficeLayout, pal: OfficePalette) {
-  R(c, 0, 0, L.w, L.h, pal.bg);
-
-  // corridor: ledger paper, ruled, with a margin line
-  const cr = L.corridor;
-  R(c, cr.x, cr.y, cr.w, cr.h, pal.corridor);
-  if (L.orientation === "landscape") {
-    for (let y = cr.y + 5; y < cr.y + cr.h; y += 7) R(c, cr.x, y, cr.w, 1, pal.corridorRule);
-    R(c, cr.x + 14, cr.y, 1, cr.h, pal.corridorMargin);
-    R(c, cr.x + 16, cr.y, 1, cr.h, pal.corridorMargin);
-  } else {
-    for (let y = cr.y + 5; y < cr.y + cr.h; y += 7) R(c, cr.x, y, cr.w, 1, pal.corridorRule);
-  }
-
-  for (const room of L.rooms) drawRoomFloor(c, room, pal);
-  for (const room of L.rooms) {
-    for (const it of room.floor) {
-      if (it.kind === "rug") drawRug(c, it.rect, pal);
-      if (it.kind === "mat") {
-        R(c, it.rect.x, it.rect.y, it.rect.w, it.rect.h, pal.roomEdge(room.dept.hue));
-        R(c, it.rect.x + 1, it.rect.y + 1, it.rect.w - 2, it.rect.h - 2, pal.floorAlt(room.dept.hue));
-      }
-    }
-  }
-  for (const room of L.rooms) drawWalls(c, room, pal);
-  // entrance: a gap in the outer wall, door frame and a coir doormat
-  const en = L.entrance;
-  R(c, en.x, en.y, en.w, en.h, pal.corridor);
-  const mat = L.orientation === "landscape" ? { x: en.x + WALL + 1, y: en.y + 2, w: 6, h: en.h - 4 } : { x: en.x + 2, y: en.y - 7, w: en.w - 4, h: 6 };
-  R(c, mat.x, mat.y, mat.w, mat.h, pal.woodDark);
-  R(c, mat.x + 1, mat.y + 1, mat.w - 2, mat.h - 2, pal.wood);
-  if (L.orientation === "landscape") {
-    R(c, en.x, en.y - 1, WALL, 1, pal.ink2); R(c, en.x, en.y + en.h, WALL, 1, pal.ink2);
-    for (let y = mat.y + 2; y < mat.y + mat.h - 1; y += 2) R(c, mat.x + 1, y, mat.w - 2, 1, pal.woodDark);
-  } else {
-    R(c, en.x - 1, en.y, 1, WALL, pal.ink2); R(c, en.x + en.w, en.y, 1, WALL, pal.ink2);
-    for (let x = mat.x + 2; x < mat.x + mat.w - 1; x += 2) R(c, x, mat.y + 1, 1, mat.h - 2, pal.woodDark);
-  }
-
-  for (const room of L.rooms) {
-    for (const it of room.wall) drawWallItem(c, it, pal);
-    for (const it of room.floor) if (it.kind !== "rug" && it.kind !== "mat") drawFloorItem(c, it, pal);
-  }
-  for (const it of L.corridorItems) drawFloorItem(c, it, pal);
-}
-
-function drawRoomFloor(c: Ctx, room: RoomLayout, pal: OfficePalette) {
-  const h = room.dept.hue;
-  const r = room.inner;
-  R(c, r.x, r.y, r.w, r.h, pal.floor(h));
-  // graph-paper floor: a faint grid every 8px
-  for (let x = r.x + 7; x < r.x + r.w; x += 8) R(c, x, r.y, 1, r.h, pal.floorAlt(h));
-  for (let y = r.y + 7; y < r.y + r.h; y += 8) R(c, r.x, y, r.w, 1, pal.floorAlt(h));
-  // soft shadow under the top wall
-  R(c, r.x, r.y, r.w, 2, pal.wallShadow);
-}
-
-function drawWalls(c: Ctx, room: RoomLayout, pal: OfficePalette) {
-  const { rect, inner, face, door } = room;
-  const cap = pal.wallCap;
-  // caps: everything between rect and the floor/face is wall seen from above
-  R(c, rect.x, rect.y, rect.w, face.y - rect.y, cap);                                   // top cap
-  R(c, rect.x, rect.y, inner.x - rect.x, rect.h, cap);                                  // left
-  R(c, inner.x + inner.w, rect.y, rect.x + rect.w - inner.x - inner.w, rect.h, cap);    // right
-  R(c, rect.x, inner.y + inner.h, rect.w, rect.y + rect.h - inner.y - inner.h, cap);    // bottom
-  // face of the top wall, with a skirting line and a dado rail in the room's tint
-  R(c, face.x, face.y, face.w, face.h, pal.wallFace);
-  R(c, face.x, face.y + face.h - 2, face.w, 1, pal.wallFaceLine);
-  R(c, face.x, face.y + face.h - 1, face.w, 1, pal.roomEdge(room.dept.hue));
-  // door gaps
-  const floor = pal.floor(room.dept.hue);
-  if (door.side === "bottom") {
-    R(c, door.at, inner.y + inner.h, door.w, rect.y + rect.h - inner.y - inner.h, floor);
-    R(c, door.at - 1, inner.y + inner.h, 1, rect.y + rect.h - inner.y - inner.h, pal.ink2);
-    R(c, door.at + door.w, inner.y + inner.h, 1, rect.y + rect.h - inner.y - inner.h, pal.ink2);
-  } else if (door.side === "top") {
-    R(c, door.at, rect.y, door.w, face.y + face.h - rect.y, floor);
-    R(c, door.at - 1, rect.y, 1, face.y + face.h - rect.y, pal.ink2);
-    R(c, door.at + door.w, rect.y, 1, face.y + face.h - rect.y, pal.ink2);
-    // the door itself, swung open against the wall face
-    R(c, door.at + door.w + 1, face.y, 2, face.h, pal.woodDark);
-  } else {
-    const x0 = door.side === "right" ? inner.x + inner.w : rect.x;
-    const ww = door.side === "right" ? rect.x + rect.w - inner.x - inner.w : inner.x - rect.x;
-    R(c, x0, door.at, ww, door.w, floor);
-    R(c, x0, door.at - 1, ww, 1, pal.ink2);
-    R(c, x0, door.at + door.w, ww, 1, pal.ink2);
-  }
-}
-
-function drawRug(c: Ctx, r: Rect, pal: OfficePalette) {
-  R(c, r.x, r.y, r.w, r.h, pal.rug);
-  R(c, r.x + 1, r.y + 1, r.w - 2, 1, pal.gold);
-  R(c, r.x + 1, r.y + r.h - 2, r.w - 2, 1, pal.gold);
-  R(c, r.x + 1, r.y + 1, 1, r.h - 2, pal.gold);
-  R(c, r.x + r.w - 2, r.y + 1, 1, r.h - 2, pal.gold);
-  for (let x = r.x + 4; x < r.x + r.w - 4; x += 4) P(c, x, r.y + Math.floor(r.h / 2), pal.goldDark);
-}
-
-function drawWallItem(c: Ctx, it: Item<WallKind>, pal: OfficePalette) {
+export function drawWallItem(c: Ctx, it: Item<WallKind>, pal: OfficePalette) {
   const r = it.rect;
   switch (it.kind) {
     case "whiteboard":
@@ -171,6 +72,21 @@ function drawWallItem(c: Ctx, it: Item<WallKind>, pal: OfficePalette) {
       R(c, r.x, r.y, r.w, 3, withAlpha(pal.ink.length === 7 ? pal.ink : "#222244", 0.25));
       R(c, r.x + 2, r.y + 5, r.w - 4, 1, pal.paperShade);
       break;
+    case "tv":
+      box(c, r, pal.ink, pal.metalDark);
+      break;
+    case "menu": {
+      box(c, r, oklch(0.36, 0.035, 170), pal.woodDark);
+      R(c, r.x + 3, r.y + 2, 9, 1, pal.paper); R(c, r.x + 3, r.y + 4, 13, 1, pal.paperShade); R(c, r.x + 3, r.y + 6, 7, 1, pal.paperShade);
+      R(c, r.x + r.w - 6, r.y + 3, 3, 3, pal.paper); P(c, r.x + r.w - 3, r.y + 4, pal.paper);
+      break;
+    }
+    case "status":
+      box(c, r, pal.screen, pal.ink);
+      break;
+    case "poster":
+      box(c, r, pal.paper, pal.ink2);
+      break;
     case "frame":
       box(c, r, pal.dark ? oklch(0.35, 0.06, 330) : oklch(0.86, 0.05, 330), pal.goldDark);
       R(c, r.x + 3, r.y + 5, r.w - 6, 2, pal.dark ? oklch(0.45, 0.08, 150) : oklch(0.7, 0.09, 150));
@@ -179,7 +95,7 @@ function drawWallItem(c: Ctx, it: Item<WallKind>, pal: OfficePalette) {
   }
 }
 
-function drawFloorItem(c: Ctx, it: Item<FloorKind>, pal: OfficePalette) {
+export function drawFloorItem(c: Ctx, it: Item<FloorKind>, pal: OfficePalette) {
   const r = it.rect;
   const shadow = (w: number) => R(c, r.x + 1, r.y + r.h, w - 1, 1, pal.wallShadow);
   switch (it.kind) {

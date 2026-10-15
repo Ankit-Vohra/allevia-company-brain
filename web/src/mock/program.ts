@@ -318,43 +318,52 @@ export function usageOf(t: string, month = isoDay(Date.now()).slice(0, 7)): Usag
   };
 }
 
-// ---------------------------------------------------------------- the morning brief, as src/insights/brief.ts writes it
+// ---------------------------------------------------------------- today's note, as src/insights/brief.ts writes it
 
 export function briefText(t: string, name: string): string {
   const p = programs[t];
-  const date = shortDate(dayAt(0));
-  if (!p) return `Morning brief, ${name}, ${date}\n\nGoals\n- No goals set yet. Set two or three in onboarding and this line tracks them.\n\nNext\n- Ask the team what to fix first.`;
+  const date = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Kolkata" });
+  if (!p) return `Today's note, ${name}, ${date}
+
+Your goals
+- No goals set yet. Pick two or three when you set up and they show here.
+
+Next step
+- Ask your team what to fix first.`;
   const fmt = (n: number) => n.toLocaleString("en-GB");
   const goalLine = (g: ProgramGoal) => {
-    const target = g.target !== null ? `target ${fmt(g.target)} by ${shortDate(g.dueAt!)}` : "no target set";
-    if (g.current === null) return `- ${g.name}: no reading yet; ${target}. [[${g.id}]]`;
-    const status = { achieved: "Achieved", on_track: "On track", at_risk: "At risk", off_track: "Off track", no_data: "No reading yet" }[g.status];
-    const why = g.status === "at_risk" && g.progress !== null ? `: ${Math.round(g.progress * 100)}% of the way with ${Math.round((p.day / 90) * 100)}% of the time gone` : "";
-    return `- ${g.name}: ${fmt(g.current)}${g.baseline !== null ? `, from ${fmt(g.baseline)} at the start` : ""}; ${target}. ${status}${why}. [[${g.id}]]`;
+    const goalText = g.target !== null ? `Goal: ${fmt(g.target)} by ${shortDate(g.dueAt!)}.` : "No goal number set yet.";
+    if (g.current === null) return `- ${g.name}: We'll know after your first full week. ${goalText} [[${g.id}]]`;
+    const status = { achieved: "Going well", on_track: "Going well", at_risk: "Needs a push", off_track: "Behind", no_data: "We'll know after your first full week" }[g.status];
+    const why = g.status === "at_risk" && g.progress !== null ? `: ${Math.round(g.progress * 100)}% of the way there, ${Math.round((p.day / 90) * 100)}% of the time used` : "";
+    return `- ${g.name}: ${fmt(g.current)} now${g.baseline !== null ? `, you started at ${fmt(g.baseline)}` : ""}. ${goalText} ${status}${why}. [[${g.id}]]`;
   };
   if (t !== "aamdani") {
     return [
-      `Morning brief, ${name}, ${date}`, "", "Goals", ...p.goals.map(goalLine), "",
-      "Since yesterday", "- 46 new numbers, 0 ended, 0 learned, 3 new recommendations.", "",
-      "Top 3", "1. Home page: title, H1 and LocalBusiness schema (Rohan). [[rec:avs-home-seo]]", "2. Verify the Google Business Profile (Vikram). [[rec:avs-gbp]]", "",
-      "Waiting on you", "- 2 approvals.", "", "Next", "- Approve or edit: Home page: title, H1 and LocalBusiness schema. [[appr:avs-gh-home-seo]]",
+      `Today's note, ${name}, ${date}`, "", "Your goals", ...p.goals.map(goalLine), "",
+      "What changed since yesterday", "- 46 new numbers came in and 3 new ideas.", "",
+      "What we noticed", "1. Home page: title, main heading and local business details (Rohan). [[rec:avs-home-seo]]", "2. Verify the Google Business Profile (Vikram). [[rec:avs-gbp]]", "",
+      "Waiting for your OK", "- 2 things are waiting for your OK.", "", "Next step", "- Say OK or edit: Home page: title, main heading and local business details. [[appr:avs-gh-home-seo]]",
     ].join("\n");
   }
   const newest = rulesOf(t).filter((r) => r.status === "active").sort((a, b) => (b.learnedAt ?? "").localeCompare(a.learnedAt ?? ""))[0];
   return [
-    `Morning brief, ${name}, ${date}`, "", "Goals", ...p.goals.map(goalLine), "",
-    "Since yesterday",
-    `- 214 new numbers, 2 ended, 1 learned, 3 new recommendations.`,
+    `Today's note, ${name}, ${date}`, "", "Your goals", ...p.goals.map(goalLine), "",
+    "What changed since yesterday",
+    "- 214 new numbers came in and 3 new ideas.",
     "- Signups, Aamdani: 288 -> 312 (+8%). [[observation:signups-wk41]]",
-    ...(newest ? [`- Learned: ${newest.text} [[${newest.id}]]`] : []),
-    `- First pass: ${Math.round((p.firstPass.rate ?? 0) * 100)}% of drafts approved with no edit over 30 days (${p.firstPass.firstPass30d} of ${p.firstPass.decided30d}); ${p.learnedRules.active} learned rules active.`,
-    "", "Top 3",
+    ...(newest ? [`- Your team learned: ${newest.text} [[${newest.id}]]`] : []),
+    `- Drafts you approved as they were: ${p.firstPass.firstPass30d} of ${p.firstPass.decided30d} in the last 30 days (${Math.round((p.firstPass.rate ?? 0) * 100)}%). Things your team learned from your edits: ${p.learnedRules.active}.`,
+    "", "What we noticed",
     "1. Make salary-reveal reels the weekly anchor (Tara). [[rec:salary-reveal-reels]]",
-    "2. Unique titles and meta descriptions for 38 /jobs pages (Arjun). [[rec:jobs-meta]]",
-    "3. Add a missed-call fallback to the OTP step (Kabir). [[rec:otp-fallback]]",
-    "", "Waiting on you", "- 3 approvals; the oldest has waited 3 days.",
-    "- Draft 3 reels: two salary reveals and a day with the screening call (content draft). [[appr:content-3-reels]]",
-    "", "Next", "- Approve or edit: Draft 3 reels: two salary reveals and a day with the screening call. [[appr:content-3-reels]]",
+    "2. Unique titles and descriptions for 38 job pages (Arjun). [[rec:jobs-meta]]",
+    "3. Add a missed-call fallback to the sign-up code step (Kabir). [[rec:otp-fallback]]",
+    "", "On call",
+    "- Checkout errors have doubled since Tuesday's update (Zoya).",
+    "- Version 4.2 is waiting for review on the Play Store (Imran).",
+    "", "Waiting for your OK", "- 3 things are waiting for your OK; the oldest has waited 3 days.",
+    "- Draft 3 reels: two salary reveals and a day with the screening call (a post draft). [[appr:content-3-reels]]",
+    "", "Next step", "- Say OK or edit: Draft 3 reels: two salary reveals and a day with the screening call. [[appr:content-3-reels]]",
   ].join("\n");
 }
 

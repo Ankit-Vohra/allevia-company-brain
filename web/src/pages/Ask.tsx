@@ -9,11 +9,13 @@ import { AgentAvatar, ChecksBadges, agentDef, fmtAgo, fmtDate, fmtMs } from "../
 import { AnswerModes } from "../components/Capabilities";
 import { Icon, type IconName } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
+import { Reveal } from "../components/Reveal";
 import { RunTimeline } from "../components/RunTimeline";
 import { WorkLanes } from "../components/WorkLanes";
 import { modesUsed } from "../lib/capabilities";
 import { labelOfId, nameOfId } from "../lib/labels";
 import { useMedia } from "../lib/useMedia";
+import { plain } from "../lib/words";
 import { useApp, useAsync } from "../state/app";
 import { type RunView, deriveRun, laneOf } from "../state/derive";
 import { type RunRecord, runStore, useRunStore } from "../state/runs";
@@ -132,7 +134,7 @@ export default function AskPage() {
 
   const [focus, setFocus] = useState<string | undefined>();
   const [highlight, setHighlight] = useState<string[] | undefined>();
-  const [paneTab, setPaneTab] = useState<"thread" | "graph">("thread");
+  const [pathOpen, setPathOpen] = useState(false);
   const [threadsOpen, setThreadsOpen] = useState(false);
   useEffect(() => { setFocus(undefined); setHighlight(undefined); }, [graphTurnKey]);
 
@@ -140,14 +142,14 @@ export default function AskPage() {
     setPicked(key);
     setHighlight(undefined);
     setFocus(id);
-    if (phone) setPaneTab("graph");
-  }, [phone]);
+    setPathOpen(true);
+  }, []);
   const onNodes = useCallback((key: string) => (ids: string[]) => {
     setPicked(key);
     setFocus(undefined);
     setHighlight(ids);
-    if (phone) setPaneTab("graph");
-  }, [phone]);
+    setPathOpen(true);
+  }, []);
 
   // composer
   const [text, setText] = useState(() => params.get("q") ?? "");
@@ -234,7 +236,7 @@ export default function AskPage() {
   );
 
   return (
-    <div className={`ask-page${phone ? ` show-${paneTab}` : ""}`}>
+    <div className={`ask-page${pathOpen ? " has-path" : ""}`}>
       {!narrow && <aside className="ask-rail" aria-label="Threads">{threadList}</aside>}
 
       <section className="ask-main" aria-labelledby="ask-title">
@@ -245,12 +247,6 @@ export default function AskPage() {
             </button>
           )}
           <h1 id="ask-title" className="ask-title">{title || <span className="skeleton" style={{ display: "inline-block", width: 220, height: 22 }} />}</h1>
-          {phone && (
-            <div className="seg ask-tabs" role="tablist" aria-label="Show">
-              <button type="button" role="tab" aria-selected={paneTab === "thread"} className={`seg-btn${paneTab === "thread" ? " is-on" : ""}`} onClick={() => setPaneTab("thread")}>Thread</button>
-              <button type="button" role="tab" aria-selected={paneTab === "graph"} className={`seg-btn${paneTab === "graph" ? " is-on" : ""}`} onClick={() => setPaneTab("graph")}>Graph</button>
-            </div>
-          )}
           {sessionId && !phone && (
             <Link to="/ask" className="btn btn-ghost btn-sm ask-new"><Icon name="plus" size={14} /> New thread</Link>
           )}
@@ -266,7 +262,7 @@ export default function AskPage() {
           ) : turns.length === 0 && !detail.loading ? (
             <div className="ask-empty">
               <h2 className="ask-empty-title">Ask {tenant.name}'s team anything about the business.</h2>
-              <p className="muted">Meera plans who does what, each desk checks the graph and files a finding, reviewers check the numbers, and you get one answer with its sources.</p>
+              <p className="muted">Meera reads your question, asks the right people on your team, and gives you one clear answer with its sources.</p>
               {suggestions.length > 0 && (
                 <ul className="ask-suggest" aria-label="Try one of these">
                   {suggestions.map((s) => (
@@ -284,12 +280,11 @@ export default function AskPage() {
                   view={views[i]!}
                   caps={caps.data}
                   latest={i === turns.length - 1}
-                  inGraph={t.key === graphTurnKey && turns.length > 1}
                   activeCite={t.key === graphTurnKey ? focus : undefined}
                   onCite={onCite(t.key)}
                   onNodes={onNodes(t.key)}
                   onReplay={() => replay(t)}
-                  onShowGraph={() => { setPicked(t.key); if (phone) setPaneTab("graph"); }}
+                  onShowPath={() => { setPicked(t.key); setPathOpen(true); }}
                   onRetry={() => ask(t.question)}
                 />
               ))}
@@ -327,7 +322,12 @@ export default function AskPage() {
         </form>
       </section>
 
-      <aside className="ask-graph" aria-label="Graph of this answer">{graphPane}</aside>
+      {pathOpen && (
+        <aside className="ask-graph" aria-label="How we know">
+          <button type="button" className="btn btn-quiet btn-icon path-close" onClick={() => setPathOpen(false)} aria-label="Close"><Icon name="close" /></button>
+          {graphPane}
+        </aside>
+      )}
 
       {narrow && (
         <SideSheet open={threadsOpen} onClose={() => setThreadsOpen(false)} title="Threads">{threadList}</SideSheet>
@@ -367,86 +367,102 @@ function ThreadList({ sessions, loading, activeId, onPick }: { sessions?: Sessio
   );
 }
 
-function TurnBlock({ turn, view, caps, latest, inGraph, activeCite, onCite, onNodes, onReplay, onShowGraph, onRetry }: {
-  turn: TurnItem; view: RunView; caps?: CapabilityState[]; latest: boolean; inGraph: boolean; activeCite?: string;
-  onCite: (id: string) => void; onNodes: (ids: string[]) => void; onReplay: () => void; onShowGraph: () => void; onRetry: () => void;
+function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onReplay, onShowPath, onRetry }: {
+  turn: TurnItem; view: RunView; caps?: CapabilityState[]; latest: boolean; activeCite?: string;
+  onCite: (id: string) => void; onNodes: (ids: string[]) => void; onReplay: () => void; onShowPath: () => void; onRetry: () => void;
 }) {
   const live = turn.status === "running";
-  const done = !!view.final;
-  // the lanes are open while the team works; once answered they fold away (the timeline stays) unless opened
-  const [open, setOpen] = useState<boolean | undefined>(undefined);
-  const lanesOpen = open ?? (live || (!done && view.count > 0));
-  const laneRef = useRef<HTMLDivElement>(null);
+  const [how, setHow] = useState(false);
   const jump = (key: string) => {
-    setOpen(true);
+    setHow(true);
     requestAnimationFrame(() => document.getElementById(`lane-${key.replace(/[^a-z0-9-]/gi, "-")}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   };
   const agents = view.final?.agents ?? [...new Set(view.laneOrder.map((k) => view.lanes[k]!.agent))];
   const loadingLog = !turn.events.length && !live;
+  const checks = view.final?.checks;
+  const checksOk = !!checks && checks.citationsValid && checks.numbersGrounded && checks.simulatedDisclosed && checks.freshnessDisclosed;
+  const nSteps = view.laneOrder.reduce((n, k) => n + view.lanes[k]!.steps.length, 0);
+
+  // while the team works: one quiet line, "Tara is drafting ideas…"
+  const working = view.activeAgents[view.activeAgents.length - 1];
+  const lane = working ? laneOf(view, working) : undefined;
+  const status = plain(lane?.status ?? lane?.task ?? "").replace(/[.…]+$/, "").trim();
+  const nm = working ? agentDef(working)?.name : undefined;
+  const workingLine = !live ? "" : !nm ? "Meera is reading your question…" : !status ? `${nm} is on it…` : /^\w+ing\b/i.test(status) ? `${nm} is ${status.charAt(0).toLowerCase()}${status.slice(1)}…` : `${nm}: ${status.charAt(0).toLowerCase()}${status.slice(1)}…`;
 
   return (
-    <li className={`turn${live ? " is-live" : ""}${inGraph ? " is-in-graph" : ""}`}>
+    <li className={`turn${live ? " is-live" : ""}`}>
       <header className="turn-q">
         <p className="turn-question">{turn.question}</p>
-        <p className="turn-meta">
-          {turn.at && <span>{fmtDate(turn.at, true)}</span>}
-          {agents.length > 0 && (
-            <span className="turn-team" aria-label={`Worked on by ${agents.map((a) => agentDef(a)?.name).join(", ")}`}>
-              {agents.map((a) => <AgentAvatar key={a} id={a} size={18} />)}
-            </span>
-          )}
-          {view.final && <span>{agents.length} staff · {fmtMs(view.final.ms)}</span>}
-          {live && <span className="turn-live"><span className="pulse" aria-hidden="true" /> {turn.replaying ? "Replaying" : "Working"}</span>}
-        </p>
+        {turn.at && <p className="turn-meta"><span>{fmtDate(turn.at, true)}</span></p>}
       </header>
 
       {loadingLog ? (
         <span className="skeleton" style={{ display: "block", height: 120 }} />
       ) : (
         <>
-          <RunTimeline view={view} running={live} onPick={jump} />
-
-          <div className="turn-log" ref={laneRef}>
-            <button type="button" className="log-toggle" aria-expanded={lanesOpen} onClick={() => setOpen(!lanesOpen)}>
-              <Icon name="chevron-right" size={14} className="log-chevron" />
-              {lanesOpen ? "Hide each desk's work" : `Show each desk's work: ${Object.keys(view.findings).length} findings, ${view.laneOrder.reduce((n, k) => n + view.lanes[k]!.steps.length, 0)} tool calls`}
-            </button>
-            {lanesOpen && <WorkLanes view={view} nodes={view.nodes} onCite={onCite} onNodes={onNodes} activeCite={activeCite} />}
-          </div>
+          {live && !(view.answerStarted && view.answer.trim()) && (
+            <p className="turn-working" role="status"><span className="pulse" aria-hidden="true" /> {turn.replaying ? "Replaying: " : ""}{workingLine}</p>
+          )}
 
           {turn.status !== "stopped" && (view.answerStarted || (view.final && (view.answer.trim() || turn.status === "done"))) && (
             <div className={`answer${view.final ? "" : " is-streaming"}`}>
               <div className="answer-by">
-                <AgentAvatar id="chief-of-staff" size={26} ring={!view.final} />
-                <span><b>Meera</b> · Chief of Staff</span>
+                <AgentAvatar id="chief-of-staff" size={24} ring={!view.final} />
+                <span><b>Meera</b></span>
               </div>
-              <Markdown text={view.answer} nodes={view.nodes} onCite={onCite} activeId={activeCite} className="answer-md" />
+              <Markdown text={view.answer} nodes={view.nodes} onCite={(id) => { onCite(id); }} activeId={activeCite} className="answer-md" />
               {view.final && (
                 <>
-                  <div className="answer-checks">
-                    <ChecksBadges checks={view.final.checks} />
-                    <AnswerModes caps={modesUsed(view.final.citations, caps ?? [])} disclosed={view.final.checks.modeDisclosed} />
-                  </div>
+                  <p className={`answer-line${checksOk ? "" : " is-warn"}`}>
+                    <Icon name={checksOk ? "check" : "warn"} size={14} />
+                    <span>{checksOk ? "Sources checked" : "A few numbers could not be matched to a source"} · {agents.length} {agents.length === 1 ? "person" : "people"} · {fmtMs(view.final.ms)}</span>
+                  </p>
                   {view.proposals.length > 0 && (
                     <ul className="proposals">
                       {view.proposals.map((p) => (
                         <li key={p.approvalId} className="proposal">
                           <Icon name={p.kind === "github_issue" ? "github" : p.kind === "content_draft" ? "pen" : p.kind === "pause_ad" ? "pause" : "chat"} size={16} />
-                          <span><b>Waiting for your approval:</b> {p.title}</span>
-                          <Link to={`/approvals#${encodeURIComponent(p.approvalId)}`} className="btn btn-sm btn-ghost">Review <Icon name="chevron-right" size={14} /></Link>
+                          <span><b>Waiting for your OK:</b> {plain(p.title)}</span>
+                          <Link to={`/approvals#${encodeURIComponent(p.approvalId)}`} className="btn btn-sm btn-gold">Review <Icon name="chevron-right" size={14} /></Link>
                         </li>
                       ))}
                     </ul>
                   )}
-                  <div className="answer-actions">
-                    {turn.turnId && <button type="button" className="btn btn-quiet btn-sm" onClick={onReplay}><Icon name="replay" size={14} /> Replay the work</button>}
-                    {!inGraph && view.path && <button type="button" className="btn btn-quiet btn-sm" onClick={onShowGraph}><Icon name="brain" size={14} /> Show this path</button>}
-                    {view.path && <span className="answer-path-note">{view.path.nodes.length} steps lit on the graph</span>}
-                  </div>
                 </>
               )}
             </div>
           )}
+
+          {(view.final || nSteps > 0) && (
+            <div className="turn-how">
+              <Reveal
+                label="Show how the team worked"
+                openLabel="Hide how the team worked"
+                summary={view.final ? `${agents.length} ${agents.length === 1 ? "person" : "people"} · ${fmtMs(view.final.ms)}` : undefined}
+                open={how}
+                onToggle={setHow}
+              >
+                <div className="how">
+                  <RunTimeline view={view} running={live} onPick={jump} />
+                  <WorkLanes view={view} nodes={view.nodes} onCite={onCite} onNodes={onNodes} activeCite={activeCite} />
+                  {view.final && (
+                    <div className="answer-checks">
+                      <ChecksBadges checks={view.final.checks} />
+                      <AnswerModes caps={modesUsed(view.final.citations, caps ?? [])} disclosed={view.final.checks.modeDisclosed} />
+                    </div>
+                  )}
+                  <div className="answer-actions">
+                    {turn.turnId && view.final && <button type="button" className="btn btn-quiet btn-sm" onClick={onReplay}><Icon name="replay" size={14} /> Replay the work</button>}
+                  </div>
+                </div>
+              </Reveal>
+              {view.final && view.path && (
+                <button type="button" className="btn btn-quiet btn-sm path-btn" onClick={onShowPath}><Icon name="brain" size={14} /> See the path</button>
+              )}
+            </div>
+          )}
+
           {(turn.status === "error" || turn.status === "stopped") && (
             <div className="turn-error" role="alert">
               <Icon name="warn" size={16} />
@@ -492,9 +508,9 @@ function GraphPane({ view, turnLabel, focus, highlight, onFocus, onClear, dark, 
     <div className="graph-pane">
       <div className="graph-pane-head">
         <div>
-          <h2 className="graph-pane-title">{view?.path ? "The path behind the answer" : view && nodes.length ? "What the team is reading" : "The graph"}</h2>
+          <h2 className="graph-pane-title">{view?.path ? "How we know" : view && nodes.length ? "What the team is reading" : "How we know"}</h2>
           <p className="graph-pane-meta">
-            {view && nodes.length ? <>{nodes.length} nodes · {edges.length} links{view.path ? <> · <span className="gold-text">{view.path.nodes.length} on the path</span></> : reading.who.length ? <> · <span className="gold-text">ringed: what {reading.who.join(" and ")} read last</span></> : null}</> : "Lights up as your team works"}
+            {view && nodes.length ? <>{nodes.length} things checked{view.path ? <> · <span className="gold-text">{view.path.nodes.length} led to the answer</span></> : reading.who.length ? <> · <span className="gold-text">{reading.who.join(" and ")} read these last</span></> : null}</> : "Lights up as your team works"}
             {turnLabel && <> · {turnLabel}</>}
           </p>
         </div>
@@ -547,7 +563,7 @@ function NodeCard({ id, node, detail, loading }: { id: string; node?: NodeRef; d
       <p className="node-card-name">{name}</p>
       {loading && !detail ? <span className="skeleton" style={{ display: "block", height: 14, width: "70%" }} /> : detail?.node.summary ? <p className="node-card-sum">{detail.node.summary}</p> : null}
       {detail?.sources.length ? <p className="node-card-src">Source: {detail.sources.map((s) => s.title).join("; ")}</p> : null}
-      <Link to={`/brain?node=${encodeURIComponent(id)}`} className="node-card-link">Open in Brain <Icon name="chevron-right" size={13} /></Link>
+      <Link to={`/brain?node=${encodeURIComponent(id)}`} className="node-card-link">See what your team knows <Icon name="chevron-right" size={13} /></Link>
     </div>
   );
 }

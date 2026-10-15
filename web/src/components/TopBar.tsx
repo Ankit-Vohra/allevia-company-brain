@@ -1,18 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { api } from "../api";
-import { useApp, useAsync } from "../state/app";
+import { type ThemeChoice, useApp, useAsync } from "../state/app";
 import { Icon, type IconName } from "./Icon";
 
+// At most five primary places; everything else lives under More.
 const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
   { to: "/", label: "Office", icon: "office", end: true },
   { to: "/ask", label: "Ask", icon: "ask" },
-  { to: "/brain", label: "Brain", icon: "brain" },
   { to: "/insights", label: "Insights", icon: "insights" },
   { to: "/approvals", label: "Approvals", icon: "approvals" },
+  { to: "/studio", label: "Studio", icon: "sparkle" },
 ];
 
-/** Screens under "More": the growth plan and the plan and credits page (the Studio and Team settings have their own links). */
+/** Screens under "More": the growth plan and the plan and credits page (the Studio and Your team have their own entries). */
 const MORE_SCREENS: { to: string; label: string; blurb: string; icon: IconName }[] = [
   { to: "/program", label: "Your growth plan", blurb: "Your goals, and how the team is helping", icon: "insights" },
   { to: "/plan", label: "Plan and credits", blurb: "What your plan includes, and this month's use", icon: "layers" },
@@ -20,7 +21,7 @@ const MORE_SCREENS: { to: string; label: string; blurb: string; icon: IconName }
 
 export const APPROVALS_CHANGED = "allevia:approvals-changed";
 
-function usePendingApprovals() {
+export function usePendingApprovals() {
   const { tenant } = useApp();
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -93,34 +94,58 @@ function BusinessSwitcher() {
   );
 }
 
-function ThemeToggle() {
+const THEMES: { id: ThemeChoice; label: string; sub: string; icon: IconName }[] = [
+  { id: "light", label: "Light", sub: "Paper and ink, all day", icon: "sun" },
+  { id: "dark", label: "Dark", sub: "The night office", icon: "moon" },
+  { id: "clock", label: "Follows the office clock", sub: "Dims gently in the evening", icon: "clock" },
+];
+
+function ThemeMenu() {
   const { theme, setTheme } = useApp();
-  const next = theme === "system" ? "light" : theme === "light" ? "dark" : "system";
-  const icon: IconName = theme === "system" ? "system" : theme === "light" ? "sun" : "moon";
-  const label = theme === "system" ? "Theme follows your system" : theme === "light" ? "Light theme" : "Night office";
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useDismiss(open, ref, useCallback(() => setOpen(false), []));
+  const cur = THEMES.find((t) => t.id === theme) ?? THEMES[0]!;
   return (
-    <button type="button" className="btn btn-quiet btn-icon" onClick={() => setTheme(next)} aria-label={`${label}. Switch to ${next === "system" ? "system" : next === "light" ? "light" : "night"}.`} title={label}>
-      <Icon name={icon} />
-    </button>
+    <div className="more" ref={ref}>
+      <button type="button" className="btn btn-quiet btn-icon" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} aria-label={`Theme: ${cur.label}`} title={`Theme: ${cur.label}`}>
+        <Icon name={cur.icon} />
+      </button>
+      {open && (
+        <div className="switcher-menu more-menu theme-menu" role="menu" aria-label="Theme">
+          {THEMES.map((t) => (
+            <button key={t.id} type="button" role="menuitemradio" aria-checked={t.id === theme} className="switcher-item" onClick={() => { setTheme(t.id); setOpen(false); }}>
+              <span className="more-icon"><Icon name={t.icon} size={16} /></span>
+              <span className="switcher-text"><span className="switcher-name">{t.label}</span><span className="switcher-domain">{t.sub}</span></span>
+              {t.id === theme && <Icon name="check" size={16} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
-/** The menu for screens not in the main bar: team settings, the growth plan and the plan page. On a phone
+function useDismiss(open: boolean, ref: RefObject<HTMLDivElement | null>, close: () => void) {
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) close(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [open, ref, close]);
+}
+
+/** The menu for screens not in the main bar: setting up a business, and the screens that are coming soon. On a phone
  *  it also holds what the top bar has no room for. */
 function MoreMenu({ variant }: { variant: "desktop" | "mobile" }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const loc = useLocation();
   useEffect(() => { setOpen(false); }, [loc.pathname]);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
-  }, [open]);
-  const active = MORE_SCREENS.some((x) => loc.pathname === x.to) || loc.pathname === "/team" || (variant === "mobile" && loc.pathname === "/onboard");
+  useDismiss(open, ref, useCallback(() => setOpen(false), []));
+  const active = MORE_SCREENS.some((x) => loc.pathname === x.to) || ["/team", "/brain", "/onboard"].includes(loc.pathname);
   return (
     <div className={`more more-${variant}`} ref={ref}>
       {variant === "desktop" ? (
@@ -134,21 +159,17 @@ function MoreMenu({ variant }: { variant: "desktop" | "mobile" }) {
       )}
       {open && (
         <div className="switcher-menu more-menu" role="menu" aria-label="More screens">
-          {variant === "mobile" && (
-            <NavLink to="/onboard" role="menuitem" className="more-item">
-              <span className="more-icon"><Icon name="plus" size={16} /></span>
-              <span className="switcher-text"><span className="switcher-name">Add a business</span><span className="switcher-domain">Build a brain from a website</span></span>
-            </NavLink>
-          )}
-          {variant === "mobile" && (
-            <NavLink to="/studio" role="menuitem" className="more-item">
-              <span className="more-icon"><Icon name="sparkle" size={16} /></span>
-              <span className="switcher-text"><span className="switcher-name">Studio</span><span className="switcher-domain">Turn a phone photo into an on-brand post</span></span>
-            </NavLink>
-          )}
+          <NavLink to="/brain" role="menuitem" className="more-item">
+            <span className="more-icon"><Icon name="brain" size={16} /></span>
+            <span className="switcher-text"><span className="switcher-name">What your team knows</span><span className="switcher-domain">The company brain, and where each fact came from</span></span>
+          </NavLink>
           <NavLink to="/team" role="menuitem" className="more-item">
             <span className="more-icon"><Icon name="office" size={16} /></span>
-            <span className="switcher-text"><span className="switcher-name">Team settings</span><span className="switcher-domain">Desks on or off, tell your team, what it learned</span></span>
+            <span className="switcher-text"><span className="switcher-name">Your team</span><span className="switcher-domain">Tell your team something, switch people on or off</span></span>
+          </NavLink>
+          <NavLink to="/onboard" role="menuitem" className="more-item">
+            <span className="more-icon"><Icon name="plus" size={16} /></span>
+            <span className="switcher-text"><span className="switcher-name">Add a business</span><span className="switcher-domain">Set up a new office from a website</span></span>
           </NavLink>
           {MORE_SCREENS.map((x) => (
             <NavLink key={x.to} to={x.to} role="menuitem" className="more-item">
@@ -175,20 +196,11 @@ export function TopBar() {
       <nav className="topnav" aria-label="Main">
         {NAV.map((n) => (
           <NavLink key={n.to} to={n.to} end={n.end} className="topnav-link">
-            <Icon name={n.icon} size={17} />
             {n.label}
-            {n.to === "/approvals" && pending > 0 && <span className="count" aria-label={`${pending} pending`}>{pending}</span>}
+            {n.to === "/approvals" && pending > 0 && <span className="count" aria-label={`${pending} waiting`}>{pending}</span>}
           </NavLink>
         ))}
-        <NavLink to="/studio" className="topnav-link">
-          <Icon name="sparkle" size={17} />
-          Studio
-        </NavLink>
         <MoreMenu variant="desktop" />
-        <NavLink to="/onboard" className="topnav-link topnav-add">
-          <Icon name="plus" size={16} />
-          Add a business
-        </NavLink>
       </nav>
       <div className="topbar-right">
         {mode === "mock" && (
@@ -196,7 +208,7 @@ export function TopBar() {
             <span className="mode-dot" aria-hidden="true" /> Demo data
           </span>
         )}
-        <ThemeToggle />
+        <ThemeMenu />
         <MoreMenu variant="mobile" />
       </div>
     </header>

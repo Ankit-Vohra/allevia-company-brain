@@ -240,12 +240,12 @@ export const mockApi = {
   async retireRule(t: string, ruleId: string): Promise<LearnedRuleDto> { await sleep(250); return p90.retireRule(t, ruleId); },
   async brief(t: string): Promise<Brief | null> {
     const name = tenants.find((x) => x.id === t)?.name ?? t;
-    return briefs[t] ?? { id: `document:brief-${t}`, title: "Morning brief", asOf: today().slice(0, 10), text: p90.briefText(t, name) };
+    return briefs[t] ?? { id: `document:brief-${t}`, title: "Today's note", asOf: today().slice(0, 10), text: p90.briefText(t, name) };
   },
   async runBrief(t: string): Promise<Brief> {
     await sleep(700);
     const name = tenants.find((x) => x.id === t)?.name ?? t;
-    return (briefs[t] = { id: `document:brief-${t}`, title: "Morning brief", asOf: today().slice(0, 10), date: today().slice(0, 10), text: p90.briefText(t, name) });
+    return (briefs[t] = { id: `document:brief-${t}`, title: "Today's note", asOf: today().slice(0, 10), date: today().slice(0, 10), text: p90.briefText(t, name) });
   },
 
   async ask(t: string, body: { question: string; sessionId?: string }, onEvent: (e: AgentEvent) => void, opts: PlayOpts) {
