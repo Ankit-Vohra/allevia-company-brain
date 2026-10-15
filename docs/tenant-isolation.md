@@ -24,12 +24,12 @@ marked as a public demo opens without one, and then read-only.
 |---|---|---|---|
 | A business's knowledge: facts, documents, numbers, notes, the team's memory, learned rules, settings, goals, approvals, Studio records | Its own graph `allevia_<slug>`. The only way a business becomes a graph name is `graphName(slug)`. | `src/graph/client.ts`, `src/graph/slug.ts` | `slug`, `http-isolation`, `graph-binding` |
 | The slug itself | One rule: lowercase letters and digits joined by single `_`, at most 40 characters, and not a reserved word (`meta`, `operator`, and the API's own path words). So no tenant can be called `allevia_meta`, and no slug can carry a path, a quote or a look-alike letter. | `src/graph/slug.ts` | `slug` (33 crafted slugs against every place a tenant is named) |
-| The registry (`allevia_meta`): which businesses exist, their region, and the hashes of owner links | Only the tenant registry and the token store open it. No request reads it directly. It never holds a business's knowledge. | `src/graph/tenants.ts`, `src/auth/tokens.ts` | `tokens`, `slug` |
+| The registry (`allevia_meta`): which businesses exist, their region, the hashes of owner links, and the Discord hub's mapping and join links | Only the tenant registry, the token store and the hub's store open it. No request reads it directly; a business is shown only its own join link. It never holds a business's knowledge. | `src/graph/tenants.ts`, `src/auth/tokens.ts` | `tokens`, `slug` |
 | What an agent, a tool or the MCP server can read | The graph handle is put in the request by the server (`ToolContext.graph`). No tool has an input that names a tenant, graph or database, and a forged one in the arguments is dropped before the tool runs. | `src/agent/tool.ts`, `src/mcp/server.ts` | `graph-binding` |
-| The free-form `cypher` tool | Read-only three ways: a text guard, `GRAPH.RO_QUERY` (the server itself refuses a write), and bounds on time and size. It runs inside one graph; Cypher has no way to name another. | `src/agent/tools/cypher.ts` | `graph-binding` (graph-switching syntax, 30 spellings of a write, crafted parameters) |
+| The free-form `cypher` tool | Read-only three ways: a text guard, `GRAPH.RO_QUERY` (the server itself refuses a write), and bounds on time and size. It runs inside one graph; Cypher has no way to name another. | `src/agent/tools/cypher.ts` | `graph-binding` (graph-switching syntax, over thirty spellings of a write, crafted parameters) |
 | Search: full-text and vector indexes | Per graph. Searching in one business cannot reach another's index. | `src/graph/indexes.ts` | `graph-binding` |
 | Cached graph projections (what the graph algorithms run on) | Keyed by graph name, with a write stamp per graph. A write invalidates only its own graph's. | `src/graph/projection.ts` | `projection-cache` |
-| Studio photos | `data/assets/<slug>/<sha256>.<ext>`. The folder comes from a valid slug; the file name must be a 64-hex hash plus an image extension, so a key can never leave the folder, even if a graph holds a crafted one. | `src/studio/store.ts` | `slug`, `http-isolation` |
+| Studio photos and videos | `data/assets/<slug>/<sha256>.<ext>`. The folder comes from a valid slug; the file name must be a 64-hex hash plus an image extension, so a key can never leave the folder, even if a graph holds a crafted one. | `src/studio/store.ts` | `slug`, `http-isolation` |
 | Drafts of approved posts | `data/drafts/<slug>/<card id>.md`. The card id is reduced to a file name. | `src/actions/executors.ts` | `connectors` |
 | Cached model answers (extraction, website questions, photo reading) | One folder per business: `data/cache/<kind>/<slug>/`. A key already carries the business context, so a hit across businesses needed identical text and identical context; one folder each means they never meet. | `src/util/cache.ts` | `caches`, `paths` |
 | Onboarding crawl output and run reports | `data/onboard/<slug>/`, `data/runs/<slug>/`. Onboarding refuses a crafted slug before it writes anything. | `src/onboard/onboard.ts` | `paths` |
@@ -161,26 +161,31 @@ defaults come from code.
    plan real sign-in before a business has more than one person.
 4. **The operator link is all-powerful** and stored the same way as an owner link. Keep it to one or two people; revoke
    and reissue when someone leaves.
-5. **Discord is a shared room with a staff key.** The hub's design is sound (see the table), but: Allevia staff can read
+5. **There is no per-business store for secrets yet.** Every token Allevia uses today (the Discord bot, the founder's Instagram
+   and GitHub access, the ops box) is a single value in the founder's env file, and belongs to the founder's own
+   businesses. When a customer connects their own accounts (Google, Instagram, ads), each token must be its own record: encrypted
+   at rest, readable only by that business's code path, never in the env file, the graph's searchable text or a log.
+   Nothing of this exists yet, so nothing is stored wrongly; the design has to come first.
+6. **Discord is a shared room with a staff key.** The hub's design is sound (see the table), but: Allevia staff can read
    every customer's channels, by design, for support, so keep that role to a few people; everything said there lives on
    Discord's servers, outside our control; whoever holds a customer's role (anyone who used its join link) can ask its
    team and decide its cards, so treat a join link like the owner link; and the hub's mapping and the join links sit in
    the registry graph beside the tenant list. Without owner links (`ALLEVIA_AUTH`) anyone who knows a business id can ask
    the server for its join link (the server warns at start-up). The older `discord --tenant` bot is still one business per
    process and treats the server owner as the business owner.
-6. **One model subscription serves every business.** All prompts and photos go through the same account (the provider
+7. **One model subscription serves every business.** All prompts and photos go through the same account (the provider
    treats them alike), and the limits are shared: two live questions at once, one onboarding at a time, one Studio run at
    a time, across all businesses. One busy business can slow the others. Per-business queues and limits are not built.
-7. **The founder's paths are defaults for any new ingest config.** `ingest` runs only for businesses configured in
+8. **The founder's paths are defaults for any new ingest config.** `ingest` runs only for businesses configured in
    `src/tenant-config.ts` (code, written by a developer), but one that lists the `brain` or `ops` source without its own
    path would read the founder's vault or ops box. Require an explicit path per business before adding a customer there.
-8. **Recorded Studio edits are keyed by the photo's hash only.** They are demo recordings from the founder's runs; a
+9. **Recorded Studio edits are keyed by the photo's hash only.** They are demo recordings from the founder's runs; a
    customer who sent the identical file would get that edit (and its recorded prompt). Harmless today; give live
    Higgsfield jobs a per-business ledger and never reuse another business's output.
-9. **One volume holds every business.** Backups of the data volume and the FalkorDB volume contain all businesses.
+10. **One volume holds every business.** Backups of the data volume and the FalkorDB volume contain all businesses.
    Erasing one business is "drop its graph and delete its five folders" (assets, drafts, cache, onboard, runs); there is
    no single command for that yet, and no per-business export.
-10. **The registry is cached for 5 seconds,** so marking a demo, or a business appearing, takes up to 5 seconds. Revoking
+11. **The registry is cached for 5 seconds,** so marking a demo, or a business appearing, takes up to 5 seconds. Revoking
     a link is immediate.
 
 ## Running it
