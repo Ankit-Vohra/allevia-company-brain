@@ -38,7 +38,8 @@ export function ConnectSearchConsole({ tenantId, onChanged }: { tenantId: string
   const load = () => api.searchConsole(tenantId).then(setStatus, (e: Error) => setError(e.message));
   useEffect(() => { if (live) void load(); }, [tenantId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!live) return null;
+  // parked on the server (ALLEVIA_SEARCH_CONSOLE off) or not set up: nothing to offer the owner yet
+  if (!live || status?.state === "not_configured") return null;
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setError(undefined);

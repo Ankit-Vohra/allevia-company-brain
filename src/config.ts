@@ -26,7 +26,8 @@ export interface AlleviaConfig {
   webBaseUrl: string; // where the web app is reached, for links from Discord (default http://127.0.0.1:<port>)
   // The OAuth app a business connects its Google accounts through (docs/connectors-setup.md). redirectUri must be exactly
   // what is registered in the Google Cloud console; connectorKey seals the stored tokens (>= 32 characters).
-  google: { clientId?: string; clientSecret?: string; redirectUri: string; connectorKey?: string };
+  // enabled: ALLEVIA_SEARCH_CONSOLE=1; off by default (the connector is built against a fake and parked for now).
+  google: { enabled: boolean; clientId?: string; clientSecret?: string; redirectUri: string; connectorKey?: string };
 }
 
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -94,6 +95,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
     port,
     webBaseUrl,
     google: {
+      enabled: (get("ALLEVIA_SEARCH_CONSOLE") ?? "") === "1",
       clientId: get("ALLEVIA_GOOGLE_CLIENT_ID"),
       clientSecret: get("ALLEVIA_GOOGLE_CLIENT_SECRET"),
       redirectUri: get("ALLEVIA_GOOGLE_REDIRECT_URI") ?? `${webBaseUrl}/api/connectors/google/callback`,

@@ -6,8 +6,12 @@ Two need nothing from you. One needs a Google Cloud project, and this page lists
 | Path | What a customer does | What you set up |
 |---|---|---|
 | **Add your numbers** (spreadsheet upload) | Drops a CSV or XLSX on the growth plan card, checks "This looks like weekly enquiries. OK?", taps OK | Nothing |
-| **Where a fix lands** | Nothing by default: an approved fix becomes a task inside the app. GitHub is an opt-in for a repo of their own | Nothing (see "Where fixes land" below for Allevia's own workspace) |
+| **Where a fix lands** | Nothing by default: an approved fix becomes a task inside the app. GitHub is an opt-in for a repo of their own | Nothing (the founder's own businesses keep their tracker) |
 | **Connect Search Console** | Clicks Connect, signs in to their own Google account, says yes to read-only Search Console | Everything on this page |
+
+**Parked for now (2026-10-15, founder's call: product and hackathon first).** The Search Console connector is off unless
+`ALLEVIA_SEARCH_CONSOLE=1`: with it off, nothing calls Google, the daily pull does not start, and the web app shows no
+Connect button. The code, tests and the steps below are kept so it can be switched on later.
 
 Search Console was built and tested against a fake Google. **It has never talked to the real Google**, so expect a small
 fix or two the first time you connect your own account (steps at the end).
@@ -106,35 +110,40 @@ What to check: the Search Console line on the growth plan card reads live, and t
 
 ## Where fixes land
 
-Until now `github_issue` opened an issue on one repo from the server's config, Allevia's own. Now each business has its own
-action target (`GET` or `POST /api/:t/actions/target`):
+Before this, `github_issue` opened an issue on one repo from the server's config, Allevia's own. Each business now has its
+own action target (`GET` or `POST /api/:t/actions/target`), stored on its Business node:
 
-- **Default: a task inside the app.** An approved fix becomes an open task; the card the owner approved already showed on the
-  web and in Discord. Nothing outside Allevia is touched, not even in a live run.
+- **A business that chose nothing, and is a customer's: a task inside the app.** An approved fix becomes an open task; the
+  card the owner approved already showed on the web and in Discord. Nothing outside Allevia is touched, not even in a live
+  run.
 - **Opt-in: GitHub on the business's own repo** (`owner/name`). The server's `gh` login must be able to write to it.
-- A business can never be pointed at Allevia's own repo (`ALLEVIA_ACTION_REPO`): it is refused in every spelling, and a graph
-  written directly with that repo still lands in tasks. Only you, from the terminal, can allow it, which is how Allevia's own
-  workspace keeps its own tracker:
+- **The founder's own businesses** (`src/tenant-config.ts`, plus any named in `ALLEVIA_ACTION_TENANTS`) that chose nothing
+  keep filing on `ALLEVIA_ACTION_REPO`, as before. Nothing for you to do.
+- **A customer's business can never be pointed at `ALLEVIA_ACTION_REPO`**: it is refused in every spelling, and a graph
+  written directly with that repo still lands in tasks. Only you, from the terminal, can allow it:
 
 ```
 npm run cli -- action-target <tenant>                                     # show it
-npm run cli -- action-target <tenant> repo <owner/name> --operator        # e.g. Allevia's own workspace on Allevia's repo
-npm run cli -- action-target <tenant> app                                 # back to tasks
+npm run cli -- action-target <tenant> repo <owner/name> [--operator]      # --operator: allow Allevia's own repo
+npm run cli -- action-target <tenant> app                                 # tasks, even for a founder's business
 ```
 
-**Before this lands on the live server, run that `repo ... --operator` line for your own workspace tenants**, or their
-approved fixes become tasks instead of issues.
+## What others still have to wire
 
-## What still has to be wired by others
-
-- **Sign-in.** `POST .../connect` and `GET /api/connectors/google/callback` must be tied to the signed-in owner of that
-  business (the signed state only proves the link was made by this server). The routes are in `src/server/routes/connectors.ts`;
-  the upload (`numbers.ts`) and action-target (`actions.ts`) routes need the same guard. All three are open today, like every
-  other write route.
+- **Sign-in is already covered, with one exception by design.** Every route under `/api/:t/` (the upload, the action
+  target, connect, property, pull, disconnect) sits behind the owner-link door when `ALLEVIA_AUTH=1`. Google's redirect
+  back, `GET /api/connectors/google/callback`, cannot carry the owner's cookie (it arrives from another site and the cookie
+  is `SameSite=Strict`), so it proves itself with the signed, expiring, single-use `state` that `connect` made. `connectors`
+  was added to the reserved slugs (`src/graph/slug.ts`) so the door lets that one path through. One rough edge for whoever
+  owns the cookie: the first page the owner lands on after Google may show "This business is private" until they reload,
+  because the redirect chain began on another site. A tiny interstitial page, or a `Lax` cookie, fixes it.
 - **Discord.** The spreadsheet path is reusable from Discord: download the attachment, call `previewUpload(g, businessId,
   {fileName, bytes})`, show `describePreview(preview)`, apply the owner's replies with `applyReply(plan, text)`, then
   `importUpload(g, businessId, file, plan, Date.now())` and show `describeResult(result)` (all in
   `src/connectors/upload/` and `src/server/routes/numbers.ts`). The Discord approval card still labels this kind "GitHub
-  issue" (`src/discord/bot.ts`); it should say "a fix for your website", since the default lands in tasks.
+  issue" (`src/discord/bot.ts`); for a customer it should say "a fix for your website", since the default lands in tasks.
+- **A secret store.** `docs/tenant-isolation.md` lists the missing per-business secret store. Search Console's tokens use a
+  small one of their own (`src/connectors/google/store.ts`: sealed files, one per business and connector). Instagram and
+  Business Profile will need the same shape; reuse the `TokenStore` interface.
 - **The upload's caps** (20 MB, 50,000 rows, 100 columns, 20,000 numbers a file) are constants in
   `src/connectors/upload/limits.ts`.

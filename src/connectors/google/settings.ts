@@ -13,8 +13,11 @@ export interface GoogleSettings {
   missing: MissingSetting[];
 }
 
-export function googleSettings(g: AlleviaConfig["google"]): GoogleSettings {
+// `enabled: false` (the default from config: ALLEVIA_SEARCH_CONSOLE is not 1) switches the whole connector off for now,
+// whatever else is set: nothing is called, the schedule does not start, and the owner reads "isn't switched on yet".
+export function googleSettings(g: Omit<AlleviaConfig["google"], "enabled"> & { enabled?: boolean }): GoogleSettings {
   const missing: MissingSetting[] = [];
+  if (g.enabled === false) missing.push({ setting: "ALLEVIA_SEARCH_CONSOLE", words: "Search Console switched on for this server (it is off for now)" });
   if (!g.clientId) missing.push({ setting: "ALLEVIA_GOOGLE_CLIENT_ID", words: "Allevia's Google client ID" });
   if (!g.clientSecret) missing.push({ setting: "ALLEVIA_GOOGLE_CLIENT_SECRET", words: "Allevia's Google client secret" });
   if (!g.connectorKey || g.connectorKey.length < 32) missing.push({ setting: "ALLEVIA_CONNECTOR_KEY", words: "the key that locks stored Google access (at least 32 characters)" });

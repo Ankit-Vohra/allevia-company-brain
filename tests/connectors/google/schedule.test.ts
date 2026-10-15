@@ -3,7 +3,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { closeAll, type GraphHandle } from "../../../src/graph/client.js";
 import { upsertNode } from "../../../src/graph/upsert.js";
 import { handleCallback, CONNECTOR, readSystem, type GoogleDeps } from "../../../src/connectors/google/searchconsole.js";
@@ -12,6 +12,8 @@ import { googleSettings } from "../../../src/connectors/google/settings.js";
 import { FileTokenStore } from "../../../src/connectors/google/store.js";
 import { analyticsFor, FakeGoogle, tokens } from "../../helpers/fake-google.js";
 import { testGraph } from "../../helpers/graph.js";
+
+vi.setConfig({ testTimeout: 90_000 }); // a first read writes about 400 numbers per business; a loaded suite needs room
 
 const KEY = "test-connector-key-0123456789abcdef0123456789abcdef";
 const NOW0 = Date.parse("2026-10-15T09:00:00Z");

@@ -4,7 +4,7 @@
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { closeAll, openGraphByName, type GraphHandle } from "../../../src/graph/client.js";
 import { businessId as bizIdOf } from "../../../src/graph/tenants.js";
 import { upsertNode } from "../../../src/graph/upsert.js";
@@ -22,6 +22,8 @@ import { getProgram } from "../../../src/program/scorecard.js";
 import { analyticsFor, FakeGoogle, READONLY, tokens } from "../../helpers/fake-google.js";
 import { testGraph } from "../../helpers/graph.js";
 
+vi.setConfig({ testTimeout: 90_000 }); // a first read writes about 400 numbers; a loaded suite needs room
+
 const KEY = "test-connector-key-0123456789abcdef0123456789abcdef";
 const CONFIG = { clientId: "test-client-id.apps.example", clientSecret: "test-client-secret-xxxxxxxxxxxx", redirectUri: "https://allevia.example/api/connectors/google/callback", connectorKey: KEY };
 const NOW0 = Date.parse("2026-10-15T09:00:00Z");
@@ -38,6 +40,8 @@ describe("settings, in plain words", () => {
     });
     expect(googleSettings({ ...CONFIG, connectorKey: "too short" }).missing.map((m) => m.setting)).toEqual(["ALLEVIA_CONNECTOR_KEY"]);
     expect(googleSettings(CONFIG)).toMatchObject({ configured: true, missing: [] });
+    // parked: with the switch off (the default from config) nothing else counts
+    expect(googleSettings({ ...CONFIG, enabled: false })).toMatchObject({ configured: false, missing: [{ setting: "ALLEVIA_SEARCH_CONSOLE" }] });
   });
 });
 

@@ -123,11 +123,14 @@ describe("server: connect Search Console (integration)", () => {
     expect(await ok.json()).toMatchObject({ state: "connected", property: "https://b.example/" });
   });
 
-  it("public mode refuses every write and the callback, and unknown businesses are a 404", async () => {
+  it("public mode refuses every write; the callback turns away a link it did not make; unknown businesses are a 404", async () => {
     const deps: GoogleDeps = { settings: googleSettings(CONFIG), store: new FileTokenStore(dir, KEY), client: google, now: () => NOW };
     const pub = h.make({ publicMode: true, google: async () => ({ deps, webBaseUrl: WEB }) });
     for (const p of ["connect", "pull", "disconnect", "property"]) expect((await post(pub, `/api/mini/connectors/search-console/${p}`, { siteUrl: "https://a.example/" })).status).toBe(403);
-    expect((await pub.request("/api/connectors/google/callback?code=x&state=y", { redirect: "manual" })).status).toBe(403);
+    // the callback proves itself with the signed state, not with a cookie: with no state of ours it is a 400 in plain words
+    const stray = await pub.request("/api/connectors/google/callback?code=x&state=y", { redirect: "manual" });
+    expect(stray.status).toBe(400);
+    expect(((await stray.json()) as { error: string }).error).toMatch(/run out, or it didn't come from the app/);
     expect((await app.request("/api/nobody/connectors/search-console")).status).toBe(404);
   });
 });
