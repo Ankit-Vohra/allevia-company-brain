@@ -16,6 +16,7 @@ import { getSession, newSessionId, newTurnId, recallBrief, saveTurn, startSessio
 import { runTurn, type TurnOutcome } from "./orchestrator.js";
 import type { AgentRuntime, Emit } from "./runtime.js";
 import { TouchedSet, type AlleviaTool, type ToolContext } from "./tool.js";
+import { loadBusinessSkills } from "./skills/business.js";
 import type { SkillCatalog } from "./skills/catalog.js";
 import type { RecallBrief, TeamSettings } from "./types.js";
 
@@ -102,7 +103,11 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
     // runs with the full team and no instructions (and says so in the log).
     let team: TeamSettings | undefined;
     try { team = await loadTeamSettings(g); } catch (e) { out({ type: "error", message: `Could not read the team settings, so the whole team is on: ${message(e)}` }); }
-    const skills = deps.skills ?? undefined;
+    // The shipped skills with this business's own laid over them (its graph only: a new business has the shipped ones alone).
+    let skills = deps.skills ?? undefined;
+    if (skills) {
+      try { skills = skills.withBusiness(await loadBusinessSkills(g)); } catch (e) { out({ type: "error", message: `Could not read this business's own skills, so the shipped ones are used: ${message(e)}` }); }
+    }
 
     // "Fill it in": the owner accepts the draft's suggestions. Done in code on the draft already in this thread (fillin.ts):
     // no desks run, nothing is re-invented, and the sources are the ones the draft already had.

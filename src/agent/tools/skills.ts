@@ -7,6 +7,7 @@ import { agentById } from "../../../shared/roster.js";
 import type { ToolContext } from "../tool.js";
 import type { SkillCatalog } from "../skills/catalog.js";
 import type { Skill } from "../skills/format.js";
+import { learnedRulesForSkill } from "../skills/business.js";
 import { skillGuidance } from "../skills/render.js";
 import { InputError, defineTool } from "./common.js";
 
@@ -20,7 +21,8 @@ async function runUseSkill(args: { id: string }, ctx: ToolContext) {
     const mine = catalog.forAgent(ctx.agentId).map((s) => s.id);
     throw new InputError(`${me} has no skill "${id}".${mine.length ? ` Yours: ${mine.join(", ")}.` : " You have no skills."}`);
   }
-  const guidance = await skillGuidance(skill, ctx, catalog);
+  const learned = await learnedRulesForSkill(ctx.graph, skill.id);
+  const guidance = await skillGuidance(skill, ctx, catalog, learned);
   return { data: { skill: skill.id, name: skill.name, source: skill.source }, nodes: [], edges: [], sources: [], note: `Opened ${skill.name}`, guidance };
 }
 

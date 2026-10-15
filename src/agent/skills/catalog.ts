@@ -38,7 +38,7 @@ export class SkillCatalog {
   has(agentId: string): boolean { return this.forAgent(agentId).length > 0; }
 
   rulesFor(agentId: string, skillId: string): SkillRule[] {
-    return this.rules.filter((r) => r.skillId === skillId && r.agents.includes(agentId));
+    return this.rules.filter((r) => (r.skillId === skillId || r.skillId === "*") && r.agents.includes(agentId));
   }
 
   /** This catalog with one business's skills and rules laid over it. */
@@ -47,7 +47,7 @@ export class SkillCatalog {
     // An override keeps what the code skill says about itself unless the business says otherwise.
     const mine = b.skills.map((s): Skill => {
       const base = code.get(s.id);
-      return base ? { ...base, ...s, name: s.name || base.name, when: s.when || base.when, tools: s.tools.length ? s.tools : base.tools } : s;
+      return base ? { ...base, name: s.name || base.name, when: s.when || base.when, agents: s.agents, body: s.body, sections: s.sections, source: "business" } : s;
     });
     const out: Skill[] = [];
     for (const s of this.skills) {

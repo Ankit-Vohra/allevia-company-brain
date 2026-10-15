@@ -122,13 +122,30 @@ export interface AgentSettings {
   instructions: Array<{ id: string; text: string; channel?: string; at?: number }>;
 }
 
+// One skill of one person on the team, as the owner reads it (GET /api/:t/agents): what it is for, what it can make, whether
+// it waits for their OK, whether it is the shipped one or this business's own, and the rules that business added to it.
+export interface SkillView {
+  id: string;
+  name: string;
+  when: string;
+  makes?: string;             // plain words, only for a skill that makes something
+  needsOk: boolean;
+  source: "code" | "business";
+  rules: Array<{ id: string; text: string; channel?: string }>;  // the owner's or the team's own rules for this skill
+  learned: string[];          // things the team learned from the owner's edits that belong to this skill
+}
+
 // "Tell your team": the owner's words turned into typed patches, previewed as a diff, then applied.
 export type DirectivePatch =
   | { kind: "agent.enabled"; agent: AgentId; enabled: boolean; note?: string }
   | { kind: "agent.mode"; agent: AgentId; mode: AgentMode }
   | { kind: "agent.autonomy"; agent: AgentId; autonomy: number }
   | { kind: "memory.instruction"; agents: AgentId[]; text: string; channel?: string; limit?: { kind: "max_daily_spend"; amount: number; currency: string } }
-  | { kind: "brand_rule.add"; text: string; ruleKind: "voice" | "visual" };
+  | { kind: "brand_rule.add"; text: string; ruleKind: "voice" | "visual" }
+  // A rule for one skill ("our posts always end with a question" -> Tara's Instagram post craft); skill "*" = all the agent's skills.
+  | { kind: "skill.rule"; agents: AgentId[]; skill: string; text: string; channel?: string }
+  // A skill of this business's own (or one that replaces a shipped skill of the same id) for the named agents.
+  | { kind: "skill.add"; agents: AgentId[]; id: string; name: string; when: string; text: string };
 
 export interface DirectiveDiffLine {
   patch: number;              // index into patches

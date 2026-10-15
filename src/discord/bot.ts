@@ -18,6 +18,7 @@ import { agentById } from "../../shared/roster.js";
 import type { AskInput, AskResult } from "../agent/ask.js";
 import { LANGUAGE_REPLY, parseLanguageSetting, setLanguagePreference } from "../agent/language.js";
 import type { GraphHandle } from "../graph/client.js";
+import { applyDirective, getDirective, parseDirective, previewDirective } from "../settings/directives.js";
 import { DecisionError, decideAndNotify, type ActionOpts, type OnDecision } from "../server/approvals.js";
 import { approvals as listApprovals, latestBrief, sessionDetail } from "../server/reads.js";
 import type { ApprovalDto } from "../server/types.js";
@@ -119,6 +120,15 @@ const quote = (s: string): string => s.split("\n").map((l) => `> ${l}`).join("\n
 export const buttonId = (decision: "approve" | "reject", approvalId: string): string => `${BUTTON_PREFIX}:${decision}:${approvalId}`;
 const BUTTON = new RegExp(`^${BUTTON_PREFIX}:(approve|reject):(.+)$`);
 const CONTINUE = new RegExp(`^${BUTTON_PREFIX}:continue:(.+)$`);
+const RULE_BUTTON = new RegExp(`^${BUTTON_PREFIX}:rule:(apply|skip):(.+)$`);
+
+// A plain message that is clearly a standing rule for one of the team's skills ("Tara, our posts always end with a
+// question"): not a question, and the rules (no model) read all of it as skill rules or skills.
+export function isSkillRule(text: string): boolean {
+  if (text.includes("?") || text.length > 600) return false;
+  const p = parseDirective(text);
+  return p.patches.length > 0 && p.unparsed.length === 0 && p.patches.every((x) => x.kind === "skill.rule" || x.kind === "skill.add");
+}
 
 export function approvalCard(a: ApprovalDto, opts: { buttons?: boolean } = {}): { content: string; buttons: ButtonSpec[] } {
   const who = agentById(a.by)?.name ?? a.by;
@@ -171,6 +181,9 @@ export class AlleviaBot {
       }
       return;
     }
+    if (m.authorIsOwner && (m.channelId === this.d.channelId || m.threadParentId === this.d.channelId) && isSkillRule(question)) {
+      if (await this.offerRule(m, question)) return;
+    }
     if (m.channelId === this.d.channelId) {
       const thread = await m.startThread(threadName(question));
       await this.turn(thread, question, asker, () => this.openSession(thread.id, question, asker));
@@ -178,6 +191,45 @@ export class AlleviaBot {
       const thread = m.thread();
       if (!thread) return;
       await this.turn(thread, question, asker, () => this.sessionFor(thread.id, question, asker));
+    }
+  }
+
+  // A standing rule for a skill, said in plain words: show what would change and let the owner say yes (the same preview
+  // and apply as the web app's "Tell your team"). Nothing is written until the button is pressed.
+  private async offerRule(m: MessagePort, text: string): Promise<boolean> {
+    try {
+      const preview = await previewDirective(this.d.graph, { text, actor: FOUNDER }, { llm: null, now: this.now() });
+      if (!preview.patches.length || preview.unparsed.length) return false;
+      const lines = preview.diff.map((l) => `• ${l.label}: ${l.op === "same" ? "already set" : `"${clip(l.after, 200)}"`}`);
+      const fresh = preview.diff.some((l) => l.op !== "same");
+      await m.reply({
+        content: clip(`${fresh ? "I can set this up for your team:" : "Your team already works this way:"}\n${lines.join("\n")}${fresh ? "\nShall I?" : ""}`, 1900),
+        buttons: fresh ? [
+          { customId: `${BUTTON_PREFIX}:rule:apply:${preview.id}`, label: "Yes, set it up", style: "success" },
+          { customId: `${BUTTON_PREFIX}:rule:skip:${preview.id}`, label: "Not now", style: "secondary" },
+        ] : [],
+      });
+      return true;
+    } catch (e) {
+      this.log(`rule preview failed: ${message(e)}`);
+      return false; // asked as a question instead
+    }
+  }
+
+  private async ruleButton(b: ButtonPort, decision: "apply" | "skip", id: string): Promise<void> {
+    if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
+    if (!b.isOwner) return b.reply("Only the owner can change how the team works.", { ephemeral: true });
+    try {
+      await b.defer?.();
+      const d = await getDirective(this.d.graph, id);
+      if (!d) return b.reply("That change is no longer there. Say it again and I'll set it up.", { ephemeral: true });
+      if (decision === "skip") return b.update({ content: "Okay, nothing changed.", buttons: [] });
+      const done = await applyDirective(this.d.graph, id, { now: this.now() });
+      const lines = done.diff.map((l) => `• ${l.label}: "${clip(l.after, 200)}"`);
+      await b.update({ content: clip(`Done. Your team will work this way from the next request:\n${lines.join("\n")}${done.errors.length ? "\nSome of it did not save; try again in the web app." : ""}`, 1900), buttons: [] });
+    } catch (e) {
+      this.log(`rule ${decision} on ${id} failed: ${message(e)}`);
+      return b.reply("I couldn't save that. Try again, or use Your team in the web app.", { ephemeral: true });
     }
   }
 
@@ -281,6 +333,8 @@ export class AlleviaBot {
       if (!b.isOwner) return b.reply("Only the owner can carry a conversation on here.", { ephemeral: true });
       return this.continueButton(b, cont[1]!);
     }
+    const rule = RULE_BUTTON.exec(b.customId);
+    if (rule) return this.ruleButton(b, rule[1] as "apply" | "skip", rule[2]!);
     const m = BUTTON.exec(b.customId);
     if (!m) return;
     if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
