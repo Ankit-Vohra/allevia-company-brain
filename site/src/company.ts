@@ -36,15 +36,15 @@ export interface CompanyFacts {
 export const COMPANY: CompanyFacts = {
   legalName: "",
   entityType: "",
-  registeredAddress: "",
+  registeredAddress: "Raipur, Chhattisgarh, India",
   country: "India",
   registrationNumber: "",
   founderName: "",
   email: { general: "", support: "", privacy: "", security: "" },
   discordSupportUrl: "",
   privacyOfficer: "",
-  governingLaw: "",
-  hosting: { provider: "Amazon Web Services", region: "" },
+  governingLaw: "the laws of India; the courts of Raipur, Chhattisgarh",
+  hosting: { provider: "Amazon Web Services", region: "Mumbai, India" },
   paymentProvider: "",
 };
 
