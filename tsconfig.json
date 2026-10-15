@@ -12,6 +12,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "verbatimModuleSyntax": false,
+    "allowImportingTsExtensions": true,
     "outDir": "dist",
     "rootDir": "."
   },

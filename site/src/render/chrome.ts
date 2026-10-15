@@ -1,41 +1,48 @@
-// The masthead and the footer, shared by both pages. The site is served from the domain root, so links are absolute.
-import { CONTACT_URL } from "../content.ts";
+// The masthead and the footer, shared by every page. The site is served from the domain root, so links are absolute.
+// Both are built from the page registry (src/pages.ts): a page in the registry with a `nav` label is in the masthead,
+// one with a `footer` column is in the footer.
+import { CONTACT_URL } from "../config.ts";
+import { PAGES } from "../pages.ts";
 
-type Page = "home" | "pricing";
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-export function masthead(page: Page): string {
-  const link = (href: string, label: string, current = false) =>
-    `<li><a href="${href}"${current ? ` aria-current="page"` : ""}>${label}</a></li>`;
+export function masthead(current: string): string {
+  const items = PAGES.filter((p) => p.nav)
+    .map((p) => `<li><a href="${p.path}"${p.path === current ? ` aria-current="page"` : ""}>${esc(p.nav!)}</a></li>`)
+    .join("\n        ");
   return `<header class="mast">
   <div class="mast__in wrap">
-    <a class="wordmark" href="/"${page === "home" ? ` aria-current="page"` : ""}><span class="visually-hidden">Allevia, home</span><span aria-hidden="true">allevia</span></a>
-    <p class="mast__line">A done-for-you AI growth team for small businesses</p>
+    <a class="wordmark" href="/"${current === "/" ? ` aria-current="page"` : ""}><span class="visually-hidden">Allevia, home</span><span aria-hidden="true">allevia</span></a>
+    <p class="mast__line">We set it up. You steer.</p>
     <nav class="mast__nav" aria-label="Main">
       <ul>
-        ${link("/#how", "How it works")}
-        ${link("/#team", "The team")}
-        ${link("/pricing/", "Pricing", page === "pricing")}
-        ${link("/#questions", "Questions")}
+        ${items}
       </ul>
     </nav>
-    <a class="btn btn-gold mast__cta" href="${CONTACT_URL}">Get a Brain Snapshot</a>
+    <a class="btn btn-gold mast__cta" href="${CONTACT_URL}">Get a free Brain Snapshot</a>
   </div>
 </header>`;
 }
 
-export function footer(): string {
+export function footer(current: string): string {
+  const col = (name: "Product" | "Company" | "Legal") => {
+    const links = PAGES.filter((p) => p.footer === name)
+      .map((p) => `<li><a href="${p.path}"${p.path === current ? ` aria-current="page"` : ""}>${esc(p.label ?? p.nav ?? p.title)}</a></li>`)
+      .join("");
+    return links ? `<div class="foot__col"><h2 class="foot__h">${name}</h2><ul>${links}</ul></div>` : "";
+  };
   return `<footer class="foot">
   <div class="wrap foot__in">
-    <p class="foot__letter">Allevia is built and supported by a small team in India, with Aamdani and AVS Atelier as its first businesses. The company brain behind every answer is a knowledge graph that runs on <a href="https://www.falkordb.com/" rel="noopener">FalkorDB</a>.</p>
-    <p class="foot__sign" aria-hidden="true">allevia</p>
-    <nav class="foot__nav" aria-label="Footer">
-      <a href="/">Home</a>
-      <a href="/pricing/">Pricing</a>
-      <a href="/pricing/#basis">How we work out "1/20th"</a>
-      <a href="${CONTACT_URL}">Get a Brain Snapshot</a>
+    <div class="foot__intro">
+      <p class="foot__sign" aria-hidden="true">allevia</p>
+      <p class="foot__letter">Allevia is built and supported by a small team in India, with Aamdani and AVS Atelier as its first two businesses. We set your team up; you steer it.</p>
+    </div>
+    <nav class="foot__cols" aria-label="Footer">
+      ${col("Product")}
+      ${col("Company")}
+      ${col("Legal")}
     </nav>
-    <p class="foot__fine">Prices exclude VAT and GST. Product screenshots are from the working product in October 2026; illustrations are drawn, not photographs.</p>
+    <p class="foot__fine">Prices exclude VAT and GST. Product screens are from the working product in October 2026, with sample numbers where they say so. Illustrations are drawn, not photographs.</p>
   </div>
 </footer>`;
 }
-

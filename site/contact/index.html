@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <!-- @head -->
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <!-- @render masthead -->
+
+    <main id="main">
+      <section class="page-head" aria-labelledby="h1">
+        <div class="wrap page-head__in">
+          <div>
+            <h1 id="h1" class="page-head__h">Talk to a&nbsp;person.</h1>
+            <p class="lede">Ask for your free Brain Snapshot, get help, or make a privacy request. Pick the one that fits.</p>
+          </div>
+          <div class="page-head__side">
+            <img class="side-art" src="/img/art-contact-600.webp" srcset="/img/art-contact-600.webp 600w, /img/art-contact-1000.webp 1000w" sizes="(min-width: 64rem) 22rem, 70vw" width="1000" height="747" decoding="async"
+              alt="Drawing: an open envelope with a blank sheet and an empty speech bubble on ledger paper, beside a cup of tea and a pencil, with a tiny pixel-art figure waving from the envelope." />
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="ways-h">
+        <div class="wrap">
+          <h2 id="ways-h" class="visually-hidden">Ways to reach us</h2>
+          <!-- @render contact-channels -->
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="send-h">
+        <div class="wrap split">
+          <div class="split__text">
+            <h2 id="send-h" class="section__h">What to send for a Brain Snapshot.</h2>
+            <ul class="ticks">
+              <li>Your website address.</li>
+              <li>Your country, so we get the currency, time zone and spelling right.</li>
+              <li>If you have them: your Instagram handle and the name of your Google listing.</li>
+              <li>Please do not send passwords, card numbers or customers' details. We never need them to start.</li>
+            </ul>
+          </div>
+          <div class="split__text">
+            <h2 class="section__h section__h--small">When we reply.</h2>
+            <p class="body">A person reads every message and replies within <!-- @render support-reply -->. We are based in India, so a message sent in your evening is usually answered by your next morning.</p>
+            <p class="body">Our AI team does not answer support messages. If a message here or in Discord reaches you from "Allevia", a person wrote it.</p>
+            <!-- @render company-line -->
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- @render footer -->
+  </body>
+</html>

@@ -3,10 +3,12 @@
 // HTML is complete without JavaScript and a price can never drift from shared/plans.ts.
 import { ALLEVIA_90, CREDIT_COSTS, CREDIT_RULES, CURRENCIES, PLANS, PLAN_BY_ID, type Plan } from "../../../shared/plans.ts";
 import { AGENTS, DEPARTMENTS, numberWord } from "../../../shared/roster.ts";
-import { FAQ, FIRST_WEEK_PROMISES, HIRE_BASIS, PROGRAM_TIMELINE, RHYTHM, WHO_DOES_WHAT } from "../content.ts";
+import { FAQ, HIRE_BASIS, PROGRAM_TIMELINE, RHYTHM, WHO_DOES_WHAT, type FaqItem } from "../content.ts";
 import { CURRENCY_LABEL, formatMoney, moneySpan } from "../money.ts";
 import { spriteSvg } from "./sprites.ts";
 import { footer, masthead } from "./chrome.ts";
+import { LEGAL_BLOCKS } from "./legal.ts";
+import { PAGE_BLOCKS } from "./pages-copy.ts";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const P = PLAN_BY_ID;
@@ -65,13 +67,9 @@ export function currencyToggle(id: string): string {
 
 export function whoDoesWhat(): string {
   const rows = WHO_DOES_WHAT.map(
-    (r) => `<tr><th scope="row">${esc(r.when)}</th><td data-label="You">${esc(r.you)}</td><td data-label="Allevia, the software">${esc(r.software)}</td><td data-label="The Allevia team">${esc(r.team)}</td></tr>`,
+    (r) => `<tr><th scope="row">${esc(r.when)}</th><td data-label="You">${esc(r.you)}</td><td data-label="Your AI team">${esc(r.software)}</td><td data-label="Our people">${esc(r.team)}</td></tr>`,
   ).join("");
-  return `<table class="ledger ledger--who"><caption class="visually-hidden">Who does the work, from setup to upkeep</caption><thead><tr><th scope="col"><span class="visually-hidden">When</span></th><th scope="col">You</th><th scope="col">Allevia, the software</th><th scope="col">The Allevia team, in India</th></tr></thead><tbody>${rows}</tbody></table>`;
-}
-
-export function promises(): string {
-  return `<ul class="promises">${FIRST_WEEK_PROMISES.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`;
+  return `<table class="ledger ledger--who"><caption class="visually-hidden">Who does the work, from setup to upkeep</caption><thead><tr><th scope="col"><span class="visually-hidden">When</span></th><th scope="col">You</th><th scope="col">Your AI team</th><th scope="col">Our people, in India</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 export function team(): string {
@@ -113,25 +111,41 @@ export function programTimeline(variant: "compact" | "full"): string {
 export function pricingTeaser(): string {
   const g = P.growth;
   return `<div class="teaser">
-  <div class="teaser__row teaser__row--lead"><p class="teaser__label">${esc(P90.name)}, the first ${P90.days} days</p><p class="teaser__price">${moneySpan(P90.upfront)}</p><p class="teaser__note">upfront, or ${P90.instalments.count} × ${moneySpan(P90.instalments.each)}. Setup, weekly tuning, strategist reviews on days ${P90.reviewDays.join(", ").replace(/, (\d+)$/, " and $1")}, and ${g.name}-level allowances.</p></div>
+  <div class="teaser__row teaser__row--lead"><p class="teaser__label">Your growth plan, the first three months</p><p class="teaser__price">${moneySpan(P90.upfront)}</p><p class="teaser__note">upfront, or ${P90.instalments.count} × ${moneySpan(P90.instalments.each)}. Setup, weekly tuning, a strategist review each month, and ${g.name}-level allowances.</p></div>
   <div class="teaser__row"><p class="teaser__label">Then ${esc(g.name)}, the default</p><p class="teaser__price">${moneySpan(g.price.monthly)}<span class="per">/month</span></p><p class="teaser__note">All ${AGENTS.length} staff, a named Growth Partner, and every month ${postsAndReels(g.allowances.studioCreditsPerMonth).replace(/^Up/, "up")}.</p></div>
-  <div class="teaser__row"><p class="teaser__label">Founding ${P90.founding.seats}</p><p class="teaser__price">${moneySpan(P90.founding.upfront)}</p><p class="teaser__note">for the program, for our first ${P90.founding.seats} customers, in exchange for case-study rights. ${g.name} then stays at ${moneySpan(P90.founding.growthLocked)}/month for ${P90.founding.growthLockMonths} months.</p></div>
+  <div class="teaser__row"><p class="teaser__label">Founding ${P90.founding.seats}</p><p class="teaser__price">${moneySpan(P90.founding.upfront)}</p><p class="teaser__note">for the first three months, for our first ${P90.founding.seats} customers, in exchange for case-study rights. ${g.name} then stays at ${moneySpan(P90.founding.growthLocked)}/month for ${P90.founding.growthLockMonths} months.</p></div>
 </div>`;
 }
 
-const reviewDaysText = () => P90.reviewDays.join(", ").replace(/, (\d+)$/, " and $1");
-
 export function programLede(): string {
-  return `<p class="lede">Everyone starts with a ${P90.days}-day program. We set everything up, a person checks every piece for the first month, and a strategist reviews progress with you on days ${reviewDaysText()}. The goals are yours, the baseline is today's numbers, and the scorecard shows both.</p>`;
+  return `<p class="lede">Everyone starts with a three-month growth plan. We set everything up, a person checks every piece for the first month, and a strategist reviews progress with you each month. The goals are yours, we write down where you started, and the plan page shows both.</p>`;
 }
 
 export function programFine(): string {
   const g = P90.guarantees;
-  return `<p class="program__fine">A ${g.refundDays}-day full refund, a day-${g.deliveryDay} delivery guarantee, and month 4 free if the leading indicators miss. <a href="/pricing/#allevia-90">The terms, in full.</a></p>`;
+  return `<p class="program__fine">A ${g.refundDays}-day full refund, a ${g.deliveryDay}-day delivery guarantee, and month 4 free if the effort goals miss. <a href="/pricing/#growth-plan">The terms, in full.</a></p>`;
 }
 
+const faqItem = (f: FaqItem) => `<details><summary><h3>${esc(f.q)}</h3></summary><p>${esc(f.a)}</p></details>`;
+
+/** The three questions the home page shows; the whole list is on /faq/. */
 export function faq(): string {
-  return `<div class="faq">${FAQ.map((f) => `<details><summary><h3>${esc(f.q)}</h3></summary><p>${esc(f.a)}</p></details>`).join("")}</div>`;
+  const pick = ["Do I need to be technical?", "Will it post something that embarrasses me?", "Is my business's data mixed with anyone else's?"];
+  return `<div class="faq">${FAQ.filter((f) => pick.includes(f.q)).map(faqItem).join("")}</div>`;
+}
+
+const FAQ_TOPICS: Record<FaqItem["topic"], string> = {
+  start: "Getting started",
+  control: "Staying in control",
+  data: "Your data",
+  money: "Money",
+  limits: "What it does not do",
+};
+
+export function faqAll(): string {
+  return (Object.keys(FAQ_TOPICS) as FaqItem["topic"][])
+    .map((t) => `<section class="faq-group" aria-labelledby="faq-${t}"><h2 class="faq-group__h" id="faq-${t}">${FAQ_TOPICS[t]}</h2><div class="faq">${FAQ.filter((f) => f.topic === t).map(faqItem).join("")}</div></section>`)
+    .join("");
 }
 
 // ---------- pricing ----------
@@ -144,14 +158,14 @@ export function programOffer(): string {
     <p class="offer__alt">upfront, or ${P90.instalments.count} monthly payments of ${moneySpan(P90.instalments.each)}</p>
   </div>
   <ul class="offer__includes">
-    <li>The done-for-you setup: the 15-minute wizard, the optional connect call, and our Setup Desk</li>
-    <li>${g.name}-level allowances for all ${P90.days} days: ${postsAndReels(g.allowances.studioCreditsPerMonth).toLowerCase()} each month (${g.allowances.studioCreditsPerMonth} Studio credits)</li>
-    <li>Weekly tuning, and strategist reviews on days ${P90.reviewDays.join(", ").replace(/, (\d+)$/, " and $1")}</li>
+    <li>The done-for-you setup: the 15-minute start, the optional connect call, and our people finishing the connections with you</li>
+    <li>${g.name}-level allowances for all three months: ${postsAndReels(g.allowances.studioCreditsPerMonth).toLowerCase()} each month (${g.allowances.studioCreditsPerMonth} Studio credits)</li>
+    <li>Weekly tuning, and a strategist review each month</li>
     <li>All ${AGENTS.length} staff in all ${DEPARTMENTS.length} departments</li>
   </ul>
   <div class="offer__founding">
     <p class="offer__founding-title">Founding ${P90.founding.seats}</p>
-    <p>Our first ${P90.founding.seats} customers pay ${moneySpan(P90.founding.upfront)} for the program, in exchange for the right to write up their results as a case study. After day ${P90.days}, ${g.name} stays at ${moneySpan(P90.founding.growthLocked)} a month for ${P90.founding.growthLockMonths} months.</p>
+    <p>Our first ${P90.founding.seats} customers pay ${moneySpan(P90.founding.upfront)} for the three months, in exchange for the right to write up their results as a case study. After month 3, ${g.name} stays at ${moneySpan(P90.founding.growthLocked)} a month for ${P90.founding.growthLockMonths} months.</p>
   </div>
 </div>`;
 }
@@ -160,19 +174,19 @@ export function guarantees(): string {
   const gu = P90.guarantees;
   return `<ol class="guarantees">
   <li><h3>${gu.refundDays}-day full refund</h3><p>No questions asked.</p></li>
-  <li><h3>Day-${gu.deliveryDay} delivery guarantee</h3><p>If, by day ${gu.deliveryDay}, your company brain is not live (at least 3 capabilities working, or their fallback explained), or we have delivered fewer than 4 Monday packs and 12 pieces ready to approve, we refund the remaining two-thirds.</p></li>
-  <li><h3>Month 4 free</h3><p>If fewer than 2 of your 3 leading-indicator goals are hit, provided you acted on at least half of what we proposed. Leading indicators are things we control together: posting 3 times a week, replying to Google reviews within 24 hours, shipping the top 5 search fixes.</p></li>
+  <li><h3>${gu.deliveryDay}-day delivery guarantee</h3><p>If, within ${gu.deliveryDay} days, your team's picture of your business is not live (at least 3 capabilities working, or the reason explained), or we have delivered fewer than 4 Monday packs and 12 pieces ready to approve, we refund the remaining two-thirds.</p></li>
+  <li><h3>Month 4 free</h3><p>If fewer than 2 of your 3 effort goals are hit, provided you acted on at least half of what we proposed. Effort goals are things we control together: posting 3 times a week, replying to Google reviews within 24 hours, shipping the top 5 search fixes.</p></li>
 </ol>
-<p class="fine">We guarantee what we control, never revenue. Your renewal notice arrives at least ${gu.renewalNoticeDays} days before the program converts to a plan.</p>`;
+<p class="fine">We guarantee what we control, never revenue. Your renewal notice arrives at least ${gu.renewalNoticeDays} days before your growth plan turns into a plan.</p>`;
 }
 
 export function plans(): string {
   const cols = PLANS.map((p) => {
     const a = p.allowances;
     const badge = p.isDefault
-      ? `<p class="plan__badge plan__badge--gold">The default after day ${P90.days}</p>`
+      ? `<p class="plan__badge plan__badge--gold">The default after month 3</p>`
       : p.graduatesOnly
-        ? `<p class="plan__badge">For ${esc(P90.name)} graduates</p>`
+        ? `<p class="plan__badge">For growth-plan graduates</p>`
         : `<p class="plan__badge plan__badge--none" aria-hidden="true">&nbsp;</p>`;
     const yearly = p.price.yearly
       ? `<p class="plan__alt">or ${moneySpan(p.price.yearly)} a year, 2 months free</p>`
@@ -240,14 +254,13 @@ export function hireBasis(): string {
   return `<table class="ledger ledger--basis"><caption class="visually-hidden">Allevia against the monthly cost of a social media manager</caption><thead><tr><th scope="col">Market</th><th scope="col" class="num">A loaded hire, per month</th><th scope="col" class="num">Essentials</th><th scope="col" class="num">Growth</th><th scope="col">Source</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-export const BLOCKS: Record<string, () => string> = {
-  "masthead-home": () => masthead("home"),
-  "masthead-pricing": () => masthead("pricing"),
-  footer,
+/** Every block takes the path of the page it is rendered into (the masthead and the footer mark the current page). */
+export const BLOCKS: Record<string, (current: string) => string> = {
+  masthead: (cur) => masthead(cur),
+  footer: (cur) => footer(cur),
   "currency-home": () => currencyToggle("home"),
   "currency-pricing": () => currencyToggle("pricing"),
   "who-does-what": whoDoesWhat,
-  promises,
   team,
   "team-strip": teamStrip,
   "timeline-compact": () => programTimeline("compact"),
@@ -256,10 +269,13 @@ export const BLOCKS: Record<string, () => string> = {
   "program-lede": programLede,
   "program-fine": programFine,
   faq,
+  "faq-all": faqAll,
   "program-offer": programOffer,
   guarantees,
   plans,
   credits,
   rhythm,
   "hire-basis": hireBasis,
+  ...PAGE_BLOCKS,
+  ...LEGAL_BLOCKS,
 };

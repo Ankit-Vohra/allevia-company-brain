@@ -1,4 +1,4 @@
-// The only script on the site: fonts and styles, the currency toggle, and the hero loop. Everything else is plain HTML
+// The only script on the site: fonts and styles, the currency toggle, and the hero and office loops. Everything else is plain HTML
 // built at compile time, and the pages read fine with this script switched off (prices then show in US dollars).
 import "@fontsource-variable/newsreader/opsz.css";
 import "@fontsource/ibm-plex-sans/latin-400.css";
@@ -77,5 +77,48 @@ function startLoop() {
   });
 }
 
-if (document.readyState === "complete") startLoop();
-else window.addEventListener("load", startLoop, { once: true });
+// ---------- the office loop ----------
+// A short loop of the real office. The poster picture is the first paint and the fallback; the loop starts only when it
+// scrolls into view, motion is welcome and the connection isn't on data saver, and it can be paused.
+function setupLoops() {
+  document.querySelectorAll<HTMLElement>("[data-loop]").forEach((fig) => {
+    const v = fig.querySelector<HTMLVideoElement>("video");
+    const btn = fig.querySelector<HTMLButtonElement>("[data-loop-pause]");
+    const src = v?.dataset.mp4;
+    if (!v || !btn || !src || reduce.matches || saveData) return;
+    let started = false;
+    const start = () => {
+      if (started) return;
+      started = true;
+      const s = document.createElement("source");
+      s.type = "video/mp4";
+      s.src = src;
+      v.append(s);
+      v.addEventListener("playing", () => { fig.classList.add("is-playing"); btn.hidden = false; }, { once: true });
+      v.load();
+      v.play().catch(() => { /* autoplay refused: the poster stays */ });
+    };
+    btn.addEventListener("click", () => {
+      const paused = !v.paused;
+      if (paused) v.pause(); else void v.play();
+      btn.setAttribute("aria-pressed", String(paused));
+      btn.textContent = paused ? "Play the loop" : "Pause the loop";
+    });
+    if ("IntersectionObserver" in window) {
+      const io = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) { start(); if (btn.getAttribute("aria-pressed") !== "true") void v.play().catch(() => { /* refused */ }); }
+          else if (started) v.pause();
+        }
+      }, { rootMargin: "100px" });
+      io.observe(fig);
+    } else start();
+  });
+}
+
+// the table of contents on the legal pages starts open on a wide screen and closed on a phone
+document.querySelectorAll<HTMLDetailsElement>("[data-toc]").forEach((d) => { d.open = window.matchMedia("(min-width: 64rem)").matches; });
+
+const boot = () => { startLoop(); setupLoops(); };
+if (document.readyState === "complete") boot();
+else window.addEventListener("load", boot, { once: true });
