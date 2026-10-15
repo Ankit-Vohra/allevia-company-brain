@@ -239,7 +239,7 @@ function similarFn(g: GraphHandle, embed: EmbedFn) {
     if (!vec) return null;
     const rows = await g.roQuery<{ id: string; d: number }>(
       `CALL db.idx.vector.queryNodes('Entity', '${ENTITY_VECTOR_PROP}', 25, vecf32($v)) YIELD node, score
-       WITH node, score WHERE node:${type} RETURN node.id AS id, score AS d ORDER BY d ASC LIMIT 1`, { v: vec });
+       WITH node, score WHERE node:${type} RETURN node.id AS id, score AS d ORDER BY d ASC, id LIMIT 1`, { v: vec });
     return rows[0] ? { id: rows[0].id, score: 1 - rows[0].d } : null;
   };
 }

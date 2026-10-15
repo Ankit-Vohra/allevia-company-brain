@@ -41,8 +41,8 @@ async function runGetEntity(args: { id: string; asOf?: string }, ctx: ToolContex
       `MATCH (n:Entity {id:$id})-[r]-(m:Entity) WHERE ${edgeAt("r", asOf)} AND type(r) <> 'HAD_VERSION'
        AND NOT any(l IN labels(m) WHERE l IN $hidden)
        WITH CASE WHEN startNode(r).id = $id THEN 'out' ELSE 'in' END AS dir, type(r) AS rel, r, m ORDER BY m.name, m.id
-       WITH dir, rel, count(*) AS c, collect({e: ${EDGE("r")}, m: ${NODE("m")}})[0..$cap] AS items
-       RETURN dir, rel, c, items ORDER BY rel, dir LIMIT 100`, { ...p, cap: GROUP_CAP }),
+       WITH dir, rel, count(*) AS c, collect({e: ${EDGE("r")}, m: ${NODE("m")}})[0..$cap] AS items ORDER BY rel, dir LIMIT 100
+       RETURN dir, rel, c, items`, { ...p, cap: GROUP_CAP }),
     ro<{ type: string; c: number }>(ctx,
       `MATCH (n:Entity {id:$id})-[r]-(m:Entity) WHERE ${edgeAt("r", asOf)} AND any(l IN labels(m) WHERE l IN $hidden)
        RETURN [l IN labels(m) WHERE l <> 'Entity'][0] AS type, count(DISTINCT m) AS c`, p),
@@ -54,9 +54,9 @@ async function runGetEntity(args: { id: string; asOf?: string }, ctx: ToolContex
          ws: o.windowStart, we: o.windowEnd, at: at}) AS all
        WITH key, reduce(b = null, x IN all | CASE WHEN b IS NULL OR x.at > b.at OR (x.at = b.at AND x.o.id > b.o.id) THEN x ELSE b END) AS x
        RETURN x.o AS o, x.e AS e, x.metric AS metric, x.value AS value, x.unit AS unit, x.ws AS ws, x.we AS we, x.at AS at
-       ORDER BY at DESC, metric LIMIT $metrics`, { ...p, metrics: METRIC_CAP }),
+       ORDER BY at DESC, metric, o.id LIMIT $metrics`, { ...p, metrics: METRIC_CAP }),
     asOf === undefined ? Promise.resolve([]) : ro<{ id: string; props: string }>(ctx,
-      "MATCH (:Entity {id:$id})-[:HAD_VERSION]->(v:Version) WHERE v.since <= $asOf AND v.until > $asOf RETURN v.id AS id, v.props AS props ORDER BY v.until LIMIT 1", p),
+      "MATCH (:Entity {id:$id})-[:HAD_VERSION]->(v:Version) WHERE v.since <= $asOf AND v.until > $asOf RETURN v.id AS id, v.props AS props ORDER BY v.until, v.id LIMIT 1", p),
   ]);
 
   const col = new Collector();
@@ -190,10 +190,10 @@ async function runHistory(args: { id: string }, ctx: ToolContext) {
     ro<{ createdAt: number | null; kv: Array<[string, unknown]> }>(ctx, `MATCH (n:Entity {id:$id}) RETURN n.createdAt AS createdAt, ${PROPS}`, p),
     ro<{ v: NodeRow; e: EdgeRow; since: number; until: number; changed: string[] | null; props: string | null }>(ctx,
       `MATCH (:Entity {id:$id})-[h:HAD_VERSION]->(v:Version) RETURN ${NODE("v")} AS v, ${EDGE("h")} AS e, v.since AS since, v.until AS until,
-       v.changed AS changed, v.props AS props ORDER BY until DESC LIMIT $cap`, { ...p, cap: EVENT_CAP }),
+       v.changed AS changed, v.props AS props ORDER BY until DESC, v.id LIMIT $cap`, { ...p, cap: EVENT_CAP }),
     ro<{ e: EdgeRow; m: NodeRow; reason: string | null }>(ctx,
       `MATCH (:Entity {id:$id})-[r]-(m:Entity) WHERE r.until IS NOT NULL AND type(r) <> 'HAD_VERSION'
-       RETURN ${EDGE("r")} AS e, ${NODE("m")} AS m, r.closeReason AS reason ORDER BY r.until DESC LIMIT $cap`, { ...p, cap: EVENT_CAP }),
+       RETURN ${EDGE("r")} AS e, ${NODE("m")} AS m, r.closeReason AS reason ORDER BY r.until DESC, id(r) LIMIT $cap`, { ...p, cap: EVENT_CAP }),
     ro<{ versions: number; closed: number }>(ctx,
       `MATCH (n:Entity {id:$id}) OPTIONAL MATCH (n)-[:HAD_VERSION]->(v:Version) WITH n, count(v) AS versions
        OPTIONAL MATCH (n)-[r]-(:Entity) WHERE r.until IS NOT NULL AND type(r) <> 'HAD_VERSION' RETURN versions, count(r) AS closed`, p),
@@ -203,7 +203,7 @@ async function runHistory(args: { id: string }, ctx: ToolContext) {
   // The current edges of a relationship that changed show who or what replaced the closed one.
   const successors = types.length ? await ro<{ e: EdgeRow; m: NodeRow }>(ctx,
     `MATCH (:Entity {id:$id})-[r]-(m:Entity) WHERE r.until IS NULL AND type(r) IN $types
-     RETURN ${EDGE("r")} AS e, ${NODE("m")} AS m ORDER BY r.since DESC LIMIT $cap`,
+     RETURN ${EDGE("r")} AS e, ${NODE("m")} AS m ORDER BY r.since DESC, id(r) LIMIT $cap`,
     { ...p, types, cap: EVENT_CAP }) : [];
 
   // Each event keeps the node and edge it is about; only the events shown contribute them to the result.

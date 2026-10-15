@@ -82,8 +82,8 @@ async function runTopics(args: { limit?: number }, ctx: ToolContext) {
   // Stored communities are grouped on the server (a big tenant has more members than one result holds): their sizes
   // are exact, and each brings a sample of members whose degree names it.
   const stored = await ro<{ c: string | number; size: number; ids: string[] }>(ctx,
-    `MATCH (n:Entity) WHERE n.community IS NOT NULL WITH n.community AS c, collect(n.id) AS ids
-     RETURN c, size(ids) AS size, ids[0..$per] AS ids ORDER BY size DESC LIMIT $groups`,
+    `MATCH (n:Entity) WHERE n.community IS NOT NULL WITH n.community AS c, collect(n.id) AS ids ORDER BY size(ids) DESC, c LIMIT $groups
+     RETURN c, size(ids) AS size, ids[0..$per] AS ids`,
     { per: Math.ceil(MEMBER_SAMPLE / (limit * 2)), groups: limit * 2 });
   const method = stored.length >= 2 ? "stored" : "label_propagation";
   let groups: Array<{ cid: string | number; size: number; ids: string[] }>;

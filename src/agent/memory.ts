@@ -142,7 +142,7 @@ export async function getSession(g: GraphHandle, id: string): Promise<(SessionIn
   const rows = await g.roQuery<{ p: Record<string, unknown> }>("MATCH (s:Session {id:$id}) RETURN properties(s) AS p", { id });
   if (!rows[0]) return null;
   const turns = await g.roQuery<{ id: string; q: string; a: string; at: number; status: string | null; checks: string | null; agents: string[] | null }>(
-    "MATCH (t:Turn)-[r:IN_SESSION]->(:Session {id:$id}) WHERE r.until IS NULL RETURN t.id AS id, t.question AS q, t.answer AS a, t.at AS at, t.status AS status, t.checks AS checks, t.agents AS agents ORDER BY t.at",
+    "MATCH (t:Turn)-[r:IN_SESSION]->(:Session {id:$id}) WHERE r.until IS NULL RETURN t.id AS id, t.question AS q, t.answer AS a, t.at AS at, t.status AS status, t.checks AS checks, t.agents AS agents ORDER BY t.at, t.id",
     { id });
   return {
     ...toSessionInfo(rows[0].p),
@@ -154,7 +154,7 @@ export async function listSessions(g: GraphHandle, o: { limit?: number } = {}): 
   const rows = await g.roQuery<{ p: Record<string, unknown>; n: number; last: number | null }>(
     `MATCH (s:Session) OPTIONAL MATCH (t:Turn)-[:IN_SESSION]->(s)
      WITH s, count(t) AS n, max(t.at) AS last
-     RETURN properties(s) AS p, n, last ORDER BY coalesce(last, s.startedAt) DESC LIMIT $limit`,
+     RETURN properties(s) AS p, n, last ORDER BY coalesce(last, s.startedAt) DESC, s.id LIMIT $limit`,
     { limit: Math.max(1, Math.min(200, o.limit ?? 20)) });
   return rows.map((r) => {
     const s = toSessionInfo(r.p);
@@ -298,7 +298,7 @@ export async function recallBrief(g: GraphHandle, o: { question: string; seedIds
 
   const thread: TurnRow[] = o.sessionId ? (await g.roQuery<TurnRow>(
     `MATCH (t:Turn)-[r:IN_SESSION]->(:Session {id:$sid}) WHERE r.until IS NULL AND coalesce(t.status, 'ok') = 'ok'
-     RETURN t.id AS id, t.question AS q, t.answer AS a, t.at AS at ORDER BY t.at DESC LIMIT 3`, { sid: o.sessionId })).reverse() : [];
+     RETURN t.id AS id, t.question AS q, t.answer AS a, t.at AS at ORDER BY t.at DESC, t.id LIMIT 3`, { sid: o.sessionId })).reverse() : [];
   if (thread.length) {
     sections.push({ title: "This thread so far:", lines: thread.map(turnLine) });
     for (const r of thread) ref(r.id, "Turn", r.q);
@@ -308,7 +308,7 @@ export async function recallBrief(g: GraphHandle, o: { question: string; seedIds
     const inThread = new Set(thread.map((r) => r.id));
     const turns = (await g.roQuery<TurnRow>(
       `MATCH (t:Turn)-[:TOUCHED|CITED]->(x:Entity) WHERE x.id IN $ids AND coalesce(t.status, 'ok') = 'ok'
-       WITH DISTINCT t RETURN t.id AS id, t.question AS q, t.answer AS a, t.at AS at ORDER BY t.at DESC LIMIT 8`, { ids: seeds }))
+       WITH DISTINCT t RETURN t.id AS id, t.question AS q, t.answer AS a, t.at AS at ORDER BY t.at DESC, t.id LIMIT 8`, { ids: seeds }))
       .filter((r) => !inThread.has(r.id)).slice(0, 5);
     if (turns.length) {
       sections.push({ title: "Earlier threads on this:", lines: turns.map(turnLine) });
@@ -318,7 +318,7 @@ export async function recallBrief(g: GraphHandle, o: { question: string; seedIds
     const notes = await g.roQuery<{ id: string; name: string; text: string | null; kind: string | null; asOf: string | null }>(
       `MATCH (m:Memory)-[r:ABOUT]->(x:Entity) WHERE x.id IN $ids AND r.until IS NULL
        WITH DISTINCT m RETURN m.id AS id, m.name AS name, coalesce(m.text, m.summary, m.name) AS text, m.kind AS kind, m.asOf AS asOf
-       ORDER BY coalesce(m.createdAt, 0) DESC LIMIT 8`, { ids: seeds });
+       ORDER BY coalesce(m.createdAt, 0) DESC, m.id LIMIT 8`, { ids: seeds });
     if (notes.length) {
       sections.push({ title: "Notes from the owner and the team:", lines: notes.map((m) => `- [[${m.id}]]${m.kind ? ` (${m.kind})` : ""}${m.asOf ? ` as of ${m.asOf}` : ""}: ${clip(oneLine(m.text ?? ""), 240)}`) });
       for (const m of notes) ref(m.id, "Memory", m.name);
@@ -340,7 +340,7 @@ export async function recallBrief(g: GraphHandle, o: { question: string; seedIds
 
   const prefs = await g.roQuery<{ id: string; name: string; text: string | null }>(
     `MATCH (m:Memory) WHERE m.kind = 'preference'
-     RETURN m.id AS id, m.name AS name, coalesce(m.text, m.summary, m.name) AS text ORDER BY coalesce(m.createdAt, 0) DESC LIMIT 8`);
+     RETURN m.id AS id, m.name AS name, coalesce(m.text, m.summary, m.name) AS text ORDER BY coalesce(m.createdAt, 0) DESC, m.id LIMIT 8`);
   if (prefs.length) {
     sections.push({ title: "Owner preferences:", lines: prefs.map((m) => `- [[${m.id}]] ${clip(oneLine(m.text ?? ""), 200)}`) });
     for (const m of prefs) ref(m.id, "Memory", m.name);

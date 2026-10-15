@@ -70,7 +70,7 @@ async function readExisting(g: GraphHandle, recId: string): Promise<Existing | n
   const [r] = await g.roQuery<Existing>(
     `MATCH (r:Recommendation {id:$id})
      OPTIONAL MATCH (r)-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL
-     WITH r, a ORDER BY coalesce(a.createdAt, 0) DESC
+     WITH r, a ORDER BY coalesce(a.createdAt, 0) DESC, a.id
      RETURN r.status AS status, r.whyTemplate AS whyTemplate, r.summary AS summary,
             [x IN collect(a) WHERE x IS NOT NULL | {id: x.id, status: x.status}] AS approvals`, { id: recId });
   return r ?? null;
