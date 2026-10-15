@@ -6,7 +6,7 @@ import { hueTo256, workLog } from "../../src/cli/_worklog.js";
 describe("CLI registry", () => {
   it("discovers every command file in src/cli (helpers excluded), with unique names", async () => {
     const names = (await loadCommands()).map((c) => c.name);
-    expect(names).toEqual(expect.arrayContaining(["ask", "db:check", "replay", "threads", "capabilities", "tell", "agents"]));
+    expect(names).toEqual(expect.arrayContaining(["ask", "db:check", "replay", "threads", "capabilities", "tell", "agents", "insights", "brief", "approvals"]));
     expect(new Set(names).size).toBe(names.length);
   });
 });

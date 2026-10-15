@@ -132,7 +132,8 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   // agent company: a Turn is handled by agents; each agent PRODUCES Findings (its share of the work, with citations);
   // reviewers REVIEW them; a Finding can build on another agent's Finding (the handoff, visible as BASED_ON).
   ...pat("Turn", "HANDLED_BY", "Agent"),
-  ...pat("Agent", "PRODUCED", ["Finding", "Recommendation", "Content", "Document", "Asset", "Task"]),
+  // Rule: a learned rule is PRODUCED by the copy editor that distilled it from the owner's edit (product design §9.3).
+  ...pat("Agent", "PRODUCED", ["Finding", "Recommendation", "Content", "Document", "Asset", "Task", "Rule"]),
   ...pat("Agent", "REVIEWED", ["Finding", "Content", "Recommendation", "Asset"]),
   ...pat("Finding", "PART_OF", "Turn"),
   ...pat("Finding", "CITED", "*"),
