@@ -4,11 +4,17 @@
 import { z } from "zod";
 import type { ToolContext } from "../tool.js";
 import { ENTITY_TYPES, REL_TYPES, isEntityType, isRelType, type EntityType, type RelType } from "../../graph/schema.js";
+import type { GraphHandle } from "../../graph/client.js";
 import { communities, pageRank } from "../../graph/algorithms.js";
 import {
-  Collector, EDGE, InputError, NODE, SEARCH_TYPES, bounded, brief, clamp, defineTool, getNodes, ro, round, typeOf, type EdgeRow,
-  type NodeRow,
+  ALGO_BUDGET, Collector, EDGE, InputError, NODE, SEARCH_TYPES, bounded, brief, clamp, defineTool, getNodes, ro, round, typeOf,
+  type AlgoBudget, type EdgeRow, type NodeRow,
 } from "./common.js";
+
+// pageRank and communities with their trailing options argument, which carries timeoutMs once the graph-core update
+// lands on dev and is ignored until then (a function of fewer parameters fits this type, so it compiles either way).
+const pageRankIn = pageRank as (g: GraphHandle, label: EntityType | "Entity", rel: RelType | undefined, opts: AlgoBudget) => ReturnType<typeof pageRank>;
+const communitiesIn = communities as (g: GraphHandle, labels: Array<EntityType | "Entity">, rels: RelType[], opts: AlgoBudget) => ReturnType<typeof communities>;
 
 // ---------- important ----------
 
@@ -31,7 +37,7 @@ async function runImportant(args: { label?: EntityType; rel?: RelType; limit?: n
     }
   }
   if (method === "pagerank") {
-    const scores = (await pageRank(bounded(ctx.graph), label, args.rel)).slice(0, 300);
+    const scores = (await pageRankIn(bounded(ctx.graph), label, args.rel, ALGO_BUDGET)).slice(0, 300);
     const nodes = await getNodes(ctx, scores.map((s) => s.id));
     ranked = scores.map((s) => ({ n: nodes.get(s.id)!, score: s.score }))
       .filter((r) => r.n && types.includes(typeOf(r.n) as EntityType)).slice(0, limit);
@@ -82,7 +88,7 @@ async function runTopics(args: { limit?: number }, ctx: ToolContext) {
   if (method === "stored") groups = stored.map((s) => ({ cid: s.c, size: s.size, ids: s.ids }));
   else {
     const byId = new Map<string | number, string[]>();
-    for (const r of await communities(bounded(ctx.graph), [], TOPIC_RELS)) byId.set(r.communityId, [...(byId.get(r.communityId) ?? []), r.id]);
+    for (const r of await communitiesIn(bounded(ctx.graph), [], TOPIC_RELS, ALGO_BUDGET)) byId.set(r.communityId, [...(byId.get(r.communityId) ?? []), r.id]);
     groups = [...byId.entries()].map(([cid, ids]) => ({ cid, size: ids.length, ids })).sort((a, b) => b.size - a.size).slice(0, limit * 2);
   }
   const multi = groups.filter((x) => x.size >= 2);

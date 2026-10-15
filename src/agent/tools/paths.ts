@@ -7,8 +7,8 @@ import type { ToolContext } from "../tool.js";
 import { REL_TYPES, type RelType } from "../../graph/schema.js";
 import { shortestPaths } from "../../graph/algorithms.js";
 import {
-  Collector, EDGE, InputError, MEMORY_RELS, PATH_RELS, bounded, clamp, defineTool, edgeText, getNodes, parseAsOf,
-  requireNode, ro, type EdgeRow,
+  ALGO_BUDGET, Collector, EDGE, InputError, MEMORY_RELS, PATH_RELS, TOOL_ALGO_TIMEOUT_MS, bounded, clamp, defineTool, edgeText,
+  getNodes, parseAsOf, requireNode, ro, type EdgeRow,
 } from "./common.js";
 
 // ---------- find_paths ----------
@@ -18,7 +18,9 @@ async function runFindPaths(args: { from: string; to: string; rels?: RelType[]; 
   if (args.from === args.to) throw new InputError("from and to are the same node.");
   const [a, b] = await Promise.all([requireNode(ctx, args.from), requireNode(ctx, args.to)]);
   const maxPaths = clamp(args.maxPaths, 3, 1, 3);
-  const paths = await shortestPaths(bounded(ctx.graph), a.id, b.id, { relTypes: args.rels?.length ? args.rels : PATH_RELS, maxPaths, asOf });
+  // A variable, not a literal: dev's shortestPaths options gain timeoutMs with the graph-core update (see common.ts).
+  const opts = { relTypes: args.rels?.length ? args.rels : PATH_RELS, maxPaths, asOf, ...ALGO_BUDGET };
+  const paths = await shortestPaths(bounded(ctx.graph), a.id, b.id, opts);
   const col = new Collector();
   col.node(a);
   col.node(b);
@@ -65,7 +67,9 @@ async function runShowPath(args: { ids: string[] }, ctx: ToolContext) {
   if (present[0]) col.node(found.get(present[0]));
   const links: Array<{ from: string; to: string; hops: number; steps: string[] }> = [];
   const unconnected: Array<{ from: string; to: string }> = [];
-  const g = bounded(ctx.graph);
+  const unchecked: Array<{ from: string; to: string }> = [];
+  // One TOOL_ALGO_TIMEOUT_MS budget for every pair's search together (up to 11 searches run one after another).
+  const deadline = Date.now() + TOOL_ALGO_TIMEOUT_MS;
   for (const [a, b] of pairs) {
     const e = directByPair.get(`${a}|${b}`);
     if (e) {
@@ -74,7 +78,14 @@ async function runShowPath(args: { ids: string[] }, ctx: ToolContext) {
       links.push({ from: a, to: b, hops: 1, steps: [edgeText(e)] });
       continue;
     }
-    const [p] = await shortestPaths(g, a, b, { maxPaths: 1, maxLen: 4, relTypes: PATH_RELS });
+    const left = deadline - Date.now();
+    if (left < 100) {
+      col.node(found.get(b));
+      unchecked.push({ from: a, to: b });
+      continue;
+    }
+    const opts = { maxPaths: 1, maxLen: 4, relTypes: PATH_RELS, timeoutMs: left };
+    const [p] = await shortestPaths(bounded(ctx.graph, left), a, b, opts);
     if (p) {
       for (const n of p.nodes.slice(1)) col.ref(n);
       for (const pe of p.edges) col.edgeRef(pe);
@@ -87,8 +98,10 @@ async function runShowPath(args: { ids: string[] }, ctx: ToolContext) {
   const problems = [
     ...(missing.length ? [`Unknown ids: ${missing.join(", ")}.`] : []),
     ...(unconnected.length ? [`Not connected within 4 hops: ${unconnected.map((u) => `${u.from} -> ${u.to}`).join("; ")}.`] : []),
+    ...(unchecked.length ? [`Not checked in time: ${unchecked.map((u) => `${u.from} -> ${u.to}`).join("; ")}.`] : []),
   ];
-  return col.result(ctx, { ordered: [...col.nodes.keys()], links, unconnected, missing }, problems.join(" ") || undefined);
+  return col.result(ctx, { ordered: [...col.nodes.keys()], links, unconnected, ...(unchecked.length ? { unchecked } : {}), missing },
+    problems.join(" ") || undefined);
 }
 
 export const showPath = defineTool({

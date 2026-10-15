@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { GraphHandle, QueryOpts } from "../../../src/graph/client.js";
 import { MissingEndpoint } from "../../../src/graph/errors.js";
 import {
-  ALGO_TIMEOUT_MS, InputError, READ_TIMEOUT_MS, SOURCE_CAP, bounded, clip, compactProps, defineTool, median, parseAsOf, serial, sourcesFor,
+  InputError, READ_TIMEOUT_MS, TOOL_ALGO_TIMEOUT_MS, SOURCE_CAP, bounded, clip, compactProps, defineTool, median, parseAsOf, serial, sourcesFor,
 } from "../../../src/agent/tools/common.js";
 import { makeCtx } from "../../helpers/tools.js";
 
@@ -42,7 +42,7 @@ describe("tool plumbing", () => {
     expect(got.length).toBeGreaterThan(SOURCE_CAP);
     for (let i = 1; i < 30; i++) expect(got).toContain(`d:${i}`);
     expect(got).toContain("d:shared");
-    expect(ALGO_TIMEOUT_MS).toBeLessThanOrEqual(READ_TIMEOUT_MS);
+    expect(TOOL_ALGO_TIMEOUT_MS).toBeLessThanOrEqual(READ_TIMEOUT_MS);
   });
 
   it("defineTool turns input errors, missing endpoints and timeouts into results; other errors throw", async () => {

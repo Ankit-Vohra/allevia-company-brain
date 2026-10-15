@@ -21,11 +21,14 @@ export const DEFAULT_ROWS = 25;
 export const TEXT_CAP = 400;
 export const SOURCE_CAP = 20;          // sources beyond the one-per-node cover
 export const SOURCE_COVER_CAP = 150;   // hard ceiling on the cover itself; every tool returns at most this many nodes
-// Graph algorithms (paths, PageRank, communities) also read projection graphs this module cannot reach: dev's
-// algorithms.ts takes no timeout yet, so those reads use the graph core's default. Pass { timeoutMs: ALGO_TIMEOUT_MS }
-// to shortestPaths/pageRank/communities once they accept it; until then bounded() applies it to every read they make
-// on the tenant graph.
-export const ALGO_TIMEOUT_MS = 8_000;
+// Graph algorithms (paths, PageRank, communities) get one budget per call. The graph core is gaining `timeoutMs` on
+// every algorithms.ts function (one budget across its projection reads and the algorithm query); until dev has it,
+// ALGO_BUDGET rides along in shapes both versions accept (inside shortestPaths' options object, and as a trailing
+// argument the current pageRank/communities ignore: see ranking.ts), and bounded() caps the reads they make on the
+// tenant graph. Once the update lands, bounded() can go.
+export const TOOL_ALGO_TIMEOUT_MS = 8_000;
+export interface AlgoBudget { timeoutMs: number }
+export const ALGO_BUDGET: AlgoBudget = { timeoutMs: TOOL_ALGO_TIMEOUT_MS };
 
 // Types that are plumbing, not business facts: hidden from neighbour lists unless asked for.
 export const BOOKKEEPING_TYPES: EntityType[] = ["Version", "Turn", "Session", "Observation", "Chunk"];
@@ -115,7 +118,7 @@ export async function packed<T>(ctx: ToolContext, body: string, row: string, par
 
 // The graph core's algorithms call roQuery without a timeout; this view caps the reads they make on the tenant graph
 // (paths, projection builds). Queries they run on a projection handle use the core's own default.
-export function bounded(g: GraphHandle, ms = ALGO_TIMEOUT_MS): GraphHandle {
+export function bounded(g: GraphHandle, ms = TOOL_ALGO_TIMEOUT_MS): GraphHandle {
   return new Proxy(g, {
     get(target, key) {
       if (key === "roQuery") {
