@@ -62,7 +62,7 @@ export function artworkPrompt(kit: ComposeKit, o: { scene: string; occasion: Occ
     `Background artwork for a ${F.label.toLowerCase()} for ${b.name}${b.industry ? `, a ${b.industry}` : ""}${b.city ? ` in ${b.city}` : ""}. Scene: ${o.scene.trim()}.${ARTWORK_VARIATIONS[o.variation % ARTWORK_VARIATIONS.length]}`,
     st.visualStyle ? `Visual style of the brand: ${st.visualStyle}` : "",
     `Colour mood drawn from the brand palette (${colours}).`,
-    `Composition: ${F.aspect} frame. The subject sits in the upper half; the lower 45% stays calm, uncluttered and softly toned, so words can be set over it.`,
+    `Composition: one continuous photograph in a ${F.aspect} frame (a single scene: no panels, borders, frames, split screens or collage). The subject sits in the upper half; the lower part of the same scene falls into calm, softly lit, uncluttered space (a plain wall, a floor, a table top in soft focus), so words can be set over it.`,
     "Strictly: no text, no letters, no numbers, no logos, no watermarks, no signs or labels, no faces of people. A finished, photographic or illustrated picture, not a template.",
   ].filter(Boolean).join(" ");
 }

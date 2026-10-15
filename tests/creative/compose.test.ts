@@ -118,6 +118,12 @@ describe("composePoster", () => {
     expect(r.manifest.logo.kind).toBe("wordmark");
   });
 
+  it("does not set the name twice: with no logo file and the name as the headline, there is no separate wordmark", async () => {
+    const r = await composePoster({ format: "insta_portrait", layout: "split", content: { headline: "Kestrel & Oak", subline: "Architecture studio" }, brand: brand(null), artwork: null });
+    expect(r.manifest.logo).toMatchObject({ kind: "wordmark", inHeadline: true });
+    expect(r.manifest.logo.box.w).toBe(0);
+  });
+
   it("flags a small logo file as soft instead of silently stretching it", async () => {
     const tiny = await sharp(logoBytes).resize(120).png().toBuffer();
     const r = await composePoster({ format: "insta_portrait", layout: "hero-bottom", content, brand: brand({ bytes: tiny, w: 120, h: 40 }), artwork: art });

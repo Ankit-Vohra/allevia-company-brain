@@ -114,7 +114,7 @@ export interface CheckDeps { vision: VisionRunner; model?: string }
 
 // The words a poster was meant to carry: what was set (the shown words), plus the name when it is the wordmark.
 export const expectedWords = (m: PosterManifest, businessName: string): string =>
-  [...m.texts.map((t) => t.shown), ...(m.logo.kind === "wordmark" ? [businessName] : [])].join("\n");
+  [...m.texts.map((t) => t.shown), ...(m.logo.kind === "wordmark" && !m.logo.inHeadline ? [businessName] : [])].join("\n");
 
 export async function checkPosters(options: OptionToCheck[], o: { businessName: string; hasLogoFile: boolean }, deps: CheckDeps): Promise<OptionVerdict[]> {
   const blocking = (m: PosterManifest): string[] => m.problems.filter((x) => !/soft/.test(x));

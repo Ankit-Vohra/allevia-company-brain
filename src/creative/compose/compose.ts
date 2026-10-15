@@ -45,7 +45,7 @@ export interface PlacedText { role: string; text: string; shown: string; box: Re
 export interface PosterManifest {
   format: FormatKey; layout: LayoutKey; width: number; height: number;
   texts: PlacedText[];
-  logo: { kind: "file" | "wordmark"; box: Rect; plate: boolean; plateColor?: string; scale: number; sourceW: number; soft: boolean };
+  logo: { kind: "file" | "wordmark"; box: Rect; plate: boolean; plateColor?: string; scale: number; sourceW: number; soft: boolean; inHeadline?: boolean };
   artwork: boolean;
   colours: { paper: string; dark: string; accent: string; light: string; background: string };
   fonts: { heading: string; body: string };
@@ -188,13 +188,14 @@ function fitStack(c: Ctx, o: Omit<StackOpts, "y" | "scale">): { scale: number; h
 }
 
 // Fits and draws the stack in the band [top, bottom]: at the bottom, the top, or the middle of it.
-function placeStack(c: Ctx, o: { x: number; w: number; top: number; bottom: number; align: "left" | "center"; onDark: boolean; at: "bottom" | "top" | "middle"; scaleCap?: number }): void {
+function placeStack(c: Ctx, o: { x: number; w: number; top: number; bottom: number; align: "left" | "center"; onDark: boolean; at: "bottom" | "top" | "middle"; scaleCap?: number }): number {
   const band = o.bottom - o.top;
   const { scale, height } = fitStack(c, { x: o.x, w: o.w, maxH: band, align: o.align, onDark: o.onDark });
   const sc = Math.min(scale, o.scaleCap ?? 1);
   const h2 = sc === scale ? height : stackHeight(c, { x: o.x, w: o.w, maxH: band, align: o.align, onDark: o.onDark, scale: sc });
   const y = o.at === "bottom" ? o.bottom - h2 : o.at === "top" ? o.top : o.top + (band - h2) / 2;
   drawStack(c, { x: o.x, y, w: o.w, maxH: band, align: o.align, onDark: o.onDark, scale: sc });
+  return y;
 }
 
 interface LogoSpot { x: number; y: number; w: number; h: number; align?: "left" | "center" | "right" }
@@ -203,6 +204,11 @@ interface LogoSpot { x: number; y: number; w: number; h: number; align?: "left" 
 async function placeLogo(c: Ctx, base: Buffer, spot: LogoSpot): Promise<{ overlays: OverlayOptions[]; info: PosterManifest["logo"] }> {
   const { brand, p } = c;
   if (!brand.logo) {
+    // the name is already the headline: setting it twice would only crowd the poster
+    const squash = (x: string) => x.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+    if (squash(c.content.headline).includes(squash(brand.businessName))) {
+      return { overlays: [], info: { kind: "wordmark", box: { x: spot.x, y: spot.y, w: 0, h: 0 }, plate: false, scale: 1, sourceW: 0, soft: false, inHeadline: true } };
+    }
     const f = pick(brand.heading, true);
     const region = await sharp(base).extract({ left: Math.max(0, round(spot.x)), top: Math.max(0, round(spot.y)), width: Math.min(c.w - round(spot.x), round(spot.w)), height: Math.min(c.h - round(spot.y), round(spot.h)) }).stats();
     const bg = { r: region.channels[0]!.mean, g: region.channels[1]!.mean, b: region.channels[2]!.mean };
@@ -306,8 +312,9 @@ export async function composePoster(req: ComposeRequest): Promise<ComposedPoster
       c.under += `<rect x="0" y="${artH}" width="${w}" height="${h - artH}" fill="${p.paper}"/>`;
       c.background = p.paper;
       const panelTop = hasArt ? artH + round(h * 0.045) : top + logoH + round(h * 0.06);
-      placeStack(c, { x: m, w: tw, top: panelTop, bottom, align: "left", onDark: false, at: "top" });
-      c.under += `<rect x="${m}" y="${artH + (hasArt ? round(h * 0.018) : 0)}" width="${round(w * 0.12)}" height="${round(h * 0.006)}" fill="${p.accent}"/>`;
+      // the words sit in the middle of the panel (a short headline must not leave half the poster empty), the accent bar just above them
+      const textY = placeStack(c, { x: m, w: tw, top: panelTop, bottom, align: "left", onDark: false, at: hasArt ? "middle" : "top" });
+      c.under += `<rect x="${m}" y="${Math.max(artH + 4, round(textY - h * 0.03))}" width="${round(w * 0.12)}" height="${round(h * 0.006)}" fill="${p.accent}"/>`;
       spot = hasArt ? { x: m, y: top, w: logoW, h: logoH } : { x: m, y: top, w: logoW, h: logoH };
       break;
     }
