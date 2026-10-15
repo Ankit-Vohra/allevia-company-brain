@@ -10,9 +10,18 @@
 // page. Nodes page by internal id (WHERE id(n) >= $from ORDER BY id(n) LIMIT MAX_PAGE, $from = last id + 1: FalkorDB's
 // id scan returns nothing for `id(n) > -1`, so the cursor is inclusive and starts at 0). Edges are read per window of
 // NODE_WINDOW source nodes (an id range FalkorDB scans directly), each window paged the same way on id(r), so the read
-// stays linear in the number of edges. The source is then counted: the rows read must match count() on the source (the
-// read is retried while writes land under it, then ProjectionMismatch), and the finished projection must hold exactly
-// those rows. An algorithm never runs on a partial graph.
+// stays linear in the number of edges. Internal ids are safe cursors because nothing ever deletes from a tenant graph
+// (upserts only add and close; FalkorDB reuses the ids of DELETED entities only): an entity created during a read gets
+// a fresh, higher id, so it is either read or caught by the checks below, never mistaken for another.
+//
+// CONSISTENT READS: a read is several queries, and writes can land between them. It is accepted only when the rows
+// read match count() on the source AND the graph's write mark (in-process counter + shared stamp, below) is the same
+// before and after it, so writes that cancel out in the counts (one edge closed, another opened) are caught too. (A
+// write is marked just after it commits, so one committing at the very end of a read can slip past; its mark then
+// makes the next use rebuild.) Otherwise it is retried with growing, jittered pauses until half the call's budget is spent (the rest is kept for
+// the build and the algorithm), then ProjectionMismatch. The finished projection must hold exactly the rows read. An
+// algorithm never runs on a partial graph. When the current-edges projection cannot settle (a busy ingest), the call
+// runs on the last good cached one instead, if it is still young, and says so (`stale: true`).
 //
 // CACHE: the current-edges projection is kept per graph and reused until a write lands, or until CACHE_TTL_MS passes.
 // noteGraphWrite (called by upsertNode/upsertEdge/closeEdge) records a write twice: an in-process counter, and a small
@@ -23,19 +32,25 @@
 // built per call and dropped afterwards. closeAll() drops the cached projections (onClose hook below).
 //
 // TIME: every read of one call (counts, pages, the algorithm itself) spends one budget, `timeoutMs` (default
-// DEFAULT_READ_TIMEOUT_MS). A cached build started by one caller runs on that caller's budget.
+// DEFAULT_READ_TIMEOUT_MS); settling a read may use up to SETTLE_SHARE of it. A cached build started by one caller
+// runs on that caller's budget.
 //
 // Names: `<graph>__<cur|asof>_<created, base36 ms>_<rand>`. Tenant graphs never contain "__" (graphName forbids it).
 // A sweep drops projections older than STALE_PROJECTION_MS, left behind by processes that died; the cache TTL is
-// shorter, so a cached projection in use is never old enough to be swept.
+// shorter, and a stale fallback is only used while younger than FALLBACK_MAX_AGE_MS, so a cached projection in use is
+// never old enough to be swept.
 import { randomBytes } from "node:crypto";
-import { connect, onClose, onGraphDropped, openGraphByName, readBudget, GraphHandle, MAX_PAGE } from "./client.js";
+import {
+  connect, onClose, onGraphDropped, openGraphByName, readBudget, GraphHandle, DEFAULT_READ_TIMEOUT_MS, MAX_PAGE,
+} from "./client.js";
 import { SEARCHABLE, typeOfLabels, type RelType } from "./schema.js";
 import { currentEdge } from "./read.js";
 import { ProjectionMismatch } from "./errors.js";
 
 export type ProjectionKind = "cur" | "asof";
 export interface ProjectionOpts { timeoutMs?: number }
+// stale: the source kept changing while it was read, so the call ran on the last good (older) projection.
+export interface ProjectionInfo { stale: boolean }
 export const STALE_PROJECTION_MS = 10 * 60_000;
 export const CACHE_TTL_MS = 5 * 60_000;
 export const WRITE_STAMP_TTL_MS = 24 * 60 * 60_000;
@@ -44,7 +59,10 @@ export const SEARCHABLE_LABEL = "Searchable";
 const PROJECTION = /^allevia_\w+?__(?:cur|asof)_([0-9a-z]+)_[0-9a-f]{8}$/;
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const NODE_WINDOW = 2000; // source nodes per edge-read window
-const READ_ATTEMPTS = 3;  // reads of a source that keeps changing before ProjectionMismatch
+const SETTLE_SHARE = 0.5;  // share of a call's budget that retries of an inconsistent read may use
+const BACKOFF_MS = 20;     // first pause between read attempts; doubles, jittered, up to BACKOFF_MAX_MS
+const BACKOFF_MAX_MS = 500;
+const FALLBACK_MAX_AGE_MS = STALE_PROJECTION_MS - 60_000; // a fallback must not be old enough to be swept mid-use
 const SEARCHABLE_SET = new Set<string>(SEARCHABLE);
 const log = (what: string) => (e: unknown) => console.error(`[graph] ${what}: ${(e as Error).message}`);
 
@@ -109,6 +127,11 @@ export function noteGraphWrite(graph: string): Promise<void> {
     .then(() => undefined, log(`could not stamp a write on ${graph}`));
 }
 
+// The graph's write mark: changes with every noteGraphWrite, in this process or another.
+interface WriteMark { writes: number; stamp: string | null }
+const writeMark = async (graph: string): Promise<WriteMark> => ({ writes: writes.get(graph) ?? 0, stamp: await readStamp(graph) });
+const sameMark = (a: WriteMark, b: WriteMark): boolean => a.writes === b.writes && a.stamp === b.stamp;
+
 // ---------- reading the source ----------
 
 interface NodeRow { nid: number; id: string; labels: string[] }
@@ -152,20 +175,46 @@ async function readEdges(g: GraphHandle, nids: number[], where: string, params: 
   return out;
 }
 
-// Null when the source has no entities. Throws ProjectionMismatch when the rows read never matched the source's counts.
-async function readSource(g: GraphHandle, where: string, params: Record<string, unknown>, left: Budget): Promise<Snapshot | null> {
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// One consistent read of the source (see CONSISTENT READS), with the write mark it reflects; `snap` is null when the
+// source has no entities. Throws ProjectionMismatch when no read settled before `settleBy`. The reads themselves stop
+// at `settleBy` too (their server-side timeout), so a slow or busy server never eats the share kept for the rest.
+async function readSource(
+  g: GraphHandle, where: string, params: Record<string, unknown>, left: Budget, settleBy: number,
+): Promise<{ snap: Snapshot | null; mark: WriteMark }> {
+  const unsettled = (attempt: number, why: string) =>
+    new ProjectionMismatch(`${g.name}: timed out before a consistent read (${attempt} attempts, until half the budget): ${why}`);
+  const until: Budget = () => {
+    const ms = Math.min(left(), settleBy - Date.now());
+    if (ms < 1) throw unsettled(0, "no time left to read");
+    return ms;
+  };
   for (let attempt = 1; ; attempt++) {
-    const nodes = await readNodes(g, left);
-    const edges = nodes.length ? await readEdges(g, nodes.map((n) => n.nid), where, params, left) : [];
-    const nodeCount = await count(g, "MATCH (n:Entity) RETURN count(n) AS c", {}, left);
-    const edgeCount = await count(g, `MATCH (a:Entity)-[r]->(b:Entity) WHERE ${where} RETURN count(r) AS c`, params, left);
+    let nodes: NodeRow[], edges: EdgeRow[], nodeCount: number, edgeCount: number, before: WriteMark, after: WriteMark;
+    try {
+      before = await writeMark(g.name);
+      nodes = await readNodes(g, until);
+      edges = nodes.length ? await readEdges(g, nodes.map((n) => n.nid), where, params, until) : [];
+      nodeCount = await count(g, "MATCH (n:Entity) RETURN count(n) AS c", {}, until);
+      edgeCount = await count(g, `MATCH (a:Entity)-[r]->(b:Entity) WHERE ${where} RETURN count(r) AS c`, params, until);
+      after = await writeMark(g.name);
+    } catch (e) {
+      if (e instanceof ProjectionMismatch || /timed out/i.test((e as Error).message)) throw unsettled(attempt, "the read did not finish in time");
+      throw e;
+    }
     const known = new Set(nodes.map((n) => n.nid));
     const dangling = edges.filter((e) => !known.has(e.s) || !known.has(e.d)).length;
-    if (nodes.length === nodeCount && edges.length === edgeCount && dangling === 0) return nodes.length ? { nodes, edges } : null;
-    if (attempt >= READ_ATTEMPTS) {
-      throw new ProjectionMismatch(`${g.name}: read ${nodes.length} of ${nodeCount} nodes and ${edges.length} of ${edgeCount} edges ` +
-        `(${dangling} with an unread endpoint) in ${attempt} attempts: the graph kept changing, or a read was truncated`);
+    const quiet = sameMark(before, after);
+    if (quiet && nodes.length === nodeCount && edges.length === edgeCount && dangling === 0) {
+      return { snap: nodes.length ? { nodes, edges } : null, mark: before };
     }
+    const pause = Math.min(BACKOFF_MAX_MS, BACKOFF_MS * 2 ** (attempt - 1)) * (0.5 + Math.random() / 2);
+    if (Date.now() + pause >= settleBy) {
+      throw unsettled(attempt, `last read ${nodes.length} of ${nodeCount} nodes and ${edges.length} of ${edgeCount} edges ` +
+        `(${dangling} with an unread endpoint), ${quiet ? "no write" : "a write"} during it: the graph kept changing, or a read was truncated`);
+    }
+    await sleep(pause);
   }
 }
 
@@ -185,13 +234,15 @@ function groupBy<T>(xs: T[], key: (x: T) => string | undefined): Map<string, T[]
   return m;
 }
 
-// Returns null when the source graph has no typed entities (nothing to project; callers run on the source).
-async function buildProjection(g: GraphHandle, kind: ProjectionKind, asOf: number | undefined, rels: readonly RelType[], left: Budget): Promise<GraphHandle | null> {
+// `handle` is null when the source graph has no typed entities (nothing to project; callers run on the source).
+async function buildProjection(
+  g: GraphHandle, kind: ProjectionKind, asOf: number | undefined, rels: readonly RelType[], left: Budget, settleBy: number,
+): Promise<{ handle: GraphHandle | null; mark: WriteMark }> {
   const where = `${asOf === undefined ? currentEdge("r") : currentEdge("r", "asOf")}${rels.length ? " AND type(r) IN $rels" : ""}`;
-  const snap = await readSource(g, where, { asOf, rels }, left);
+  const { snap, mark } = await readSource(g, where, { asOf, rels }, left, settleBy);
   // Typeless nodes (no entity label) are not projected, nor their edges; everything else must land.
   const typed = snap?.nodes.filter((n) => typeOfLabels(n.labels) !== undefined).length ?? 0;
-  if (!snap || !typed) return null;
+  if (!snap || !typed) return { handle: null, mark };
   await sweepOnce();
   const proj = await openGraphByName(projectionName(g.name, kind));
   try {
@@ -220,7 +271,7 @@ async function buildProjection(g: GraphHandle, kind: ProjectionKind, asOf: numbe
     if (pn !== typed || pe !== typedEdges) {
       throw new ProjectionMismatch(`${proj.name}: holds ${pn} nodes and ${pe} edges, expected ${typed} and ${typedEdges}`);
     }
-    return proj;
+    return { handle: proj, mark };
   } catch (e) {
     await proj.drop().catch(log(`could not drop half-built projection ${proj.name}`));
     throw e;
@@ -231,14 +282,14 @@ async function buildProjection(g: GraphHandle, kind: ProjectionKind, asOf: numbe
 
 interface Cached {
   handle: GraphHandle | null;
-  writes: number;        // the in-process write counter when the build started
-  stamp: string | null;  // the shared write stamp when the build started
+  mark: WriteMark;  // the source's write mark its read reflects
   builtAt: number;
   users: number;
-  retired: boolean;
+  retired: boolean; // replaced or forgotten: dropped once its last user is done
   dropped: boolean;
 }
-const cache = new Map<string, Promise<Cached>>();
+const current = new Map<string, Cached>();            // the last good projection of each graph
+const building = new Map<string, Promise<Cached>>();  // the rebuild in flight, shared by every caller that needs it
 
 function dropIfUnused(c: Cached): Promise<void> {
   if (!c.retired || c.users > 0 || !c.handle || c.dropped) return Promise.resolve();
@@ -251,32 +302,52 @@ function retire(c: Cached): Promise<void> {
   return dropIfUnused(c);
 }
 
-async function acquire(g: GraphHandle, left: Budget): Promise<Cached> {
-  const stamp = await readStamp(g.name);
-  const p = cache.get(g.name);
-  if (p) {
-    const c = await p.catch(() => undefined);
-    if (c && !c.retired && c.writes === (writes.get(g.name) ?? 0) && c.stamp === stamp && Date.now() - c.builtAt < CACHE_TTL_MS) {
-      c.users++;
-      return c;
-    }
-    if (cache.get(g.name) === p) {
-      cache.delete(g.name);
-      if (c) void retire(c);
-    }
+function forget(graph: string, c: Cached): Promise<void> {
+  if (current.get(graph) === c) current.delete(graph);
+  return retire(c);
+}
+
+const fresh = (c: Cached, mark: WriteMark): boolean => !c.retired && sameMark(c.mark, mark) && Date.now() - c.builtAt < CACHE_TTL_MS;
+const usableFallback = (c: Cached | undefined): c is Cached =>
+  c !== undefined && !c.retired && c.handle !== null && Date.now() - c.builtAt < FALLBACK_MAX_AGE_MS;
+
+async function acquire(g: GraphHandle, left: Budget, settleBy: number): Promise<{ c: Cached; stale: boolean }> {
+  const last = current.get(g.name);
+  if (last && fresh(last, await writeMark(g.name))) {
+    last.users++;
+    return { c: last, stale: false };
   }
-  let next = cache.get(g.name); // another caller may already be rebuilding
+  let next = building.get(g.name); // another caller may already be rebuilding
   if (!next) {
-    const seen = writes.get(g.name) ?? 0;
-    const building = buildProjection(g, "cur", undefined, [], left)
-      .then((handle): Cached => ({ handle, writes: seen, stamp, builtAt: Date.now(), users: 0, retired: false, dropped: false }));
-    next = building;
-    cache.set(g.name, building);
-    building.catch(() => { if (cache.get(g.name) === building) cache.delete(g.name); });
+    const build: Promise<Cached> = buildProjection(g, "cur", undefined, [], left, settleBy)
+      .then(({ handle, mark }) => {
+        const c: Cached = { handle, mark, builtAt: Date.now(), users: 0, retired: false, dropped: false };
+        if (building.get(g.name) === build) { // still wanted: the graph was not dropped, nor the cache cleared
+          const prev = current.get(g.name);
+          current.set(g.name, c);
+          if (prev) void retire(prev);
+        } else {
+          c.retired = true; // its callers use it, then it is dropped
+        }
+        return c;
+      })
+      .finally(() => { if (building.get(g.name) === build) building.delete(g.name); });
+    building.set(g.name, build);
+    next = build;
   }
-  const c = await next;
-  c.users++;
-  return c;
+  try {
+    const c = await next;
+    c.users++;
+    return { c, stale: false };
+  } catch (e) {
+    // The source kept changing: run on the last good projection rather than fail, and say so.
+    const fallback = current.get(g.name);
+    if (e instanceof ProjectionMismatch && usableFallback(fallback)) {
+      fallback.users++;
+      return { c: fallback, stale: true };
+    }
+    throw e;
+  }
 }
 
 function release(c: Cached): void {
@@ -284,13 +355,17 @@ function release(c: Cached): void {
   void dropIfUnused(c);
 }
 
-// Dropping a graph (GraphHandle.drop) also drops its projections: forget the cache entry, the counter and the stamp.
+// Dropping a graph (GraphHandle.drop) also drops its projections: forget the cache entries, the counter and the stamp.
 onGraphDropped(async (name) => {
   if (isProjectionName(name)) return;
-  const p = cache.get(name);
-  cache.delete(name);
+  const c = current.get(name);
+  current.delete(name);
+  building.delete(name);
   writes.delete(name);
-  p?.then((c) => { c.retired = true; c.dropped = true; }, () => {});
+  if (c) {
+    c.retired = true;
+    c.dropped = true;
+  }
   try {
     await (await redis()).del(writeStampKey(name));
   } catch (e) {
@@ -300,14 +375,11 @@ onGraphDropped(async (name) => {
 
 // Shutdown: drop every cached projection this process holds. One still in use is dropped when its user finishes.
 export async function dropCachedProjections(): Promise<void> {
-  const all = [...cache.values()];
-  cache.clear();
-  const drops: Array<Promise<void>> = [];
-  for (const p of all) {
-    const c = await p.catch(() => undefined);
-    if (c) drops.push(retire(c));
-  }
-  await Promise.all(drops);
+  const done = [...current.values()];
+  const pending = [...building.values()];
+  current.clear();
+  building.clear();
+  await Promise.all([...done.map(retire), ...pending.map((p) => p.then(retire, () => {}))]);
 }
 
 onClose(dropCachedProjections);
@@ -316,21 +388,24 @@ onClose(dropCachedProjections);
 
 // Runs `fn` on a graph whose edges are exactly those valid now (asOf undefined: the cached projection) or at asOf
 // (a per-call projection, skipped when every edge of `rels` was valid then). An empty source graph runs as is.
-// `fn` gets the budget too: pass `left()` as the timeoutMs of its own reads.
+// `fn` gets the budget too (pass `left()` as the timeoutMs of its own reads), and `info.stale` when it runs on the last
+// good projection because the source would not hold still (current edges only; an asOf call throws instead).
 export async function onEdgesValidAt<T>(
   g: GraphHandle, asOf: number | undefined, rels: readonly RelType[],
-  fn: (h: GraphHandle, left: () => number) => Promise<T>, opts: ProjectionOpts = {},
+  fn: (h: GraphHandle, left: () => number, info: ProjectionInfo) => Promise<T>, opts: ProjectionOpts = {},
 ): Promise<T> {
-  const left = readBudget(opts.timeoutMs);
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
+  const left = readBudget(timeoutMs);
+  const settleBy = Date.now() + timeoutMs * SETTLE_SHARE;
   if (asOf === undefined) {
     for (let attempt = 0; ; attempt++) {
-      const c = await acquire(g, left);
+      const { c, stale } = await acquire(g, left, settleBy);
       try {
-        return await fn(c.handle ?? g, left);
+        return await fn(c.handle ?? g, left, { stale });
       } catch (e) {
         // the projection vanished under us (swept or dropped elsewhere): rebuild once
-        if (attempt === 0 && c.handle && /empty key/i.test((e as Error).message)) {
-          void retire(c);
+        if (attempt === 0 && c.handle && /empty key|deleted or replaced/i.test((e as Error).message)) {
+          void forget(g.name, c);
           continue;
         }
         throw e;
@@ -339,13 +414,13 @@ export async function onEdgesValidAt<T>(
       }
     }
   }
-  const stale = await count(g,
+  const notValid = await count(g,
     `MATCH ()-[r]->() WHERE NOT (${currentEdge("r", "asOf")})${rels.length ? " AND type(r) IN $rels" : ""} RETURN count(r) AS c`, { asOf, rels }, left);
-  if (!stale) return fn(g, left);
-  const proj = await buildProjection(g, "asof", asOf, rels, left);
-  if (!proj) return fn(g, left);
+  if (!notValid) return fn(g, left, { stale: false });
+  const { handle: proj } = await buildProjection(g, "asof", asOf, rels, left, settleBy);
+  if (!proj) return fn(g, left, { stale: false });
   try {
-    return await fn(proj, left);
+    return await fn(proj, left, { stale: false });
   } finally {
     // never let a failed drop hide the algorithm's own error; a later sweep collects the orphan
     await proj.drop().catch(log(`could not drop projection ${proj.name}`));
