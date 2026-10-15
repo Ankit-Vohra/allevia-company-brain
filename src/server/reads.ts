@@ -172,7 +172,7 @@ export interface StoredTurn { id: string; sessionId: string; question: string; s
 
 export async function storedTurn(g: GraphHandle, turnId: string, o: { showcaseOnly: boolean }): Promise<StoredTurn | null> {
   const rows = await ro<{ q: string | null; sid: string | null; status: string | null; error: string | null; e: string | null; showcase: boolean | null }>(g,
-    `MATCH (t:Turn {id:$id}) RETURN t.question AS q, t.sessionId AS sid, t.status AS status, t.error AS error, t.events AS e,
+    `MATCH (t:Entity:Turn {id:$id}) RETURN t.question AS q, t.sessionId AS sid, t.status AS status, t.error AS error, t.events AS e,
        t.showcase AS showcase LIMIT 1`, { id: turnId });
   const r = rows[0];
   if (!r || (o.showcaseOnly && r.showcase !== true)) return null;

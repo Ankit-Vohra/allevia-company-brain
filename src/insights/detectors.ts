@@ -857,7 +857,7 @@ const techSentryNewIssues: Detector = {
     const days = windowDays(latest.from, latest.at);
     const issues = (await sentryIssues(g)).filter((i) => i.app === latest.subject && i.isNew);
     const events = await ro<{ id: string; metric: string; value: number }>(g,
-      `MATCH (o:Observation)-[m:MEASURES]->(e:Event) WHERE o.metric IN ['sentry_issue_events', 'sentry_issue_users'] AND m.until IS NULL AND e.id IN $ids
+      `MATCH (o:Observation)-[m:MEASURES]->(e:Entity:Event) WHERE o.metric IN ['sentry_issue_events', 'sentry_issue_users'] AND m.until IS NULL AND e.id IN $ids
        WITH e, o.metric AS metric, o ORDER BY coalesce(o.windowEnd, o.asOf) DESC, o.id DESC
        RETURN e.id AS id, metric, collect(o.value)[0] AS value ORDER BY id, metric`, { ids: issues.map((i) => i.id) });
     const ev = (id: string, metric: string) => events.find((x) => x.id === id && x.metric === metric)?.value;
@@ -1008,7 +1008,7 @@ const techAppReviewWaiting: Detector = {
     const min = opts.reviewWaitDays ?? REVIEW_WAIT_DAYS;
     if (!days || !num(days.value) || days.value < min) return [];
     const [ch] = await ro<{ version: string | null; state: string | null; sent: string | null }>(g,
-      "MATCH (c:Channel {id:$id}) RETURN c.latestVersion AS version, c.latestVersionState AS state, c.reviewSubmittedAt AS sent", { id: days.subject });
+      "MATCH (c:Entity:Channel {id:$id}) RETURN c.latestVersion AS version, c.latestVersionState AS state, c.reviewSubmittedAt AS sent", { id: days.subject });
     const [ev] = ch?.version ? await ro<{ id: string }>(g, "MATCH (e:Event {kind:'release', platform:'ios', version:$v}) RETURN e.id AS id ORDER BY id LIMIT 1", { v: ch.version }) : [];
     const waited = Math.floor(days.value);
     const what = ch?.version ? `iPhone app update ${ch.version}` : "iPhone app update";
