@@ -10,7 +10,7 @@ import {
 import { directPrompt, synthesisPrompt } from "../../src/agent/prompts.js";
 import { FakeRuntime, type FakeScript, type RunInput } from "../../src/agent/runtime.js";
 import type { AlleviaTool } from "../../src/agent/tool.js";
-import { FINDING_MAX_CHARS } from "../../src/agent/prompts.js";
+import { CONTENT_FINDING_MAX_CHARS, FINDING_MAX_CHARS } from "../../src/agent/prompts.js";
 import { fakeTool, recorder, result, NOW } from "../helpers/agent.js";
 
 // ---------- fixtures ----------
@@ -837,6 +837,58 @@ describe("runTurn: a long finding is cut between items, never inside one", () =>
     expect(f.text.length).toBeLessThanOrEqual(FINDING_MAX_CHARS);
     expect(f.text.endsWith("…")).toBe(false);
     for (const line of f.text.split("\n")) expect(line === long.split("\n")[0] || bullets.includes(line), line).toBe(true);
+  });
+});
+
+describe("runTurn: content findings hold the whole deliverable", () => {
+  it("a week of captions and a script (about 3000 characters) is kept whole; a revision keeps it too", async () => {
+    const day = (i: number) => `${i}. "Hook line ${i}? A calm sentence about the project, from what the record says [[content:reel-1]]. Another short one."`;
+    const week = `Seven captions and the reel script.\n${Array.from({ length: 7 }, (_, i) => day(i + 1)).join("\n")}\n\nScript, 0-3s: hook. 3-10s: the problem. 10-17s: the answer. 17-20s: the name.`;
+    const big = `${week}\n${"Film: the place, from the owner's own phone. ".repeat(40)}`.slice(0, 3200);
+    expect(big.length).toBeGreaterThan(FINDING_MAX_CHARS);
+    const { events, run, runtime } = setup({
+      "chief-of-staff:plan": plan([{ agent: "content-strategist", task: "A week of posts and a reel script" }]),
+      "content-strategist:work": { calls: [{ name: "content_performance" }], ...finding(big) },
+      "content-strategist:revise": finding(`${big}\n(Dev: fixed one hook.)`),
+      "copy-editor:review": { structured: { verdict: "fix", note: "Hook 3 is vague." } },
+      "fact-checker:review": { structured: { verdict: "ok", note: "ok" } },
+      "chief-of-staff:synthesis": { text: "Here it is [[content:reel-1]]." },
+    });
+    await run();
+    const fs = events.filter(is("finding", "content-strategist")) as Array<Extract<AgentEvent, { type: "finding" }>>;
+    expect(fs[0]!.text.length).toBeGreaterThan(FINDING_MAX_CHARS);
+    expect(fs[0]!.text).toContain("Script, 0-3s");
+    expect(fs[1]!.text).toContain("(Dev: fixed one hook.)");
+    expect(runtime.runs.find((r) => r.phase === "work" && r.agentId === "content-strategist")!.prompt).toContain(`at most ${CONTENT_FINDING_MAX_CHARS} characters`);
+  });
+});
+
+describe("runTurn: a reviewer that did not run", () => {
+  const scripts = (review: FakeScript): Record<string, FakeScript> => ({
+    "chief-of-staff:plan": plan([{ agent: "content-strategist", task: "A caption" }]),
+    "content-strategist:work": { calls: [{ name: "content_performance" }], ...finding("A calm caption about Reel 1 [[content:reel-1]].") },
+    "copy-editor:review": { structured: { verdict: "ok", note: "Plain." } },
+    "fact-checker:review": review,
+    "chief-of-staff:synthesis": { text: "Here is the caption [[content:reel-1]]." },
+  });
+
+  it("is asked again once; a second try that works counts as a normal review", async () => {
+    const { run, runtime } = setup(scripts([{ fail: "Claude Code process terminated by signal SIGSEGV" }, { structured: { verdict: "ok", note: "Checked." } }]));
+    const out = await run();
+    expect(runtime.runs.filter((r) => r.agentId === "fact-checker" && r.phase === "review")).toHaveLength(2);
+    expect(out.reviews.map((r) => r.reviewer).sort()).toEqual(["copy-editor", "fact-checker"]);
+    expect(runtime.runs.find((r) => r.phase === "synthesis")!.prompt).not.toContain("could not check");
+  });
+
+  it("if it still cannot run, the Chief is told the finding is unchecked and must say so (the check fails closed, not silent)", async () => {
+    const { run, runtime, events } = setup(scripts({ fail: "Claude Code process terminated by signal SIGSEGV" }));
+    const out = await run();
+    expect(runtime.runs.filter((r) => r.agentId === "fact-checker" && r.phase === "review")).toHaveLength(2);
+    const p = runtime.runs.find((r) => r.phase === "synthesis")!.prompt;
+    expect(p).toContain("Nisha (Fact Checker) could not check this finding");
+    expect(p).toMatch(/say plainly that .* was not fact-checked/);
+    expect(events.some(is("agent_done", "fact-checker", (e) => e.ok === false))).toBe(true);
+    expect(out.ok).toBe(true);
   });
 });
 
