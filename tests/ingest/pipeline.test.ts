@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes, createHash } from "node:crypto";
 import { closeAll, openGraph, openGraphByName, type GraphHandle } from "../../src/graph/client.js";
-import { runIngest, alignAdrDecision, extractionOrder, type IngestRun } from "../../src/ingest/pipeline.js";
+import { runIngest, alignAdrDecision, extractionOrder, mergeNodes, type IngestRun } from "../../src/ingest/pipeline.js";
 import type { Extraction } from "../../src/ingest/extract.js";
 import type { LlmRunner, StructuredInput } from "../../src/ingest/llm.js";
 import type { RawDoc } from "../../src/ingest/types.js";
@@ -50,7 +50,8 @@ const EXTRACTIONS: Array<[string, Extraction]> = [
     relations: [
       { from: "Instagram", fromType: "Channel", type: "PART_OF", to: "Widget Co", toType: "Business", evidence: "Instagram is the main channel", conf: 0.8 },
     ],
-    observations: [],
+    // the same number as the daily report, corrected by this later document
+    observations: [{ ref: "o1", metric: "reels_reach", subject: "Instagram", subjectType: "Channel", value: 1250, asOf: "2026-10-10", evidence: "On 2026-10-10 the reels reached 1,250 accounts." }],
   }],
 ];
 
@@ -101,6 +102,20 @@ describe("alignAdrDecision", () => {
     expect(alignAdrDecision(ex(["Pause posting"]), "ADR 002: Something else").entities[0]!.name).toBe("ADR 002: Something else");
     const two = alignAdrDecision(ex(["Pause posting", "Hire a designer"]), "ADR 003: Budget rules");
     expect(two.entities.map((e) => e.name)).toEqual(["Pause posting", "Hire a designer"]);
+  });
+});
+
+describe("mergeNodes", () => {
+  it("keeps the first source's name (the registry names its connectors), the newest source's state, and fills the rest", () => {
+    const merged = mergeNodes([
+      [{ type: "System", id: "system:instagram", name: "Instagram Graph API", summary: "Publishes reels.", props: { kind: "connector", status: "connected", owner: "ops" }, src: "document:reg", asOf: "2026-10-01" }],
+      [{ type: "System", id: "system:instagram", name: "instagram", props: { kind: "connector", status: "ok" }, src: "document:snap", asOf: "2026-10-15" }],
+      [{ type: "Channel", id: "channel:x", name: "X", asOf: "2026-10-01" }],
+    ]);
+    expect(merged).toEqual([
+      { type: "System", id: "system:instagram", name: "Instagram Graph API", summary: "Publishes reels.", props: { kind: "connector", status: "ok", owner: "ops" }, src: "document:snap", asOf: "2026-10-15" },
+      { type: "Channel", id: "channel:x", name: "X", asOf: "2026-10-01" },
+    ]);
   });
 });
 
@@ -177,12 +192,15 @@ describe("runIngest (integration, fixture vault, fake model)", () => {
     expect(al[0]!.a).toEqual(["Require human review for every post"]);
   });
 
-  it("resolves the founder's name, reuses existing channels, and keeps report numbers as observations", async () => {
+  it("resolves the founder's name, reuses existing channels, and lets a later document correct a reported number", async () => {
     const people = await g.roQuery<{ id: string }>("MATCH (p:Person) RETURN p.id AS id ORDER BY id");
     expect(people.map((p) => p.id)).toEqual(["person:founder", "person:octo-dev"]);
     const obs = await g.roQuery<{ v: number; c: string }>(
       "MATCH (o:Observation {metric:'reels_reach'})-[:MEASURES]->(c:Channel) RETURN o.value AS v, c.id AS c");
-    expect(obs).toEqual([{ v: 1200, c: "channel:instagram" }]);
+    expect(obs).toEqual([{ v: 1250, c: "channel:instagram" }]);
+    const src = await g.roQuery<{ src: string; conf: number; versions: number }>(
+      "MATCH (o:Observation {metric:'reels_reach'}) OPTIONAL MATCH (o)-[:HAD_VERSION]->(v) RETURN o.src AS src, o.conf AS conf, count(v) AS versions");
+    expect(src).toEqual([{ src: "document:10-company-overview-md", conf: 0.8, versions: 1 }]);
   });
 
   it("embeds searchable nodes and chunks, derives KNOWS_ABOUT, and stores rank", async () => {

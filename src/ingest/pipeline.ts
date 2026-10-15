@@ -23,7 +23,7 @@ import { MAX_PAGE, openGraph, type GraphHandle } from "../graph/client.js";
 import { ensureIndexes, CHUNK_VECTOR_PROP, ENTITY_VECTOR_PROP } from "../graph/indexes.js";
 import { ensureTenant, businessId } from "../graph/tenants.js";
 import { isEntityType, typeOfLabels, type EntityType } from "../graph/schema.js";
-import { closeEdge, upsertNode, writeBatch, type EdgeInput, type NodeInput, type ObservationInput, type WriteStats } from "../graph/upsert.js";
+import { closeEdge, observationId, upsertNode, writeBatch, type EdgeInput, type NodeInput, type ObservationInput, type WriteStats } from "../graph/upsert.js";
 import { noteGraphWrite } from "../graph/projection.js";
 import { searchableTypesPredicate } from "../graph/read.js";
 import { entityId, sha256 } from "../util/ids.js";
@@ -72,7 +72,7 @@ export interface PipelineReport extends IngestReport {
   durationMs: number;
   sources: Array<IngestReport["sources"][number] & { ms: number }>;
   extraction: IngestReport["extraction"] & {
-    candidates: number; skipped: number; failed: number; observations: number;
+    candidates: number; skipped: number; failed: number; observations: number; olderReadings: number;
     order: string[]; skippedDocs: Array<{ id: string; reason: string }>; failures: Array<{ id: string; error: string }>;
   };
   embeddings: { entities: number; chunks: number };
@@ -130,9 +130,11 @@ export function alignAdrDecision(ex: Extraction, decisionName: string): Extracti
   return { ...ex, entities };
 }
 
-// A node several sources describe becomes one write: the newest source (by asOf) is the base, the others fill props it
-// lacks; on equal dates the earlier source in the list wins. Without this, two sources would take turns overwriting the
-// node's name on every run.
+// A node several sources describe becomes one write, so sources never take turns overwriting it on every run:
+// - its name and summary come from the first source in list order that has one (the vault's registry names the
+//   connectors the ops snapshot only knows by key);
+// - its state (props, src, asOf) from the newest source by asOf (on equal dates the earlier one), with the others
+//   filling props it lacks.
 export function mergeNodes(lists: NodeInput[][]): NodeInput[] {
   const groups = new Map<string, NodeInput[]>();
   for (const n of lists.flat()) groups.set(n.id, [...(groups.get(n.id) ?? []), n]);
@@ -142,9 +144,30 @@ export function mergeNodes(lists: NodeInput[][]): NodeInput[] {
     const ordered = ns.map((n, i) => ({ n, i })).sort((a, b) => t(b.n) - t(a.n) || a.i - b.i).map((x) => x.n);
     const base = ordered[0]!;
     const props = Object.assign({}, ...ordered.slice(1).reverse().map((n) => n.props ?? {}), base.props ?? {});
-    const summary = base.summary ?? ordered.find((n) => n.summary)?.summary;
-    return { ...base, ...(summary ? { summary } : {}), ...(Object.keys(props).length ? { props } : {}) };
+    const summary = ns.find((n) => n.summary)?.summary;
+    return { ...base, name: ns[0]!.name, ...(summary ? { summary } : {}), ...(Object.keys(props).length ? { props } : {}) };
   });
+}
+
+// Two documents may report the same number (same metric, subject and date: one observation id) with different values.
+// The newer document is the correction; an older one, or one from the same day read later, never overwrites it. Without
+// this rule the two would take turns on every run, each turn leaving a Version. Readings weaker than the stored one (a
+// document against a connector's measurement) are left to writeObservation, which skips them.
+async function keepNewestReadings(g: GraphHandle, obs: ObservationInput[], docId: string): Promise<{ keep: ObservationInput[]; older: number }> {
+  if (!obs.length) return { keep: obs, older: 0 };
+  const rows = await g.roQuery<{ id: string; src: string | null; srcAsOf: string | null }>(
+    "MATCH (o:Observation) WHERE o.id IN $ids OPTIONAL MATCH (d:Document {id: o.src}) RETURN o.id AS id, o.src AS src, d.asOf AS srcAsOf",
+    { ids: obs.map(observationId) });
+  const stored = new Map(rows.map((r) => [r.id, r]));
+  const [me] = await g.roQuery<{ asOf: string | null }>("MATCH (d:Document {id:$id}) RETURN d.asOf AS asOf", { id: docId });
+  const mine = me?.asOf ?? "";
+  const keep = obs.filter((o) => {
+    const s = stored.get(observationId(o));
+    if (!s || !s.src || s.src === docId) return true;
+    if (!s.srcAsOf) return true; // stored from a connector or an undated source: conf decides (writeObservation)
+    return mine > s.srcAsOf;
+  });
+  return { keep, older: obs.length - keep.length };
 }
 
 // ---------- graph helpers ----------
@@ -355,7 +378,7 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
     tenant: tc.slug, startedAt, finishedAt: startedAt, dryRun: !!opts.dryRun, model, durationMs: 0,
     sources: sourceRows, stats: { nodesCreated: 0, nodesUpdated: 0, versions: 0, edgesCreated: 0, edgesClosed: 0, observations: 0, errors: 0 },
     extraction: {
-      docs: 0, cached: 0, entities: 0, relations: 0, observations: 0, dropped: 0, candidates: candidates.length,
+      docs: 0, cached: 0, entities: 0, relations: 0, observations: 0, olderReadings: 0, dropped: 0, candidates: candidates.length,
       skipped: candidates.length - chosen.length, failed: 0, order: chosen.map((d) => d.id),
       skippedDocs: candidates.slice(limit).map((d) => ({ id: d.id, reason: `over the extraction limit (${limit})` })), failures: [],
     },
@@ -438,9 +461,13 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
       }
       const { extraction, cached } = res.v;
       const ex = typeof d.meta?.decisionName === "string" ? alignAdrDecision(extraction, d.meta.decisionName) : extraction;
-      const { write, dropped } = await resolveExtraction(ex, {
+      const resolved = await resolveExtraction(ex, {
         docId: d.id, text: d.text, asOf: d.asOf, existing: known, similar, founderNames: tc.founderNames,
       });
+      const { dropped } = resolved;
+      const readings = await keepNewestReadings(g, resolved.write.observations, d.id);
+      const write = { ...resolved.write, observations: readings.keep };
+      report.extraction.olderReadings += readings.older;
       const s = await writeBatch(g, write, nowMs);
       tally(s);
       rememberWrite(known, write);

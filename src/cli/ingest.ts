@@ -43,7 +43,7 @@ export function formatReport(r: PipelineReport, reportPath: string): string {
     `Ingest ${r.tenant}${r.dryRun ? " (dry run: nothing written, no model calls)" : ""} · ${(r.durationMs / 1000).toFixed(1)} s · model ${r.model}${r.vaultHead ? ` · vault ${r.vaultHead.slice(0, 12)}` : ""}`,
     "Sources:",
     ...r.sources.map((s) => `  ${s.source.padEnd(10)} ${s.nodes} nodes, ${s.edges} edges, ${s.observations} observations, ${s.docs} docs, ${s.skipped} skipped`),
-    `Extraction: ${x.candidates} candidates · ${x.docs} extracted (${x.cached} cached) · ${x.skipped} over the limit · ${x.failed} failed · ${x.entities} entities, ${x.relations} relations, ${x.observations} numbers, ${x.dropped} dropped`,
+    `Extraction: ${x.candidates} candidates · ${x.docs} extracted (${x.cached} cached) · ${x.skipped} over the limit · ${x.failed} failed · ${x.entities} entities, ${x.relations} relations, ${x.observations} numbers, ${x.dropped} dropped, ${x.olderReadings} older readings kept out`,
   ];
   if (!r.dryRun) {
     lines.push(

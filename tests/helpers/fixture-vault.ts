@@ -19,7 +19,8 @@ The founder, Meera, reviews every post before it goes out. Ask questions at help
 The shop runs on a rented box; the admin password lives with the founder.
 
 ## Channels
-Instagram is the main channel: reels bring most new buyers. See [[60-decisions/001-human-review|the review rule]] and
+Instagram is the main channel: reels bring most new buyers. On 2026-10-10 the reels reached 1,250 accounts.
+See [[60-decisions/001-human-review|the review rule]] and
 [[15-tech/access]] for the setup. Inline code is not a link: \`[[README]]\`.
 `,
   "60-decisions/001-human-review.md": `# 001 — Human review for every post
