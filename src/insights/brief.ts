@@ -15,6 +15,7 @@ import { agentById } from "../../shared/roster.js";
 import { entityId } from "../util/ids.js";
 import { isoDate } from "../util/time.js";
 import { ensureAgentNode, existingIds, findBusinessId } from "../actions/shared.js";
+import { learningMetrics, type LearningMetrics } from "../actions/learning.js";
 import { DAY_MS, cap1, clip, dayMs, dayOf, fmt, longDate, money, pct, plural, round, shortDate } from "./text.js";
 import { polishText } from "./polish.js";
 
@@ -42,6 +43,7 @@ export interface Brief {
   changes: Change[];
   closed: { count: number; examples: ClosedFact[] };
   learned: Array<{ id: string; text: string }>;
+  learning: LearningMetrics;
   newRecommendations: number;
   top: Array<{ id: string; title: string; by: string | null; score: number; approvalId: string | null }>;
   pending: { count: number; overdue: number; oldestDays: number; cards: Array<{ id: string; title: string; kind: string; ageDays: number }> };
@@ -194,6 +196,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   if (!Number.isFinite(since)) throw new Error(`brief: since is not a time: ${String(opts.since)}`);
 
   const goals = await goalPulse(g, now, biz);
+  const kpi = await learningMetrics(g, now);
   const { count: newObservations, changes } = await changesSince(g, since);
   const closed = await closedSince(g, since);
   const learned = await g.roQuery<{ id: string; text: string }>(
@@ -233,6 +236,9 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   }
   for (const f of closed.examples) lines.push(`- Ended: ${f.fromName} no longer ${verb(f.type)} ${f.toName}.`);
   for (const r of learned) lines.push(`- Learned: ${r.text} [[${r.id}]]`);
+  if (kpi.decided30d) {
+    lines.push(`- First pass: ${pct(kpi.firstPassRate ?? 0, 0)} of drafts approved with no edit over 30 days (${kpi.firstPass30d} of ${kpi.decided30d}); ${plural(kpi.learnedRules, "learned rule")} active.`);
+  }
   lines.push("", "Top 3");
   if (top.length) top.forEach((r, i) => lines.push(`${i + 1}. ${r.title}${r.by ? ` (${agentById(r.by)?.name ?? r.by})` : ""}. [[${r.id}]]`));
   else lines.push("- Nothing open. Run insights to look again.");
@@ -245,8 +251,8 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   }
   const firstCard = pending.cards[0];
   const atRisk = goals.find((x) => x.status === "at_risk" || x.status === "off_track");
-  const next = firstCard ? `Approve or edit "${clip(firstCard.title, 80)}". [[${firstCard.id}]]`
-    : top[0] ? `Read "${clip(top[0].title, 80)}" and decide. [[${top[0].id}]]`
+  const next = firstCard ? `Approve or edit: ${clip(firstCard.title, 80).replace(/[.:]$/, "")}. [[${firstCard.id}]]`
+    : top[0] ? `Read and decide: ${clip(top[0].title, 80).replace(/[.:]$/, "")}. [[${top[0].id}]]`
     : atRisk ? `Ask the team how to get "${atRisk.name}" back on track. [[${atRisk.id}]]`
     : "Nothing needs you today.";
   lines.push("", "Next", `- ${next}`);
@@ -287,7 +293,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   }
 
   const brief: Brief = {
-    id, title, text, date, since, goals, newObservations, changes, closed, learned, newRecommendations: nr?.n ?? 0, top, pending,
+    id, title, text, date, since, goals, newObservations, changes, closed, learned, learning: kpi, newRecommendations: nr?.n ?? 0, top, pending,
     next, mentions: mentions.filter((m) => present.has(m)), ...(polished !== undefined ? { polished } : {}),
   };
   if (opts.publish) {

@@ -116,9 +116,10 @@ const ruleId = (key: string): string => entityId("Rule", `learned ${key}`);
 const quote = (s: string) => `"${s}"`;
 const numeric = (w: string) => /^[\p{N}.,%₹$£€]+$/u.test(w);
 
-export function replaceRule(find: string, replace: string, occurrences = 1): RuleSpec {
+// find matches case-insensitively; `said` is how the draft wrote it, for the rule's text ("Instagram", not "instagram").
+export function replaceRule(find: string, replace: string, occurrences = 1, said = find): RuleSpec {
   return {
-    id: ruleId(`say ${replace} not ${find}`), op: "replace", find, replace, text: `Say ${quote(replace)}, not ${quote(find)}.`,
+    id: ruleId(`say ${replace} not ${find}`), op: "replace", find, replace, text: `Say ${quote(replace)}, not ${quote(said)}.`,
     confidence: Math.min(0.8, 0.6 + 0.1 * (occurrences - 1)),
   };
 }
@@ -132,7 +133,7 @@ export function extractRules(original: string, edited: string): Extraction {
   const upper = (x: string | undefined) => !!x && /^\p{Lu}/u.test(x);
   const rules: RuleSpec[] = [];
   const hunks = wordDiff(a, b);
-  const pairs = new Map<string, { find: string; replace: string; n: number }>();
+  const pairs = new Map<string, { find: string; replace: string; said: string; n: number }>();
   const cut = new Set<string>();
   for (const h of hunks ?? []) {
     const tone = h.del.filter((w) => TONE_WORDS.has(w) && !h.ins.includes(w));
@@ -146,16 +147,20 @@ export function extractRules(original: string, edited: string): Extraction {
     // The replacement as the owner wrote it ("by Friday"), except a capital that only marks a sentence start: "Villa"
     // -> "Home" at the start of a title teaches "home".
     let replace = keep.map((x) => x.raw).join(" ");
-    const firstDel = at[h.delAt[h.del.indexOf(del[0]!)]!]?.raw;
-    if (upper(firstDel) && upper(replace) && /^\p{Lu}\p{Ll}*(\s|$)/u.test(replace)) replace = replace[0]!.toLowerCase() + replace.slice(1);
+    let said = h.del.map((w, k) => ({ w, raw: at[h.delAt[k]!]!.raw })).filter((x) => !TONE_WORDS.has(x.w)).map((x) => x.raw).join(" ");
+    if (upper(said) && upper(replace) && /^\p{Lu}\p{Ll}*(\s|$)/u.test(replace)) {
+      replace = replace[0]!.toLowerCase() + replace.slice(1);
+      said = said[0]!.toLowerCase() + said.slice(1);
+    }
     const find = del.join(" ");
     if (find === replace.toLowerCase()) continue;
     const k = `${find}\u0000${replace.toLowerCase()}`;
-    pairs.set(k, { find, replace: pairs.get(k)?.replace ?? replace, n: (pairs.get(k)?.n ?? 0) + 1 });
+    const prev = pairs.get(k);
+    pairs.set(k, { find, replace: prev?.replace ?? replace, said: prev?.said ?? said, n: (prev?.n ?? 0) + 1 });
   }
   // Many scattered substitutions are a rewrite, not a pattern: keep only the ones the owner made more than once.
   const rewrite = (hunks?.length ?? Infinity) > 6;
-  for (const p of pairs.values()) if (!rewrite || p.n >= 2) rules.push(replaceRule(p.find, p.replace, p.n));
+  for (const p of pairs.values()) if (!rewrite || p.n >= 2) rules.push(replaceRule(p.find, p.replace, p.n, p.said));
   if (EMOJI.test(original) && !EMOJI.test(edited)) rules.push({ id: ruleId("no emoji"), op: "remove_emoji", text: "No emojis.", confidence: 0.7 });
   if (original.includes("!") && !edited.includes("!")) rules.push({ id: ruleId("no exclamation marks"), op: "no_exclaim", text: "No exclamation marks.", confidence: 0.6 });
   if (cut.size) {

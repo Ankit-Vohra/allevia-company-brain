@@ -32,6 +32,7 @@ describe("word diff and rule extraction (deterministic)", () => {
     const { rules } = extractRules("Draft one reel this week.", "Draft one reel by Friday.");
     expect(rules).toEqual([expect.objectContaining({ find: "this week", replace: "by Friday", text: 'Say "by Friday", not "this week".' })]);
     expect(applyRule("Post it this week. This week works.", rules[0]!)).toBe("Post it by Friday. By Friday works.");
+    expect(extractRules("Reel for Instagram", "Reel for IG").rules[0]).toMatchObject({ find: "instagram", replace: "IG", text: 'Say "IG", not "Instagram".' });
   });
 
   it("a substitution made twice in one edit is more confident", () => {

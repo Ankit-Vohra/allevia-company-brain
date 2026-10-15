@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
 import { upsertNode } from "../../src/graph/upsert.js";
 import { goalStatus, writeBrief, type Brief } from "../../src/insights/brief.js";
-import { runInsights } from "../../src/insights/recommend.js";
+import { insightApprovalId, runInsights } from "../../src/insights/recommend.js";
+import { decideApproval } from "../../src/actions/approvals.js";
 import { D, seedInsights, SEED_NOW } from "../fixtures/insights-graph.js";
 import { testGraph } from "../helpers/graph.js";
 import { whenFree } from "../helpers/tools.js";
@@ -85,7 +86,7 @@ describe("writeBrief", () => {
     expect(scores).toEqual([...scores].sort((a, b) => b - a));
     expect(brief.pending.count).toBeGreaterThanOrEqual(10);
     expect(brief.pending.cards).toHaveLength(3);
-    expect(brief.next).toMatch(/^Approve or edit ".+"\. \[\[approval:/);
+    expect(brief.next).toMatch(/^Approve or edit: .+\. \[\[approval:/);
     expect(brief.next).toContain(brief.pending.cards[0]!.id);
   });
 
@@ -108,6 +109,14 @@ describe("writeBrief", () => {
     expect(tomorrow.since).toBe(SEED_NOW + 60_000);
     expect(tomorrow.text).toContain("Since yesterday");
     expect(await count("MATCH (d:Document) WHERE d.kind = 'brief' RETURN count(d) AS c")).toBe(2);
+  });
+
+  it("reports the learning KPI once the owner has decided something", async () => {
+    expect(brief.text).not.toContain("First pass:");
+    await decideApproval(g, { approvalId: insightApprovalId("ads.high_cpa:campaign:meta-employers"), decision: "approve", now: SEED_NOW + 90_000 }, { tenant: "test" });
+    const b = await writeBrief("test", { graph: g, now: SEED_NOW + 100_000 });
+    expect(b.text).toContain("- First pass: 100% of drafts approved with no edit over 30 days (1 of 1); 1 learned rule active.");
+    expect(b.learning).toMatchObject({ firstPassRate: 1, decided30d: 1 });
   });
 
   it("an optional model may tighten the text but not change a figure", async () => {
