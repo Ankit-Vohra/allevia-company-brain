@@ -56,6 +56,9 @@ export function normalizeOverwrites(list: Overwrite[]): Overwrite[] {
 export const sameOverwrites = (a: Overwrite[], b: Overwrite[]): boolean =>
   JSON.stringify(normalizeOverwrites(a)) === JSON.stringify(normalizeOverwrites(b));
 
+// The HTTP status of a failed Discord REST call, when it has one.
+export const statusOf = (e: unknown): number | undefined => (e && typeof e === "object" && "status" in e && typeof (e as { status: unknown }).status === "number" ? (e as { status: number }).status : undefined);
+
 // ---------- the Discord port ----------
 
 export interface RoleInfo { id: string; name: string; position: number }

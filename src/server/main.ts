@@ -22,8 +22,11 @@ export interface ServeOpts {
 }
 
 export function productionDeps(o: { model?: string; publicMode: boolean; staticDir?: string }): ServerDeps {
+  let hub: Promise<import("../discord/hub-service.js").HubService | null> | undefined;
   return {
     publicMode: o.publicMode,
+    // The Discord hub, when DISCORD_HUB_GUILD_ID (and the rest) is set; built once and shared with the retry loop below.
+    discordHub: () => (hub ??= o.publicMode ? Promise.resolve(null) : import("../discord/hub-service.js").then((m) => m.productionHub())),
     listTenants: () => listTenants(),
     openGraph: (slug) => openGraph(slug),
     askDeps: async (tenant) => {
@@ -46,17 +49,21 @@ export async function startServer(opts: ServeOpts = {}): Promise<{ server: Serve
   const host = opts.host ?? process.env.HOST ?? "127.0.0.1";
   const publicMode = opts.publicMode ?? cfg.publicMode;
   const staticDir = opts.staticDir === null ? undefined : opts.staticDir ?? (existsSync(WEB_DIST) ? WEB_DIST : undefined);
-  const app = createApp({
+  const deps: ServerDeps = {
     ...productionDeps({ publicMode, ...(opts.model ? { model: opts.model } : {}), ...(staticDir ? { staticDir } : {}) }),
     ...opts.over,
-  });
+  };
+  const app = createApp(deps);
+  // A business whose Discord area could not be set up at onboarding is retried in the background.
+  const hub = publicMode ? null : await deps.discordHub?.().catch(() => null);
+  const stopRetry = hub ? hub.startRetryLoop() : undefined;
   const server = await new Promise<ServerType>((resolve, reject) => {
     const s = serve({ fetch: app.fetch, port, hostname: host }, () => resolve(s));
     s.once("error", reject);
   });
   const url = `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}`;
   console.error(`Allevia on ${url}${publicMode ? " (public read-only mode)" : ""}${staticDir ? "" : " (API only: build the web app with `cd web && npm run build`)"}`);
-  return { server, url, close: () => new Promise<void>((r) => server.close(() => r())) };
+  return { server, url, close: () => { stopRetry?.(); return new Promise<void>((r) => server.close(() => r())); } };
 }
 
 // Resolves on SIGINT/SIGTERM after the server has stopped taking requests.

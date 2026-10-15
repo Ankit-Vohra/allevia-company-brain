@@ -5,7 +5,7 @@
 import { Routes, type REST } from "discord.js";
 import type { ButtonSpec, Outgoing } from "./bot.js";
 import {
-  PERM, type ChannelInfo, type ChannelSpec, type HubPort, type InviteInfo, type InviteSpec, type Overwrite, type PermName, type RoleInfo,
+  PERM, statusOf, type ChannelInfo, type ChannelSpec, type HubPort, type InviteInfo, type InviteSpec, type Overwrite, type PermName, type RoleInfo,
 } from "./hub-types.js";
 
 type Json = Record<string, any>; // Discord's JSON, read field by field below
@@ -38,7 +38,6 @@ function messageJson(m: Outgoing): Json {
   return body;
 }
 
-export const statusOf = (e: unknown): number | undefined => (e && typeof e === "object" && "status" in e && typeof (e as { status: unknown }).status === "number" ? (e as { status: number }).status : undefined);
 
 const inviteFrom = (j: Json, channelId: string): InviteInfo => ({
   code: String(j.code), channelId: String(j.channel?.id ?? channelId), uses: Number(j.uses ?? 0), maxUses: Number(j.max_uses ?? 0),

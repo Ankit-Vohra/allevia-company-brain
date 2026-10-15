@@ -1,8 +1,7 @@
 // `discord-hub status`: is everything the hub needs in place? Read-only: it only reads from Discord and from the
 // registry, never creates or changes anything, and it never prints a token. The answer is a plain pass / fail list;
 // each failure says what to do about it.
-import { statusOf } from "./hub-rest.js";
-import { BOT_PERMISSIONS, PERM, roleNameFor, type HubPort, type HubStore, type PermName } from "./hub-types.js";
+import { BOT_PERMISSIONS, PERM, roleNameFor, statusOf, type HubPort, type HubStore, type PermName } from "./hub-types.js";
 
 export interface Check { ok: boolean; label: string; fix?: string }
 

@@ -27,6 +27,10 @@ export function hubSettings(cfg: AlleviaConfig): { configured: boolean; settings
 export const hubInviteUrl = (appId: string): string =>
   `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(appId)}&scope=bot%20applications.commands&permissions=${BOT_PERMISSION_INTEGER}`;
 
+export class LinkTooSoon extends Error {
+  override name = "LinkTooSoon";
+}
+
 export interface HubService {
   guildId: string;
   deps: ProvisionDeps;
@@ -68,7 +72,7 @@ export function createHubService(deps: ProvisionDeps): HubService {
     home: (slug) => homeInfo(slug, deps),
     async newLink(slug) {
       const last = lastLink.get(slug) ?? 0;
-      if (now() - last < 60_000) throw new Error("A new link was made a moment ago. Give it a minute.");
+      if (now() - last < 60_000) throw new LinkTooSoon("A new link was made a moment ago. Give it a minute.");
       lastLink.set(slug, now());
       await provisionCustomer(slug, deps, { newInvite: true });
       return homeInfo(slug, deps);
