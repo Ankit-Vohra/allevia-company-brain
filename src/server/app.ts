@@ -17,7 +17,7 @@
 //   use: the real executors, with GitHub issues and Discord posts as a dry run unless ALLEVIA_ACTIONS_LIVE=1. The
 //   answer is the card plus `learned` (the learned-rule AgentEvents, in the JSON) and `action`.
 // Focused route files: routes/program.ts (program, capabilities, learning), routes/team.ts (agents, directives),
-// routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page).
+// routes/goals.ts (the owner says OK to the suggested goals), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page).
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
@@ -34,6 +34,7 @@ import type { GraphHandle } from "../graph/client.js";
 import type { LlmRunner } from "../ingest/llm.js";
 import { DecisionError, decide, type ActionOpts, type OnDecision } from "./approvals.js";
 import { HttpError, readBody, type RouteCtx } from "./http.js";
+import { registerGoalRoutes } from "./routes/goals.js";
 import { registerProgramRoutes } from "./routes/program.js";
 import { registerTeamRoutes } from "./routes/team.js";
 import { registerUsageRoutes } from "./routes/usage.js";
@@ -429,6 +430,7 @@ export function createApp(deps: ServerDeps): Hono {
   const routeCtx: RouteCtx = { tenantOf, refuseInPublicMode, publicMode: deps.publicMode, now, log };
   registerTeamRoutes(app, routeCtx, deps.directiveLlm !== undefined ? { directiveLlm: deps.directiveLlm } : {});
   registerProgramRoutes(app, routeCtx);
+  registerGoalRoutes(app, routeCtx);
   registerWorkRoutes(app, routeCtx);
   registerUsageRoutes(app, routeCtx, { actionsLive: () => deps.actions?.live ?? loadConfig().actionsLive });
 
