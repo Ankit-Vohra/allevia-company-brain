@@ -3,7 +3,7 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll } from "vitest";
 import { closeAll, MAX_PAGE, type GraphHandle } from "../../src/graph/client.js";
 import { ensureIndexes, listIndexes } from "../../src/graph/indexes.js";
-import { backfillMetricKey, backfillSearchable, ensureConstraints, findDuplicateIds, mergeDuplicateNodes } from "../../src/graph/migrate.js";
+import { backfillMetricKey, backfillSearchable, ensureConstraints, findDuplicateIds, mergeDuplicateNodes, registerTypeLabels } from "../../src/graph/migrate.js";
 import { addObservation, upsertNode } from "../../src/graph/upsert.js";
 import { testGraph } from "../helpers/graph.js";
 
@@ -35,6 +35,21 @@ describe("migrating a graph written before the current schema (integration)", ()
     expect(await one(g, "MATCH (o:Observation) WHERE o.metricKey IS NULL RETURN count(o) AS c")).toEqual({ c: 0 });
     expect(await one(g, "MATCH (o:Entity:Observation {id:'obs:m2'}) RETURN o.metricKey AS k")).toEqual({ k: "reach_total" });
     expect(await one(g, "MATCH (o:Entity:Observation {id:'obs:keep'}) RETURN o.metricKey AS k")).toEqual({ k: "already" });
+  });
+
+  it("lists the type label before Searchable on every node, so [l IN labels(n) WHERE l <> 'Entity'][0] is the type", async () => {
+    await ensureIndexes(g);
+    expect(await registerTypeLabels(g)).toBe(0);
+    for (const [type, id] of [["Business", "business:b"], ["Turn", "turn:t"], ["Session", "session:s"], ["Page", "page:p"], ["Checkpoint", "checkpoint:c"], ["Decision", "decision:d"]] as const) {
+      await upsertNode(g, { type, id, name: type });
+      expect(await labelsOf(g, id), type).toEqual(["Entity", type, "Searchable"]);
+      expect(await one(g, "MATCH (n:Entity {id:$id}) RETURN [l IN labels(n) WHERE l <> 'Entity'][0] AS t", { id })).toEqual({ t: type });
+    }
+  });
+
+  it("registers the type labels only while the graph has no Searchable label, and leaves an older graph as it is", async () => {
+    await g.query("CREATE (:Entity:Decision:Searchable {id:'decision:old', name:'old'})");
+    expect(await registerTypeLabels(g)).toBe(0);
   });
 
   it("brings an old graph (Entity indexes only, no constraints) to the whole schema in one ensureIndexes", async () => {

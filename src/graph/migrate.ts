@@ -1,13 +1,14 @@
 // Schema evolution for a tenant graph. Every step is idempotent and cheap once done, so ensureIndexes runs them all on
 // every call (tenant creation, every ingest) and a graph written by older code converges without a separate migration
 // command:
+//   0. registerTypeLabels  - the type labels are registered before Searchable, so labels(n) lists the type first
 //   1. backfillSearchable  - nodes of a type search can be asked for (SEARCH_INDEXED_TYPES) get the `Searchable` label (the full-text and vector indexes live on it)
 //   2. backfillMetricKey   - Observations get `metricKey`, the lowercase metric every metric read compares (and indexes)
 //   3. ensureConstraints   - UNIQUE and MANDATORY on Entity.id, after merging any duplicate ids already in the graph
 // The order matters: labels and properties are in place before the indexes that cover them are built, and duplicates
 // are gone before the UNIQUE constraint is asked to hold (it would otherwise end FAILED and the graph go unprotected).
 import { MAX_PAGE, type ConstraintInfo, type GraphHandle } from "./client.js";
-import { SEARCH_INDEXED_TYPES, SEARCHABLE_LABEL, metricKeyOf } from "./schema.js";
+import { ENTITY_TYPES, SEARCH_INDEXED_TYPES, SEARCHABLE_LABEL, metricKeyOf } from "./schema.js";
 import { noteGraphWrite } from "./projection.js";
 
 const log = (msg: string) => console.error(`[graph] ${msg}`);
@@ -21,6 +22,27 @@ async function hasEntities(g: GraphHandle): Promise<boolean> {
     if (/empty key/i.test(String((e as Error).message))) return false;
     throw e;
   }
+}
+
+// labels(n) lists a node's labels by label id, which is the order the graph first saw each label. Code that wants a node's type
+// should use typeOfLabels, but anything that takes "the first label that is not Entity" gets the type only if `Searchable`
+// comes after every type label. So on a graph that has no Searchable label yet, all the others are registered first (a node
+// created and deleted in one statement leaves the label behind), and Searchable, set on the first searchable node, is last.
+// Returns how many labels it registered. A graph that already has Searchable keeps whatever order it has.
+export async function registerTypeLabels(g: GraphHandle): Promise<number> {
+  const have = new Set((await g.peek<{ label: string }>("CALL db.labels() YIELD label RETURN label")).map((r) => r.label));
+  if (have.has(SEARCHABLE_LABEL)) return 0;
+  let made = 0;
+  for (const label of ["Entity", ...ENTITY_TYPES].filter((l) => !have.has(l))) {
+    try {
+      await g.query(label === "Entity" ? "CREATE (n:Entity) DELETE n" : `CREATE (n:Entity:${label}) DELETE n`);
+      made++;
+    } catch (e) {
+      if (!/constraint/i.test(String((e as Error).message))) throw e; // Entity.id is MANDATORY here: leave it, the order is a nicety
+      break;
+    }
+  }
+  return made;
 }
 
 // One statement per type, so each is a scan of that label only (not of the whole graph, which holds a node per reading).
@@ -184,5 +206,6 @@ export async function ensureConstraints(g: GraphHandle, opts: { timeoutMs?: numb
 
 // Everything above, in order. ensureIndexes calls this around its index creation (see indexes.ts).
 export async function migrateBeforeIndexes(g: GraphHandle): Promise<{ searchable: number; metricKeys: number }> {
+  await registerTypeLabels(g);
   return { searchable: await backfillSearchable(g), metricKeys: await backfillMetricKey(g) };
 }
