@@ -2,7 +2,7 @@
 // structured data), the sitemap, the footer and the link check all read this list, so a page cannot be in one and
 // missing from another. A page's file is derived from its path: "/" is site/index.html, "/how-it-works/" is
 // site/how-it-works/index.html.
-import { AGENTS, DEPARTMENTS, numberWord } from "../../shared/roster.ts";
+import { AGENTS, numberWord } from "../../shared/roster.ts";
 
 export type Schema = "organization" | "website" | "software" | "faq" | "breadcrumb";
 
@@ -28,7 +28,6 @@ export interface PageDef {
 }
 
 const STAFF = numberWord(AGENTS.length);
-const DEPTS = numberWord(DEPARTMENTS.length);
 
 export const PAGES: readonly PageDef[] = [
   {
@@ -93,34 +92,6 @@ export const PAGES: readonly PageDef[] = [
     description: "Ask for a free Brain Snapshot, get support in our Discord channel or by email, and send privacy requests. What to send and when we reply.",
     footer: "Company", label: "Contact and support",
     priority: 0.7, changefreq: "monthly", schema: ["breadcrumb"],
-  },
-  {
-    path: "/privacy/",
-    title: "Privacy Policy · Allevia",
-    description: "What Allevia collects from your website, accounts, photos and chats, why, where it is kept, how long, who processes it, and how to export or delete it.",
-    footer: "Legal", label: "Privacy Policy",
-    priority: 0.5, changefreq: "yearly", schema: ["breadcrumb"],
-  },
-  {
-    path: "/terms/",
-    title: "Terms of Service · Allevia",
-    description: "The terms for using Allevia: what the service is, what you agree to, who owns what, fees and refunds, and what happens if you stop.",
-    footer: "Legal", label: "Terms of Service",
-    priority: 0.5, changefreq: "yearly", schema: ["breadcrumb"],
-  },
-  {
-    path: "/data-deletion/",
-    title: "Delete your data · Allevia",
-    description: "How to ask Allevia to delete everything it holds about your business, how to disconnect Instagram or Google, what we delete and how long it takes.",
-    footer: "Legal", label: "Delete your data",
-    priority: 0.5, changefreq: "yearly", schema: ["breadcrumb"],
-  },
-  {
-    path: "/cookies/",
-    title: "Cookies and analytics · Allevia",
-    description: "This site sets no cookies and runs no analytics or ads. One small setting is stored in your browser, only if you change the price currency.",
-    footer: "Legal", label: "Cookies and analytics",
-    priority: 0.3, changefreq: "yearly", schema: ["breadcrumb"],
   },
 ];
 

@@ -57,6 +57,8 @@ export const COMMITMENTS = {
   deleteWithinDays: 30,
   /** After that, how long until the deleted data has also aged out of our backups. */
   backupsAgeOutDays: 35,
+  /** After a business stops using Allevia and has not asked for deletion, how long its workspace is kept so it can come back. */
+  afterEndDays: 90,
   /** How quickly we confirm we got a privacy request. */
   acknowledgeWithinDays: 7,
   /** Notice before a material change to the terms or the privacy policy. */

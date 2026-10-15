@@ -1,0 +1,13 @@
+{
+  "name": "Allevia",
+  "short_name": "Allevia",
+  "description": "A team of AI staff for your business. We set it up. You steer.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#faf8f3",
+  "theme_color": "#162151",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/img/logo-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

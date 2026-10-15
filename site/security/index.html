@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <!-- @head -->
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <!-- @render masthead -->
+
+    <main id="main">
+      <section class="page-head" aria-labelledby="h1">
+        <div class="wrap page-head__in page-head__in--one">
+          <div>
+            <h1 id="h1" class="page-head__h">Your business stays&nbsp;yours.</h1>
+            <p class="lede">What we do to protect your data, in plain words, and what we do not claim. Everything on this page is something we can point to in how Allevia is built.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="three-h">
+        <div class="wrap">
+          <h2 id="three-h" class="visually-hidden">The three promises</h2>
+          <ol class="proof proof--paper">
+            <li>
+              <h3>Each business is its own separate database</h3>
+              <p>Your business's memory lives in a database of its own, apart from every other business's. Nothing is shared across businesses, and nothing learned from one business is used for another.</p>
+            </li>
+            <li>
+              <h3>Nothing goes out without your OK</h3>
+              <p>Your team writes drafts and proposes actions. Anything that costs money, speaks in public or changes something waits on a card until you say OK. Nothing is posted by Allevia today.</p>
+            </li>
+            <li>
+              <h3>We keep what we need, and say what that is</h3>
+              <p>Sensitive details are stripped from text before it is stored or sent to the AI model, photos lose their location, and the privacy policy lists what is collected, why, and who handles it.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section" id="how" aria-labelledby="how-h">
+        <div class="wrap">
+          <h2 id="how-h" class="section__h">How it works underneath.</h2>
+          <dl class="facts">
+            <div class="facts__row"><dt>Separate databases</dt><dd>Each business gets its own graph in FalkorDB, named for the business, plus one small registry that lists the businesses. A request is tied to one business before your team starts, and none of the team's tools can name another business's database. The tool that lets the team look things up freely is read-only: the database itself refuses any change.</dd></div>
+            <div class="facts__row"><dt>What businesses do share</dt><dd>Generic rule books that hold no business's information, such as search-engine checks, platform rules and a timeline of Google updates. Every business gets the same copy.</dd></div>
+            <div class="facts__row"><dt>Photos</dt><dd>Each business's photos sit in a folder of its own. A photo is only served if it belongs to the business that asked. The location data inside a photo is removed on arrival, and the stored copy has no hidden metadata. How people in photos are handled is explained in the <a href="/privacy/#photos">privacy policy</a>.</dd></div>
+            <div class="facts__row"><dt>Approvals</dt><dd>Posts, replies, issues and anything that spends money are proposed as cards. By default, approving records the decision and saves the draft; it does not publish or post. Replies to reviews of three stars or lower, price and legal claims, and ad spend never go out on their own.</dd></div>
+            <div class="facts__row"><dt>Filtering sensitive details</dt><dd>Before text is stored or sent to the AI model, a filter removes passwords, tokens, account numbers, email addresses and phone numbers, and a scan checks the stored memory for any it missed. It is cautious on purpose: it also removes a business's own public phone number and email.</dd></div>
+            <div class="facts__row"><dt>Read-only connections</dt><dd>When we connect to a system to read your numbers, only a short list of read-only actions is allowed, and anything else is refused before it is sent. The tool that lets another AI program read your memory can read, never write.</dd></div>
+            <div class="facts__row"><dt>Reading your website</dt><dd>The crawler calls itself AlleviaBot, follows your robots.txt, only visits public pages, refuses addresses on private networks and checks every redirect before following it.</dd></div>
+            <div class="facts__row"><dt>The public demo</dt><dd>The public demo is read-only. Every action that would change something is refused, it never calls the AI model, and it replays recorded answers instead of making new ones.</dd></div>
+            <div class="facts__row"><dt>Secrets</dt><dd>Passwords and tokens live in a settings file on the server, outside the code. The AI model's process is given only the few settings it needs, and a test checks every file in the code for anything that looks like a secret or private identifier.</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="section" id="discord" aria-labelledby="discord-h">
+        <div class="wrap">
+          <h2 id="discord-h" class="section__h">Discord.</h2>
+          <dl class="facts">
+            <div class="facts__row"><dt>Private areas</dt><dd>Each business gets its own private category on our Discord server, with its own channels. A role for that business unlocks only that area. Everyone else, including other customers, sees nothing, and the bot does not answer direct messages.</dd></div>
+            <div class="facts__row"><dt>Which business a message belongs to</dt><dd>The bot works out the business from the channel a message was posted in, using a list kept in the database. Nothing a person types, and no channel name, can choose the business.</dd></div>
+            <div class="facts__row"><dt>Joining</dt><dd>Each person joins with an invite that works once and expires after seven days. If we cannot tell which invite someone used, they get no access until we add them by hand.</dd></div>
+            <div class="facts__row"><dt>Who can decide</dt><dd>Only people with the business's own role can ask its team questions or press Approve and Reject. Our staff role can read the area and answer in #support, but never asks your team questions or decides your cards.</dd></div>
+            <div class="facts__row"><dt>What Discord keeps</dt><dd>Messages you write live on Discord, under Discord's own terms, and we also store the question and the answer in your business's memory. What you write in #support is copied to a staff-only channel so a person can answer it. Discord names and ids are not written into your business's memory.</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="section" id="not-claimed" aria-labelledby="nc-h">
+        <div class="wrap">
+          <h2 id="nc-h" class="section__h">What we do not claim.</h2>
+          <p class="lede">We would rather you know the gaps than find them.</p>
+          <ul class="ticks ticks--cross">
+            <li><strong>We are not SOC 2 audited,</strong> and we will not say we are until we are.</li>
+            <li><strong>Your text and photos go to an AI model.</strong> To answer, the team sends what it needs to Claude, made by Anthropic. The <a href="/privacy/#processors">privacy policy</a> lists every company that handles data for us.</li>
+            <li><strong>Owner sign-in is not live yet.</strong> Today your team's workspace is set up and run for you, and a business's private area on Discord is limited by role. Individual owner accounts are on our build list, and this page will change when they ship.</li>
+            <li><strong>Our people can see your workspace</strong> to set it up and to help you. There is not yet a log you can read of when they did.</li>
+            <li><strong>No data-region promise yet.</strong> The servers' region is in the <a href="/privacy/#where">privacy policy</a>. We do not offer a choice of region.</li>
+            <li><strong>Deleting and exporting are done by us, on request,</strong> not by a button. <a href="/data-deletion/">How to ask.</a></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="report-h">
+        <div class="wrap split">
+          <div class="split__text">
+            <h2 id="report-h" class="section__h">Report a weakness.</h2>
+            <p class="lede">If you think you have found a security problem, email us privately before telling anyone else. We will confirm we got it, tell you when it is fixed and thank you.</p>
+            <p class="body"><!-- @render security-contact --></p>
+          </div>
+          <div class="split__text">
+            <h2 class="section__h section__h--small">More.</h2>
+            <p class="body"><a class="link" href="/privacy/">Privacy Policy</a></p>
+            <p class="body"><a class="link" href="/data-deletion/">Delete your data</a></p>
+            <p class="body"><a class="link" href="/faq/#faq-data">Questions about your data</a></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section close" aria-labelledby="close-h">
+        <div class="wrap close__in">
+          <h2 id="close-h">Questions we have not answered?</h2>
+          <p>Ask us. We would rather answer before you sign up than after.</p>
+          <a class="btn btn-gold btn-lg" href="/contact/">Contact us</a>
+        </div>
+      </section>
+    </main>
+
+    <!-- @render footer -->
+  </body>
+</html>

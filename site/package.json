@@ -9,6 +9,10 @@
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "check:links": "node scripts/check-links.mjs",
+    "check:placeholders": "node scripts/check-placeholders.mjs",
+    "check": "npm run build && npm run check:links && npm run check:placeholders",
+    "product-shots": "node scripts/product-shots.mjs",
     "images": "node scripts/images.mjs",
     "shots": "node scripts/shots.mjs"
   },

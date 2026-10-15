@@ -29,7 +29,7 @@ export function footer(current: string): string {
     const links = PAGES.filter((p) => p.footer === name)
       .map((p) => `<li><a href="${p.path}"${p.path === current ? ` aria-current="page"` : ""}>${esc(p.label ?? p.nav ?? p.title)}</a></li>`)
       .join("");
-    return `<div class="foot__col"><h2 class="foot__h">${name}</h2><ul>${links}</ul></div>`;
+    return links ? `<div class="foot__col"><h2 class="foot__h">${name}</h2><ul>${links}</ul></div>` : "";
   };
   return `<footer class="foot">
   <div class="wrap foot__in">
