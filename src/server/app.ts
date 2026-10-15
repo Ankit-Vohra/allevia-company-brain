@@ -31,9 +31,11 @@ import { ask, STOPPED_MESSAGE, type AskDeps } from "../agent/ask.js";
 import type { ToolContext } from "../agent/tool.js";
 import { loadConfig } from "../config.js";
 import type { GraphHandle } from "../graph/client.js";
-import { isTenantSlug } from "../graph/slug.js";
+import { MAX_SLUG_LENGTH, isTenantSlug, RESERVED_SLUGS } from "../graph/slug.js";
+import { OPERATOR_SCOPE } from "../auth/tokens.js";
 import type { LlmRunner } from "../ingest/llm.js";
 import { DecisionError, decide, type ActionOpts, type OnDecision } from "./approvals.js";
+import { PRIVATE_MESSAGE, authorize, clearSession, presentedTokens, requestView, scopesOf, setSession, type AuthDeps } from "./auth.js";
 import { HttpError, readBody, type RouteCtx } from "./http.js";
 import { registerGoalRoutes } from "./routes/goals.js";
 import { registerProgramRoutes } from "./routes/program.js";
@@ -62,6 +64,7 @@ export interface RegistryTenant {
   currency?: string;
   locale?: string;
   timeZone?: string;
+  demo?: boolean;   // a public demo business (graph/tenants.ts setDemo): opens read-only without an owner link when ALLEVIA_AUTH=1
 }
 
 export interface OnboardStart {
@@ -82,6 +85,9 @@ export interface PlansModule { [k: string]: unknown }
 
 export interface ServerDeps {
   publicMode: boolean;
+  // ALLEVIA_AUTH=1 (src/auth, docs/tenant-isolation.md): every /api/:t/... route needs that business's owner token, and
+  // /api/onboard the operator's. Absent (or enabled: false) is local development: no checks.
+  auth?: AuthDeps;
   listTenants: () => Promise<RegistryTenant[]>;
   openGraph: (slug: string) => Promise<GraphHandle>;
   // ask()'s deps for one live turn (createAskDeps in production; a FakeRuntime in tests).
@@ -153,8 +159,24 @@ const validTimeZone = (tz: string | undefined): string | undefined => {
   }
 };
 
-// "Kestrel & Oak" -> "kestrel_oak"; a name with no Latin letters falls back to the website's host.
+// "Kestrel & Oak" -> "kestrel_oak"; a name with no Latin letters falls back to the website's host. A name that comes out as a
+// reserved word ("Meta", "Health") gets "_co" so it is a slug (graph/slug.ts).
 export function slugFor(name: string, url: string): string {
+  const slug = slugFrom(name, url);
+  return isTenantSlug(slug) ? slug : `${slug.slice(0, MAX_SLUG_LENGTH - 3).replace(/_+$/, "")}_co`;
+}
+
+// The first of base_2, base_3, … that is not taken.
+export function freeSlug(base: string, taken: ReadonlySet<string>): string {
+  for (let n = 2; n < 100; n++) {
+    const suffix = `_${n}`;
+    const slug = `${base.slice(0, MAX_SLUG_LENGTH - suffix.length).replace(/_+$/, "")}${suffix}`;
+    if (!taken.has(slug)) return slug;
+  }
+  throw new HttpError(409, "That business id is already taken.");
+}
+
+function slugFrom(name: string, url: string): string {
   const fromName = name.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40).replace(/_+$/, "");
   if (fromName) return fromName;
   let host = url;
@@ -226,7 +248,11 @@ export function createApp(deps: ServerDeps): Hono {
     return t;
   }
 
-  const refuseInPublicMode = () => { if (deps.publicMode) throw new HttpError(403, PUBLIC_REFUSAL); };
+  // With ALLEVIA_AUTH=1 "public" is decided per request: a demo business without a token is the public read-only view;
+  // anyone holding a token for the business they asked for is its owner, and sees (and may change) the real thing.
+  const authOn = !!deps.auth?.enabled;
+  const isPublic = (): boolean => (authOn ? requestView.getStore()?.publicView ?? true : deps.publicMode);
+  const refuseInPublicMode = () => { if (isPublic()) throw new HttpError(403, PUBLIC_REFUSAL); };
   // Studio cards approved anywhere become draft posts; then the server's own hook runs.
   const onDecision = studioDecisionHook(deps.openGraph, now, deps.onDecision);
 
@@ -235,9 +261,20 @@ export function createApp(deps: ServerDeps): Hono {
   app.use("/api/*", cors({
     origin: (origin) => (origins.includes(origin) ? origin : null),
     allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: ["content-type", "accept"],
+    allowHeaders: ["content-type", "accept", "authorization"],
     maxAge: 600,
   }));
+  // The door (ALLEVIA_AUTH=1): before any body is read or any route runs, a request for a business needs that business's
+  // owner token, or the business must be a demo, and then it is the read-only public view. Reserved first segments
+  // (health, tenants, plans, onboard, auth) are the global routes below; a first segment that is not a slug is a 404 later.
+  app.use("/api/:t/*", async (c, next) => {
+    const slug = c.req.param("t") ?? "";
+    if (!authOn || RESERVED_SLUGS.includes(slug) || !isTenantSlug(slug)) return next();
+    if (await authorize(deps.auth!, c, slug)) return requestView.run({ publicView: false }, next);
+    const reg = (await registry()).find((t) => t.slug === slug);
+    if (reg?.demo === true) return requestView.run({ publicView: true }, next);
+    throw new HttpError(401, PRIVATE_MESSAGE); // the same answer for a business that exists and one that does not
+  });
   // 64 KB everywhere except the Studio's photo upload, which sets its own limit (studio.ts)
   const smallBodies = bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: "The request body is too large." }, 413) });
   app.use("/api/*", (c, next) => (c.req.method === "POST" && STUDIO_UPLOAD_PATH.test(c.req.path) ? next() : smallBodies(c, next)));
@@ -257,20 +294,48 @@ export function createApp(deps: ServerDeps): Hono {
   app.get("/api/health", async (c) => {
     try {
       const tenants = await registry();
-      return c.json({ ok: true, publicMode: deps.publicMode, tenants: tenants.length });
+      // with the flag on the number of businesses is not for strangers
+      return c.json({ ok: true, publicMode: deps.publicMode, ...(authOn ? { authRequired: true } : { tenants: tenants.length }) });
     } catch {
       return c.json({ ok: false, publicMode: deps.publicMode, error: "The graph database is not reachable." }, 503);
     }
   });
 
   app.get("/api/tenants", async (c) => {
-    const list = await registry();
+    let list = await registry();
+    if (authOn) {
+      // a stranger sees the demo businesses, an owner also their own, the operator all of them
+      const scopes = await scopesOf(deps.auth!, c);
+      list = list.filter((t) => scopes.has(OPERATOR_SCOPE) || scopes.has(t.slug) || t.demo === true);
+    }
     const out = await Promise.all(list.slice(0, 200).map(async (reg) => {
       let g: GraphHandle | undefined;
       try { g = await deps.openGraph(reg.slug); } catch { g = undefined; }
       return tenantDto(reg, g);
     }));
     return c.json(out);
+  });
+
+  // ---- opening a business with its link (only with ALLEVIA_AUTH=1) ----
+  // The web app posts the token from the link's #fragment here once; the answer sets an HttpOnly cookie for that business.
+  // Every failure is the same sentence, so it says nothing about which tokens or businesses exist.
+  app.post("/api/auth/open", async (c) => {
+    if (!authOn) throw new HttpError(404, "No such endpoint.");
+    const body = await readBody(c, z.object({ token: z.unknown().optional() }));
+    const bad = new HttpError(401, "That link is not valid any more. Ask for a new one.");
+    if (typeof body.token !== "string") throw bad;
+    const v = await deps.auth!.verify(body.token);
+    if (!v) throw bad;
+    setSession(c, v.scope, body.token);
+    return c.json(v.scope === OPERATOR_SCOPE ? { scope: v.scope } : { scope: v.scope, tenant: v.scope });
+  });
+
+  app.post("/api/auth/close", async (c) => {
+    if (!authOn) throw new HttpError(404, "No such endpoint.");
+    const body = await readBody(c, z.object({ tenant: z.string() }));
+    if (body.tenant !== OPERATOR_SCOPE && !isTenantSlug(body.tenant)) throw new HttpError(400, "Say which business to close.");
+    clearSession(c, body.tenant);
+    return c.json({ closed: body.tenant });
   });
 
   app.get("/api/plans", async (c) => {
@@ -286,14 +351,27 @@ export function createApp(deps: ServerDeps): Hono {
   });
 
   app.post("/api/onboard", async (c) => {
-    refuseInPublicMode();
+    if (authOn) {
+      // creating a business spends the operator's model access and makes a graph: only the operator does it
+      const tokens = presentedTokens(c);
+      if (!tokens.length) throw new HttpError(401, PRIVATE_MESSAGE);
+      if (!(await scopesOf(deps.auth!, c)).has(OPERATOR_SCOPE)) throw new HttpError(403, "Setting up a business is done by the Allevia team.");
+    } else refuseInPublicMode();
     const body = await readBody(c, OnboardBody);
     const run = await (deps.loadOnboard ?? loadOnboardModule)();
     if (!run) throw new HttpError(501, "Website onboarding is not installed on this server yet.");
     if (onboarding) throw new HttpError(429, "Another business is being set up right now. Try again in a few minutes.");
+    // Onboarding writes into the graph of the slug it is given. It must never be a business that already exists unless the
+    // operator says so by naming it: another business's name, web address or id cannot steer it into that business's graph.
+    // (A re-run from the open web is not offered: `npm run cli -- enroll` and scripts/onboard.ts do it.)
+    const known = new Set((await registry()).map((t) => t.slug));
     let slug = body.slug ?? slugFor(body.name, body.url);
-    const taken = (await registry()).find((t) => t.slug === slug);
-    if (taken && !body.slug && taken.domain && !body.url.includes(taken.domain.replace(/^www\./, ""))) slug = `${slug}_2`;
+    if (known.has(slug)) {
+      if (body.slug && authOn) {
+        // the operator re-runs a business by naming it
+      } else if (body.slug) throw new HttpError(409, "That business id is already taken.");
+      else slug = freeSlug(slug, known);
+    }
     const input: OnboardStart = {
       name: body.name, slug, url: body.url,
       ...Object.fromEntries((["instagram", "country", "currency", "locale", "industry", "vertical"] as const)
@@ -357,8 +435,8 @@ export function createApp(deps: ServerDeps): Hono {
 
   app.get("/api/:t/sessions", async (c) => {
     const { reg, g } = await tenantOf(c);
-    const list: SessionSummaryDto[] = await reads.sessions(g, { showcaseOnly: deps.publicMode });
-    const working = deps.publicMode ? [] : turns.running(reg.slug);
+    const list: SessionSummaryDto[] = await reads.sessions(g, { showcaseOnly: isPublic() });
+    const working = isPublic() ? [] : turns.running(reg.slug);
     const ids = new Set(working.map((t) => t.sessionId));
     // a new thread whose first turn is still being set up is not in the graph yet: listed from the live turn
     const fresh = working.filter((t) => t.sessionId && !list.some((s) => s.id === t.sessionId)).map((t): SessionSummaryDto => {
@@ -371,8 +449,8 @@ export function createApp(deps: ServerDeps): Hono {
   app.get("/api/:t/sessions/:id", async (c) => {
     const { reg, g } = await tenantOf(c);
     const id = c.req.param("id");
-    const running = deps.publicMode ? undefined : turns.runningInSession(reg.slug, id);
-    const s: SessionDetailDto | null = await reads.sessionDetail(g, id, { showcaseOnly: deps.publicMode })
+    const running = isPublic() ? undefined : turns.runningInSession(reg.slug, id);
+    const s: SessionDetailDto | null = await reads.sessionDetail(g, id, { showcaseOnly: isPublic() })
       ?? (running ? { id, title: running.question, turns: [] } : null); // a new thread whose first turn is still being set up
     if (!s) throw new HttpError(404, "No such thread.");
     return c.json(running && !s.turns.some((t) => t.id === running.turnId) ? { ...s, running: running.dto() } : s);
@@ -400,7 +478,7 @@ export function createApp(deps: ServerDeps): Hono {
       };
       return c.json(dto);
     }
-    const stored = await reads.storedTurn(g, id, { showcaseOnly: deps.publicMode });
+    const stored = await reads.storedTurn(g, id, { showcaseOnly: isPublic() });
     if (!stored) throw new HttpError(404, "No such turn.");
     const events = stored.events.slice(after, after + page);
     const next = Math.min(stored.events.length, after + events.length);
@@ -424,7 +502,7 @@ export function createApp(deps: ServerDeps): Hono {
 
   app.get("/api/:t/turns/:id/replay", async (c) => {
     const { g } = await tenantOf(c);
-    const events = await reads.turnEvents(g, c.req.param("id"), { showcaseOnly: deps.publicMode });
+    const events = await reads.turnEvents(g, c.req.param("id"), { showcaseOnly: isPublic() });
     if (!events) throw new HttpError(404, "No stored work log for that turn.");
     return c.json(events);
   });
@@ -460,7 +538,7 @@ export function createApp(deps: ServerDeps): Hono {
     return c.json(data);
   });
 
-  const routeCtx: RouteCtx = { tenantOf, refuseInPublicMode, publicMode: deps.publicMode, now, log };
+  const routeCtx: RouteCtx = { tenantOf, refuseInPublicMode, get publicMode() { return isPublic(); }, now, log };
   registerTeamRoutes(app, routeCtx, deps.directiveLlm !== undefined ? { directiveLlm: deps.directiveLlm } : {});
   registerProgramRoutes(app, routeCtx);
   registerGoalRoutes(app, routeCtx);
@@ -498,7 +576,7 @@ export function createApp(deps: ServerDeps): Hono {
     const body = await readBody(c, AskBody);
     const question = body.question.trim();
 
-    if (deps.publicMode) {
+    if (isPublic()) {
       const turn = await reads.findShowcaseTurn(g, { question, ...(body.turnId ? { turnId: body.turnId } : {}) });
       return sse<AgentEvent>(c, { heartbeatMs, log }, async (send, signal) => {
         if (!turn) { send({ type: "error", message: LIVE_CHAT_OFF }); return; }

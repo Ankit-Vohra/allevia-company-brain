@@ -17,7 +17,7 @@ export const RESERVED_SLUGS: readonly string[] = [
   "health", "tenants", "plans", "onboard", "auth", "admin", "api", // first path segments under /api
 ];
 
-export function isTenantSlug(s: unknown): s is string {
+export function isTenantSlug(s: unknown): boolean {
   return typeof s === "string" && s.length <= MAX_SLUG_LENGTH && TENANT_SLUG.test(s) && !RESERVED_SLUGS.includes(s);
 }
 
@@ -26,5 +26,5 @@ export function assertTenantSlug(s: unknown): string {
   if (!isTenantSlug(s)) {
     throw new Error(`tenant slug must be lowercase words joined by single "_" (at most ${MAX_SLUG_LENGTH} characters, not a reserved name), got ${JSON.stringify(s)}`);
   }
-  return s;
+  return s as string;
 }

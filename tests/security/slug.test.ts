@@ -9,46 +9,11 @@ import { META_GRAPH } from "../../src/graph/tenants.js";
 import { closeAll, graphName, openGraph, openGraphByName } from "../../src/graph/client.js";
 import { ensureTenant, listTenants } from "../../src/graph/tenants.js";
 import { MAX_SLUG_LENGTH, RESERVED_SLUGS, isTenantSlug } from "../../src/graph/slug.js";
+import { CRAFTED_SLUGS } from "./crafted.js";
 import { AssetStore } from "../../src/studio/store.js";
 import { studioSample } from "../../src/studio/wiring.js";
 import { tenantGraph } from "../../src/agent/wiring.js";
 import { testGraphName } from "../helpers/graph.js";
-
-export const CRAFTED_SLUGS: Array<[string, string]> = [
-  ["parent directory", "../aamdani"],
-  ["deep traversal", "../../etc/passwd"],
-  ["slash", "a/b"],
-  ["backslash", "a\\b"],
-  ["url-encoded dots", "%2e%2e%2fmeta"],
-  ["single quote", "x'y"],
-  ["double quote", 'x"y'],
-  ["backtick", "x`y"],
-  ["cypher break-out", "x' }) MATCH (n) DETACH DELETE n //"],
-  ["semicolon", "a;b"],
-  ["space", "a b"],
-  ["trailing newline", "aamdani\n"],
-  ["leading newline", "\naamdani"],
-  ["null byte", "aamdani\u0000meta"],
-  ["upper case", "Aamdani"],
-  ["all caps", "AAMDANI"],
-  ["the registry itself, upper", "META"],
-  ["dash", "avs-atelier"],
-  ["double underscore (projection names)", "shop__cur_1_deadbeef"],
-  ["leading underscore", "_shop"],
-  ["trailing underscore", "shop_"],
-  ["empty", ""],
-  ["wildcard", "*"],
-  ["dot", "."],
-  ["Cyrillic a", "аamdani"],
-  ["fullwidth letters", "ａamdani"],
-  ["Turkish dotless i", "ındex"],
-  ["combining accent", "áamdani"],
-  ["right-to-left override", "aamdani‮"],
-  ["zero-width space", "aam​dani"],
-  ["emoji", "shop\u{1F600}"],
-  ["Arabic-Indic digit", "shop٣"],
-  ["longer than the limit", "a".repeat(MAX_SLUG_LENGTH + 1)],
-];
 
 describe("tenant slugs", () => {
   it("accepts ordinary slugs, up to the length limit", () => {
