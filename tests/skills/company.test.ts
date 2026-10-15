@@ -9,6 +9,7 @@ import { companyFacts, companySkills, companySkillVersions, companySlug, writeCo
 import { lintBusinessSkill } from "../../src/agent/skills/format.js";
 import { skillsBlock } from "../../src/agent/skills/render.js";
 import { useSkill } from "../../src/agent/tools/skills.js";
+import { search } from "../../src/agent/tools/search.js";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
 import { ensureIndexes } from "../../src/graph/indexes.js";
 import { upsertNode, writeBatch } from "../../src/graph/upsert.js";
@@ -113,6 +114,13 @@ describe("company skills from a business's own graph (integration)", () => {
     expect(r.data).toMatchObject({ skill: "harbour-bakery-reel", source: "business" });
     // Rohan sees the ad skill first too
     expect(skillsBlock(catalog.forAgent("growth-marketer")).indexOf("harbour-bakery-ad")).toBeLessThan(skillsBlock(catalog.forAgent("growth-marketer")).indexOf("- ad-budget-check"));
+  });
+
+  it("is never a search hit, so nobody cites a skill as if it were evidence", async () => {
+    const r = await search.run({ query: "Harbour Bakery reels brand voice sourdough", limit: 10 }, stubCtx({ graph: g, agentId: "fact-checker" }));
+    const ids = ((r.data as { hits?: Array<{ id: string }> }).hits ?? []).map((h) => h.id);
+    expect(ids.some((id) => id.startsWith("memory:skill-"))).toBe(false);
+    expect(ids).toContain("product:sourdough");
   });
 
   it("a business with an empty graph still gets honest skills that say what is not recorded", () => {

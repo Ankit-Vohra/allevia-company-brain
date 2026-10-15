@@ -44,7 +44,8 @@ async function run(args: { query: string; types?: string[]; limit?: number }, ct
 
   const entCols = `${NODE("node")} AS n, node.summary AS summary, score`;
   const chunkCols = `${NODE("node")} AS c, node.text AS text, ${NODE("d")} AS doc, score`;
-  const typeFilter = "WITH node, score WHERE any(l IN labels(node) WHERE l IN $types) AND NOT node:Chunk";
+  // a skill (the team's way of working) is never a search hit: it is not evidence, so it must not be found and cited
+  const typeFilter = "WITH node, score WHERE any(l IN labels(node) WHERE l IN $types) AND NOT node:Chunk AND NOT (node:Memory AND coalesce(node.kind, '') IN ['skill', 'skill_rule'])";
   const q = terms.length ? ftQuery(terms) : null;
   let vec: number[] | null = null;
   if (ctx.embedQuery) {
