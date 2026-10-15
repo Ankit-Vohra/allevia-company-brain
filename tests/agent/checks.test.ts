@@ -56,7 +56,20 @@ describe("findNumbers", () => {
     expect(findNumbers("५ अक्टूबर को ५५ साइनअप हुए, ₹१,२०० खर्च").map((m) => m.value)).toEqual([55, 1200]);
   });
   it("keeps a year-looking number that carries a currency, a comma or a percent", () => {
-    expect(raws("₹2026 and 2,026 and 2026% but not 2026")).toEqual(["₹2026", "2,026", "2026%"]);
+    expect(raws("₹2026 and 2,026 and 2026% but not in 2026")).toEqual(["₹2026", "2,026", "2026%"]);
+  });
+  it("a number from 1990 to 2100 is a year only next to a date or a year word; otherwise it is a quantity", () => {
+    expect(raws("We had 2045 sessions and 1999 clicks")).toEqual(["2045", "1999"]);
+    for (const t of ["in 2026", "since 2019", "until 2030", "the year 2026", "FY 2026", "Q3 2026", "end of 2025", "2025-2026", "2025 to 2026",
+      "2026's best week", "the 2026 budget", "Oct, 2026", "2026 में"]) expect(raws(`${t}: 40`), t).toEqual(["40"]);
+  });
+  it("ignores slash dates, week numbers and 'top N'", () => {
+    expect(raws("Updated 2026/10/12 and 12/10/2026: in week 41 (wk 40) the top 3 pages had 5 signups")).toEqual(["5"]);
+  });
+  it("reads lowercase m/b multipliers only after a currency, and the currencies of every market", () => {
+    expect(findNumbers("£2.5m, $1.2b, US$1,200, A$3k, AED 1,500, Dhs 200, 5m away").map((m) => [m.raw, m.value * m.scale])).toEqual([
+      ["£2.5m", 2_500_000], ["$1.2b", 1_200_000_000], ["US$1,200", 1200], ["A$3k", 3000], ["AED 1,500", 1500], ["Dhs 200", 200], ["5", 5],
+    ]);
   });
 });
 
@@ -116,6 +129,22 @@ describe("checkTurn: numbers", () => {
     const t4 = touched({ delta: -12 });
     expect(checkTurn("Clicks fell 12 week on week.", t4, { now: NOW }).numbersGrounded).toBe(true);
   });
+  it("dates in tool data never ground a number: '12%' is not grounded by 2026-10-12", () => {
+    const dated = touched({ week: "2026-10-12", at: "2026-10-12T10:30:00Z", label: "2026/10/12", uk: "12/10/2026", value: 41 });
+    expect(dated.numbers().has("12")).toBe(false);
+    expect(dated.numbers().has("-10")).toBe(false);
+    expect(checkTurn("Signups fell 12% to 41.", dated, { now: NOW }).ungroundedNumbers).toEqual(["12%"]);
+    expect(checkTurn("Signups were 41 in the week to 2026-10-12.", dated, { now: NOW }).numbersGrounded).toBe(true);
+  });
+  it("a hyphen after a digit is not a minus sign (a range in tool data), but a leading minus is", () => {
+    const t5 = touched({ range: "10-12", delta: "-7", id: "abc-3" });
+    expect([...t5.numbers()].sort()).toEqual(["-7", "10", "12", "3"]);
+  });
+  it("currency multipliers: £2.5m, $1.2k, $1.2bn are grounded by the full value", () => {
+    const money = touched({ revenue: 2500000, spend: 1200, big: 1200000000 });
+    expect(checkTurn("Revenue was £2.5m, spend $1.2k and $1.2bn overall.", money, { now: NOW }).numbersGrounded).toBe(true);
+    expect(checkTurn("Revenue was £3.5m.", money, { now: NOW }).ungroundedNumbers).toEqual(["£3.5m"]);
+  });
   it("an answer with no numbers is grounded", () => {
     expect(checkTurn("Nothing recorded on that.", touched({}), { now: NOW }).numbersGrounded).toBe(true);
   });
@@ -142,7 +171,54 @@ describe("checkTurn: simulated and freshness", () => {
     expect(checkTurn("55 signups", t, { now: NOW }).freshnessDisclosed).toBe(false);
     expect(checkTurn("55 signups as of 20 Sep 2026", t, { now: NOW }).freshnessDisclosed).toBe(true);
   });
+  it("'as of' counts only with an actual date after it ('as of now' or 'as of today' doesn't)", () => {
+    const t = touched({}, [{ id: "obs:a", asOf: "2026-09-01" }]);
+    for (const a of ["As of now, 5 signups.", "As of today signups are fine", "as of the latest data, 5"]) {
+      expect(checkTurn(a, t, { now: NOW }).freshnessDisclosed, a).toBe(false);
+    }
+    for (const a of ["Signups as of 1 Sep 2026", "as of 2026-09-01: 5", "As of Sept 1, 5", "as of 01/09/2026, 5", "as at 1 September 2026, 5",
+      "as of the week to 2026-09-01, 5", "१ सितंबर २०२६ तक की स्थिति: ५", "2026-09-01 के अनुसार ५"]) {
+      expect(checkTurn(a, t, { now: NOW }).freshnessDisclosed, a).toBe(true);
+    }
+  });
+  it("newestAsOf compares instants, not strings", () => {
+    const t = touched({}, [{ id: "a", asOf: "2026-10-15" }, { id: "b", asOf: "2026-10-14T23:00:00-05:00" }]);
+    expect(t.newestAsOf()).toBe("2026-10-14T23:00:00-05:00");
+  });
   it("no asOf anywhere: fresh by default", () => {
     expect(checkTurn("ok", touched({}, [{ id: "a" }]), { now: NOW }).freshnessDisclosed).toBe(true);
   });
+});
+
+// The review's probe-checks.ts, as a table: each answer against its tool data.
+describe("checkTurn: the review's probe cases", () => {
+  const cases: Array<[string, unknown, string, boolean, string[]?]> = [
+    ["GBP m lowercase", { revenue: 2500000 }, "Revenue was £2.5m in September.", true],
+    ["USD M upper", { revenue: 2500000 }, "Revenue was $2.5M in September.", true],
+    ["USD bn", { revenue: 1200000000 }, "Revenue was $1.2bn.", true],
+    ["USD k lowercase", { spend: 12500 }, "Spend was $12.5k.", true],
+    ["a year-like quantity is checked", { sessions: 2010 }, "We had 2045 sessions last week.", false, ["2045"]],
+    ["a year-like quantity in the data", { sessions: 2045 }, "We had 2045 sessions last week.", true],
+    ["slash ISO date", { x: 1 }, "Updated 2026/10/12.", true],
+    ["a small number is not grounded by a date", { week: "2026-10-12", value: 41 }, "Signups fell 12% to 41.", false, ["12%"]],
+    ["pct points", { ctr: 0.034 }, "CTR was 3.4%.", true],
+    ["pct as 3.4 in data", { ctr: 3.4 }, "CTR was 3.4%.", true],
+    ["£1,234.56", { amt: 1234.56 }, "Paid £1,234.56.", true],
+    ["week 41", { v: 5 }, "In week 41 we had 5 signups.", true],
+    ["UK date", { v: 5 }, "5 signups on 12/10/2026.", true],
+    ["range en dash", { a: 10, b: 12 }, "between 10–12 signups", true],
+    ["Q3 FY26", { v: 1 }, "Q3 FY26 results", true],
+    ["2.4x", { mult: 2.4 }, "a 2.4x outlier", true],
+    ["timezone BST", { v: 1 }, "at 10:30 BST", true],
+    ["US$", { v: 1200 }, "US$1,200 spent", true],
+    ["1.2 million", { v: 1200000 }, "1.2 million impressions", true],
+    ["top 3", { v: 1 }, "Top 3 pages", true],
+  ];
+  for (const [name, data, answer, grounded, ungrounded] of cases) {
+    it(name, () => {
+      const c = checkTurn(answer, touched(data), { now: NOW });
+      expect(c.numbersGrounded).toBe(grounded);
+      if (ungrounded) expect(c.ungroundedNumbers).toEqual(ungrounded);
+    });
+  }
 });
