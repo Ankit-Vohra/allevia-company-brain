@@ -39,7 +39,7 @@ export async function buildEditPrompt(
   fidelity.forEach((r) => sources.add(r.id));
   const audiences = await g.roQuery<{ id: string; name: string | null }>("MATCH (a:Audience) RETURN a.id AS id, a.name AS name ORDER BY a.id LIMIT 3");
   const needs = audiences.length
-    ? await g.roQuery<{ name: string | null }>("MATCH (a:Audience)-[:HAS_NEED]->(n:Need) WHERE a.id IN $ids RETURN n.name AS name ORDER BY n.name, n.id LIMIT 4", { ids: audiences.map((x) => x.id) })
+    ? await g.roQuery<{ name: string | null }>("MATCH (a:Entity:Audience)-[:HAS_NEED]->(n:Need) WHERE a.id IN $ids RETURN n.name AS name ORDER BY n.name, n.id LIMIT 4", { ids: audiences.map((x) => x.id) })
     : [];
   audiences.forEach((x) => sources.add(x.id));
   const winners = await g.roQuery<{ id: string; name: string | null; v: number }>(

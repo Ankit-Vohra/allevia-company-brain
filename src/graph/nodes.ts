@@ -10,7 +10,7 @@
 // earlier same-date reading from another source, whose values that Version already records, changes nothing.
 import { randomBytes } from "node:crypto";
 import type { GraphHandle } from "./client.js";
-import { TRACKED_PROPS, typeOfLabels } from "./schema.js";
+import { SEARCH_INDEXED_TYPES, SEARCHABLE_LABEL, TRACKED_PROPS, metricKeyOf, typeOfLabels } from "./schema.js";
 import { CHUNK_VECTOR_PROP, ENTITY_VECTOR_PROP, vectorPropFor } from "./indexes.js";
 import { InvalidWrite } from "./errors.js";
 import { defined, num, sameValue, validateNode, type NodeInput, type Prim } from "./validate.js";
@@ -20,9 +20,13 @@ import { sha256 } from "../util/ids.js";
 export interface NodeResult { created: boolean; versioned: boolean; updated: boolean }
 
 const VECTOR_PROPS = [ENTITY_VECTOR_PROP, CHUNK_VECTOR_PROP];
+const SEARCHABLE_TYPES = new Set<string>(SEARCH_INDEXED_TYPES);
+// FalkorDB's UNIQUE constraint on Entity.id refuses the second node with an id (a concurrent create, or the same id
+// under another type): the caller re-reads, finds the winner, and goes on as an update (or reports the type clash).
+const uniqueViolation = (e: unknown): boolean => /unique constraint/i.test(String((e as Error).message));
 
 async function readNode(g: GraphHandle, id: string): Promise<{ labels: string[]; props: Record<string, unknown> } | null> {
-  const rows = await g.query<{ labels: string[]; kv: Array<[string, unknown]> }>(
+  const rows = await g.peek<{ labels: string[]; kv: Array<[string, unknown]> }>(
     "MATCH (n:Entity {id:$id}) RETURN labels(n) AS labels, [k IN keys(n) WHERE NOT k IN $skip | [k, n[k]]] AS kv LIMIT 1",
     { id, skip: VECTOR_PROPS });
   const r = rows[0];
@@ -42,7 +46,7 @@ const absent = (v: unknown): boolean => v === null || v === undefined;
 // values: the Version written when this source was current, on an earlier run of the same ingest. Replaying such a
 // source must not flip the node back to it.
 async function alreadyRecorded(g: GraphHandle, n: NodeInput, content: Record<string, Prim>, keys: string[]): Promise<boolean> {
-  const rows = await g.query<{ props: string }>(
+  const rows = await g.peek<{ props: string }>(
     "MATCH (:Entity {id:$id})-[:HAD_VERSION]->(v:Version) WHERE v.asOf = $asOf AND coalesce(v.src, '') = $src RETURN v.props AS props",
     { id: n.id, asOf: n.asOf ?? null, src: n.src ?? "" });
   return rows.some((v) => keys.every((k) => sameValue((JSON.parse(v.props) as Record<string, unknown>)[k], content[k])));
@@ -95,11 +99,16 @@ async function writeBackdated(
 // Concurrency: the create path is one MERGE that reports `created` only to the caller whose ON CREATE ran (a per-call
 // token), and every update is a compare-and-set on `rev`, with the Version written in the same statement. A caller
 // that loses a race re-reads and re-diffs, so two concurrent upserts never both report created and never version the
-// same state twice. What remains: nodes are matched by id with the type checked on read, so a concurrent create of
-// the same id under a different type could still make two nodes (the id-prefix check makes that a caller bug).
+// same state twice. Entity.id carries UNIQUE and MANDATORY constraints (ensureIndexes), so a concurrent create of the
+// same id, under the same type or another, makes the loser's MERGE fail with a unique-constraint error: it re-reads and
+// finds the winner (an update) or the type clash (InvalidWrite). On a graph whose constraint is not operational yet,
+// the type clash could still make two nodes (the id-prefix check makes that a caller bug).
 export async function upsertNode(g: GraphHandle, n: NodeInput, now: number = Date.now()): Promise<NodeResult> {
   validateNode(n);
-  const content = defined({ ...n.props, name: n.name, summary: n.summary });
+  // An Observation always carries metricKey, whoever writes it: reads compare it (and index it) instead of toLower(metric).
+  const metric = n.type === "Observation" ? n.props?.metric : undefined;
+  const props = typeof metric === "string" && n.props?.metricKey === undefined ? { ...n.props, metricKey: metricKeyOf(metric) } : n.props;
+  const content = defined({ ...props, name: n.name, summary: n.summary });
   const prov = defined({ src: n.src, asOf: n.asOf, simulated: n.simulated });
   const vecProp = vectorPropFor(n.type);
   const inAsOf = dateMs(n.asOf);
@@ -109,11 +118,19 @@ export async function upsertNode(g: GraphHandle, n: NodeInput, now: number = Dat
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const existing = await readNode(g, n.id);
     if (!existing) {
-      const rows = await g.query<{ created: boolean }>(
-        `MERGE (n:Entity:${n.type} {id:$id})
-         ON CREATE SET n += $props, n.createdAt = $now, n.updatedAt = $now, n.stateSince = $stateSince, n.rev = 1, n._mergeToken = $token${n.embedding ? `, n.${vecProp} = vecf32($vec)` : ""}
-         WITH n, coalesce(n._mergeToken = $token, false) AS created SET n._mergeToken = null RETURN created`,
-        { ...base, token: randomBytes(8).toString("hex") });
+      let rows: Array<{ created: boolean }>;
+      try {
+        // The match stays on (Entity, type) so a node written before the Searchable label existed is still found
+        // (ensureIndexes backfills those); the label is set on create, not matched.
+        rows = await g.query<{ created: boolean }>(
+          `MERGE (n:Entity:${n.type} {id:$id})
+           ON CREATE SET n += $props, n.createdAt = $now, n.updatedAt = $now, n.stateSince = $stateSince, n.rev = 1, n._mergeToken = $token${n.embedding ? `, n.${vecProp} = vecf32($vec)` : ""}${SEARCHABLE_TYPES.has(n.type) ? `, n:${SEARCHABLE_LABEL}` : ""}
+           WITH n, coalesce(n._mergeToken = $token, false) AS created SET n._mergeToken = null RETURN created`,
+          { ...base, token: randomBytes(8).toString("hex") });
+      } catch (e) {
+        if (uniqueViolation(e)) continue; // lost a create race, or the id is taken by another type: re-read
+        throw e;
+      }
       if (rows[0]?.created) {
         await noteGraphWrite(g.name); // a new node changes what the algorithms see
         return { created: true, versioned: false, updated: false };
@@ -167,6 +184,7 @@ export async function upsertNode(g: GraphHandle, n: NodeInput, now: number = Dat
       cypher += " CREATE (n)-[h:HAD_VERSION]->(v:Entity:Version) SET v += $version, h += $hv";
     }
     cypher += " SET n += $props, n.rev = $rev + 1";
+    if (SEARCHABLE_TYPES.has(n.type)) cypher += `, n:${SEARCHABLE_LABEL}`; // heals a node written before the label existed
     if (changed.length) cypher += ", n.updatedAt = $now";
     if (tracked.length) cypher += ", n.stateSince = $nextSince";
     if (n.embedding) cypher += `, n.${vecProp} = vecf32($vec)`;

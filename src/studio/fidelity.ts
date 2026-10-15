@@ -141,7 +141,7 @@ export async function checkFidelity(
     };
     r.note = badgeNote(r);
     out.push(r);
-    const [row] = await g.roQuery<{ name: string }>("MATCH (x:Asset {id:$id}) RETURN x.name AS name", { id: v.id });
+    const [row] = await g.roQuery<{ name: string }>("MATCH (x:Entity:Asset {id:$id}) RETURN x.name AS name", { id: v.id });
     await upsertNode(g, {
       type: "Asset", id: v.id, name: row?.name ?? v.id,
       props: { fidelityBadge: badge, fidelityNote: r.note, dhashDistance: r.dhashDistance, ssim: r.ssim, structure: r.structure, fidelity: JSON.stringify(vision) },

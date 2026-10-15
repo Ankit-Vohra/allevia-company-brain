@@ -8,6 +8,9 @@ export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
     pool: "forks",
+    // The query-shape check: setupFiles record what src/ sends, globalSetup plans it all with EXPLAIN when the run ends.
+    globalSetup: ["tests/setup/query-shapes.global.ts"],
+    setupFiles: ["tests/setup/query-shapes.ts"],
     testTimeout: 20_000,
     hookTimeout: 30_000,
     env: {

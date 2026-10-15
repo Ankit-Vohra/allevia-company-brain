@@ -230,6 +230,23 @@ outside the repo. Local embeddings are optional too ($0, no network after the fi
 scripts/spikes/embeddings.ts` fetches `Xenova/multilingual-e5-small` (about 130 MB) into `models/`. Without it, search
 is full-text only.
 
+### FalkorDB settings and schema
+
+`docker-compose.yml` starts FalkorDB with the limits the code is written for, as module load arguments (`FALKORDB_ARGS`:
+`THREAD_COUNT 4`, `MAX_QUEUED_QUERIES 500`, `TIMEOUT_DEFAULT 15000`, `TIMEOUT_MAX 120000`, `QUERY_MEM_CAPACITY 536870912`,
+`CACHE_SIZE 256`, `RESULTSET_SIZE 10000`; what each is for is in [`src/graph/server-config.ts`](src/graph/server-config.ts)).
+Load arguments survive a restart and `GRAPH.CONFIG SET` does not, so a running server picks them up with
+`docker compose up -d falkordb`, and `npm run cli -- db:check` reports one that differs.
+
+Every tenant graph is brought to the same schema when it is created and again at the start of every ingest
+([`src/graph/indexes.ts`](src/graph/indexes.ts), [`migrate.ts`](src/graph/migrate.ts)); `npm run cli -- db:migrate [tenant]`
+runs it on demand. The schema is: a range index on `Entity.id` with UNIQUE and MANDATORY constraints (duplicate ids already in a graph
+are merged first); range indexes on `Observation.metric`, `metricKey` (the lowercase metric, so no read wraps it in
+`toLower()`), `subject` and `asOf`; the `Searchable` label on the types search returns, with the full-text and vector
+indexes on it, so a reading's name never competes with an entity's. Queries look nodes up as `(n:Entity:Type {id:$id})`
+(the index is on `Entity.id`), and bind the edge under every count (`WHERE ID(e) >= 0`) because FalkorDB 6.0.2 collapses parallel
+edges nothing refers to; the suite holds both rules (see Tests).
+
 ### CLI
 
 `npm run cli -- <command>` (`npm run cli` lists them all). The main ones:
@@ -250,13 +267,15 @@ is full-text only.
 | `mcp --tenant <slug> [--http]` | The read-only MCP server for one tenant |
 | `eval <tenant> [--fake]` | Run the tenant's eval questions, score every turn, write `docs/evals/<date>-<tenant>.md` |
 | `showcase <tenant> [<turnId>]` | Mark a stored turn for public replay, or list the showcase turns |
+| `db:check` / `db:migrate [tenant…]` | Ping FalkorDB and compare its settings with `docker-compose.yml`; bring tenant graphs up to the current schema |
 | `privacy-scan <tenant>` | Scan every string in a tenant's graph for secrets and personal data (must report 0) |
 
 ## Tests and evals
 
 - **1,493 tests pass** (2 more skipped) in 117 files (vitest), run against a real FalkorDB in throwaway graphs: unit tests,
   integration tests for every tool and algorithm, the API, SSE, the Discord and MCP surfaces, a static scan that
-  holds every Cypher string in `src/` to the crash rules, and a regression that runs every tool, detector and read
+  holds every Cypher string in `src/` to the crash rules, the Entity-label and parallel-edge rules, an `EXPLAIN` of every
+  query the suite sends (it fails the run if one looks a node up by id and still scans a label), and a regression that runs every tool, detector and read
   over a graph built of ties, zeros and gaps. Two live-model tests are skipped unless `ALLEVIA_LIVE_LLM=1`.
   `npm test` (or `ALLEVIA_FALKORDB_URL=redis://127.0.0.1:<port> npx vitest run` against a throwaway server).
 - **Evals** ([`evals/`](evals), reports in [`docs/evals/`](docs/evals)): 43 questions with expected citations, regexes,

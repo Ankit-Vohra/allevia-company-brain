@@ -34,7 +34,7 @@ export async function getProgram(g: GraphHandle, opts: ProgramOpts = {}): Promis
   if (!biz) return null;
   const program = await currentProgram(g, biz);
   if (!program) return null;
-  const [b] = await g.roQuery<{ tz: string | null; tk: string | null }>("MATCH (b:Business {id:$id}) RETURN b.timeZone AS tz, b.templateKey AS tk", { id: biz });
+  const [b] = await g.roQuery<{ tz: string | null; tk: string | null }>("MATCH (b:Entity:Business {id:$id}) RETURN b.timeZone AS tz, b.templateKey AS tk", { id: biz });
   const timeZone = b?.tz ?? undefined;
   const today = localDate(now, timeZone);
   const day = Math.max(0, programDay(program.startDate, today));
@@ -87,12 +87,12 @@ export async function refreshGoalReadings(g: GraphHandle, o: { now?: number; bus
   const biz = await findBusiness(g, o.businessId);
   const program = biz ? await currentProgram(g, biz) : null;
   if (!biz || !program) return 0;
-  const [b] = await g.roQuery<{ tz: string | null }>("MATCH (b:Business {id:$id}) RETURN b.timeZone AS tz", { id: biz });
+  const [b] = await g.roQuery<{ tz: string | null }>("MATCH (b:Entity:Business {id:$id}) RETURN b.timeZone AS tz", { id: biz });
   return (await measureGoals(g, { program: program.id, businessId: biz, today: localDate(now, b?.tz ?? undefined), now })).length;
 }
 
 async function programName(g: GraphHandle, id: string): Promise<string | undefined> {
-  return (await g.roQuery<{ n: string }>("MATCH (p:Program {id:$id}) RETURN p.name AS n", { id }))[0]?.n;
+  return (await g.roQuery<{ n: string }>("MATCH (p:Entity:Program {id:$id}) RETURN p.name AS n", { id }))[0]?.n;
 }
 
 function programGoal(gl: GoalRow, p: Awaited<ReturnType<typeof goalPulse>>[number] | undefined): ProgramGoal {

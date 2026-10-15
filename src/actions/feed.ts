@@ -16,9 +16,9 @@ async function toDtos(g: Read, rows: RuleRow[]): Promise<LearnedRuleDto[]> {
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
   const [from, agents] = await Promise.all([
-    g.roQuery<{ id: string; a: string }>("UNWIND $ids AS id MATCH (r:Rule {id:id})-[:LEARNED_FROM]->(a:Approval) RETURN r.id AS id, a.id AS a ORDER BY a, id", { ids }),
+    g.roQuery<{ id: string; a: string }>("UNWIND $ids AS id MATCH (r:Entity:Rule {id:id})-[:LEARNED_FROM]->(a:Approval) RETURN r.id AS id, a.id AS a ORDER BY a, id", { ids }),
     g.roQuery<{ id: string; agent: string | null }>(
-      "UNWIND $ids AS id MATCH (r:Rule {id:id})-[e:APPLIES_TO]->(ag:Agent) WHERE e.until IS NULL RETURN r.id AS id, ag.rosterId AS agent ORDER BY agent, id", { ids }),
+      "UNWIND $ids AS id MATCH (r:Entity:Rule {id:id})-[e:APPLIES_TO]->(ag:Agent) WHERE e.until IS NULL RETURN r.id AS id, ag.rosterId AS agent ORDER BY agent, id", { ids }),
   ]);
   return rows.map((r) => ({
     id: r.id, text: r.text ?? r.id, op: r.op ?? "instruction", status: r.status === "retired" ? "retired" : "active",
@@ -40,13 +40,13 @@ export async function learnedRules(g: Read, since = 0, limit = 200): Promise<Lea
 }
 
 export async function learnedRule(g: Read, id: string): Promise<LearnedRuleDto | null> {
-  const rows = await g.roQuery<RuleRow>(`MATCH (r:Rule {id:$id}) WHERE r.kind = 'learned' RETURN ${RULE_FIELDS}`, { id });
+  const rows = await g.roQuery<RuleRow>(`MATCH (r:Entity:Rule {id:$id}) WHERE r.kind = 'learned' RETURN ${RULE_FIELDS}`, { id });
   return (await toDtos(g, rows))[0] ?? null;
 }
 
 // null when there is no such learned rule; retiring a retired rule changes nothing.
 export async function retireLearnedRule(g: GraphHandle, id: string, o: { now?: number; actor?: string } = {}): Promise<LearnedRuleDto | null> {
-  const [r] = await g.roQuery<{ name: string; status: string | null }>("MATCH (r:Rule {id:$id}) WHERE r.kind = 'learned' RETURN r.name AS name, r.status AS status", { id });
+  const [r] = await g.roQuery<{ name: string; status: string | null }>("MATCH (r:Entity:Rule {id:$id}) WHERE r.kind = 'learned' RETURN r.name AS name, r.status AS status", { id });
   if (!r) return null;
   if (r.status !== "retired") {
     const now = o.now ?? Date.now();

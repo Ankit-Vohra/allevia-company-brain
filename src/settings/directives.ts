@@ -460,7 +460,7 @@ export async function previewDirective(g: GraphHandle, input: { text: string; ac
   const id = entityId("Document", `directive ${istDate(now)} ${randomBytes(4).toString("hex")}`);
   const [agents, rules] = await Promise.all([
     listAgentsWithSettings(g),
-    g.roQuery<{ id: string }>("UNWIND $ids AS id MATCH (r:BrandRule {id:id}) RETURN r.id AS id",
+    g.roQuery<{ id: string }>("UNWIND $ids AS id MATCH (r:Entity:BrandRule {id:id}) RETURN r.id AS id",
       { ids: patches.filter((p) => p.kind === "brand_rule.add").map((p) => brandRuleId(p.text)) }),
   ]);
   const diff = diffOf(patches, agents, new Set(rules.map((r) => r.id)), id);
@@ -481,7 +481,7 @@ export async function previewDirective(g: GraphHandle, input: { text: string; ac
 const parseJson = <T>(s: unknown, fallback: T): T => { try { return typeof s === "string" ? JSON.parse(s) as T : fallback; } catch { return fallback; } };
 
 export async function getDirective(g: GraphHandle, id: string): Promise<(DirectivePreview & { name: string }) | null> {
-  const [r] = await g.roQuery<{ p: Record<string, unknown> }>("MATCH (d:Document {id:$id}) WHERE d.kind = 'directive' RETURN properties(d) AS p", { id });
+  const [r] = await g.roQuery<{ p: Record<string, unknown> }>("MATCH (d:Entity:Document {id:$id}) WHERE d.kind = 'directive' RETURN properties(d) AS p", { id });
   if (!r) return null;
   const p = r.p;
   const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
@@ -514,7 +514,7 @@ export async function applyDirective(g: GraphHandle, previewId: string, opts: { 
   const { name, ...preview } = d;
   if (d.status === "applied") return { ...preview, errors: [] }; // applied already: nothing more to write
 
-  const [roster] = await g.roQuery<{ c: number }>("MATCH (a:Agent) WHERE a.id IN $ids RETURN count(a) AS c", { ids: AGENTS.map((a) => agentNodeId(a.id)) });
+  const [roster] = await g.roQuery<{ c: number }>("MATCH (a:Entity:Agent) WHERE a.id IN $ids RETURN count(a) AS c", { ids: AGENTS.map((a) => agentNodeId(a.id)) });
   if ((roster?.c ?? 0) < AGENTS.length) await ensureRoster(g, {}, now);
   const businessId = await findBusiness(g);
   const stated = await ensurePerson(g, d.actor, now);
@@ -545,7 +545,7 @@ async function instructionWrite(
   g: GraphHandle, p: Extract<DirectivePatch, { kind: "memory.instruction" }>, id: string, src: string, actor: string | undefined, now: number,
 ): Promise<{ nodes: NodeInput[]; edges: EdgeInput[] }> {
   const ch = p.channel ? channelRef(p.channel) : undefined;
-  const chExists = ch ? !!(await g.roQuery<{ c: number }>("MATCH (c:Channel {id:$id}) RETURN count(c) AS c", { id: ch.id }))[0]?.c : false;
+  const chExists = ch ? !!(await g.roQuery<{ c: number }>("MATCH (c:Entity:Channel {id:$id}) RETURN count(c) AS c", { id: ch.id }))[0]?.c : false;
   const props: Record<string, Prim> = {
     kind: "instruction", text: p.text, status: "active", at: now,
     ...(ch ? { channel: ch.id, channelName: ch.name } : {}),

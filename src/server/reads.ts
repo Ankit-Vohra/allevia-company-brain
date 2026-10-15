@@ -57,7 +57,7 @@ export interface BusinessProps { name?: string; domain?: string; industry?: stri
 
 export async function businessProps(g: GraphHandle, businessId: string): Promise<BusinessProps> {
   const rows = await ro<Record<string, unknown>>(g,
-    `MATCH (b:Business {id:$id}) RETURN b.name AS name, b.domain AS domain, b.industry AS industry, b.city AS city, b.country AS country,
+    `MATCH (b:Entity:Business {id:$id}) RETURN b.name AS name, b.domain AS domain, b.industry AS industry, b.city AS city, b.country AS country,
        b.currency AS currency, b.locale AS locale, b.timeZone AS timeZone LIMIT 1`, { id: businessId });
   const r = rows[0] ?? {};
   return Object.fromEntries(Object.entries(r).filter(([, v]) => typeof v === "string" && v)) as BusinessProps;
@@ -67,7 +67,7 @@ export async function businessProps(g: GraphHandle, businessId: string): Promise
 
 export async function labelCounts(g: GraphHandle): Promise<Record<string, number>> {
   const rows = await ro<{ label: string | null; c: number }>(g,
-    "MATCH (n:Entity) WITH [l IN labels(n) WHERE l <> 'Entity'][0] AS label RETURN label, count(*) AS c ORDER BY c DESC, label LIMIT 100");
+    "MATCH (n:Entity) WITH [l IN labels(n) WHERE NOT l IN ['Entity', 'Searchable']][0] AS label RETURN label, count(*) AS c ORDER BY c DESC, label LIMIT 100");
   return Object.fromEntries(rows.filter((r) => r.label).map((r) => [r.label!, r.c]));
 }
 
@@ -136,10 +136,11 @@ export async function sessions(g: GraphHandle, o: { showcaseOnly: boolean; limit
 }
 
 export async function sessionDetail(g: GraphHandle, id: string, o: { showcaseOnly: boolean }): Promise<SessionDetailDto | null> {
-  const [s] = await ro<{ name: string | null }>(g, "MATCH (s:Session {id:$id}) RETURN s.name AS name LIMIT 1", { id });
+  const [s] = await ro<{ name: string | null }>(g, "MATCH (s:Entity:Session {id:$id}) RETURN s.name AS name LIMIT 1", { id });
   if (!s) return null;
   const rows = await ro<Record<string, unknown>>(g,
-    `MATCH (t:Turn)-[r:IN_SESSION]->(:Session {id:$id}) WHERE r.until IS NULL ${o.showcaseOnly ? "AND t.showcase = true" : ""}
+    `MATCH (s:Entity:Session {id:$id}) WITH s
+     MATCH (t:Turn)-[r:IN_SESSION]->(s) WHERE r.until IS NULL ${o.showcaseOnly ? "AND t.showcase = true" : ""}
      RETURN t.id AS id, t.question AS question, t.answer AS answer, t.at AS at, t.ms AS ms, t.agents AS agents, t.citations AS citations,
        t.checks AS checks, t.status AS status, t.error AS error ORDER BY t.at, t.id LIMIT $limit`, { id, limit: LIMITS.turns });
   if (o.showcaseOnly && !rows.length) return null;
@@ -158,7 +159,7 @@ function turnRecord(r: Record<string, unknown>): TurnRecordDto {
 
 export async function turnEvents(g: GraphHandle, turnId: string, o: { showcaseOnly: boolean }): Promise<AgentEvent[] | null> {
   const rows = await ro<{ e: string | null; showcase: boolean | null }>(g,
-    "MATCH (t:Turn {id:$id}) RETURN t.events AS e, t.showcase AS showcase LIMIT 1", { id: turnId });
+    "MATCH (t:Entity:Turn {id:$id}) RETURN t.events AS e, t.showcase AS showcase LIMIT 1", { id: turnId });
   const r = rows[0];
   if (!r || (o.showcaseOnly && r.showcase !== true)) return null;
   const events = parseJson(r.e);
@@ -171,7 +172,7 @@ export interface StoredTurn { id: string; sessionId: string; question: string; s
 
 export async function storedTurn(g: GraphHandle, turnId: string, o: { showcaseOnly: boolean }): Promise<StoredTurn | null> {
   const rows = await ro<{ q: string | null; sid: string | null; status: string | null; error: string | null; e: string | null; showcase: boolean | null }>(g,
-    `MATCH (t:Turn {id:$id}) RETURN t.question AS q, t.sessionId AS sid, t.status AS status, t.error AS error, t.events AS e,
+    `MATCH (t:Entity:Turn {id:$id}) RETURN t.question AS q, t.sessionId AS sid, t.status AS status, t.error AS error, t.events AS e,
        t.showcase AS showcase LIMIT 1`, { id: turnId });
   const r = rows[0];
   if (!r || (o.showcaseOnly && r.showcase !== true)) return null;
@@ -226,7 +227,8 @@ export async function nodeDetail(g: GraphHandle, id: string): Promise<NodeDetail
     ...(typeof props.rank === "number" ? { rank: props.rank } : {}), ...(typeof props.community === "number" ? { community: props.community } : {}) };
 
   const nbQuery = (dir: "out" | "in") => ro<NbRow>(g,
-    `MATCH (n:Entity {id:$id})${dir === "out" ? "-[r]->" : "<-[r]-"}(m:Entity)
+    `MATCH (n:Entity {id:$id}) WITH n
+     MATCH (n)${dir === "out" ? "-[r]->" : "<-[r]-"}(m:Entity)
      WHERE r.until IS NULL AND NOT type(r) IN $skipRels AND NOT any(l IN labels(m) WHERE l IN $plumbing)
      RETURN type(r) AS type, r.since AS since, ${NODE("m")} AS n
      ORDER BY CASE WHEN m:Observation OR m:Turn OR m:Finding THEN 1 ELSE 0 END, type, m.id LIMIT $limit`,
@@ -262,7 +264,7 @@ type DocRow = { id: string; title: string | null; asOf: string | null };
 async function sourcesOf(g: GraphHandle, id: string, src: unknown): Promise<SourceRef[]> {
   const cols = "d.id AS id, coalesce(d.title, d.name) AS title, d.asOf AS asOf";
   const [own, linked] = await Promise.all([
-    typeof src === "string" && src ? ro<DocRow>(g, `MATCH (d:Document {id:$src}) RETURN ${cols} LIMIT 1`, { src }) : Promise.resolve([]),
+    typeof src === "string" && src ? ro<DocRow>(g, `MATCH (d:Entity:Document {id:$src}) RETURN ${cols} LIMIT 1`, { src }) : Promise.resolve([]),
     ro<DocRow>(g,
       `MATCH (:Entity {id:$id})-[r:SOURCED_FROM]->(d:Document) WHERE r.until IS NULL RETURN ${cols} ORDER BY coalesce(d.asOf, '') DESC, d.id LIMIT $limit`,
       { id, limit: LIMITS.sources }),
@@ -344,13 +346,13 @@ export async function agentStats(g: GraphHandle): Promise<Map<string, AgentStats
   const ids = AGENTS.map((a) => agentNodeId(a.id));
   const rows = await ro<StatRow>(g,
     `UNWIND $ids AS aid
-     OPTIONAL MATCH (a:Agent {id:aid})
-     OPTIONAL MATCH (t:Turn)-[:HANDLED_BY]->(a)
+     OPTIONAL MATCH (a:Entity:Agent {id:aid})
+     OPTIONAL MATCH (t:Turn)-[h:HANDLED_BY]->(a) WHERE h.until IS NULL
      WITH aid, a, count(DISTINCT t) AS requests, max(t.at) AS last
-     OPTIONAL MATCH (a)-[:PRODUCED]->(f:Finding)
+     OPTIONAL MATCH (a)-[pf:PRODUCED]->(f:Finding) WHERE pf.until IS NULL
      WITH aid, a, requests, last, count(DISTINCT f) AS findings,
           sum(CASE WHEN f IS NOT NULL AND coalesce(f.rejected, false) = false AND coalesce(f.revised, false) = false THEN 1 ELSE 0 END) AS passed
-     OPTIONAL MATCH (a)-[:PRODUCED]->(rec:Recommendation)
+     OPTIONAL MATCH (a)-[pr:PRODUCED]->(rec:Recommendation) WHERE pr.until IS NULL
      WITH aid, a, requests, last, findings, passed, count(DISTINCT rec) AS proposals
      OPTIONAL MATCH (a)-[rv:REVIEWED]->()
      WITH aid, a, requests, last, findings, passed, proposals, count(rv) AS reviews
@@ -384,7 +386,7 @@ export async function agentDetail(g: GraphHandle, rosterId: string): Promise<Age
   const [stats, knows, findings, playbooks] = await Promise.all([
     agentStats(g),
     ro<{ n: NodeRow; w: number | null }>(g,
-      `MATCH (:Agent {id:$aid})-[k:KNOWS_ABOUT]->(x:Entity) WHERE k.until IS NULL
+      `MATCH (:Entity:Agent {id:$aid})-[k:KNOWS_ABOUT]->(x:Entity) WHERE k.until IS NULL
        RETURN ${NODE("x")} AS n, k.weight AS w ORDER BY coalesce(k.weight, 0) DESC, x.id LIMIT $limit`, { aid, limit: LIMITS.knows }),
     agentFindings(g, aid, rosterId),
     agentPlaybooks(g, aid, def.tools.includes("playbook")),
@@ -408,9 +410,9 @@ export async function agentDetail(g: GraphHandle, rosterId: string): Promise<Age
 
 async function agentFindings(g: GraphHandle, aid: string, rosterId: string): Promise<FindingRecordDto[]> {
   const rows = await ro<Record<string, unknown>>(g,
-    `MATCH (:Agent {id:$aid})-[:PRODUCED]->(f:Finding)
+    `MATCH (:Entity:Agent {id:$aid})-[pf:PRODUCED]->(f:Finding) WHERE pf.until IS NULL
      WITH f ORDER BY coalesce(f.createdAt, 0) DESC, f.id DESC LIMIT $limit
-     OPTIONAL MATCH (f)-[:PART_OF]->(t:Turn)
+     OPTIONAL MATCH (f)-[pt:PART_OF]->(t:Turn) WHERE pt.until IS NULL
      OPTIONAL MATCH (rv:Agent)-[r:REVIEWED]->(f)
      RETURN f.id AS id, coalesce(f.text, f.summary, '') AS text, f.citations AS citations, coalesce(t.id, f.turnId) AS turnId,
        t.question AS question, coalesce(t.at, f.createdAt) AS at, collect({by: rv.id, verdict: r.verdict, note: r.note}) AS verdicts
@@ -433,7 +435,7 @@ async function agentPlaybooks(g: GraphHandle, aid: string, readsPlaybooks: boole
   type Row = { id: string; name: string | null; source: string | null };
   const cols = "p.id AS id, p.name AS name, coalesce(p.source, p.url, p.license, '') AS source";
   const [used, all] = await Promise.all([
-    ro<Row>(g, `MATCH (:Agent {id:$aid})-[u:USES]->(p:Playbook) WHERE u.until IS NULL RETURN ${cols} ORDER BY p.id LIMIT $limit`,
+    ro<Row>(g, `MATCH (:Entity:Agent {id:$aid})-[u:USES]->(p:Playbook) WHERE u.until IS NULL RETURN ${cols} ORDER BY p.id LIMIT $limit`,
       { aid, limit: LIMITS.playbooks }),
     readsPlaybooks ? ro<Row>(g, `MATCH (p:Playbook) RETURN ${cols} ORDER BY p.id LIMIT $limit`, { limit: LIMITS.playbooks }) : Promise.resolve([]),
   ]);
@@ -478,7 +480,7 @@ export async function recommendations(g: GraphHandle, limit: number = LIMITS.rec
      WITH r, collect({id: a.id, status: a.status, at: a.createdAt}) AS approvals
      OPTIONAL MATCH (r)-[e:EVIDENCED_BY|BASED_ON]->(x:Entity) WHERE e.until IS NULL
      WITH r, approvals, collect(${NODE("x")})[0..8] AS ev
-     OPTIONAL MATCH (ag:Agent)-[:PRODUCED]->(r)
+     OPTIONAL MATCH (ag:Agent)-[pr:PRODUCED]->(r) WHERE ID(pr) >= 0
      RETURN {id: r.id, name: r.name, summary: r.summary, area: r.area, kind: r.kind, status: r.status, score: r.score, confidence: r.confidence,
        by: r.by, impact: r.impact, value: r.value, valueAmount: r.valueAmount, valueCurrency: r.valueCurrency, valuePer: r.valuePer,
        valueNote: r.valueNote, simulated: r.simulated, createdAt: r.createdAt} AS r,
@@ -546,11 +548,11 @@ function toApproval(r: Record<string, unknown>): ApprovalDto {
 }
 
 const approvalQuery = (where: string) =>
-  `MATCH (a:Approval) ${where}
+  `MATCH (a:Entity:Approval) ${where}
    WITH a ORDER BY CASE WHEN coalesce(a.status, 'pending') = 'pending' THEN 0 ELSE 1 END, coalesce(a.createdAt, 0) DESC, a.id LIMIT $limit
-   OPTIONAL MATCH (r:Recommendation)-[:PROPOSES]->(a)
+   OPTIONAL MATCH (r:Recommendation)-[pp:PROPOSES]->(a) WHERE ID(pp) >= 0
    WITH a, collect(r)[0] AS r
-   OPTIONAL MATCH (ag:Agent)-[:PRODUCED]->(r)
+   OPTIONAL MATCH (ag:Agent)-[pr:PRODUCED]->(r) WHERE ID(pr) >= 0
    RETURN ${APPROVAL_FIELDS}, r.id AS rec, r.by AS by, r.simulated AS recSimulated, collect(ag.id)[0] AS producer`;
 
 export async function approvals(g: GraphHandle, limit: number = LIMITS.approvals): Promise<ApprovalDto[]> {

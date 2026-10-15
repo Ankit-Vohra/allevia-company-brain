@@ -32,7 +32,7 @@ async function setupGoals(g: GraphHandle, businessId: string): Promise<GoalSetup
   const [goals, marks] = await Promise.all([
     programGoals(g, program.id),
     g.roQuery<{ id: string; at: number | null }>(
-      `MATCH (gl:Goal)-[pp:PART_OF]->(:Program {id:$p}) WHERE pp.until IS NULL RETURN gl.id AS id, gl.confirmedAt AS at ORDER BY gl.id`, { p: program.id }),
+      `MATCH (pr:Entity:Program {id:$p}) WITH pr MATCH (gl:Goal)-[pp:PART_OF]->(pr) WHERE pp.until IS NULL RETURN gl.id AS id, gl.confirmedAt AS at ORDER BY gl.id`, { p: program.id }),
   ]);
   const confirmed = new Set(marks.filter((m) => m.at !== null && m.at !== undefined).map((m) => m.id));
   return goals.map((x: GoalRow): GoalSetupDto => ({

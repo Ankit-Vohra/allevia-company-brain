@@ -72,7 +72,7 @@ export async function proposeStudioDraft(
   ].join(" ");
   return serial(g.name, async () => {
     const [pending] = await g.roQuery<{ id: string }>(
-      "MATCH (:Recommendation {id:$rid})-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL AND a.status = 'pending' RETURN a.id AS id ORDER BY a.id LIMIT 1", { rid: recId });
+      "MATCH (:Entity:Recommendation {id:$rid})-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL AND a.status = 'pending' RETURN a.id AS id ORDER BY a.id LIMIT 1", { rid: recId });
     const approvalId = pending?.id ?? `approval:studio-${short}-${o.now.toString(36)}`;
     const src = `studio:${short}`;
     const asOf = isoDate(o.now);
@@ -94,7 +94,7 @@ export async function proposeStudioDraft(
 // The stored card, or null when the approval is not a Studio card.
 export async function studioCard(g: GraphHandle, approvalId: string): Promise<{ status: string; payload: StudioPayload } | null> {
   const [row] = await g.roQuery<{ status: string | null; payload: string | null }>(
-    "MATCH (a:Approval {id:$id}) RETURN a.status AS status, a.payload AS payload", { id: approvalId });
+    "MATCH (a:Entity:Approval {id:$id}) RETURN a.status AS status, a.payload AS payload", { id: approvalId });
   if (!row?.payload) return null;
   try {
     const p = JSON.parse(row.payload) as StudioPayload;
@@ -136,8 +136,8 @@ export async function finalizeStudioDraft(g: GraphHandle, approvalId: string, p:
   const asOf = isoDate(now);
   const v = s.variants.find((x) => x.id === variantId);
   const [made] = await g.roQuery<{ id: string; name: string }>(
-    "MATCH (:Approval {id:$id})-[:RESULTED_IN]->(:Action)-[:RESULTED_IN]->(c:Content) RETURN c.id AS id, c.name AS name LIMIT 1", { id: approvalId });
-  const [orig] = await g.roQuery<{ sha: string | null }>("MATCH (a:Asset {id:$id}) RETURN a.sha256 AS sha", { id: s.originalId });
+    "MATCH (:Entity:Approval {id:$id})-[:RESULTED_IN]->(:Action)-[:RESULTED_IN]->(c:Content) RETURN c.id AS id, c.name AS name LIMIT 1", { id: approvalId });
+  const [orig] = await g.roQuery<{ sha: string | null }>("MATCH (a:Entity:Asset {id:$id}) RETURN a.sha256 AS sha", { id: s.originalId });
   const short = (orig?.sha ?? s.originalId.replace(/^asset:/, "")).slice(0, 12);
   const contentId = made?.id ?? entityId("Content", `post ${short}`);
   const studioProps = { format: "post", status: "draft", channel: "instagram", altText: s.altText, aspect: "4:5", assetId: variantId, aiEdited: v?.aiEdited ?? false, createdBy: "studio" };
@@ -162,7 +162,7 @@ export async function finalizeStudioDraft(g: GraphHandle, approvalId: string, p:
     for (const a of [variantId, s.originalId]) await upsertEdge(g, { from: a, type: "DEPICTS", to: s.pageId, src, asOf }, now).catch(() => undefined);
   }
   // asset states: the chosen variant approved, the others declined, the original used
-  const assets = await g.roQuery<{ id: string; name: string }>("MATCH (a:Asset) WHERE a.id IN $ids RETURN a.id AS id, a.name AS name",
+  const assets = await g.roQuery<{ id: string; name: string }>("MATCH (a:Entity:Asset) WHERE a.id IN $ids RETURN a.id AS id, a.name AS name",
     { ids: [s.originalId, ...s.variants.map((x) => x.id)] });
   for (const a of assets) {
     const status = a.id === variantId ? "approved" : a.id === s.originalId ? "used" : "declined";
@@ -170,7 +170,7 @@ export async function finalizeStudioDraft(g: GraphHandle, approvalId: string, p:
   }
   await addObservation(g, { subject: contentId, metric: "credits_charged", value: s.credits, unit: "credits", asOf, src: approvalId, evidence: "Product design §4.2: a static post uses 1 Studio credit, spent on approval." }, now);
   await addObservation(g, { subject: contentId, metric: "usd_cost", value: POST_COST_USD, unit: "USD", asOf, src: approvalId, conf: 0.5, evidence: POST_COST_EVIDENCE }, now);
-  const [ap] = await g.roQuery<{ name: string; result: string | null }>("MATCH (a:Approval {id:$id}) RETURN a.name AS name, a.result AS result", { id: approvalId });
+  const [ap] = await g.roQuery<{ name: string; result: string | null }>("MATCH (a:Entity:Approval {id:$id}) RETURN a.name AS name, a.result AS result", { id: approvalId });
   await upsertNode(g, { type: "Approval", id: approvalId, name: ap?.name ?? approvalId, props: { result: ap?.result || `Draft post saved (${contentId}); not published.`, contentId } }, now);
   return contentId;
 }

@@ -43,7 +43,7 @@ interface StoredBusiness {
 export async function profileStage(c: ProgramStageCtx, input: ProfileInput): Promise<ProfileResult> {
   c.stage("profile", "Setting your country, currency, time zone and industry template");
   const [b] = await c.retry(() => c.g.roQuery<StoredBusiness>(
-    `MATCH (b:Business {id:$id}) RETURN b.country AS country, b.currency AS currency, b.locale AS locale, b.timeZone AS timeZone,
+    `MATCH (b:Entity:Business {id:$id}) RETURN b.country AS country, b.currency AS currency, b.locale AS locale, b.timeZone AS timeZone,
        b.industry AS industry, b.templateKey AS templateKey, b.vertical AS vertical, b.domain AS domain, b.city AS city`, { id: c.businessId }));
   const stored: Partial<StoredBusiness> = b ?? {};
   const region = resolveRegion({ ...input, domain: input.domain ?? stored.domain ?? undefined }, stored);

@@ -53,7 +53,7 @@ export async function intake(
     },
   }, deps.now);
   const owner = input.ownerId ?? OWNER_FALLBACK;
-  const [exists] = await g.roQuery<{ c: number }>("MATCH (p:Person {id:$id}) RETURN count(p) AS c", { id: owner });
+  const [exists] = await g.roQuery<{ c: number }>("MATCH (p:Entity:Person {id:$id}) RETURN count(p) AS c", { id: owner });
   if (!exists?.c) await upsertNode(g, { type: "Person", id: owner, name: owner === OWNER_FALLBACK ? "Owner" : owner }, deps.now);
   await upsertEdge(g, { from: owner, type: "AUTHORED", to: id, props: { via: "studio-upload" } }, deps.now);
   const asset: AssetRecord = { id, kind: "original", w: n.w, h: n.h, sha256: n.sha256, dhash: n.dhash, storageKey, mime: n.mime };

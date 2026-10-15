@@ -2,16 +2,21 @@
 // GraphHandle is the only door to a graph: `query` for writes, `roQuery` (GRAPH.RO_QUERY) for anything the agent
 // asks, which the server itself refuses to run if it would write.
 //
-// Timeouts: `timeoutMs` becomes FalkorDB's per-query TIMEOUT, enforced server-side. FalkorDB 6.0 applies it to
-// read-only queries only; write queries ignore it (verified in scripts/spikes/falkordb-graph-core.ts), so writes are
-// never cut off half-way. roQuery defaults to DEFAULT_READ_TIMEOUT_MS. A call made of several reads (a projection
+// Server settings: the limits this file assumes (RESULTSET_SIZE, TIMEOUT_DEFAULT/TIMEOUT_MAX, MAX_QUEUED_QUERIES…) are set
+// by docker-compose.yml and listed in server-config.ts; `db:check` reports a server that differs.
+//
+// Timeouts: `timeoutMs` becomes FalkorDB's per-query TIMEOUT, enforced server-side. A TIMEOUT above the server's TIMEOUT_MAX
+// is refused, not clamped (120 s: the librarian's budget is the longest). FalkorDB 6.0 applies it to
+// read-only queries only; write queries ignore it (verified in scripts/spikes/falkordb-graph-core.ts), so a write is not
+// cut off by a caller's budget. The server's own TIMEOUT_DEFAULT does bound a write (verified on 6.0.2: a write that
+// ran past it failed with "Query timed out" and left nothing behind), which is what stops a runaway write. roQuery defaults to DEFAULT_READ_TIMEOUT_MS. A call made of several reads (a projection
 // build, an algorithm) spends one budget across all of them: see `readBudget`.
 //
 // Result size: FalkorDB caps every result at RESULTSET_SIZE rows (10,000 on our servers) and drops the rest
 // SILENTLY. A read whose row count grows with the graph must page (MAX_PAGE rows at a time, keyed on an ordered
 // column) or pack its rows into lists; projection.ts, algorithms.ts and tenants.ts do.
 //
-// Busy server: FalkorDB refuses a query outright when MAX_QUEUED_QUERIES (25 here) are already waiting ("Max pending
+// Busy server: FalkorDB refuses a query outright when MAX_QUEUED_QUERIES (500 here) are already waiting ("Max pending
 // queries exceeded"). Such a query never ran, so it is sent again after a short, growing, jittered pause: a read within
 // its own timeout (the time spent waiting comes off the TIMEOUT it is sent with; a read the server never admits in
 // time fails as timed out), a write for up to WRITE_QUEUE_WAIT_MS.
@@ -37,6 +42,7 @@ const BUSY = /max pending queries exceeded/i;
 type Param = null | string | number | boolean | Param[] | { [k: string]: Param };
 type Params = Record<string, Param>;
 export interface QueryOpts { timeoutMs?: number; unchecked?: boolean }
+export interface ConstraintInfo { type: "UNIQUE" | "MANDATORY"; label: string; props: string[]; status: "PENDING" | "OPERATIONAL" | "FAILED" }
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const MIN_NORMAL = 2.2250738585072014e-308; // the smallest double the server's parser accepts
@@ -95,6 +101,14 @@ function toOptions(params: Record<string, unknown> | undefined): { params?: Para
 const withTimeout = (o: { params?: Params }, timeoutMs: number | undefined): FalkorQueryOptions =>
   (timeoutMs === undefined ? o : { ...o, TIMEOUT: Math.max(1, Math.round(timeoutMs)) }) as FalkorQueryOptions;
 
+// Called with the text of every query a GraphHandle sends, before it is sent. The test suite records the shapes with it
+// (tests/setup/query-shapes.ts) and EXPLAINs them at the end; nothing in src/ sets it.
+export type QueryObserver = (cypher: string, graph: string) => void;
+let observer: QueryObserver | undefined;
+export function setQueryObserver(fn: QueryObserver | undefined): void {
+  observer = fn;
+}
+
 export class GraphHandle {
   readonly name: string;
   readonly #g: Graph;
@@ -108,6 +122,7 @@ export class GraphHandle {
 
   async query<T = Record<string, unknown>>(cypher: string, params?: Record<string, unknown>, opts?: QueryOpts): Promise<T[]> {
     if (!opts?.unchecked) assertSafeQuery(cypher);
+    observer?.(cypher, this.name);
     const opt = withTimeout(toOptions(params), opts?.timeoutMs);
     const r = await admitted(WRITE_QUEUE_WAIT_MS, () => this.#g.query<T>(cypher, opt));
     return r.data ?? [];
@@ -115,6 +130,7 @@ export class GraphHandle {
 
   async roQuery<T = Record<string, unknown>>(cypher: string, params?: Record<string, unknown>, opts?: QueryOpts): Promise<T[]> {
     if (!opts?.unchecked) assertSafeQuery(cypher);
+    observer?.(cypher, this.name);
     const timeoutMs = opts?.timeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
     const o = toOptions(params);
     try {
@@ -124,6 +140,50 @@ export class GraphHandle {
       if (BUSY.test(String((e as Error).message))) throw new Error(`Query timed out: the server stayed busy for ${timeoutMs} ms`);
       throw e;
     }
+  }
+
+  // A read that sits in front of a write (does the node exist, what is stored). Sent on GRAPH.RO_QUERY so it does not
+  // queue behind the single writer (the write that follows is a compare-and-set, so a stale read only costs a retry);
+  // a graph that does not exist yet reads as empty.
+  async peek<T = Record<string, unknown>>(cypher: string, params?: Record<string, unknown>, opts?: QueryOpts): Promise<T[]> {
+    try {
+      return await this.roQuery<T>(cypher, params, opts);
+    } catch (e) {
+      if (/empty key/i.test(String((e as Error).message))) return [];
+      throw e;
+    }
+  }
+
+  // The plan the server would run, one line per operator (GRAPH.EXPLAIN: nothing executes, so unbound $params are fine).
+  // `Node By Index Scan` is an index, `Node By Label Scan` and `All Node Scan` are scans: tests/graph/explain.test.ts.
+  async explain(cypher: string): Promise<string[]> {
+    const lines = (await this.#g.explain(cypher)) as unknown;
+    return Array.isArray(lines) ? lines.map(String) : [String(lines)];
+  }
+
+  // Node constraints (GRAPH.CONSTRAINT): created asynchronously, PENDING until the server has checked the data, then
+  // OPERATIONAL, or FAILED when existing data breaks them. A graph that does not exist yet has none.
+  async constraints(): Promise<ConstraintInfo[]> {
+    try {
+      const rows = await this.roQuery<{ type: string; label: string; properties: string[]; entitytype: string; status: string }>(
+        "CALL db.constraints() YIELD type, label, properties, entitytype, status RETURN type, label, properties, entitytype, status");
+      return rows.filter((r) => r.entitytype === "NODE").map((r) => ({
+        type: r.type as ConstraintInfo["type"], label: r.label, props: [...r.properties], status: r.status as ConstraintInfo["status"],
+      }));
+    } catch (e) {
+      if (/empty key/i.test(String((e as Error).message))) return [];
+      throw e;
+    }
+  }
+
+  async createConstraint(type: ConstraintInfo["type"], label: string, prop: string): Promise<void> {
+    if (!IDENT.test(label) || !IDENT.test(prop)) throw new Error(`constraint label/prop must be plain identifiers, got ${label}.${prop}`);
+    await this.#g.constraintCreate(type as never, "NODE" as never, label, prop);
+  }
+
+  async dropConstraint(type: ConstraintInfo["type"], label: string, prop: string): Promise<void> {
+    if (!IDENT.test(label) || !IDENT.test(prop)) throw new Error(`constraint label/prop must be plain identifiers, got ${label}.${prop}`);
+    await this.#g.constraintDrop(type as never, "NODE" as never, label, prop);
   }
 
   // Deletes the whole graph, and its projections (`<name>__…`). Dropping a graph that does not exist (never written,

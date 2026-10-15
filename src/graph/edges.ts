@@ -50,12 +50,23 @@ const asOfMillis = (asOf: string | undefined): number | undefined => {
 //    way: emptied (until = its since), and it no longer bounds the new edge.
 // Empty edges hold at no moment and never bound or cover anything; a replay of one is a re-assert. Undated claims
 // neither contradict nor overrule.
-export async function upsertEdge(g: GraphHandle, e: EdgeInput, now: number = Date.now()): Promise<{ created: boolean; closed: number }> {
+//
+// `known` is for a caller that has just read or written both ends and has their labels: the endpoint check then needs
+// no read of its own. Without it the ends are read here, on GRAPH.RO_QUERY (nodes are never deleted, so a read a moment
+// old cannot hide a node that exists).
+export async function upsertEdge(
+  g: GraphHandle, e: EdgeInput, now: number = Date.now(), known?: ReadonlyMap<string, readonly string[]>,
+): Promise<{ created: boolean; closed: number }> {
   validateEdge(e);
-  const ends = await g.query<{ id: string; labels: string[] | null }>(
-    "UNWIND $ids AS id OPTIONAL MATCH (n:Entity {id:id}) RETURN id, labels(n) AS labels", { ids: [e.from, e.to] });
-  const labels = new Map<string, string[]>();
-  for (const r of ends) if (r.labels && !labels.has(r.id)) labels.set(r.id, r.labels);
+  const labels = new Map<string, readonly string[]>();
+  if (known?.has(e.from) && known.has(e.to)) {
+    labels.set(e.from, known.get(e.from)!);
+    labels.set(e.to, known.get(e.to)!);
+  } else {
+    const ends = await g.peek<{ id: string; labels: string[] | null }>(
+      "UNWIND $ids AS id OPTIONAL MATCH (n:Entity {id:id}) RETURN id, labels(n) AS labels", { ids: [e.from, e.to] });
+    for (const r of ends) if (r.labels && !labels.has(r.id)) labels.set(r.id, r.labels);
+  }
   const missing = [e.from, e.to].filter((id) => !labels.has(id));
   if (missing.length) throw new MissingEndpoint(missing, `${e.from} -[:${e.type}]-> ${e.to}`);
   const fromType = typeOfLabels(labels.get(e.from)!);

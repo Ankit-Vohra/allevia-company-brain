@@ -172,7 +172,7 @@ export async function runStudio(g: GraphHandle, input: StudioInput, deps: Studio
   });
 
   // keep the run on the original, for the page after a reload (and the public demo)
-  const [row] = await g.roQuery<{ name: string }>("MATCH (x:Asset {id:$id}) RETURN x.name AS name", { id: original.id });
+  const [row] = await g.roQuery<{ name: string }>("MATCH (x:Entity:Asset {id:$id}) RETURN x.name AS name", { id: original.id });
   await upsertNode(g, {
     type: "Asset", id: original.id, name: row?.name ?? original.id,
     props: { status: "assessed", studioEvents: JSON.stringify(log), studioRunAt: now(), approvalId: card.approvalId, tiltDeg: tilt.deg, tiltSource: tilt.source },
