@@ -5,6 +5,7 @@ import type { AgentEvent, EdgeRef, NodeRef, SourceRef, TurnChecks } from "../../
 import { AGENTS, agentById } from "../../shared/roster.js";
 import type { GraphHandle } from "../graph/client.js";
 import { SEARCHABLE } from "../graph/schema.js";
+import { STOPPED_MESSAGE } from "../agent/ask.js";
 import { agentNodeId } from "../agent/memory.js";
 import { TouchedSet, type ToolContext } from "../agent/tool.js";
 import { search } from "../agent/tools/search.js";
@@ -140,16 +141,18 @@ export async function sessionDetail(g: GraphHandle, id: string, o: { showcaseOnl
   const rows = await ro<Record<string, unknown>>(g,
     `MATCH (t:Turn)-[r:IN_SESSION]->(:Session {id:$id}) WHERE r.until IS NULL ${o.showcaseOnly ? "AND t.showcase = true" : ""}
      RETURN t.id AS id, t.question AS question, t.answer AS answer, t.at AS at, t.ms AS ms, t.agents AS agents, t.citations AS citations,
-       t.checks AS checks ORDER BY t.at, t.id LIMIT $limit`, { id, limit: LIMITS.turns });
+       t.checks AS checks, t.status AS status, t.error AS error ORDER BY t.at, t.id LIMIT $limit`, { id, limit: LIMITS.turns });
   if (o.showcaseOnly && !rows.length) return null;
   return { id, title: s.name || "Thread", turns: rows.map(turnRecord) };
 }
 
 function turnRecord(r: Record<string, unknown>): TurnRecordDto {
   const checks = parseJson(r.checks);
+  const error = typeof r.error === "string" && r.error ? r.error : undefined;
   return {
     id: str(r.id), question: str(r.question), answer: str(r.answer), at: iso(r.at) ?? new Date(0).toISOString(), ms: numOr(r.ms, 0),
     agents: strList(r.agents), citations: strList(r.citations), checks: { ...DEFAULT_CHECKS, ...(isObj(checks) ? (checks as Partial<TurnChecks>) : {}) },
+    ...(r.status === "failed" ? { ended: error === STOPPED_MESSAGE ? "stopped" as const : "failed" as const, ...(error ? { error } : {}) } : {}),
   };
 }
 
@@ -160,6 +163,23 @@ export async function turnEvents(g: GraphHandle, turnId: string, o: { showcaseOn
   if (!r || (o.showcaseOnly && r.showcase !== true)) return null;
   const events = parseJson(r.e);
   return Array.isArray(events) ? (events as AgentEvent[]) : null;
+}
+
+// A stored Turn for GET /turns/:id/events when it is no longer live on this server: where it ran, how it ended and
+// its saved (compacted) event log.
+export interface StoredTurn { id: string; sessionId: string; question: string; status: "ok" | "failed"; error: string | null; events: AgentEvent[] }
+
+export async function storedTurn(g: GraphHandle, turnId: string, o: { showcaseOnly: boolean }): Promise<StoredTurn | null> {
+  const rows = await ro<{ q: string | null; sid: string | null; status: string | null; error: string | null; e: string | null; showcase: boolean | null }>(g,
+    `MATCH (t:Turn {id:$id}) RETURN t.question AS q, t.sessionId AS sid, t.status AS status, t.error AS error, t.events AS e,
+       t.showcase AS showcase LIMIT 1`, { id: turnId });
+  const r = rows[0];
+  if (!r || (o.showcaseOnly && r.showcase !== true)) return null;
+  const events = parseJson(r.e);
+  return {
+    id: turnId, sessionId: str(r.sid), question: str(r.q), status: r.status === "failed" ? "failed" : "ok", error: r.error ?? null,
+    events: Array.isArray(events) ? (events as AgentEvent[]) : [],
+  };
 }
 
 // Public mode: the stored showcase turn whose question matches (case and spacing ignored), or the one named by id.

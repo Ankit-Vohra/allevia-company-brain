@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { api } from "../api";
 import { useApp, useAsync } from "../state/app";
-import { SOON } from "../lib/soon";
 import { Icon, type IconName } from "./Icon";
 
 const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
@@ -11,6 +10,12 @@ const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
   { to: "/brain", label: "Brain", icon: "brain" },
   { to: "/insights", label: "Insights", icon: "insights" },
   { to: "/approvals", label: "Approvals", icon: "approvals" },
+];
+
+/** Screens under "More": the growth plan and the plan and credits page (the Studio and Team settings have their own links). */
+const MORE_SCREENS: { to: string; label: string; blurb: string; icon: IconName }[] = [
+  { to: "/program", label: "Your growth plan", blurb: "Your goals, and how the team is helping", icon: "insights" },
+  { to: "/plan", label: "Plan and credits", blurb: "What your plan includes, and this month's use", icon: "layers" },
 ];
 
 export const APPROVALS_CHANGED = "allevia:approvals-changed";
@@ -100,7 +105,7 @@ function ThemeToggle() {
   );
 }
 
-/** The menu for screens not in the main bar: setting up a business, and the screens that are coming soon. On a phone
+/** The menu for screens not in the main bar: team settings, the growth plan and the plan page. On a phone
  *  it also holds what the top bar has no room for. */
 function MoreMenu({ variant }: { variant: "desktop" | "mobile" }) {
   const [open, setOpen] = useState(false);
@@ -115,8 +120,7 @@ function MoreMenu({ variant }: { variant: "desktop" | "mobile" }) {
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
   }, [open]);
-  const items = SOON.filter((x) => x.id !== "studio"); // the Studio is built: a link of its own, not a "soon" item
-  const active = items.some((x) => loc.pathname === x.path) || loc.pathname === "/team" || (variant === "mobile" && loc.pathname === "/onboard");
+  const active = MORE_SCREENS.some((x) => loc.pathname === x.to) || loc.pathname === "/team" || (variant === "mobile" && loc.pathname === "/onboard");
   return (
     <div className={`more more-${variant}`} ref={ref}>
       {variant === "desktop" ? (
@@ -146,11 +150,10 @@ function MoreMenu({ variant }: { variant: "desktop" | "mobile" }) {
             <span className="more-icon"><Icon name="office" size={16} /></span>
             <span className="switcher-text"><span className="switcher-name">Team settings</span><span className="switcher-domain">Desks on or off, tell your team, what it learned</span></span>
           </NavLink>
-          {items.map((x) => (
-            <NavLink key={x.id} to={x.path} role="menuitem" className="more-item">
+          {MORE_SCREENS.map((x) => (
+            <NavLink key={x.to} to={x.to} role="menuitem" className="more-item">
               <span className="more-icon"><Icon name={x.icon} size={16} /></span>
-              <span className="switcher-text"><span className="switcher-name">{x.nav}</span><span className="switcher-domain">{x.blurb}</span></span>
-              <span className="soon-tag">Soon</span>
+              <span className="switcher-text"><span className="switcher-name">{x.label}</span><span className="switcher-domain">{x.blurb}</span></span>
             </NavLink>
           ))}
         </div>

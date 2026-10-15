@@ -7,7 +7,7 @@ import type {
   DirectivePatch, DirectivePreview, FirstPassPoint, LearnedRuleDto, ProgramGoal, ProgramScorecard,
 } from "@shared/contracts";
 import { AGENTS, agentById } from "@shared/roster";
-import type { Approval } from "../types-ext";
+import type { Approval, GoalSetup, Usage, UsageItem } from "../types-ext";
 import type { MockGraph } from "./graph-kit";
 
 const DAY = 86_400_000;
@@ -274,6 +274,49 @@ syncProgramRules("avs-atelier");
 
 /** null for a business set up in this session: not in Allevia 90 yet (the API answers 404). */
 export const programOf = (t: string): ProgramScorecard | null => programs[t] ?? null;
+
+// ---------------------------------------------------------------- the goals the team suggests (GET /api/:t/goals/setup)
+
+// Aamdani said OK to its goals three weeks ago; AVS Atelier was set up today, so its three are waiting for an OK.
+const confirmedGoals: Record<string, Set<string>> = {
+  aamdani: new Set(programs.aamdani?.goals.map((g) => g.id) ?? []),
+  "avs-atelier": new Set(),
+};
+
+export function goalSetupOf(t: string): GoalSetup[] {
+  return (programs[t]?.goals ?? []).map((g) => ({
+    id: g.id, name: g.name, unit: g.unit, period: g.period, baseline: g.baseline, target: g.target, why: null, confirmed: confirmedGoals[t]?.has(g.id) ?? false,
+  }));
+}
+
+/** OK (no target) or OK with the owner's own number, as POST /api/:t/goals/:id does. */
+export function setGoal(t: string, id: string, target?: number): GoalSetup {
+  const g = programs[t]?.goals.find((x) => x.id === id);
+  if (!g) throw new Error("No such goal in your growth plan.");
+  if (target !== undefined) g.target = target;
+  (confirmedGoals[t] ??= new Set()).add(id);
+  return goalSetupOf(t).find((x) => x.id === id)!;
+}
+
+// ---------------------------------------------------------------- this month's usage (GET /api/:t/usage)
+
+/** Aamdani approved a few Studio posts this month; AVS Atelier was set up today and has spent nothing yet. */
+export function usageOf(t: string, month = isoDay(Date.now()).slice(0, 7)): Usage {
+  const thisMonth = month === isoDay(Date.now()).slice(0, 7);
+  const items: UsageItem[] = t === "aamdani" && thisMonth
+    ? [
+      { subject: "content:post-guard-payslip", name: "Post: a guard's payslip, explained", credits: 1, date: dayAt(-1) },
+      { subject: "content:carousel-raipur-jobs", name: "Carousel: five jobs hiring in Raipur", credits: 2, date: dayAt(-4) },
+      { subject: "content:post-driver-offer", name: "Post: a driver reads his offer letter", credits: 1, date: dayAt(-6) },
+      { subject: "content:reel-salary-real", name: "Reel: is the salary real?", credits: 4, date: dayAt(-9) },
+    ].filter((i) => i.date.startsWith(month))
+    : [];
+  const used = items.reduce((s, i) => s + i.credits, 0);
+  return {
+    month, credits: { used, items }, costUsd: Math.round(items.length * 0.5 * 100) / 100,
+    answers: t === "aamdani" && thisMonth ? 37 : 0, actionsLive: false, billingConnected: false,
+  };
+}
 
 // ---------------------------------------------------------------- the morning brief, as src/insights/brief.ts writes it
 

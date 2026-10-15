@@ -25,7 +25,8 @@ export interface Overview {
   approvalsPending: number;
 }
 
-export interface SessionSummary { id: string; title: string; startedAt: string; lastAt: string; turns: number; channel: "web" | "discord" | "cli" }
+/** `running`: a turn in this thread is still working on the server (set only then). */
+export interface SessionSummary { id: string; title: string; startedAt: string; lastAt: string; turns: number; channel: "web" | "discord" | "cli"; running?: boolean }
 
 export interface TurnRecord {
   id: string;
@@ -36,9 +37,20 @@ export interface TurnRecord {
   agents: AgentId[];
   citations: string[];
   checks: TurnChecks;
+  /** Set only when the turn did not finish: stopped by the owner, or failed. */
+  ended?: "stopped" | "failed";
+  error?: string;
 }
 
-export interface SessionDetail { id: string; title: string; turns: TurnRecord[] }
+/** `running`: the thread's turn still working on the server (not yet among `turns`); re-attach with turnEvents. */
+export interface SessionDetail { id: string; title: string; turns: TurnRecord[]; running?: LiveTurn }
+
+/** A turn running on the server: it goes on when the tab closes, and only an explicit stop cancels it. */
+export type LiveStatus = "running" | "done" | "failed" | "stopped";
+export interface LiveTurn { turnId: string; sessionId: string; question: string; startedAt: string; status: LiveStatus }
+
+/** GET /api/:t/turns/:id/events?after=N: events from index N, `next` to ask from, `done` once ended and all sent. */
+export interface TurnEventsPage { turnId: string; sessionId: string; question: string; status: LiveStatus; events: AgentEvent[]; next: number; done: boolean }
 
 export interface SearchHit { node: NodeRef; score: number; snippet?: string }
 
@@ -165,4 +177,33 @@ export type LearnedEvent = Extract<AgentEvent, { type: "learned" }>;
 export interface DecisionResult extends Approval {
   learned?: LearnedEvent[];
   action?: { id: string; kind: ActionKind; status: "done" | "failed" | "skipped" | "dry_run"; result: string; url?: string; simulated?: boolean } | null;
+}
+
+// ---------- plan and usage (product design §4.1, §4.2) ----------
+
+/** One Studio charge: credits spent when a draft was approved. */
+export interface UsageItem { subject: string; name: string; credits: number; date: string }
+
+/** GET /api/:t/usage?month=YYYY-MM (src/server/routes/usage.ts). */
+export interface Usage {
+  month: string;
+  credits: { used: number; items: UsageItem[] };
+  costUsd: number;            // what the month's Studio work cost to make; covered by the plan
+  answers: number;            // questions the team answered this month
+  actionsLive: boolean;       // false: approved GitHub issues and Discord posts are dry runs
+  billingConnected: false;
+}
+
+// ---------- "Your team suggests these goals" (src/server/routes/goals.ts) ----------
+
+/** GET /api/:t/goals/setup, and POST /api/:t/goals/:id's answer: a suggested goal and whether the owner said OK. */
+export interface GoalSetup {
+  id: string;
+  name: string;
+  unit: string | null;
+  period: "week" | "month";
+  baseline: number | null;
+  target: number | null;
+  why: string | null;
+  confirmed: boolean;
 }

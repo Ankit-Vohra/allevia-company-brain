@@ -124,7 +124,7 @@ function NotEnrolled({ caps }: { caps?: CapabilityState[] }) {
   );
 }
 
-function Timeline({ day, checkpoints }: { day: number; checkpoints: ProgramCheckpoint[] }) {
+export function Timeline({ day, checkpoints }: { day: number; checkpoints: ProgramCheckpoint[] }) {
   const pct = (d: number) => `${(Math.max(0, Math.min(90, d)) / 90) * 100}%`;
   return (
     <div className="p90-line" role="img" aria-label={`Day ${day} of 90. Checkpoints: ${checkpoints.map((c) => `day ${c.day} ${c.status}`).join(", ")}.`}>

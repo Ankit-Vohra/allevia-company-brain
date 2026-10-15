@@ -1,8 +1,9 @@
 // Server-sent events for POST endpoints (ask, onboard). Each event is framed as `event: <type>\ndata: <json>\n\n`, in the
 // order it was produced: sends are queued, so a producer that emits synchronously (ask() does) never reorders or
 // blocks on a slow reader. The run's AbortSignal fires when the client goes away (the request's signal, or the
-// response stream being cancelled), so a turn stops instead of running on for nobody. A comment line (`: ping`) every
-// heartbeatMs keeps proxies from closing a quiet stream while agents think.
+// response stream being cancelled): onboarding stops then, while an ask only stops following its turn, which runs on
+// to the end on the server (turns.ts). A comment line (`: ping`) every heartbeatMs keeps proxies from closing a quiet
+// stream while agents think.
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 

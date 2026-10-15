@@ -1,0 +1,15 @@
+/* ---------- "Show details": one quiet expander under the essentials ---------- */
+.show-details { display: grid; }
+.show-details-btn {
+  display: inline-flex; align-items: center; gap: 6px; justify-self: start; width: max-content;
+  padding: 6px 10px 6px 6px; margin-left: -6px; border-radius: var(--radius-sm);
+  font-size: var(--text-sm); font-weight: 600; color: var(--color-ink-2); cursor: pointer; list-style: none;
+  transition: color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out);
+}
+.show-details-btn::-webkit-details-marker { display: none; }
+.show-details-btn:hover { color: var(--color-ink); background: var(--color-paper-2); }
+.show-details-btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.show-details-chev { transition: transform var(--dur-short) var(--ease-out); }
+.show-details[open] > .show-details-btn .show-details-chev { transform: rotate(90deg); }
+.show-details-body { display: grid; gap: var(--space-xl); padding-top: var(--space-lg); }
+@media (prefers-reduced-motion: reduce) { .show-details-chev { transition: none; } }
