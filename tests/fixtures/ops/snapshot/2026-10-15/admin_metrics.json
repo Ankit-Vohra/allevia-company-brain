@@ -1,0 +1,144 @@
+{
+ "tool": "admin_metrics",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for admin_metrics"
+ ],
+ "data": {
+  "database": "prod",
+  "selection": {
+   "tab": "overview",
+   "websiteWindowDays": 7
+  },
+  "window": {
+   "from": "2026-09-18",
+   "to": "2026-10-15",
+   "days": 28,
+   "timeZone": "Asia/Kolkata",
+   "trendDays": 28
+  },
+  "metricLayer": {
+   "lastRefreshed": null,
+   "ageHours": 3.89,
+   "latestDay": "2026-10-15",
+   "refreshByCategory": {
+    "users": "ok"
+   },
+   "schedule": ""
+  },
+  "metrics": [
+   {
+    "key": "users.new_seekers",
+    "label": "New seekers",
+    "category": "users",
+    "unit": "count",
+    "direction": "up",
+    "tabs": [
+     "overview"
+    ],
+    "latest": {
+     "day": "2026-10-14",
+     "value": 61
+    },
+    "previous": {
+     "day": "2026-10-13",
+     "value": 54
+    },
+    "change": 59,
+    "changePct": 76.68,
+    "windowSum": 300
+   },
+   {
+    "key": "market.jobs_live",
+    "label": "Live jobs",
+    "category": "market",
+    "unit": "count",
+    "direction": "up",
+    "tabs": [
+     "overview"
+    ],
+    "latest": {
+     "day": "2026-10-15",
+     "value": 423
+    },
+    "previous": null,
+    "change": null,
+    "changePct": null
+   },
+   {
+    "key": "health.refresh_ok",
+    "label": "Refresh OK",
+    "category": "health",
+    "unit": "bool",
+    "direction": "up",
+    "tabs": [
+     "overview"
+    ],
+    "latest": null,
+    "previous": null,
+    "change": null,
+    "changePct": null,
+    "note": "synthetic: no value"
+   },
+   {
+    "key": "health.screening_failure_rate",
+    "label": "Screening failure rate",
+    "category": "health",
+    "unit": "ratio",
+    "direction": "down",
+    "tabs": [
+     "health"
+    ],
+    "latest": {
+     "day": "2026-10-14",
+     "value": 0.567
+    },
+    "previous": null,
+    "change": null,
+    "changePct": null
+   },
+   {
+    "key": "money.active_subs",
+    "label": "Active subscriptions",
+    "category": "money",
+    "unit": "count",
+    "direction": "up",
+    "tabs": [
+     "overview",
+     "money"
+    ],
+    "latest": {
+     "day": "2026-10-14",
+     "value": 61
+    },
+    "previous": null,
+    "change": null,
+    "changePct": null
+   },
+   {
+    "key": "money.mrr_inr",
+    "label": "MRR",
+    "category": "money",
+    "unit": "inr",
+    "direction": "up",
+    "tabs": [
+     "money"
+    ],
+    "latest": {
+     "day": "2026-10-14",
+     "value": 9263
+    },
+    "previous": null,
+    "change": null,
+    "changePct": null
+   }
+  ],
+  "notes": [],
+  "excluded": {
+   "accounts": 88,
+   "rule": "synthetic exclusion rule"
+  }
+ }
+}

@@ -1,0 +1,25 @@
+{
+ "tool": "play_health",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for play_health"
+ ],
+ "data": {
+  "package": "com.example.app",
+  "crash": {
+   "latestDay": "2026-10-13",
+   "last7dUserPerceivedPct": 0.94,
+   "last7dPct": 0.737,
+   "daily": []
+  },
+  "anr": {
+   "latestDay": "2026-10-13",
+   "last7dUserPerceivedPct": 0.334,
+   "last7dPct": 0.984,
+   "daily": []
+  },
+  "note": "synthetic"
+ }
+}

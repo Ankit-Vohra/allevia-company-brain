@@ -1,0 +1,87 @@
+{
+ "tool": "reels_performance",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for reels_performance"
+ ],
+ "data": {
+  "windowDays": 28,
+  "count": 82,
+  "reels": [
+   {
+    "id": "17800000000000001",
+    "publishedAt": "2026-10-10T11:43:00+0000",
+    "publishedIST": "2026-10-10 17:13 IST",
+    "permalink": "https://www.instagram.com/reel/FAKE0001/",
+    "caption": "Driver ki naukri chahiye? Call +91 98765 43210 or mail hr@example.com\nsecond line stays out",
+    "durationS": null,
+    "views": 4666,
+    "reach": 8022,
+    "skipPct": 28.26,
+    "avgWatchS": 2.09,
+    "stayersWatchS": null,
+    "watchedShare": null,
+    "likes": 93,
+    "shares": 65,
+    "saves": 54,
+    "comments": 60,
+    "totalInteractions": null,
+    "user_id": "u-planted-should-drop",
+    "vsBest": {
+     "viewsShareOfBest": 0.832,
+     "skipPctDiff": 90.41
+    }
+   },
+   {
+    "id": "17800000000000002",
+    "publishedAt": "2026-10-01T09:17:00+0000",
+    "publishedIST": "2026-10-01 14:47 IST",
+    "permalink": "https://www.instagram.com/reel/FAKE0002/",
+    "caption": "Delivery jobs in Raipur",
+    "durationS": null,
+    "views": 613,
+    "reach": 639,
+    "skipPct": 25.05,
+    "avgWatchS": 4.79,
+    "stayersWatchS": null,
+    "watchedShare": null,
+    "likes": 73,
+    "shares": 63,
+    "saves": 65,
+    "comments": 82,
+    "totalInteractions": null,
+    "vsBest": null
+   }
+  ],
+  "baseline": {
+   "reelsCompared": 54,
+   "bestReel": {
+    "id": "17800000000000009",
+    "publishedAt": "2026-08-01T10:29:00+0000",
+    "publishedIST": "2026-08-01 15:59 IST",
+    "permalink": "https://www.instagram.com/reel/FAKE0009/",
+    "caption": "Our best reel ever",
+    "durationS": null,
+    "views": 2701,
+    "reach": 8309,
+    "skipPct": 19.11,
+    "avgWatchS": 8.74,
+    "stayersWatchS": null,
+    "watchedShare": null,
+    "likes": 658,
+    "shares": 79,
+    "saves": 74,
+    "comments": 81,
+    "totalInteractions": null
+   },
+   "medianViews": 76179.02,
+   "medianSkipPct": 29.26,
+   "medianAvgWatchS": 1.11
+  },
+  "notes": [
+   "synthetic"
+  ]
+ }
+}

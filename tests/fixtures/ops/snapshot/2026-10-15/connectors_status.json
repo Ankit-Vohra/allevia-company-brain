@@ -1,0 +1,67 @@
+{
+ "tool": "connectors_status",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for connectors_status"
+ ],
+ "data": {
+  "summary": {
+   "ok": 93,
+   "error": 83,
+   "not_configured": 59
+  },
+  "connectors": [
+   {
+    "connector": "instagram",
+    "status": "ok",
+    "message": "synthetic check passed (as example_business)"
+   },
+   {
+    "connector": "facebook",
+    "status": "ok",
+    "message": "synthetic check passed",
+    "details": {
+     "expires": "2099-01-01",
+     "pageId": "1234567890"
+    }
+   },
+   {
+    "connector": "youtube",
+    "status": "ok",
+    "message": "synthetic check passed"
+   },
+   {
+    "connector": "prod_db",
+    "status": "ok",
+    "message": "synthetic database check passed",
+    "details": {
+     "role": "reader_role_x",
+     "host": "10.0.0.12"
+    }
+   },
+   {
+    "connector": "sentry",
+    "status": "error",
+    "message": "Sentry 401"
+   },
+   {
+    "connector": "vercel",
+    "status": "not_configured",
+    "message": "not built",
+    "setup": "..."
+   },
+   {
+    "connector": "search_console",
+    "status": "ok",
+    "message": "synthetic check passed"
+   },
+   {
+    "connector": "play",
+    "status": "ok",
+    "message": "synthetic check passed"
+   }
+  ]
+ }
+}

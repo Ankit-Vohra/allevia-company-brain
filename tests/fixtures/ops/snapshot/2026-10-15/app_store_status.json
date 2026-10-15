@@ -1,0 +1,10 @@
+{
+ "tool": "app_store_status",
+ "status": "not_configured",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [],
+ "message": "ASC key not set",
+ "setup": "add the key",
+ "note": "synthetic fixture: the App Store connector is not set up"
+}

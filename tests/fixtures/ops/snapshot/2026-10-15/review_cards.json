@@ -1,0 +1,38 @@
+{
+ "tool": "review_cards",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for review_cards"
+ ],
+ "data": {
+  "summary": {
+   "awaitingApproval": 64,
+   "scheduled": 92,
+   "total": 59,
+   "byKind": {
+    "reel": 93,
+    "post": 48
+   },
+   "truncated": false,
+   "oldestIST": "2026-09-20 09:37 IST"
+  },
+  "allPending": {
+   "total": 48,
+   "byAge": {
+    "upTo7Days": 83,
+    "days8to30": 79,
+    "over30Days": 73
+   },
+   "byKind": {
+    "reel": 82,
+    "post": 64
+   },
+   "stale": 55,
+   "staleMeaning": "",
+   "superseded": []
+  },
+  "cards": []
+ }
+}

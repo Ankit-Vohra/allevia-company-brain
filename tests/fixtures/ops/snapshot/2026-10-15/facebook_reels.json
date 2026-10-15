@@ -1,0 +1,30 @@
+{
+ "tool": "facebook_reels",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for facebook_reels"
+ ],
+ "data": {
+  "count": 73,
+  "totals": {
+   "plays": 998,
+   "interactions": 89
+  },
+  "reels": [
+   {
+    "id": "990000000000001",
+    "created": "2026-10-10T11:44:00+0000",
+    "lengthS": 79,
+    "caption": "Driver ki naukri chahiye?",
+    "permalink": "https://www.facebook.com/reel/990000000000001",
+    "plays": 804,
+    "avgWatchS": 3.75,
+    "socialActions": 79,
+    "newFollowers": 60,
+    "error": null
+   }
+  ]
+ }
+}

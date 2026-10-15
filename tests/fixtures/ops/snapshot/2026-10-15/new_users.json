@@ -1,0 +1,64 @@
+{
+ "tool": "new_users",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for new_users"
+ ],
+ "data": {
+  "database": "prod",
+  "range": {
+   "from": "2026-09-18",
+   "to": "2026-10-15",
+   "days": 28,
+   "window": "custom",
+   "timeZone": "Asia/Kolkata",
+   "todayIST": "2026-10-15"
+  },
+  "groupBy": "day",
+  "kind": "all",
+  "totals": {
+   "total": 55,
+   "seekers": 82,
+   "employers": 73,
+   "employerStaff": 0,
+   "admins": 0,
+   "setupCompleted": 79
+  },
+  "setupCompletedPct": 56.74,
+  "rows": [
+   {
+    "day": "2026-10-13",
+    "total": 54,
+    "seekers": 74,
+    "employers": 59,
+    "employerStaff": 0,
+    "admins": 0,
+    "setupCompleted": 59
+   },
+   {
+    "day": "2026-10-14",
+    "total": 64,
+    "seekers": 81,
+    "employers": 79,
+    "employerStaff": 0,
+    "admins": 0,
+    "setupCompleted": 94
+   },
+   {
+    "day": "2026-10-15",
+    "total": 94,
+    "seekers": 81,
+    "employers": 48,
+    "employerStaff": 0,
+    "admins": 0,
+    "setupCompleted": 60
+   }
+  ],
+  "excluded": {
+   "accounts": 92,
+   "rule": "synthetic exclusion rule"
+  }
+ }
+}

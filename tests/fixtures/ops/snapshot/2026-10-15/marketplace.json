@@ -1,0 +1,58 @@
+{
+ "tool": "marketplace",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for marketplace"
+ ],
+ "data": {
+  "database": "prod",
+  "range": {
+   "from": "2026-09-18",
+   "to": "2026-10-15",
+   "days": 28,
+   "window": "custom",
+   "timeZone": "Asia/Kolkata",
+   "todayIST": "2026-10-15"
+  },
+  "inWindow": {
+   "jobs_posted": 73,
+   "jobs_approved": 55,
+   "applications": 831,
+   "skips": 873,
+   "rejections": 83,
+   "shortlists": 751,
+   "interviews": 74,
+   "hires": 54,
+   "joins": 83,
+   "saves": 388,
+   "messages_sent": 652
+  },
+  "now": {
+   "liveJobs": 862,
+   "pendingFirstJobReview": 82,
+   "oldestPendingReview": null,
+   "oldestPendingReviewAgeHours": 74.58,
+   "pendingReviewTestJobs": 0,
+   "openButExpired": 82,
+   "jobsAllTime": 9257
+  },
+  "applicationsByCurrentStatus": {
+   "applied": 499
+  },
+  "topCategories": [
+   {
+    "category": "Driver",
+    "applications": 358,
+    "jobsPosted": 86,
+    "liveNow": 63
+   }
+  ],
+  "notes": [],
+  "excluded": {
+   "accounts": 89,
+   "rule": "synthetic exclusion rule"
+  }
+ }
+}

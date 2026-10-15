@@ -1,0 +1,90 @@
+{
+ "tool": "brain_pending",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for brain_pending"
+ ],
+ "data": {
+  "updated": "Updated 2026-10-14 (synthetic)",
+  "count": 8,
+  "totalOpen": 7,
+  "items": [
+   {
+    "id": "Z1",
+    "section": "Founder queue (synthetic)",
+    "owner": "founder",
+    "done": false,
+    "title": "Renew the store listing screenshots",
+    "details": {},
+    "issues": [
+     5559
+    ]
+   },
+   {
+    "id": "Z2",
+    "section": "Founder queue (synthetic)",
+    "owner": "founder",
+    "done": false,
+    "title": "Pick the next festival campaign",
+    "details": {},
+    "issues": []
+   },
+   {
+    "id": "Z3",
+    "section": "Agent queue (synthetic)",
+    "owner": "agent",
+    "done": false,
+    "title": "Email the vendor at ops@example.com about the invoice",
+    "details": {},
+    "issues": []
+   },
+   {
+    "id": null,
+    "section": "Agent queue (synthetic)",
+    "owner": "agent",
+    "done": false,
+    "title": "Tidy the content board",
+    "details": {},
+    "issues": []
+   },
+   {
+    "id": "Z5",
+    "section": "Synthetic server access notes",
+    "owner": "founder",
+    "done": false,
+    "title": "Rotate the deploy key",
+    "details": {},
+    "issues": []
+   },
+   {
+    "id": "Z6",
+    "section": "Synthetic credential rotation",
+    "owner": "agent",
+    "done": false,
+    "title": "Swap the bot token",
+    "details": {},
+    "issues": []
+   },
+   {
+    "id": "Z7",
+    "section": "Partner lead (synthetic)",
+    "owner": "Asha (ops)",
+    "done": false,
+    "title": "Send the partner deck",
+    "details": {},
+    "issues": []
+   },
+   {
+    "id": "Z8",
+    "section": "Founder queue (synthetic)",
+    "owner": "founder",
+    "done": true,
+    "title": "~~Old done item~~",
+    "details": {},
+    "issues": []
+   }
+  ]
+ }
+}

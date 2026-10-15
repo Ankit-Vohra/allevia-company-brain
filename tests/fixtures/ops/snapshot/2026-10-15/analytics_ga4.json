@@ -1,0 +1,113 @@
+{
+ "tool": "analytics_ga4",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for analytics_ga4"
+ ],
+ "data": {
+  "property": "properties/000000000",
+  "window": {
+   "from": "2026-09-17",
+   "to": "2026-10-14",
+   "days": 28
+  },
+  "previousWindow": {
+   "from": "2026-08-20",
+   "to": "2026-09-16"
+  },
+  "totals": {
+   "activeUsers": 2824,
+   "newUsers": 9082,
+   "sessions": 1340,
+   "pageViews": 2772,
+   "engagementRatePct": 93.72,
+   "avgSessionSec": 7208.25
+  },
+  "previous": {
+   "activeUsers": 4547,
+   "newUsers": 5754,
+   "sessions": 7266,
+   "pageViews": 9518,
+   "engagementRatePct": 62.87,
+   "avgSessionSec": 3042.21
+  },
+  "change": {
+   "activeUsersPct": 84.47,
+   "sessionsPct": 65.97,
+   "pageViewsPct": 14.75
+  },
+  "note": "synthetic",
+  "site": "all",
+  "breakdown": {
+   "by": "source",
+   "dimension": "sessionSourceMedium",
+   "rows": [
+    {
+     "source": "google / organic",
+     "activeUsers": 243,
+     "newUsers": 0,
+     "sessions": 611,
+     "pageViews": 9423,
+     "engagementRatePct": 0,
+     "avgSessionSec": 0
+    },
+    {
+     "source": "(direct) / (none)",
+     "activeUsers": 284,
+     "newUsers": 0,
+     "sessions": 343,
+     "pageViews": 7135,
+     "engagementRatePct": 0,
+     "avgSessionSec": 0
+    },
+    {
+     "source": "l.instagram.com / referral",
+     "activeUsers": 118,
+     "newUsers": 0,
+     "sessions": 664,
+     "pageViews": 543,
+     "engagementRatePct": 0,
+     "avgSessionSec": 0
+    },
+    {
+     "source": "instagram / social",
+     "activeUsers": 290,
+     "newUsers": 0,
+     "sessions": 629,
+     "pageViews": 289,
+     "engagementRatePct": 0,
+     "avgSessionSec": 0
+    },
+    {
+     "source": "chatgpt.com / referral",
+     "activeUsers": 64,
+     "newUsers": 0,
+     "sessions": 55,
+     "pageViews": 631,
+     "engagementRatePct": 0,
+     "avgSessionSec": 0
+    },
+    {
+     "source": "m.facebook.com / referral",
+     "activeUsers": 89,
+     "newUsers": 0,
+     "sessions": 95,
+     "pageViews": 81,
+     "engagementRatePct": 0,
+     "avgSessionSec": 0
+    },
+    {
+     "source": "bing / organic",
+     "activeUsers": 55,
+     "newUsers": 0,
+     "sessions": 61,
+     "pageViews": 95,
+     "engagementRatePct": 0,
+     "avgSessionSec": 0
+    }
+   ]
+  }
+ }
+}

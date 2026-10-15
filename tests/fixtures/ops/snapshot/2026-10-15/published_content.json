@@ -1,0 +1,64 @@
+{
+ "tool": "published_content",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for published_content"
+ ],
+ "data": {
+  "count": 82,
+  "truncated": false,
+  "items": [
+   {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "shortId": "00000000",
+    "kind": "reel",
+    "format": null,
+    "publishedAt": "2026-10-10T11:43:00Z",
+    "publishedIST": "2026-10-10 17:13 IST",
+    "caption": "Driver ki naukri chahiye?",
+    "instagramMediaId": "17800000000000001",
+    "channels": [
+     {
+      "channel": "instagram",
+      "ok": true,
+      "id": "17800000000000001",
+      "link": null
+     },
+     {
+      "channel": "facebook",
+      "ok": true,
+      "id": "990000000000001",
+      "link": "https://www.facebook.com/reel/990000000000001"
+     },
+     {
+      "channel": "youtube",
+      "ok": false,
+      "id": null,
+      "error": "synthetic upload failure",
+      "link": null
+     }
+    ]
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000002",
+    "shortId": "00000000",
+    "kind": "post",
+    "format": "carousel",
+    "publishedAt": "2026-10-05T03:51:00Z",
+    "publishedIST": "2026-10-05 09:21 IST",
+    "caption": "Electrician jobs this week",
+    "instagramMediaId": "17800000000000005",
+    "channels": [
+     {
+      "channel": "instagram",
+      "ok": true,
+      "id": "17800000000000005",
+      "link": null
+     }
+    ]
+   }
+  ]
+ }
+}

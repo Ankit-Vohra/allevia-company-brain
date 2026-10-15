@@ -1,0 +1,121 @@
+{
+ "tool": "users_summary",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for users_summary"
+ ],
+ "data": {
+  "database": "prod",
+  "todayIST": "2026-10-15",
+  "totals": {
+   "all": 5611,
+   "seekers": {
+    "total": 7847,
+    "free": 298,
+    "plus": 89
+   },
+   "employers": 517,
+   "employerStaff": 92,
+   "admins": 61,
+   "unknownType": 48
+  },
+  "newAccounts": {
+   "today": {
+    "all": 55,
+    "seekers": 88,
+    "employers": 74,
+    "employerStaff": 0,
+    "admins": 0,
+    "unknownType": 0
+   },
+   "yesterday": {
+    "all": 64,
+    "seekers": 94,
+    "employers": 63,
+    "employerStaff": 0,
+    "admins": 0,
+    "unknownType": 0
+   },
+   "last7Days": {
+    "all": 92,
+    "seekers": 93,
+    "employers": 79,
+    "employerStaff": 59,
+    "admins": 0,
+    "unknownType": 0
+   },
+   "last30Days": {
+    "all": 231,
+    "seekers": 840,
+    "employers": 65,
+    "employerStaff": 64,
+    "admins": 0,
+    "unknownType": 65
+   }
+  },
+  "setup": {
+   "completed": 347,
+   "completedPct": 70.82,
+   "seekers": {
+    "completed": 699,
+    "pct": 92.61
+   },
+   "employers": {
+    "completed": 95,
+    "pct": 25.75
+   },
+   "phoneVerified": 6441,
+   "seekersProfileComplete": 236
+  },
+  "kycVerified": 83,
+  "suspended": 64,
+  "bySignupPlatform": [
+   {
+    "platform": "android",
+    "total": 507,
+    "last30Days": 438
+   },
+   {
+    "platform": "web",
+    "total": 645,
+    "last30Days": 815
+   },
+   {
+    "platform": "ios",
+    "total": 749,
+    "last30Days": 89
+   },
+   {
+    "platform": "unknown",
+    "total": 93,
+    "last30Days": 60
+   }
+  ],
+  "byChannel": [
+   {
+    "createdVia": "app",
+    "total": 5322,
+    "last30Days": 549
+   },
+   {
+    "createdVia": "voice_onboarding",
+    "total": 752,
+    "last30Days": 92
+   },
+   {
+    "createdVia": "helpline",
+    "total": 61,
+    "last30Days": 95
+   }
+  ],
+  "notes": [
+   "synthetic"
+  ],
+  "excluded": {
+   "accounts": 65,
+   "rule": "synthetic exclusion rule"
+  }
+ }
+}

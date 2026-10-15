@@ -1,0 +1,64 @@
+{
+ "tool": "ai_features",
+ "status": "ok",
+ "asOf": "2026-10-15T03:00:00.000Z",
+ "asOfIST": "2026-10-15 08:30 IST",
+ "sources": [
+  "synthetic fixture for ai_features"
+ ],
+ "data": {
+  "database": "prod",
+  "range": {
+   "from": "2026-09-18",
+   "to": "2026-10-15",
+   "days": 28,
+   "window": "custom",
+   "timeZone": "Asia/Kolkata",
+   "todayIST": "2026-10-15"
+  },
+  "screening": {
+   "calls": 93,
+   "completed": 63,
+   "queued": 86,
+   "failed": 89,
+   "completionRatePct": 38.18,
+   "failureRatePct": 12.77,
+   "avgScore": 4.39,
+   "avgDurationSeconds": 84083.52,
+   "avgQuestionsAnswered": 4.05,
+   "avgRetries": 3.25,
+   "byStatus": {},
+   "byOutcome": {},
+   "bySource": {},
+   "byLanguage": {},
+   "lastCall": null,
+   "lastCompleted": null
+  },
+  "voiceOnboarding": {
+   "sessions": 63,
+   "completed": 54,
+   "abandoned": 48,
+   "inProgress": 94,
+   "completionRatePct": 39.18,
+   "avgDurationSeconds": 33186.9,
+   "avgFieldsCollected": 602.18,
+   "byStatusAndLanguage": [],
+   "lastSession": null,
+   "lastCompleted": null
+  },
+  "helpline": {
+   "calls": 55,
+   "newUsers": 89,
+   "applications": 79,
+   "avgDurationSeconds": 75866.01,
+   "byStatusAndOutcome": [],
+   "byLanguage": {},
+   "lastCall": null
+  },
+  "notes": [],
+  "excluded": {
+   "accounts": 63,
+   "rule": "synthetic exclusion rule"
+  }
+ }
+}
