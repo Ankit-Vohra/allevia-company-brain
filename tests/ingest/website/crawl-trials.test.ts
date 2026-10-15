@@ -74,4 +74,22 @@ describe("crawlSite on sites with redirects and long lists", () => {
     expect(crawl.pages.map((p) => new URL(p.finalUrl).pathname + new URL(p.finalUrl).search).sort()).toEqual(["/", "/blog", "/blog/first-post"]);
     expect(crawl.skipped.filter((s) => /listing/i.test(s.reason)).length).toBeGreaterThanOrEqual(3);
   }, 60_000);
+
+  it("leaves room for the rest of the site when one section (a shop's catalogue) has far more pages than the cap", async () => {
+    const range = Array.from({ length: 25 }, (_, i) => `/range/item-${i}`);
+    const routes: Parameters<typeof startSite>[0] = {
+      "/": (send) => ok(send, "Home", [...range, "/stories/our-farm", "/stories/the-team", "/stories/visiting"].map((p) => `<a href="${p}">${p}</a>`).join("")),
+    };
+    for (const p of [...range, "/stories/our-farm", "/stories/the-team", "/stories/visiting"]) routes[p] = (send) => ok(send, p);
+    const site = await startSite({
+      "/sitemap.xml": (send) => send(200, { "content-type": "application/xml" }, `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>`),
+      ...routes,
+    });
+    sites.push(site);
+    const crawl = await crawlSite(`${site.origin}/`, { allowHosts: [`127.0.0.1:${site.port}`], minDelayMs: 0, maxPages: 12, maxLinkChecks: 0 });
+    const paths = crawl.pages.map((p) => new URL(p.finalUrl).pathname);
+    expect(paths).toHaveLength(12);
+    expect(paths).toEqual(expect.arrayContaining(["/stories/our-farm", "/stories/the-team", "/stories/visiting"]));
+    expect(paths.filter((p) => p.startsWith("/range/")).length).toBeLessThanOrEqual(8);
+  }, 60_000);
 });

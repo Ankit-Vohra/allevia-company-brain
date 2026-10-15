@@ -17,7 +17,7 @@ import { chromium, type Browser, type BrowserContext, type Page, type Route } fr
 import { BlockedUrlError, Pacer, RedirectRefusedError, USER_AGENT, checkUrl, guardedFetch, type FetchOpts, type FetchResult, type Resolver } from "./fetch.js";
 import { allowAll, disallowAll, parseRobots, parseSitemap, type Robots } from "./robots.js";
 import { CAPTURE_SCRIPT, STYLE_SCRIPT, fromCapture, type Captured, type PageData, type StyleSample } from "./page.js";
-import { isActionPath, isBinaryPath, isListingVariant, keyPagePriority, normalizeUrl, toSiteUrl } from "./urls.js";
+import { isActionPath, isBinaryPath, isListingVariant, keyPagePriority, normalizeUrl, sectionOf, toSiteUrl } from "./urls.js";
 import { Semaphore } from "../../llm.js";
 
 export interface CrawlOptions {
@@ -305,10 +305,24 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
     if (!robots.isAllowed(pathOf(site))) return skip(site, "disallowed by robots.txt");
     queue.set(site, { url: site, prio: keyPagePriority(u), depth, seq: seq++ });
   };
+  // A catalogue or a blog can have hundreds of pages that all say the same kind of thing. Once a section has used its
+  // share of the page cap, pages from other sections go first; its own pages only fill what is left.
+  const sectionCap = Math.max(8, Math.ceil(o.maxPages * 0.3));
+  const sectionCount = new Map<string, number>();
+  const overCap = (it: Item): boolean => {
+    const sec = sectionOf(new URL(it.url));
+    return !!sec && (sectionCount.get(sec) ?? 0) >= sectionCap;
+  };
   const next = (): Item | undefined => {
     let best: Item | undefined;
+    let bestOver = false;
     for (const it of queue.values()) {
-      if (!best || it.prio > best.prio || (it.prio === best.prio && (it.depth < best.depth || (it.depth === best.depth && it.seq < best.seq)))) best = it;
+      const over = overCap(it);
+      const wins = !best || (bestOver && !over) || (bestOver === over && (it.prio > best.prio || (it.prio === best.prio && (it.depth < best.depth || (it.depth === best.depth && it.seq < best.seq)))));
+      if (wins) {
+        best = it;
+        bestOver = over;
+      }
     }
     if (best) queue.delete(best.url);
     return best;
@@ -375,6 +389,8 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
       }
     }
     pages.push(page);
+    const sec = sectionOf(new URL(site));
+    if (sec) sectionCount.set(sec, (sectionCount.get(sec) ?? 0) + 1);
     log(`[crawl] ${page.status} ${site}${page.title ? ` "${page.title}"` : ""}`);
     if (o.onPage) await o.onPage(page);
     if (/\bnofollow\b|\bnone\b/i.test(page.robotsMeta ?? "")) return;

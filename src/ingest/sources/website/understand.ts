@@ -16,19 +16,30 @@ import type { GraphWrite, RawDoc } from "../../types.js";
 import { channelId } from "../channels.js";
 import type { Ask } from "./ask.js";
 import type { PageData } from "./page.js";
-import { keyPagePriority, pageDocId, socialProfile, type SocialProfile } from "./urls.js";
+import { keyPagePriority, pageDocId, sectionOf, socialProfile, type SocialProfile } from "./urls.js";
 
 export const UNDERSTAND_PAGES = 12;
 const MIN_WORDS = 30;
+const SECTION_SHARE = 3;   // pages one section (a catalogue, a blog) may take of the ones read
 
 // The pages worth reading, best first: key pages by path, then the shorter path; working HTML pages with some text.
 export function selectKeyPages(pages: PageData[], max = UNDERSTAND_PAGES): PageData[] {
-  return pages
+  const ranked = pages
     .filter((p) => p.status >= 200 && p.status < 300 && !p.error && p.wordCount >= MIN_WORDS)
-    .map((p) => ({ p, prio: keyPagePriority(new URL(p.finalUrl)), len: new URL(p.finalUrl).pathname.length }))
-    .sort((a, b) => b.prio - a.prio || a.len - b.len)
-    .slice(0, max)
-    .map((x) => x.p);
+    .map((p) => ({ p, prio: keyPagePriority(new URL(p.finalUrl)), len: new URL(p.finalUrl).pathname.length, sec: sectionOf(new URL(p.finalUrl)) }))
+    .sort((a, b) => b.prio - a.prio || a.len - b.len);
+  // One section (a shop's collections, a blog) takes at most SECTION_SHARE places while others have pages to read;
+  // what it leaves unfilled goes back to the best of what is left.
+  const used = new Map<string, number>();
+  const chosen = ranked.filter((x) => {
+    if (!x.sec) return true;
+    const n = used.get(x.sec) ?? 0;
+    used.set(x.sec, n + 1);
+    return n < SECTION_SHARE;
+  });
+  const out = [...chosen.slice(0, max)];
+  for (const x of ranked) if (out.length < max && !out.includes(x)) out.push(x);
+  return out.map((x) => x.p);
 }
 
 // The page as an extraction document: its description line, then its main text.
