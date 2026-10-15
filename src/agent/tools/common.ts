@@ -98,8 +98,21 @@ export function refuseIfReadOnly(ctx: ToolContext, tool: string): void {
 // - ORDER BY after RETURN resolves `v.until` against the RETURNed `v`; when `v` is a NODE() map without `until`, the
 //   sort silently does nothing. Order by a RETURNed alias (`v.until AS until … ORDER BY until`).
 
-export function ro<T = Record<string, unknown>>(ctx: ToolContext, cypher: string, params?: Record<string, unknown>, timeoutMs = READ_TIMEOUT_MS): Promise<T[]> {
-  return ctx.graph.roQuery<T>(cypher, params, { timeoutMs: Math.min(timeoutMs, READ_TIMEOUT_MS) });
+// FalkorDB refuses a query outright ("Max pending queries exceeded") when its queue is full (MAX_QUEUED_QUERIES):
+// ten agents reading in parallel can get there. Such a read waits and tries again, BUSY_RETRIES times, about 1.5 s
+// in all; any other error is thrown at once.
+const BUSY = /max pending queries/i;
+const BUSY_RETRIES = 4;
+
+export async function ro<T = Record<string, unknown>>(ctx: ToolContext, cypher: string, params?: Record<string, unknown>, timeoutMs = READ_TIMEOUT_MS): Promise<T[]> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await ctx.graph.roQuery<T>(cypher, params, { timeoutMs: Math.min(timeoutMs, READ_TIMEOUT_MS) });
+    } catch (e) {
+      if (attempt >= BUSY_RETRIES || !BUSY.test(String((e as Error)?.message))) throw e;
+      await new Promise((r) => setTimeout(r, 100 * 2 ** attempt * (0.5 + Math.random())));
+    }
+  }
 }
 
 // FalkorDB sends at most 10,000 rows (RESULTSET_SIZE) and drops the rest without an error. A read that can produce

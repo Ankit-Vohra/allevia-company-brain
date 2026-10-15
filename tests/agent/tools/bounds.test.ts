@@ -31,25 +31,22 @@ describe("tools on a tenant bigger than one result set", () => {
     ({ g, cleanup } = await seededGraph());
     seoBase = (await call(seoReport, {}, makeCtx(g))).data.summary;
 
-    // 12,000 documents: 30 hubs SOURCED_FROM 400 each; all AUTHORED by one writer and MENTIONING one topic; two stored
-    // communities of 6,000. Then a node whose only source is its `src` prop, and Priya's 3 documents on the topic.
-    await g.query(`CREATE (:Entity:Person {id:'person:bulk-writer', name:'Bulk writer'}), (:Entity:Product {id:'product:bulk-topic', name:'Bulk topic'})`);
+    // 12,000 documents: 30 hubs SOURCED_FROM 400 each; all AUTHORED by one writer, MENTIONING one topic and DEPENDING_ON
+    // one core (the alphabetically first dependent is created last); two stored communities of 6,000. Then a node whose
+    // only source is its `src` prop, and Priya's 3 documents on the topic.
+    await g.query(`CREATE (:Entity:Person {id:'person:bulk-writer', name:'Bulk writer'}), (:Entity:Product {id:'product:bulk-topic', name:'Bulk topic'}),
+      (:Entity:System {id:'system:bulk-core', name:'Core'})`);
     await g.query(`UNWIND range(0, 29) AS h CREATE (:Entity:System {id:'system:bulk-hub-' + toString(h), name:'Hub ' + toString(h)})`);
-    await g.query(`MATCH (w:Entity {id:'person:bulk-writer'}), (t:Entity {id:'product:bulk-topic'})
+    await g.query(`MATCH (w:Entity {id:'person:bulk-writer'}), (t:Entity {id:'product:bulk-topic'}), (c:Entity {id:'system:bulk-core'})
       UNWIND range(1, $n) AS i
       CREATE (d:Entity:Document {id:'document:bulk-' + toString(i), name:'Bulk doc ' + toString(i), community: 'bulk-' + toString(i % 2)})
-      CREATE (w)-[:AUTHORED]->(d), (d)-[:MENTIONS]->(t)`, { n: DOCS });
+      CREATE (w)-[:AUTHORED]->(d), (d)-[:MENTIONS]->(t), (d)-[:DEPENDS_ON]->(c)`, { n: DOCS });
+    await g.query("MATCH (c:Entity {id:'system:bulk-core'}) CREATE (:Entity:System {id:'system:bulk-aaa', name:'AAA first'})-[:DEPENDS_ON]->(c)");
     await g.query(`UNWIND range(1, $n) AS i MATCH (d:Entity {id:'document:bulk-' + toString(i)}), (h:Entity {id:'system:bulk-hub-' + toString(i % 30)})
       CREATE (h)-[:SOURCED_FROM]->(d)`, { n: DOCS });
     await g.query("CREATE (:Entity:Task {id:'task:bulk-src', name:'Sourced by prop', src:'document:runbook'})");
     await g.query(`MATCH (p:Entity {id:'person:priya'}), (t:Entity {id:'product:bulk-topic'}) UNWIND range(1, 3) AS i
       CREATE (d:Entity:Document {id:'document:priya-' + toString(i), name:'Priya on the topic ' + toString(i)}), (p)-[:AUTHORED]->(d), (d)-[:MENTIONS]->(t)`);
-
-    // 11,000 systems DEPEND_ON one core; the alphabetically first one is created last.
-    await g.query("CREATE (:Entity:System {id:'system:bulk-core', name:'Core'})");
-    await g.query(`MATCH (c:Entity {id:'system:bulk-core'}) UNWIND range(1, 11000) AS i
-      CREATE (:Entity:System {id:'system:bulk-dep-' + toString(i), name:'Dep ' + toString(100000 + i)})-[:DEPENDS_ON]->(c)`);
-    await g.query("MATCH (c:Entity {id:'system:bulk-core'}) CREATE (:Entity:System {id:'system:bulk-aaa', name:'AAA first'})-[:DEPENDS_ON]->(c)");
 
     // A 2,500-day series, and a second subject whose numbers are the latest and biggest.
     await g.query("CREATE (:Entity:Channel {id:'channel:bulk-series', name:'Series'}), (:Entity:Channel {id:'channel:bulk-series-2', name:'Series 2'})");
@@ -86,14 +83,18 @@ describe("tools on a tenant bigger than one result set", () => {
       CREATE (:Entity:Observation {id:'obs:views:' + r.c + ':' + r.at, name:'views', metric:'views', value: r.v, windowEnd: r.at, asOf: r.at})-[:MEASURES]->(c)`,
       { rows: contentObs });
 
-    // A decision based on 300 documents and affecting 200 systems; a task with 120 versions.
+    // A decision based on 300 documents and affecting 200 others; a task with 120 versions.
     await g.query(`CREATE (:Entity:Decision {id:'decision:bulk', name:'Bulk decision', status:'accepted'})`);
     await g.query(`MATCH (x:Entity {id:'decision:bulk'}) UNWIND range(1, 300) AS i MATCH (d:Entity {id:'document:bulk-' + toString(i)}) CREATE (x)-[:BASED_ON]->(d)`);
-    await g.query(`MATCH (x:Entity {id:'decision:bulk'}) UNWIND range(1, 200) AS i MATCH (s:Entity {id:'system:bulk-dep-' + toString(i)}) CREATE (x)-[:AFFECTS]->(s)`);
+    await g.query(`MATCH (x:Entity {id:'decision:bulk'}) UNWIND range(301, 500) AS i MATCH (s:Entity {id:'document:bulk-' + toString(i)}) CREATE (x)-[:AFFECTS]->(s)`);
     await g.query(`CREATE (t:Entity:Task {id:'task:bulk-versions', name:'Versioned', status:'s120', createdAt: 0})
       WITH t UNWIND range(0, 119) AS i
       CREATE (t)-[:HAD_VERSION]->(:Entity:Version {id:'version:task:bulk-versions:' + toString(i), since: i * 1000, until: (i + 1) * 1000,
         changed: ['status'], props: '{"status":"s' + toString(i) + '"}'})`);
+    // A task whose 60 versions each changed a 3,000-character summary.
+    await g.query(`CREATE (t:Entity:Task {id:'task:bulk-long', name:'Long', summary: 'now', createdAt: 0}) WITH t UNWIND range(0, 59) AS i
+      CREATE (t)-[:HAD_VERSION]->(:Entity:Version {id:'version:task:bulk-long:' + toString(i), since: i * 1000, until: (i + 1) * 1000,
+        changed: ['summary'], props: '{"summary":"' + reduce(s = '', k IN range(1, 300) | s + 'ten chars ') + '"}'})`);
 
     // Seven past turns on the topic (recall shows the latest 5); three decisions affect hub 0, the newest with the last id.
     await g.query(`MATCH (t:Entity {id:'product:bulk-topic'}) UNWIND range(1, 7) AS i
@@ -130,7 +131,7 @@ describe("tools on a tenant bigger than one result set", () => {
     expect(r.data.impacted[0].items[0]).toMatchObject({ id: "system:bulk-aaa", name: "AAA first" });
     expect(r.note).toMatch(/Stopped at 60/);
     const n = await call(neighbors, { id: "system:bulk-core", rels: ["DEPENDS_ON"], direction: "in" }, makeCtx(g));
-    expect(n.data.total).toBe(11_001);
+    expect(n.data.total).toBe(DOCS + 1);
     expect(n.data.neighbors[0]).toMatchObject({ id: "system:bulk-aaa", hop: 1 });
     expect(n.data.neighbors).toHaveLength(25);
   });
@@ -192,7 +193,7 @@ describe("tools on a tenant bigger than one result set", () => {
   it("every result stays small: few nodes, a bounded JSON size", async () => {
     const calls: Array<[AlleviaTool, Record<string, unknown>]> = [
       [getEntity, { id: "product:bulk-topic" }], [getEntity, { id: "system:bulk-core" }], [neighbors, { id: "system:bulk-core", depth: 2, limit: 100 }],
-      [neighbors, { id: "product:bulk-topic", depth: 2, limit: 100 }], [history, { id: "system:bulk-core" }], [impactOf, { id: "system:bulk-core", depth: 4 }],
+      [neighbors, { id: "product:bulk-topic", depth: 2, limit: 100 }], [history, { id: "system:bulk-core" }], [history, { id: "task:bulk-long" }], [impactOf, { id: "system:bulk-core", depth: 4 }],
       [whoKnows, { id: "product:bulk-topic", limit: 25 }], [whoOwns, { id: "system:bulk-core" }], [metricTrend, { metric: "bulk_visits" }],
       [metricTrend, { metric: "bulk_visits", subject: "channel:bulk-series" }], [seoReport, { limit: 25 }], [adReport, {}], [contentPerformance, { limit: 25 }],
       [topics, { limit: 20 }], [traceDecision, { id: "decision:bulk" }], [recall, { ids: ["product:bulk-topic"] }], [playbook, { limit: 25 }],

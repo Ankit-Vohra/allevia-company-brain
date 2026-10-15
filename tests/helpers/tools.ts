@@ -9,7 +9,12 @@ import { testGraph } from "./graph.js";
 
 export async function seededGraph(): Promise<{ g: GraphHandle; cleanup: () => Promise<void> }> {
   const { g, cleanup } = await testGraph();
-  await seedMini(g);
+  try {
+    await seedMini(g);
+  } catch (e) {
+    await cleanup().catch(() => undefined); // a failed seed must not leave its graph on the shared server
+    throw e;
+  }
   return { g, cleanup: async () => { await cleanup(); await closeAll(); } };
 }
 

@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import type { GraphHandle, QueryOpts } from "../../../src/graph/client.js";
 import { MissingEndpoint } from "../../../src/graph/errors.js";
 import {
-  InputError, READ_TIMEOUT_MS, TOOL_ALGO_TIMEOUT_MS, SOURCE_CAP, bounded, clip, compactProps, defineTool, median, parseAsOf, serial, sourcesFor,
+  InputError, READ_TIMEOUT_MS, TOOL_ALGO_TIMEOUT_MS, SOURCE_CAP, bounded, clip, compactProps, defineTool, median, parseAsOf, ro, serial,
+  sourcesFor,
 } from "../../../src/agent/tools/common.js";
 import { makeCtx } from "../../helpers/tools.js";
 
@@ -32,6 +33,21 @@ describe("tool plumbing", () => {
     expect(log).toEqual([8000, 8000, 2000]);
     expect(g.name).toBe("fake");
     expect(READ_TIMEOUT_MS).toBeLessThanOrEqual(8000);
+  });
+
+  it("ro waits and retries while the server's query queue is full, and only then", async () => {
+    let calls = 0;
+    const busy = (times: number, err = "Max pending queries exceeded") => ({
+      name: "fake", async roQuery() { if (++calls <= times) throw new Error(err); return [{ ok: 1 }]; },
+    }) as unknown as GraphHandle;
+    expect(await ro(makeCtx(busy(2)), "RETURN 1")).toEqual([{ ok: 1 }]);
+    expect(calls).toBe(3);
+    calls = 0;
+    await expect(ro(makeCtx(busy(99)), "RETURN 1")).rejects.toThrow(/Max pending/);
+    expect(calls).toBe(5);
+    calls = 0;
+    await expect(ro(makeCtx(busy(1, "Query timed out")), "RETURN 1")).rejects.toThrow(/timed out/);
+    expect(calls).toBe(1);
   });
 
   it("sources cover every id first (one each), then fill up to the cap", async () => {

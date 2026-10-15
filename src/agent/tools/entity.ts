@@ -170,10 +170,12 @@ interface Ev { ms: number; at: string; event: "created" | "changed" | "linked" |
 interface Refs { nodes: NodeRow[]; edges: EdgeRow[] }
 const EVENT_CAP = 50;
 
+// The changed props of a Version's JSON, shortened like any props (a changed summary can be thousands of characters).
 function pick(json: string | null | undefined, keys: string[]): Record<string, unknown> {
   try {
     const o = JSON.parse(json ?? "{}") as Record<string, unknown>;
-    return Object.fromEntries(keys.map((k) => [k, o[k] ?? null]));
+    const short = compactProps(keys.slice(0, 10).map((k) => [k, o[k]]));
+    return Object.fromEntries(keys.slice(0, 10).map((k) => [k, short[k] ?? null]));
   } catch {
     return {};
   }

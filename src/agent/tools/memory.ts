@@ -61,7 +61,7 @@ async function runRecall(args: { ids?: string[]; query?: string }, ctx: ToolCont
     ro<{ c: number }>(ctx, "MATCH (a:Approval) WHERE a.status = 'pending' RETURN count(a) AS c"),
   ]);
   const approvals = recs.length ? await ro<{ rid: string; a: NodeRow; e: EdgeRow; status: string | null; kind: string | null }>(ctx,
-    `UNWIND $rids AS rid MATCH (rec:Entity {id:rid}) WITH rid, rec MATCH (rec)-[p:PROPOSES]->(a:Approval) RETURN rid, ${NODE("a")} AS a, ${EDGE("p")} AS e, a.status AS status, a.kind AS kind LIMIT 100`,
+    `UNWIND $rids AS rid MATCH (rec:Entity {id:rid}) WITH rid, rec MATCH (rec)-[p:PROPOSES]->(a:Approval) RETURN rid, ${NODE("a")} AS a, ${EDGE("p")} AS e, a.status AS status, a.kind AS kind LIMIT 40`,
     { rids: recs.map((r) => r.rec.id) }) : [];
 
   const col = new Collector();
