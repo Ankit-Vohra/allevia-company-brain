@@ -7,7 +7,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { countWrite, funnelStep, mapSnapshot, redactText, stripPersonalFields } from "../../src/ingest/sources/ops-map/index.js";
+import { countWrite, funnelStep, mapSnapshot, stripPersonalFields } from "../../src/ingest/sources/ops-map/index.js";
 import { isAllowed } from "../../src/graph/schema.js";
 import { observationId, type ObservationInput } from "../../src/graph/upsert.js";
 import { typeFromId } from "../../src/util/ids.js";
@@ -440,7 +440,7 @@ describe("privacy", () => {
   const all = JSON.stringify(r);
 
   it("no planted personal data or infrastructure detail reaches the write", () => {
-    for (const s of ["98765", "hr@example.com", "ops@example.com", "u-planted-should-drop", "10.0.0.12", "1234567890", "second line stays out", "reader_role_x", "synthetic fixture for"]) {
+    for (const s of ["98765", "hr@example.com", "ops@example.com", "u-planted-should-drop", "192.0.2.12", "1234567890", "second line stays out", "reader_role_x", "synthetic fixture for"]) {
       expect(all, s).not.toContain(s);
     }
     expect(r.redactions.email).toBeGreaterThanOrEqual(1);
@@ -448,28 +448,15 @@ describe("privacy", () => {
     expect(r.redactions.personal_field).toBeGreaterThanOrEqual(1);
   });
 
-  it("redactText handles emails, phones, IPs and AWS ids", () => {
-    const x = redactText("mail a.b@example.co.in or +91 98765 43210 / 9876543210 at 10.1.2.3 on i-0123456789abcdef0 in sg-0fedcba9876543210");
-    expect(x.text).toBe("mail [redacted:email] or [redacted:phone] / [redacted:phone] at [redacted:ipv4] on [redacted:aws-id] in [redacted:aws-id]");
-    expect(x.counts).toEqual({ email: 1, phone: 2, ipv4: 1, "aws-id": 2 });
-    expect(redactText("Top 10 jobs in 2026, 1500 views").text).toBe("Top 10 jobs in 2026, 1500 views");
-  });
-
-  it("redactText covers the rest of spec §6.3: secrets, secret paths, company ids, Supabase refs (fake values)", () => {
-    const cases: Array<[string, string]> = [
-      ["copy ~/Documents/aamdani-secrets/x.txt to the box", "copy [redacted:secret-path] to the box"],
-      ["key at ~/.config/aamdani/keys/a.txt", "key at [redacted:secret-path]"],
-      ["set FOO_TOKEN=abc123 then", "set FOO_TOKEN=[redacted:secret] then"],
-      ["use ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 now", "use [redacted:token] now"],
-      ["key AKIAABCDEFGHIJKLMNOP and sk-abcdefghijklmnop1234", "key [redacted:token] and [redacted:token]"],
-      ["db at https://user:pw@db.example.test/x", "db at [redacted:url-credentials]db.example.test/x"],
-      ["CIN U12345MH2020PTC123456 filed", "CIN [redacted:cin] filed"],
-      ["our D-U-N-S number is 123456789", "our D-U-N-S number is [redacted:duns]"],
-      ["Apple Team ID ABCDE12345 added", "Apple Team ID [redacted:team-id] added"],
-      ["project abcdefghijklmnopqrst on supabase", "project [redacted:supabase-ref] on supabase"],
-    ];
-    for (const [input, out] of cases) expect(redactText(input).text, input).toBe(out);
-    expect(redactText("internationalisation and recommendations").text).toBe("internationalisation and recommendations");
+  // The redaction rules themselves (every kind, and what must stay untouched) are tested once, in redact.test.ts. Here: the
+  // mapper sends free text through that engine, and the counts it reports use the engine's kind names.
+  it("free text goes through redact(): secret paths, addresses, credentials and company ids become placeholders, and are counted", () => {
+    const caption = "copy ~/Documents/acme-secrets/x.txt to 198.51.100.7 with FOO_TOKEN=abc123 and ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 for Team ID ABCDE12345 now";
+    const out = mapSnapshot(snap({ "reels_performance.json": env("reels_performance", { reels: [{ id: "17800000000000042", caption }] }) }), ctx);
+    expect(out.write.nodes.find((n) => n.id === "content:instagram-17800000000000042")?.props?.caption).toBe(
+      "copy [redacted:secret-path] to [redacted:ipv4] with FOO_TOKEN=[redacted:secret] and [redacted:secret] for Team ID [redacted:apple-team-id] now");
+    expect(out.redactions).toEqual({ "secret-path": 1, ipv4: 1, secret: 2, "apple-team-id": 1 });
+    expect(JSON.stringify(out.write)).not.toMatch(/acme-secrets|198\.51\.100|abc123|ghp_|ABCDE12345/);
   });
 
   it("stripPersonalFields drops personal keys but keeps counts named after them", () => {

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
 import { ensureIndexes } from "../../src/graph/indexes.js";
 import { upsertNode, writeBatch } from "../../src/graph/upsert.js";
+import { scanGraph } from "../../src/ingest/privacy.js";
 import { mapSnapshot } from "../../src/ingest/sources/ops-map/index.js";
 import { testGraph } from "../helpers/graph.js";
 
@@ -35,6 +36,8 @@ describe("ops snapshot -> graph (integration)", () => {
     const sourced = await g.roQuery<{ c: number }>(
       "MATCH (o:Observation)-[:SOURCED_FROM]->(d:Document {kind:'snapshot'}) RETURN count(o) AS c");
     expect(sourced[0]!.c).toBe(write.observations.length);
+
+    expect(await scanGraph(g)).toEqual([]); // the audit finds nothing the redaction engine would still remove
 
     const again = await writeBatch(g, write, T0 + 60_000);
     expect(again.errors).toEqual([]);

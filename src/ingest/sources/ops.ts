@@ -20,7 +20,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { loadConfig, type AlleviaConfig } from "../../config.js";
 import { istDate } from "../../util/time.js";
-import { redactText } from "./ops-map/index.js";
+import { redact } from "../privacy.js";
 
 export { mapSnapshot } from "./ops-map/index.js";
 
@@ -156,7 +156,7 @@ function parseEnvelope(name: string, res: Record<string, unknown>): Envelope {
     } catch { /* not an envelope */ }
   }
   return { tool: name, status: "error", asOf: new Date().toISOString(), sources: [],
-    message: `the server answered without an envelope${text ? `: ${redactText(text.slice(0, 200)).text}` : ""}` };
+    message: `the server answered without an envelope${text ? `: ${redact(text.slice(0, 200)).text}` : ""}` };
 }
 
 export class OpsClient implements OpsCaller {
@@ -175,7 +175,7 @@ export class OpsClient implements OpsCaller {
     this.transport = new StdioClientTransport({ command: this.spec.command, args: this.spec.args, env: this.spec.env, stderr: "pipe" });
     // Keep a short, redacted tail of the server's (and ssh's) stderr for error reports; never echo it.
     this.transport.stderr?.on("data", (chunk: Buffer) => {
-      for (const line of chunk.toString("utf8").split("\n")) if (line.trim()) this.stderr.push(redactText(line.slice(0, 300)).text);
+      for (const line of chunk.toString("utf8").split("\n")) if (line.trim()) this.stderr.push(redact(line.slice(0, 300)).text);
       if (this.stderr.length > 20) this.stderr.splice(0, this.stderr.length - 20);
     });
     const client = new Client({ name: "allevia-ops-snapshot", version: "0.1.0" });
@@ -351,7 +351,7 @@ export async function snapshot(caller: OpsCaller, outDir: string, opts: Snapshot
   try {
     listed = new Set(await caller.listTools());
   } catch (e) {
-    manifest.error = `listTools failed: ${redactText(String((e as Error)?.message ?? e).slice(0, 300)).text}`;
+    manifest.error = `listTools failed: ${redact(String((e as Error)?.message ?? e).slice(0, 300)).text}`;
     writeManifest();
     throw e;
   }
@@ -372,7 +372,7 @@ export async function snapshot(caller: OpsCaller, outDir: string, opts: Snapshot
     } catch (e) {
       if (e instanceof RefusedToolError) { manifest.skipped[c.call] = e.message; continue; }
       env = { tool: c.tool, status: "error", asOf: new Date().toISOString(), sources: [],
-        message: redactText(String((e as Error)?.message ?? e).slice(0, 300)).text };
+        message: redact(String((e as Error)?.message ?? e).slice(0, 300)).text };
     }
     const ms = Date.now() - t0;
     const text = `${JSON.stringify(env, null, 1)}\n`;
@@ -380,7 +380,7 @@ export async function snapshot(caller: OpsCaller, outDir: string, opts: Snapshot
     manifest.calls[c.call] = {
       tool: c.tool, file: c.file, args: c.args, status: env.status, asOf: env.asOf, ms, bytes: Buffer.byteLength(text),
       ...(env.cached ? { cached: true } : {}),
-      ...(env.status !== "ok" && env.message ? { message: redactText(env.message.slice(0, 200)).text } : {}),
+      ...(env.status !== "ok" && env.message ? { message: redact(env.message.slice(0, 200)).text } : {}),
     };
     log(`${c.call}: ${env.status} in ${ms} ms`);
     if (c.budget === "instagram" && isRateLimited(env)) instagramLimited = c.call;

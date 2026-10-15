@@ -9,7 +9,7 @@ import { businessId } from "../../../graph/tenants.js";
 import { observationId, type EdgeInput, type NodeInput, type ObservationInput, type Prim } from "../../../graph/upsert.js";
 import { entityId, pageKey, typeFromId } from "../../../util/ids.js";
 import type { SourceResult } from "../../types.js";
-import { redactText } from "./privacy.js";
+import { redact } from "../../privacy.js";
 
 export interface OpsMapContext {
   tenantSlug: string;
@@ -120,7 +120,7 @@ export class Builder {
   text(s: unknown, max = 160): string | undefined {
     const first = str(s)?.split(/\r?\n/)[0]?.trim();
     if (!first) return undefined;
-    const { text, counts } = redactText(first); // redact before cutting, so a cut never leaves half an address behind
+    const { text, counts } = redact(first); // redact before cutting, so a cut never leaves half an address behind
     for (const [k, n] of Object.entries(counts)) this.count(k, n);
     return text.length > max ? `${text.slice(0, max - 1)}…` : text;
   }

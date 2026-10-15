@@ -38,7 +38,7 @@
     "message": "synthetic database check passed",
     "details": {
      "role": "reader_role_x",
-     "host": "10.0.0.12"
+     "host": "192.0.2.12"
     }
    },
    {

@@ -17,7 +17,7 @@ import { SYSTEM_MAPPERS } from "./system.js";
 import { USER_MAPPERS } from "./users.js";
 
 export { CHANNELS, type ChannelKey, type OpsMapContext } from "./builder.js";
-export { redactText, stripPersonalFields, SENSITIVE_SECTION } from "./privacy.js";
+export { stripPersonalFields, SENSITIVE_SECTION } from "./privacy.js";
 export { FINANCE_METRIC, funnelStep } from "./users.js";
 
 export const MAPPERS: Record<string, Mapper> = {

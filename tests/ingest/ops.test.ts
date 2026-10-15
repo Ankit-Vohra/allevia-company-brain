@@ -52,12 +52,12 @@ describe("READ_TOOLS allow-list", () => {
 });
 
 describe("SSH launch", () => {
-  const ssh = { host: "203.0.113.10", user: "ankit", keyPath: "/Users/x/.ssh/k.pem", remoteDir: "/home/ankit/aamdani-social-automation" };
+  const ssh = { host: "203.0.113.10", user: "ankit", keyPath: "/fixtures/test-key", remoteDir: "/home/ankit/aamdani-social-automation" };
 
   it("builds a non-interactive ssh that runs only the MCP launch script, with no forwarding", () => {
     const l = sshLaunch(ssh);
     expect(l.command).toBe("ssh");
-    expect(l.args.slice(0, 2)).toEqual(["-i", "/Users/x/.ssh/k.pem"]);
+    expect(l.args.slice(0, 2)).toEqual(["-i", "/fixtures/test-key"]);
     for (const o of ["BatchMode=yes", "ConnectTimeout=15", "ServerAliveInterval=20", "ForwardAgent=no", "ClearAllForwardings=yes"]) {
       expect(l.args, o).toContain(o);
     }
