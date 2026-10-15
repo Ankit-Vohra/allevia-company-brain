@@ -1,0 +1,83 @@
+// How Allevia writes to the owner: the i-have-adhd answer shape (vendor/skills/i-have-adhd, MIT) in the owner's plain
+// words (docs/owner-words.md). Shared by the Chief's answer prompts, the desks' house rules and the morning brief
+// ("Today's note"), so one change here reaches every text the owner reads.
+//
+// The owner is a working founder, not technical, reading on a phone for two minutes. So: the answer and the one next
+// action come first, steps are numbered, lists stop at five and are ranked, and none of the machinery's words appear.
+
+/** Words the owner must never read (docs/owner-words.md "Words" table), as a pattern; ownerJargon() lists the hits. */
+const JARGON: Array<[label: string, re: RegExp]> = [
+  ["baseline", /\bbaselines?\b/i],
+  ["Day 0", /\bday[- ]?0\b/i],
+  ["first-pass", /\bfirst[- ]pass\b/i],
+  ["capability", /\bcapabilit(?:y|ies)\b/i],
+  ["approval card", /\bapproval cards?\b/i],
+  ["approval", /\bapprovals?\b/i],
+  ["finding", /\bfindings?\b/i],
+  ["detector", /\bdetectors?\b/i],
+  ["agent", /\bagents?\b/i],
+  ["desk", /\bdesks?\b/i],
+  ["orchestrator", /\borchestrat(?:or|ors|ion)\b/i],
+  ["synthesis", /\bsynthesis\b/i],
+  ["citation", /\bcitations?\b/i],
+  ["provenance", /\bprovenance\b/i],
+  ["graph", /\b(?:knowledge )?graph\b/i],
+  ["node", /\bnodes?\b/i],
+  ["recommendation", /\brecommendations?\b/i],
+  ["insight", /\binsights?\b/i],
+  ["deliverable", /\bdeliverables?\b/i],
+  ["simulated", /\bsimulated\b/i],
+  ["learned rule", /\blearned rules?\b/i],
+  ["access mode", /\baccess modes?\b/i],
+  ["on track / at risk / off track", /\b(?:on|off) track\b|\bat risk\b/i],
+  ["morning brief", /\bmorning brief\b/i],
+];
+
+/** The jargon in a text the owner will read (ids in [[double brackets]] are not text, so they are skipped). */
+export function ownerJargon(text: string): string[] {
+  const prose = text.replace(/\[\[[^\]]*\]\]/g, " ");
+  return JARGON.filter(([, re]) => re.test(prose)).map(([label]) => label);
+}
+
+/** The plain-words rule, as the prompts state it. */
+export const OWNER_WORDS_RULE = `Plain words. The owner runs a business, is not technical, and reads this on a phone between jobs:
+- Never write these words: baseline, Day 0, first-pass, capability, approval card, finding, detector, agent, desk, orchestrator, synthesis, citation, provenance, graph, node, recommendation, insight, deliverable, on track / at risk / off track.
+- Write instead: "where you started" (not baseline), "monthly check-in", "waiting for your OK", "what we noticed" or "an idea", "your team", people by name and job ("Tara, content"; "Zoya, on call"), "how we know" (sources), "going well / needs a push / behind", "drafts you approved as they were", "things your team learned from your edits", "today's note" (not morning brief).
+- Numbers that are samples are called "sample numbers", next to the number, every time.
+- Short words, short sentences. Explain a term once in plain words, or leave it out.`;
+
+/** The answer's shape: the i-have-adhd rules (lead with the action, numbered steps, five at most, one next action). */
+export const ANSWER_SHAPE = `Shape the answer so a busy reader can act on it (the i-have-adhd rules):
+- First line: the answer, or the one thing to do. No preamble ("Great question", "Let me", "Looking at"), no recap of the question.
+- More than one step: a numbered list, one small action per step, the fewest steps that work.
+- Lists: at most 5 items per group, most important first. Keep the rest back; they are the next items, not lost.
+- Give real time estimates ("about 10 minutes", "an afternoon"), never "a bit of work".
+- Say what is already done or going well, in concrete terms ("Enquiries are up this week: 41, from 33"), not buried at the end.
+- Errors and gaps: say what happened and what to do, flat ("Instagram isn't connected, so reach is not recorded. Connect it in Settings."). No "uh oh", no "there seems to be a problem".
+- The last line is ONE next action the owner can take in under two minutes. No closer ("let me know", "hope this helps"), no second summary.`;
+
+/** What a desk's own write-up looks like: concise, complete, ranked, and every item whole. */
+export const DESK_SHAPE = `Write it so it can be used as is: the finding first, then at most 5 supporting points, most important first, each a whole sentence. If you run out of room, drop the lowest-ranked point; never stop in the middle of one. Plain words (no "baseline", "Day 0", "agent", "desk", "graph", "node"), and name sample numbers as "sample numbers".`;
+
+/**
+ * Cut a write-up to at most `max` characters without ending in the middle of an item: at the last whole line (a bullet
+ * or a numbered step), else the last whole sentence, else the last whole word with an ellipsis. The ellipsis is only
+ * ever added when a single item is itself longer than `max`.
+ */
+export function clipToItem(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  const head = t.slice(0, max);
+  const whole = (s: string): string => {
+    const open = s.lastIndexOf("[[");
+    return open > s.lastIndexOf("]]") ? s.slice(0, open).trimEnd() : s; // never end inside a [[source]] tag
+  };
+  const nl = head.lastIndexOf("\n");
+  if (t[max] === "\n") return whole(head).trimEnd(); // the cut falls exactly between two lines
+  if (nl > 0 && nl >= max * 0.3) return whole(head.slice(0, nl)).trimEnd();
+  const ends = [...head.matchAll(/[.!?]["')\]]*(?=\s|$)/g)].at(-1);
+  if (ends && ends.index! + ends[0].length >= max * 0.3) return whole(head.slice(0, ends.index! + ends[0].length)).trimEnd();
+  const space = head.lastIndexOf(" ");
+  const cut = whole(space > 0 ? head.slice(0, space) : head.slice(0, max - 1)).trimEnd().replace(/[,;:\-–—(]$/, "");
+  return `${cut}…`;
+}

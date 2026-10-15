@@ -1,17 +1,23 @@
-// The morning brief, shaped as a goal pulse (product design §3.2 "Daily 07:30", §9 item 10). In order:
-//   1. Goals: each Goal against its Day-0 baseline and target: achieved, on track, at risk or off track (no reading
-//      yet says so). A changed status is written back to the Goal, so its history is a series of Versions.
-//   2. Since the last brief: new Observations (with the two biggest moves), facts that ended, rules learned.
-//   3. Top 3 open recommendations.
-//   4. Approvals waiting on the owner.
-//   5. One next action.
+// The morning brief, written to the owner as "Today's note" in plain words (docs/owner-words.md; the stored graph
+// names stay: Goal, baseline, Recommendation, Approval). Shaped as a goal pulse (product design §3.2 "Daily 07:30", §9
+// item 10). In order:
+//   1. Your goals: each Goal against where the owner started and the goal's number: reached, going well, needs a push or
+//      behind (no reading yet says "we'll know after your first full week"). A changed status is written back to the
+//      Goal, so its history is a series of Versions.
+//   2. What changed since the last note: new Observations (with the two biggest moves), facts that ended, things the
+//      team learned from the owner's edits.
+//   3. What we noticed: the top 3 open Recommendations (not the on-call ones).
+//   4. On call: open tech Recommendations from Zoya (errors, crashes) and Imran (releases, app stores). Only when
+//      something is open.
+//   5. Waiting for your OK: the pending Approvals.
+//   6. One next step.
 // Every number comes from the graph; the text is a template. An optional Haiku pass (off by default) may tighten the
 // wording but must keep every figure and [[id]] (polish.ts). Saved as Document {kind:'brief'} (one per day, re-written
 // in place) PRODUCED by the Chief of Staff, MENTIONS everything it summarises. `publish` is the channel (Discord later).
 import { openGraph, type GraphHandle } from "../graph/client.js";
 import { closeEdge, upsertEdge, upsertNode } from "../graph/upsert.js";
 import { AgentSdkRunner, type LlmRunner } from "../ingest/llm.js";
-import { agentById } from "../../shared/roster.js";
+import { plainWho } from "../../shared/roster.js";
 import { entityId } from "../util/ids.js";
 import { isoDate } from "../util/time.js";
 import { ensureAgentNode, existingIds, findBusinessId } from "../actions/shared.js";
@@ -46,6 +52,7 @@ export interface Brief {
   learning: LearningMetrics;
   newRecommendations: number;
   top: Array<{ id: string; title: string; by: string | null; score: number; approvalId: string | null }>;
+  onCall: Array<{ id: string; title: string; by: string | null; score: number }>;
   pending: { count: number; overdue: number; oldestDays: number; cards: Array<{ id: string; title: string; kind: string; ageDays: number }> };
   next: string;
   mentions: string[];
@@ -131,17 +138,21 @@ export async function goalPulse(g: Read, now: number, businessId: string | null)
 }
 
 const value = (n: number, unit: string | null) => (unit && /^(inr|usd|gbp|eur|aud|aed)$/i.test(unit) ? money(n, unit) : unit === "ratio" ? pct(n) : fmt(n));
-const STATUS_TEXT: Record<GoalStatus, string> = { achieved: "Achieved", on_track: "On track", at_risk: "At risk", off_track: "Off track", no_data: "No reading yet" };
+// The owner's words for a goal's state (docs/owner-words.md): never "on track / at risk / off track".
+export const STATUS_TEXT: Record<GoalStatus, string> = { achieved: "Reached", on_track: "Going well", at_risk: "Needs a push", off_track: "Behind", no_data: "We'll know after your first full week" };
+// What an approval is, said as the owner's thing to OK.
+const KIND_TEXT: Record<string, string> = { github_issue: "a fix for your website", content_draft: "a draft post", pause_ad: "pausing an ad", discord_post: "a message to your team chat" };
+const kindText = (k: string): string => KIND_TEXT[k] ?? k.replace(/_/g, " ");
 
 function goalLine(p: GoalPulse): string {
   const due = p.dueAt && dayOf(p.dueAt) ? ` by ${shortDate(dayOf(p.dueAt)!)}` : "";
-  const target = p.target !== null ? `target ${value(p.target, p.unit)}${due}` : "no target set";
-  if (p.current === null) return `- ${p.name}: no reading yet; ${target}. [[${p.id}]]`;
-  const from = p.baseline !== null ? `, from ${value(p.baseline, p.unit)} at the start` : "";
+  const goal = p.target !== null ? `Goal: ${value(p.target, p.unit)}${due}.` : "No goal number set yet.";
+  if (p.current === null) return `- ${p.name}: ${STATUS_TEXT.no_data}. ${goal} [[${p.id}]]`;
+  const from = p.baseline !== null ? `, you started at ${value(p.baseline, p.unit)}` : "";
   const why = p.status === "at_risk" && p.progress !== null && p.elapsed !== null
-    ? `: ${pct(Math.max(0, p.progress), 0)} of the way with ${pct(p.elapsed, 0)} of the time gone`
-    : p.status === "off_track" ? ": moving away from the target" : "";
-  return `- ${p.name}: ${value(p.current, p.unit)}${from}; ${target}. ${STATUS_TEXT[p.status]}${why}. [[${p.id}]]`;
+    ? `: ${pct(Math.max(0, p.progress), 0)} of the way there, ${pct(p.elapsed, 0)} of the time used`
+    : p.status === "off_track" ? ": moving away from the goal" : "";
+  return `- ${p.name}: ${value(p.current, p.unit)} now${from}. ${goal} ${STATUS_TEXT[p.status]}${why}. [[${p.id}]]`;
 }
 
 // ---------- 2. since the last brief ----------
@@ -189,6 +200,15 @@ async function closedSince(g: Read, since: number): Promise<{ count: number; exa
   return { count: c?.n ?? 0, examples: ex };
 }
 
+// ---------- on call: open tech recommendations from Zoya and Imran ----------
+
+export async function onCallOpen(g: Read): Promise<Brief["onCall"]> {
+  return g.roQuery<Brief["onCall"][number]>(
+    `MATCH (r:Recommendation) WHERE r.status = 'open' AND r.area = 'tech'
+     RETURN r.id AS id, r.name AS title, r.by AS by, coalesce(r.score, 0) AS score
+     ORDER BY score DESC, coalesce(r.createdAt, 0) DESC, id LIMIT 5`);
+}
+
 const verb = (t: string) => ({ OWNS: "owns", DEPENDS_ON: "depends on", BLOCKS: "blocks", MEMBER_OF: "is a member of", SUPERSEDES: "supersedes", USES: "uses", PUBLISHED_ON: "is published on" } as Record<string, string>)[t] ?? t.toLowerCase().replace(/_/g, " ");
 
 // ---------- the brief ----------
@@ -218,11 +238,12 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
     "MATCH (r:Rule) WHERE r.kind = 'learned' AND r.createdAt >= $since RETURN r.id AS id, coalesce(r.text, r.name) AS text ORDER BY r.createdAt, id LIMIT 5", { since });
   const [nr] = await g.roQuery<{ n: number }>("MATCH (r:Recommendation) WHERE r.createdAt >= $since RETURN count(r) AS n", { since });
   const top = await g.roQuery<{ id: string; title: string; by: string | null; score: number; approvalId: string | null }>(
-    `MATCH (r:Recommendation) WHERE r.status = 'open'
+    `MATCH (r:Recommendation) WHERE r.status = 'open' AND coalesce(r.area, '') <> 'tech'
      OPTIONAL MATCH (r)-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL AND a.status = 'pending'
      WITH r, collect(a.id)[0] AS approvalId
      RETURN r.id AS id, r.name AS title, r.by AS by, coalesce(r.score, 0) AS score, approvalId
      ORDER BY score DESC, coalesce(r.createdAt, 0) DESC, id LIMIT 3`);
+  const onCall = await onCallOpen(g);
   const pendingRows = await g.roQuery<{ id: string; title: string | null; name: string; kind: string; createdAt: number | null; score: number | null }>(
     `MATCH (a:Approval) WHERE a.status = 'pending'
      OPTIONAL MATCH (r:Recommendation)-[p:PROPOSES]->(a) WHERE p.until IS NULL
@@ -238,54 +259,60 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   };
 
   // ---- text ----
-  const lines: string[] = [`Morning brief, ${bizRow?.name ?? tenant}, ${longDate(date)}`, ""];
-  lines.push("Goals");
+  const lines: string[] = [`Today's note, ${bizRow?.name ?? tenant}, ${longDate(date)}`, ""];
+  lines.push("Your goals");
   if (goals.length) lines.push(...goals.map(goalLine));
-  else lines.push("- No goals set yet. Set two or three in onboarding and this line tracks them.");
-  lines.push("", `Since ${since >= now - 36 * 3_600_000 && since <= now ? "yesterday" : shortDate(isoDate(since))}`);
-  const counts = [plural(newObservations, "new number"), plural(closed.count, "fact", "facts"), plural(learned.length, "rule", "rules")];
-  lines.push(`- ${counts[0]}, ${counts[1]} ended, ${counts[2]} learned, ${plural(nr?.n ?? 0, "new recommendation")}.`);
+  else lines.push("- No goals set yet. Pick two or three when you set up and they show here.");
+  lines.push("", `What changed since ${since >= now - 36 * 3_600_000 && since <= now ? "yesterday" : shortDate(isoDate(since))}`);
+  lines.push(`- ${plural(newObservations, "new number")} came in${nr?.n ? ` and ${plural(nr.n, "new idea")}` : ""}.`);
   for (const c of changes) {
     const delta = (c.to - c.from) / c.from;
     lines.push(`- ${cap1(c.metric.replace(/_/g, " "))}, ${c.name}: ${value(c.from, c.unit)} -> ${value(c.to, c.unit)} (${delta > 0 ? "+" : ""}${pct(delta, 0)}). [[${c.obsId}]]`);
   }
-  for (const f of closed.examples) lines.push(`- Ended: ${f.fromName} no longer ${verb(f.type)} ${f.toName}.`);
-  for (const r of learned) lines.push(`- Learned: ${r.text} [[${r.id}]]`);
+  for (const f of closed.examples) lines.push(`- Changed: ${f.fromName} no longer ${verb(f.type)} ${f.toName}.`);
+  for (const r of learned) lines.push(`- Your team learned: ${r.text} [[${r.id}]]`);
   if (kpi.decided30d) {
-    lines.push(`- First pass: ${pct(kpi.firstPassRate ?? 0, 0)} of drafts approved with no edit over 30 days (${kpi.firstPass30d} of ${kpi.decided30d}); ${plural(kpi.learnedRules, "learned rule")} active.`);
+    lines.push(`- Drafts you approved as they were: ${fmt(kpi.firstPass30d)} of ${fmt(kpi.decided30d)} in the last 30 days (${pct(kpi.firstPassRate ?? 0, 0)}). Things your team learned from your edits: ${fmt(kpi.learnedRules)}.`);
   }
-  lines.push("", "Top 3");
-  if (top.length) top.forEach((r, i) => lines.push(`${i + 1}. ${r.title}${r.by ? ` (${agentById(r.by)?.name ?? r.by})` : ""}. [[${r.id}]]`));
-  else lines.push("- Nothing open. Run insights to look again.");
-  lines.push("", "Waiting on you");
+  lines.push("", "What we noticed");
+  if (top.length) top.forEach((r, i) => lines.push(`${i + 1}. ${r.title}${r.by ? ` (${plainWho(r.by)})` : ""}. [[${r.id}]]`));
+  else lines.push("- Nothing new to flag today.");
+  if (onCall.length) {
+    lines.push("", "On call");
+    for (const r of onCall.slice(0, 3)) lines.push(`- ${clip(r.title, 110).replace(/[.:]$/, "")}${r.by ? ` (${plainWho(r.by)})` : ""}. [[${r.id}]]`);
+    if (onCall.length > 3) lines.push(`- ${plural(onCall.length - 3, "more thing")} to look at.`);
+  }
+  lines.push("", "Waiting for your OK");
   if (pending.count) {
-    lines.push(`- ${plural(pending.count, "approval")}${pending.oldestDays ? `; the oldest has waited ${plural(pending.oldestDays, "day")}` : ""}${pending.overdue ? ` (${fmt(pending.overdue)} over 48 hours)` : ""}.`);
-    for (const c of pending.cards) lines.push(`- ${clip(c.title, 90)} (${c.kind.replace(/_/g, " ")}). [[${c.id}]]`);
+    lines.push(`- ${plural(pending.count, "thing is", "things are")} waiting for your OK${pending.oldestDays ? `; the oldest has waited ${plural(pending.oldestDays, "day")}` : ""}${pending.overdue ? ` (${fmt(pending.overdue)} over 2 days)` : ""}.`);
+    for (const c of pending.cards) lines.push(`- ${clip(c.title, 90)} (${kindText(c.kind)}). [[${c.id}]]`);
   } else {
     lines.push("- Nothing.");
   }
   const firstCard = pending.cards[0];
   const atRisk = goals.find((x) => x.status === "at_risk" || x.status === "off_track");
-  const next = firstCard ? `Approve or edit: ${clip(firstCard.title, 80).replace(/[.:]$/, "")}. [[${firstCard.id}]]`
-    : top[0] ? `Read and decide: ${clip(top[0].title, 80).replace(/[.:]$/, "")}. [[${top[0].id}]]`
-    : atRisk ? `Ask the team how to get "${atRisk.name}" back on track. [[${atRisk.id}]]`
+  const urgent = onCall.find((r) => r.score >= 0.8);
+  const next = urgent ? `Look at this first: ${clip(urgent.title, 80).replace(/[.:]$/, "")}. [[${urgent.id}]]`
+    : firstCard ? `Say OK or edit: ${clip(firstCard.title, 80).replace(/[.:]$/, "")}. [[${firstCard.id}]]`
+    : top[0] ? `Take a look: ${clip(top[0].title, 80).replace(/[.:]$/, "")}. [[${top[0].id}]]`
+    : atRisk ? `Ask your team how to get "${atRisk.name}" going again. [[${atRisk.id}]]`
     : "Nothing needs you today.";
-  lines.push("", "Next", `- ${next}`);
+  lines.push("", "Next step", `- ${next}`);
   let text = lines.join("\n");
 
   let polished: boolean | undefined;
   if (opts.llm) {
     const runner = opts.runner ?? new AgentSdkRunner({ concurrency: 1, retries: 0 });
-    const r = await polishText(runner, { text, instruction: "Tighten this morning brief. Keep its sections, order and line breaks; shorten lines, do not merge or drop any." });
+    const r = await polishText(runner, { text, instruction: "Tighten this note. Keep its sections, order and line breaks; shorten lines, do not merge or drop any. Keep the plain words as they are: never write baseline, approval, recommendation or on track." });
     text = r.text;
     polished = r.polished;
   }
 
   // ---- save ----
-  const title = `Morning brief, ${shortDate(date)}`;
+  const title = `Today's note, ${shortDate(date)}`;
   const mentions = [...new Set([
     ...(biz ? [biz] : []), ...goals.map((x) => x.id), ...goals.flatMap((x) => (x.obsId ? [x.obsId] : [])), ...changes.map((c) => c.obsId),
-    ...learned.map((r) => r.id), ...top.map((r) => r.id), ...pending.cards.map((c) => c.id),
+    ...learned.map((r) => r.id), ...top.map((r) => r.id), ...onCall.slice(0, 3).map((r) => r.id), ...pending.cards.map((c) => c.id),
   ])];
   const present = await existingIds(g, mentions);
   const agent = await ensureAgentNode(g, "chief-of-staff", now);
@@ -308,7 +335,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   }
 
   const brief: Brief = {
-    id, title, text, date, since, goals, newObservations, changes, closed, learned, learning: kpi, newRecommendations: nr?.n ?? 0, top, pending,
+    id, title, text, date, since, goals, newObservations, changes, closed, learned, learning: kpi, newRecommendations: nr?.n ?? 0, top, onCall, pending,
     next, mentions: mentions.filter((m) => present.has(m)), ...(polished !== undefined ? { polished } : {}),
   };
   if (opts.publish) {

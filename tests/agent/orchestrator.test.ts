@@ -9,6 +9,7 @@ import {
 } from "../../src/agent/orchestrator.js";
 import { FakeRuntime, type FakeScript, type RunInput } from "../../src/agent/runtime.js";
 import type { AlleviaTool } from "../../src/agent/tool.js";
+import { FINDING_MAX_CHARS } from "../../src/agent/prompts.js";
 import { fakeTool, recorder, result, NOW } from "../helpers/agent.js";
 
 // ---------- fixtures ----------
@@ -73,7 +74,7 @@ describe("normalisePlan", () => {
     expect(p.steps[0]!.task).toBe("a; b");
   });
   it("allows up to 5 desks only for a broad review of the whole business", () => {
-    for (const q of ["How is the business doing overall?", "Give me the weekly review", "Morning brief please", "A full report across the business"]) {
+    for (const q of ["How is the business doing overall?", "Give me the weekly review", "Morning brief please", "What is in today's note?", "A full report across the business"]) {
       expect(normalisePlan({ rationale: "r", steps: SEVEN }, q).steps.map((s) => s.agent)).toEqual(["data-analyst", "tech-lead", "growth-marketer", "librarian", "ops-manager"]);
     }
     for (const q of ["How's everything going?", "How are we doing overall?"]) expect(normalisePlan({ rationale: "r", steps: SEVEN }, q).steps.length).toBe(5);
@@ -746,6 +747,24 @@ describe("runTurn: budgets, timeouts and stopping", () => {
     expect(out).toMatchObject({ ok: true, answer: ANSWER });
     expect(texts(events)).toBe(ANSWER);
     expect(events.some((e) => e.type === "error")).toBe(false);
+  });
+});
+
+describe("runTurn: a long finding is cut between items, never inside one", () => {
+  it("keeps whole bullets within the character limit and no ellipsis", async () => {
+    const bullets = Array.from({ length: 12 }, (_, i) => `- Point ${i + 1}: the sitemap issue on page ${i + 1} is still open and needs a fix this week. [[system:sitemap]]`);
+    const long = `The sitemap is broken [[system:sitemap]].\n${bullets.join("\n")}`;
+    expect(long.length).toBeGreaterThan(FINDING_MAX_CHARS);
+    const { events, run } = setup({
+      "chief-of-staff:plan": plan([{ agent: "tech-lead", task: "Site" }]),
+      "tech-lead": { calls: [{ name: "get_entity", args: { id: "system:sitemap" } }], ...finding(long) },
+      "chief-of-staff:synthesis": { text: "The sitemap is broken [[system:sitemap]]." },
+    });
+    await run();
+    const f = events.find(is("finding", "tech-lead")) as Extract<AgentEvent, { type: "finding" }>;
+    expect(f.text.length).toBeLessThanOrEqual(FINDING_MAX_CHARS);
+    expect(f.text.endsWith("…")).toBe(false);
+    for (const line of f.text.split("\n")) expect(line === long.split("\n")[0] || bullets.includes(line), line).toBe(true);
   });
 });
 

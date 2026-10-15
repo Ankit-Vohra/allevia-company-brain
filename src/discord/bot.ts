@@ -188,7 +188,7 @@ export class AlleviaBot {
   private async briefCommand(c: CommandPort): Promise<void> {
     await c.defer();
     const b = await latestBrief(this.d.graph);
-    if (!b) return c.respond("No morning brief yet. Once the brief writer has run, `/brief` shows the latest one here.");
+    if (!b) return c.respond("No note yet. Once today's note has been written, `/brief` shows the latest one here.");
     const [first, ...rest] = splitMessage(`**${b.title}**${b.asOf ? ` · as of ${b.asOf}` : ""}\n\n${renderCitations(b.text, new Map())}`);
     await c.respond(first ?? b.title);
     for (const p of rest) await c.followUp(p);

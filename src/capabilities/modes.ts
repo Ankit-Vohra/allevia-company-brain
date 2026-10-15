@@ -115,7 +115,7 @@ const DISCLOSURE: Record<Exclude<AccessMode, "api">, RegExp> = {
   delegated: /\bdelegat|\baccess you (?:gave|granted|shared)|\bservice account\b|\bpartner access\b/i,
   upload: /\bupload|\bscreenshot|\b(?:file|csv|spreadsheet|export|report) you (?:sent|shared|gave|uploaded)/i,
   public: /\bpublic(?:ly)?\b|\bcrawl|\b(?:visible|shown) on your (?:site|website|profile)|सार्वजनिक/i,
-  benchmark: /\bbenchmark|\bindustry (?:norm|average|typical)|\btypical for\b|\bsimulated\b|बेंचमार्क|सिम्युलेटेड|सिमुलेटेड/i,
+  benchmark: /\bbenchmark|\bindustry (?:norm|average|typical)|\btypical for\b|\bsimulated\b|\bsample (?:numbers|data|figures)\b|बेंचमार्क|सिम्युलेटेड|सिमुलेटेड/i,
   none: /\bnot (?:yet )?connected\b|\bno (?:data|access)\b|\bisn'?t connected\b|\bnot recorded\b/i,
 };
 

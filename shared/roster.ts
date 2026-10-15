@@ -127,6 +127,19 @@ export const AGENTS: AgentDef[] = [
   },
 ];
 
+// How the owner reads a person on the team: the name and the job in a word or two ("Tara, content"). The owner never
+// reads "agent", "desk" or a roster id (docs/owner-words.md).
+const ROLE_WORD: Record<string, string> = {
+  "chief-of-staff": "chief of staff", "coe-lead": "numbers", "data-analyst": "analytics", "growth-marketer": "marketing",
+  "content-strategist": "content", "copy-editor": "writing", "fact-checker": "fact checks", "tech-lead": "tech",
+  "oncall-engineer": "on call", "qa-release": "app releases", "ops-manager": "follow-ups", librarian: "records",
+};
+/** "Tara, content" for a roster id; the id itself when it is not on the roster. */
+export function plainWho(id: string): string {
+  const a = AGENTS.find((x) => x.id === id);
+  return a ? `${a.name}, ${ROLE_WORD[a.id] ?? a.title.toLowerCase()}` : id;
+}
+
 export const agentById = (id: string): AgentDef | undefined => AGENTS.find((a) => a.id === id);
 export const departmentById = (id: string): DepartmentDef | undefined => DEPARTMENTS.find((d) => d.id === id);
 

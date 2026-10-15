@@ -158,6 +158,10 @@ describe("checkTurn: simulated and freshness", () => {
     const t = touched({}, [{ id: "campaign:x", label: "Campaign", simulated: true }]);
     expect(checkTurn("Pause the campaign.", t, { now: NOW }).simulatedDisclosed).toBe(false);
     expect(checkTurn("Pause the (simulated) campaign.", t, { now: NOW }).simulatedDisclosed).toBe(true);
+    // the owner's word for it (docs/owner-words.md) counts as saying it
+    expect(checkTurn("Pause the campaign (sample numbers).", t, { now: NOW }).simulatedDisclosed).toBe(true);
+    expect(checkTurn("These are sample figures from a stand-in campaign.", t, { now: NOW }).simulatedDisclosed).toBe(true);
+    expect(checkTurn("Pause the campaign; here is a sample of the ads.", t, { now: NOW }).simulatedDisclosed).toBe(false);
   });
   it("no simulated nodes: disclosed trivially", () => {
     expect(checkTurn("ok", touched({}, [{ id: "a" }]), { now: NOW }).simulatedDisclosed).toBe(true);

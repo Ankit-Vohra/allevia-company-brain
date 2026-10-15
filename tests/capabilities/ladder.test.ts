@@ -159,6 +159,7 @@ describe("capability evidence and disclosure (pure)", () => {
     expect(modeCheck("Two pages lack a description [[rule:seo-check-meta-description]]; ads are steady [[campaign:spring-leads]].", ids, caps))
       .toEqual({ ok: false, missing: [caps[3], caps[1]] });
     expect(modeCheck("From a crawl of your site [[rule:seo-check-meta-description]]; the simulated campaign [[campaign:spring-leads]] is steady.", ids, caps).ok).toBe(true);
+    expect(modeCheck("From a crawl of your site [[rule:seo-check-meta-description]]; these are sample numbers for the campaign [[campaign:spring-leads]].", ids, caps).ok).toBe(true);
     expect(modeCheck("Per the benchmark, ads [[campaign:spring-leads]] look fine; your public pages [[rule:seo-check-meta-description]].", ids, caps).ok).toBe(true);
     expect(modeCheck("A good CTR [[rule:benchmark-meta-ads-ctr]].", ["rule:benchmark-meta-ads-ctr"], caps).ok).toBe(false);
     expect(modeCheck("Sessions rose [[obs:ga4_sessions:channel:website:2026-10-13]].", ["obs:ga4_sessions:channel:website:2026-10-13"], caps).ok).toBe(true);

@@ -84,7 +84,7 @@ describe("insights, brief and approvals from the terminal", () => {
   it("brief prints today's brief and where it was saved", async () => {
     const r = await cli("brief", [tenant]);
     expect(r.code).toBe(0);
-    expect(r.out).toMatch(/^Morning brief, Aamdani, /);
+    expect(r.out).toMatch(/^Today's note, Aamdani, /);
     expect(r.out).toMatch(/\(saved as document:brief-test-[0-9a-f]+-\d{4}-\d{2}-\d{2}\)$/);
   });
 

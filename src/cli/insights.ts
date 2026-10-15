@@ -69,7 +69,7 @@ export const commands: Command[] = [
   {
     name: "brief",
     usage: "brief <tenant> [--since <ISO date>] [--llm] [--json]",
-    summary: "Write today's morning brief: goal pulse, what changed, top 3, approvals, next action",
+    summary: "Write today's note: goals, what changed, what we noticed, on call, waiting for your OK, next step",
     async run(args) {
       const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { since: { type: "string" }, llm: { type: "boolean" }, json: { type: "boolean" } } });
       const g = await tenantGraph(positionals[0]);

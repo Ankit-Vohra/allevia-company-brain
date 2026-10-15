@@ -36,6 +36,7 @@ import type { GraphHandle } from "../graph/client.js";
 import { modesUsed, type CapabilityModeInfo } from "../capabilities/modes.js";
 import { typeFromId } from "../util/ids.js";
 import { checkTurn, extractCitations, hasNumbers } from "./checks.js";
+import { clipToItem } from "./style.js";
 import {
   CHIEF, FINDING_MAX_CHARS, FINDING_SCHEMA, MAX_DESKS, MAX_DESKS_BROAD, REVIEW_SCHEMA, agentSystemPrompt, directPrompt, planSchema,
   planPrompt, planSystemPrompt, reviewPrompt, revisePrompt, synthesisPrompt, workPrompt, type FindingView, type PromptOpts, type ReviewEvidence,
@@ -146,7 +147,7 @@ const BROAD = new RegExp([
   String.raw`\bhow(?:'s| is| are) everything\b`, String.raw`\bacross the (?:business|company)\b`,
   String.raw`\ball (?:departments|desks|channels|areas)\b`, String.raw`\bwhole (?:business|company)\b`,
   String.raw`\bfull (?:review|report|audit|picture|brief)\b`, String.raw`\b(?:weekly|monthly|quarterly) (?:review|report|brief|summary)\b`,
-  String.raw`\bmorning brief\b`, String.raw`\bstate of the (?:business|company)\b`,
+  String.raw`\bmorning brief\b`, String.raw`\btoday'?s note\b`, String.raw`\bstate of the (?:business|company)\b`,
   String.raw`\bhow (?:is|are) (?:the |my |our )?(?:business|company|things) (?:doing|going)\b`,
 ].join("|"), "i");
 export const isBroadQuestion = (question: string): boolean => BROAD.test(question);
@@ -697,7 +698,7 @@ class Turn {
 
   private toFinding(out: RunOutput, base: { id: string; agent: string; task: string; depIds: string[] }): FindingRecord {
     const s = (out.structured ?? tryParseJson(out.text)) as Record<string, unknown> | undefined;
-    const text = clip((typeof s?.text === "string" ? s.text : out.text).trim(), FINDING_MAX_CHARS);
+    const text = clipToItem(typeof s?.text === "string" ? s.text : out.text, FINDING_MAX_CHARS); // cut between items, never inside one
     if (!text) throw new Error("returned an empty finding");
     const known = new Set([...this.findings.values()].map((f) => f.id));
     return {

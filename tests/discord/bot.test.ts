@@ -231,7 +231,7 @@ describe("slash commands", () => {
     const bot = await makeBot();
     const none = command({ command: "brief" });
     await bot.onCommand(none);
-    expect(text(none.responses[0]!.m)).toMatch(/No morning brief yet/);
+    expect(text(none.responses[0]!.m)).toMatch(/No note yet/);
     await upsertNode(g, { type: "Document", id: "document:brief-2026-10-15", name: "Morning brief, 15 Oct", props: { kind: "brief", title: "Morning brief, 15 Oct", text: "Signups held steady.\n\n" + "More detail. ".repeat(200) }, asOf: "2026-10-15" }, SEED_NOW);
     const some = command({ command: "brief" });
     await bot.onCommand(some);

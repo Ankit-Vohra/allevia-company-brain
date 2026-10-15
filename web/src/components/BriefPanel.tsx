@@ -37,9 +37,9 @@ export function parseBrief(text: string): { heading?: string; sections: Section[
 
 type Pulse = "ok" | "warn" | "bad" | "none";
 function pulseOf(line: string): Pulse {
-  if (/\b(?:achieved|on track)\b/i.test(line)) return "ok";
-  if (/\bat risk\b/i.test(line)) return "warn";
-  if (/\boff track\b/i.test(line)) return "bad";
+  if (/\b(?:reached|going well|achieved|on track)\b/i.test(line)) return "ok";
+  if (/\b(?:needs a push|at risk)\b/i.test(line)) return "warn";
+  if (/\b(?:behind|off track)\b/i.test(line)) return "bad";
   return "none";
 }
 

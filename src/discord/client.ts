@@ -25,7 +25,7 @@ export const inviteUrl = (appId: string): string =>
 export const SLASH_COMMANDS = [
   new SlashCommandBuilder().setName("ask").setDescription("Ask Allevia's team a question; the answer comes in a thread")
     .addStringOption((o) => o.setName("question").setDescription("What do you want to know?").setRequired(true).setMaxLength(1000)),
-  new SlashCommandBuilder().setName("brief").setDescription("The latest morning brief"),
+  new SlashCommandBuilder().setName("brief").setDescription("Today's note: the latest summary"),
   new SlashCommandBuilder().setName("approvals").setDescription("Proposals waiting for the owner's approval"),
 ].map((c) => c.toJSON());
 

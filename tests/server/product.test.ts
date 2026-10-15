@@ -142,7 +142,7 @@ describe("server: product endpoints (integration)", () => {
     expect(r.findings).toBeGreaterThan(0);
     expect(r.errors).toEqual([]);
     const b = await json<{ id: string; text: string; goals: Array<{ name: string }> }>(await post(h.app, "/api/mini/brief/run", {}));
-    expect(b.text).toMatch(/^Goals$/m);
+    expect(b.text).toMatch(/^Your goals$/m);
     expect(b.goals.map((g) => g.name)).toEqual(expect.arrayContaining(["Weekly signups", "Instagram reach", "Search clicks"]));
     const served = await json<{ id: string; text: string }>(await h.app.request("/api/mini/brief"));
     expect(served).toMatchObject({ id: b.id, text: b.text });

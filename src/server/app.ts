@@ -308,7 +308,7 @@ export function createApp(deps: ServerDeps): Hono {
   app.get("/api/:t/brief", async (c) => {
     const { g } = await tenantOf(c);
     const brief = await reads.latestBrief(g);
-    if (!brief) throw new HttpError(404, "No morning brief has been written for this business yet.");
+    if (!brief) throw new HttpError(404, "No note has been written for this business yet.");
     return c.json(brief);
   });
 

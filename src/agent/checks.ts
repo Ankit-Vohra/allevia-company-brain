@@ -161,6 +161,9 @@ export function isGrounded(m: NumberMention, data: readonly number[]): boolean {
 const AS_OF = new RegExp(String.raw`\bas (?:of|at)\s+(?:(?:the\s+)?(?:week|month|day|quarter)\s+(?:to|ending|of)\s+)?${ANY_DATE}`, "iu");
 const HINDI_AS_OF = new RegExp(String.raw`(?:${ANY_DATE}|\d{1,2}\s+${HINDI_MONTH}(?:\s+\d{4})?)\s*(?:तक|के अनुसार)`, "u");
 
+// "simulated", or the owner's word for it: "sample numbers / data / figures" (docs/owner-words.md).
+const SIMULATED_SAID = /simulated|\bsample (?:numbers|data|figures)\b|सिम्युलेटेड|सिमुलेटेड|सैंपल (?:नंबर|आंकड़े|डेटा)|नमूना (?:संख्या|आंकड़े|डेटा)/i;
+
 export interface CheckOpts {
   now?: number;
   question?: string; // numbers the owner wrote in the question ("3 reel ideas") are allowed in the answer
@@ -180,7 +183,7 @@ export function checkTurn(answer: string, touched: TouchedSet, opts: CheckOpts =
     if (!isGrounded(m, data) && !ungroundedNumbers.includes(m.raw)) ungroundedNumbers.push(m.raw);
   }
 
-  const simulatedDisclosed = !touched.anySimulated() || /simulated|सिम्युलेटेड|सिमुलेटेड/i.test(answer);
+  const simulatedDisclosed = !touched.anySimulated() || SIMULATED_SAID.test(answer);
 
   const newest = touched.newestAsOf();
   const newestMs = newest ? Date.parse(newest) : NaN;

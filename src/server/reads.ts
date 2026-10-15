@@ -72,7 +72,7 @@ export async function labelCounts(g: GraphHandle): Promise<Record<string, number
 
 const SOURCE_NAMES: Record<string, string> = {
   vault: "Vault notes", note: "Vault notes", decision: "Decisions", report: "Reports", snapshot: "Ops snapshots", pending: "Pending list",
-  registry: "Registry", readme: "Readmes", agent: "Agent notes", playbook: "Playbooks", simulated: "Simulated ads", brief: "Morning brief",
+  registry: "Registry", readme: "Readmes", agent: "Agent notes", playbook: "Playbooks", simulated: "Simulated ads", brief: "Today's note",
   web: "Website crawl", web_page: "Website crawl", page: "Website crawl", website: "Website crawl", github_issue: "GitHub issues",
   issue: "GitHub issues", instagram: "Instagram", search_console: "Search Console", ga4: "GA4",
 };
@@ -106,7 +106,7 @@ export async function latestBrief(g: GraphHandle): Promise<BriefDto | null> {
      ORDER BY coalesce(d.asOf, '') DESC, coalesce(d.createdAt, 0) DESC, d.id LIMIT 1`);
   const r = rows[0];
   if (!r) return null;
-  return { id: str(r.id), title: str(r.title, "Morning brief"), ...(typeof r.asOf === "string" ? { asOf: r.asOf } : {}), text: str(r.text) };
+  return { id: str(r.id), title: str(r.title, "Today's note"), ...(typeof r.asOf === "string" ? { asOf: r.asOf } : {}), text: str(r.text) };
 }
 
 // ---------- sessions and turns ----------

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
 import { upsertNode } from "../../src/graph/upsert.js";
 import { goalStatus, writeBrief, type Brief } from "../../src/insights/brief.js";
+import { ownerJargon } from "../../src/agent/style.js";
 import { insightApprovalId, runInsights } from "../../src/insights/recommend.js";
 import { decideApproval } from "../../src/actions/approvals.js";
 import { D, seedInsights, SEED_NOW } from "../fixtures/insights-graph.js";
@@ -56,20 +57,27 @@ describe("goal pulse", () => {
 });
 
 describe("writeBrief", () => {
-  it("is plain text in the right order: goals, changes, top 3, approvals, next", () => {
+  it("is plain text in the right order: goals, what changed, what we noticed, waiting for your OK, next step", () => {
     const t = brief.text;
     const at = (s: string) => t.indexOf(s);
-    expect(t.startsWith("Morning brief, Aamdani, 15 Oct 2026\n")).toBe(true);
-    expect(at("Goals")).toBeLessThan(at("Since 4 Oct"));
-    expect(at("Since 4 Oct")).toBeLessThan(at("Top 3"));
-    expect(at("Top 3")).toBeLessThan(at("Waiting on you"));
-    expect(at("Waiting on you")).toBeLessThan(at("Next"));
-    expect(t).toContain("- Signups a day: 14, from 5 at the start; target 20 by 13 Jan. On track. [[goal:signups-per-day]]");
-    expect(t).toContain("- Instagram followers: 1,400, from 1,000 at the start; target 5,000 by 31 Dec. At risk: 10% of the way with 33% of the time gone. [[goal:instagram-followers]]");
-    expect(t).toContain('- Learned: Say "home", not "villa". [[rule:learned-say-home-not-villa]]');
-    expect(t).toContain("- Ended: Ankit no longer owns Fix Instagram token refresh.");
+    expect(t.startsWith("Today's note, Aamdani, 15 Oct 2026\n")).toBe(true);
+    expect(at("Your goals")).toBeLessThan(at("What changed since 4 Oct"));
+    expect(at("What changed since 4 Oct")).toBeLessThan(at("What we noticed"));
+    expect(at("What we noticed")).toBeLessThan(at("Waiting for your OK"));
+    expect(at("Waiting for your OK")).toBeLessThan(at("Next step"));
+    expect(t).toContain("- Signups a day: 14 now, you started at 5. Goal: 20 by 13 Jan. Going well. [[goal:signups-per-day]]");
+    expect(t).toContain("- Instagram followers: 1,400 now, you started at 1,000. Goal: 5,000 by 31 Dec. Needs a push: 10% of the way there, 33% of the time used. [[goal:instagram-followers]]");
+    expect(t).toContain('- Your team learned: Say "home", not "villa". [[rule:learned-say-home-not-villa]]');
+    expect(t).toContain("- Changed: Ankit no longer owns Fix Instagram token refresh.");
     expect(t.split("\n").filter((l) => /^\d\. /.test(l))).toHaveLength(3);
     expect(t).not.toMatch(/[\p{Extended_Pictographic}]/u);
+  });
+
+  it("uses the owner's plain words: none of the machinery's terms, and no On call section when nothing is open", () => {
+    expect(ownerJargon(brief.text)).toEqual([]);
+    expect(brief.text).not.toMatch(/\bOn call\b/);
+    expect(brief.text).not.toMatch(/\btarget\b/i);
+    expect(brief.text).toContain("things are waiting for your OK");
   });
 
   it("counts what changed since the last brief, with the biggest moves", () => {
@@ -79,6 +87,7 @@ describe("writeBrief", () => {
     expect(brief.changes.length).toBeLessThanOrEqual(2);
     expect(brief.changes[0]).toMatchObject({ metric: "views", subject: "content:reel-salary-reveal", from: 30000, to: 48000 });
     expect(brief.text).toContain("- Views, Salary reveal: what a Raipur delivery job pays: 30,000 -> 48,000 (+60%).");
+    expect(brief.text).toMatch(/- \d+ new numbers? came in/);
   });
 
   it("lists the top 3 open recommendations by score and the approvals waiting, and picks one next action", () => {
@@ -86,7 +95,7 @@ describe("writeBrief", () => {
     expect(scores).toEqual([...scores].sort((a, b) => b - a));
     expect(brief.pending.count).toBeGreaterThanOrEqual(10);
     expect(brief.pending.cards).toHaveLength(3);
-    expect(brief.next).toMatch(/^Approve or edit: .+\. \[\[approval:/);
+    expect(brief.next).toMatch(/^Say OK or edit: .+\. \[\[approval:/);
     expect(brief.next).toContain(brief.pending.cards[0]!.id);
   });
 
@@ -107,24 +116,25 @@ describe("writeBrief", () => {
     expect(await count("MATCH (d:Document) WHERE d.kind = 'brief' RETURN count(d) AS c")).toBe(1);
     const tomorrow = await writeBrief("test", { graph: g, now: SEED_NOW + 86_400_000 });
     expect(tomorrow.since).toBe(SEED_NOW + 60_000);
-    expect(tomorrow.text).toContain("Since yesterday");
+    expect(tomorrow.text).toContain("What changed since yesterday");
     expect(await count("MATCH (d:Document) WHERE d.kind = 'brief' RETURN count(d) AS c")).toBe(2);
   });
 
   it("reports the learning KPI once the owner has decided something", async () => {
-    expect(brief.text).not.toContain("First pass:");
+    expect(brief.text).not.toContain("Drafts you approved as they were");
     await decideApproval(g, { approvalId: insightApprovalId("ads.high_cpa:campaign:meta-employers"), decision: "approve", now: SEED_NOW + 90_000 }, { tenant: "test" });
     const b = await writeBrief("test", { graph: g, now: SEED_NOW + 100_000 });
-    expect(b.text).toContain("- First pass: 100% of drafts approved with no edit over 30 days (1 of 1); 1 learned rule active.");
+    expect(b.text).toContain("- Drafts you approved as they were: 1 of 1 in the last 30 days (100%). Things your team learned from your edits: 1.");
+    expect(ownerJargon(b.text)).toEqual([]);
     expect(b.learning).toMatchObject({ firstPassRate: 1, decided30d: 1 });
   });
 
   it("an optional model may tighten the text but not change a figure", async () => {
-    const ok = await writeBrief("test", { graph: g, now: SEED_NOW + 120_000, llm: true, runner: { structured: async (i) => ({ text: i.prompt.replace("Waiting on you", "For you") }) } });
+    const ok = await writeBrief("test", { graph: g, now: SEED_NOW + 120_000, llm: true, runner: { structured: async (i) => ({ text: i.prompt.replace("Waiting for your OK", "For you") }) } });
     expect(ok.polished).toBe(true);
     expect(ok.text).toContain("For you");
-    const bad = await writeBrief("test", { graph: g, now: SEED_NOW + 180_000, llm: true, runner: { structured: async (i) => ({ text: i.prompt.replace("14,", "41,") }) } });
+    const bad = await writeBrief("test", { graph: g, now: SEED_NOW + 180_000, llm: true, runner: { structured: async (i) => ({ text: i.prompt.replace("14 now", "41 now") }) } });
     expect(bad.polished).toBe(false);
-    expect(bad.text).toContain("Signups a day: 14,");
+    expect(bad.text).toContain("Signups a day: 14 now");
   });
 });
