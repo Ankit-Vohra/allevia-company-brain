@@ -24,8 +24,8 @@ import { loadPlaybooks } from "../ingest/sources/playbooks.js";
 import type { GraphWrite } from "../ingest/types.js";
 import {
   BlockedUrlError, brandWrite, buildBrandKit, channelsWrite, checkUrl, crawlSite, describeBrand, evaluateSeo,
-  extractPages, findSocials, linksWrite, makeAsk, normalizeUrl, pageDocId, pageId, pageWrite, profileBusiness, profileWrite, redactPage,
-  seoRulesWrite, seoWrite, understandingLinks, websiteChannelWrite, type BrandVoice, type CrawlOptions, type CrawlResult, type PageData,
+  extractPages, findSocials, linksWrite, makeAsk, normalizeUrl, pageDocId, pageId, pageWrite, profileBusiness, profileWrite, redactPage, selectKeyPages,
+  seoRulesWrite, seoWrite, understandingLinks, websiteChannelWrite, type BrandVoice, type Profile, type CrawlOptions, type CrawlResult, type PageData,
 } from "../ingest/sources/website/index.js";
 import type { BaselineResult } from "../program/program.js";
 import { baselineStage, capabilitiesStage, goalsStage, profileStage, type GoalsResult, type ProfileResult, type ProgramStageCtx } from "./enroll.js";
@@ -103,6 +103,19 @@ export function startUrl(raw: string, allowHosts: string[] = []): string {
   const n = normalizeUrl(withScheme);
   if (!n) throw new BlockedUrlError(`not a website address: ${JSON.stringify(t.slice(0, 200))}`);
   return checkUrl(n, allowHosts).toString();
+}
+
+// Why a crawl found nothing to read, in the owner's words (never HTTP): shown after "We could not read <site>:".
+export function whyUnreadable(c: Pick<CrawlResult, "pages" | "robots">): string {
+  if (c.robots.disallowAll) return "its robots.txt asks robots not to read it. If you own the site, allow AlleviaBot and try again.";
+  const bad = c.pages.find((p) => p.status < 200 || p.status >= 300);
+  if (bad?.status === 429) return "the site asked us to slow down. Try again in a few minutes.";
+  if (bad && [401, 403, 406, 451].includes(bad.status)) return "the site would not let us in (it blocks automated visitors, or needs a login).";
+  if (bad && [404, 410].includes(bad.status)) return "there is no page at that address.";
+  if (bad && bad.status >= 500) return "the site is having trouble on its side. Try again later.";
+  if (bad) return "the site did not give us its page.";
+  if (c.pages.length) return "the page has almost no text we could read: it may need you to log in, or build everything with scripts.";
+  return "we could not reach it.";
 }
 
 export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => void, deps: OnboardDeps): Promise<OnboardResult> {
@@ -199,6 +212,8 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
   const formDoc = entityId("Document", `onboarding form ${input.slug}`);
 
   let crawl: CrawlResult | undefined;
+  let crawlFailure: string | undefined;    // why crawlSite itself threw, if it did
+  let siteProfile: Profile | undefined;  // what the website says the business is: its kind and industry pick the template
   let pages: PageData[] = [];
   if (website) {
   // ---------- crawl ----------
@@ -229,9 +244,17 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
     result.pages = pages.length;
     await write("crawl", websiteChannelWrite(crawl.origin, businessId, asOf));
     await write("crawl", linksWrite(pages));
-    if (!pages.length) fail("crawl", `no pages could be read from ${start}${crawl.skipped[0] ? ` (${crawl.skipped[0].reason})` : ""}`);
   } catch (e) {
-    fail("crawl", e);
+    crawlFailure = msg(e);
+    log(`[onboard] crawl failed: ${crawlFailure}`);
+  }
+  // A site that could not be read is not a business we can set up: say why, in plain words, and stop here rather than
+  // write a plan and "Your team is ready" for a business the team knows nothing about.
+  if (!selectKeyPages(pages, 1).length) {
+    const m = `We could not read ${domain}: ${crawl ? whyUnreadable(crawl) : crawlFailure ?? "we could not reach it."}`;
+    errors.push(m);
+    send({ type: "error", message: m });
+    return result;
   }
   const home = pages.find((p) => p.status >= 200 && p.status < 300 && !p.error);
   const homeDoc = home ? pageDocId(home.finalUrl) : undefined;
@@ -312,9 +335,13 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
     }
     try {
       const profile = await profileBusiness(ask, { name, ...(input.industry ? { industry: input.industry } : {}) }, pages);
+      siteProfile = profile;
       const docs = pages.filter((p) => p === home || /about|contact|story|studio/i.test(new URL(p.finalUrl).pathname)).slice(0, 3).map((p) => pageDocId(p.finalUrl));
       await write("understand", profileWrite(profile, { businessId, name, domain: domain!, docs, asOf }));
-      if (profile.city) await ensureTenant({ slug: input.slug, name, domain: domain!, city: profile.city, ...(input.industry ? { industry: input.industry } : {}) }, deps.tenantOpts);
+      const industry = input.industry ?? profile.industry;
+      if (profile.city || (industry && !input.industry)) {
+        await ensureTenant({ slug: input.slug, name, domain: domain!, ...(profile.city ? { city: profile.city } : {}), ...(industry ? { industry } : {}) }, deps.tenantOpts);
+      }
     } catch (e) {
       fail("understand", e);
     }
@@ -344,6 +371,8 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
       profile = await profileStage(ctx, {
         ...Object.fromEntries((["industry", "vertical", "country", "currency", "locale", "timeZone"] as const).filter((k) => input[k]).map((k) => [k, input[k]])),
         ...(domain ? { domain } : {}),
+        ...(siteProfile?.kind ? { kind: siteProfile.kind } : {}),
+        ...(siteProfile?.industry ? { siteIndustry: siteProfile.industry } : {}),
       });
       result.region = profile.region;
       result.templateKey = profile.template.key;
@@ -356,7 +385,8 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
   if (website && !stopped()) {
     stage("playbooks", "Loading SEO, Instagram, ads and writing playbooks for your industry");
     try {
-      const pb = loadPlaybooks({ tenantSlug: input.slug, ...(input.industry ? { industry: input.industry } : {}) });
+      const industry = input.industry ?? siteProfile?.industry; // the owner's word, else what the website says
+      const pb = loadPlaybooks({ tenantSlug: input.slug, ...(industry ? { industry } : {}) });
       await write("playbooks", pb.write);
       for (const s of pb.skipped.slice(0, 5)) log(`[onboard] playbooks skipped ${s.ref}: ${s.reason}`);
     } catch (e) {

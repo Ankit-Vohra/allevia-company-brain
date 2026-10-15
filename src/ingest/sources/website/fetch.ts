@@ -22,6 +22,11 @@ export class BlockedUrlError extends Error {
   override name = "BlockedUrlError";
 }
 
+// A redirect hop the caller refused (off-site, a login page, a path robots.txt disallows); the page behind it is never requested.
+export class RedirectRefusedError extends Error {
+  override name = "RedirectRefusedError";
+}
+
 export type Resolver = (host: string) => Promise<Array<{ address: string; family: number }>>;
 
 export interface FetchOpts {
@@ -34,6 +39,7 @@ export interface FetchOpts {
   userAgent?: string;
   accept?: string;
   headers?: Record<string, string>; // extra request headers (lower-case names); cannot replace the user agent
+  hopCheck?: (next: URL) => string | undefined; // called before each redirect is followed; a reason refuses it (RedirectRefusedError)
 }
 
 export interface FetchResult {
@@ -170,6 +176,8 @@ export async function guardedFetch(url: string, opts: FetchOpts = {}): Promise<F
       }
       redirects.push(u.toString());
       u = checkUrl(next, allow); // the same checks on every hop
+      const refused = o.hopCheck?.(u);
+      if (refused) throw new RedirectRefusedError(refused);
       continue;
     }
     return {

@@ -75,6 +75,17 @@ export function isActionPath(u: URL): boolean {
   return [...u.searchParams.keys()].some((k) => ACTION_PARAM.test(k));
 }
 
+// A copy of a list rather than a page of its own: the next page of a blog or shop (?offset=, ?page=2, /page/3), or the
+// same list sorted or filtered. A page cap spent on these reads one list many times and misses the pages behind it.
+const LISTING_PARAMS = /^(offset|paged|pg|cursor|start|after|before|sort|sort_by|sortby|orderby|order|limit|per_page|perpage|view|layout|display|filter(?:\..*)?)$/i;
+export function isListingVariant(u: URL): boolean {
+  if (/\/page\/(?:[2-9]|\d{2,})\/?$/i.test(u.pathname)) return true;
+  for (const [k, v] of u.searchParams) {
+    if (/^page$/i.test(k) ? !/^0*1$/.test(v) : LISTING_PARAMS.test(k)) return true;
+  }
+  return false;
+}
+
 // Addresses a stranger's URL must never reach: loopback, private, link-local (cloud metadata lives at 169.254.169.254),
 // CGNAT, multicast, reserved and documentation ranges, in IPv4 and IPv6 (IPv4-mapped IPv6 is checked as IPv4 by
 // BlockList). Used on URL hosts and, at connect time, on every address a host name resolves to (fetch.ts).
@@ -107,19 +118,31 @@ export function isPrivateHost(hostname: string): boolean {
 // How much a page tells us about the business, from its path alone. The crawler visits high scores first (so a page
 // cap never drops "About"), and understanding reads the top pages.
 const KEY_PATTERNS: Array<[RegExp, number]> = [
-  [/^(about|about-us|who-we-are|our-story|story|studio|practice|company|firm)$/, 90],
-  [/^(services|what-we-do|expertise|offerings|solutions|capabilities|approach|process)$/, 85],
+  [/^(about|about-us|who-we-are|our-story|story|studio|practice|our-practice|company|firm)$/, 90],
+  [/^(services|what-we-do|expertise|offerings|solutions|capabilities|approach|process|treatments?|procedures|what-we-offer|our-services|classes|courses|workshops|lessons|training)$/, 85],
   [/^(projects|portfolio|work|our-work|case-studies|case-study|gallery)$/, 80],
   [/^(pricing|prices|packages|plans|fees|rates)$/, 75],
-  [/^(products|shop|store|menu|collections)$/, 70],
-  [/^(contact|contact-us|get-in-touch|enquire|enquiry|book|visit)$/, 70],
-  [/^(team|people|our-team|founders|leadership)$/, 60],
-  [/^(testimonials|reviews|clients|awards|press)$/, 55],
+  [/^(products|shop|store|menu|our-menu|collections|caf[eé]s?|restaurant|nursery|food|drinks?|food-and-drink|bar|rooms|accommodation)$/, 70],
+  [/^(contact|contact-us|get-in-touch|enquire|enquiry|book|booking|book-online|book-now|visit|visit-us|find-us|locations?|opening-hours|hours|directions|new-patients?|patients|appointments?|reservations?|reserve|order-online)$/, 70],
+  [/^(team|people|our-team|meet-the-team|meet-us|founders|leadership|doctors|dentists|staff)$/, 60],
+  [/^(testimonials|reviews|clients|awards|press|faqs?)$/, 55],
 ];
 
+// Shopify and Wix put every content page under /pages/: "/pages/cafe" is "/cafe".
+const WRAPPER_SEGMENTS = new Set(["pages"]);
+
+const decode = (s: string): string => {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+};
+
 export function keyPagePriority(u: URL): number {
-  const segs = u.pathname.toLowerCase().split("/").filter(Boolean).map((s) => s.replace(/\.(html?|php|aspx?)$/, ""));
+  const segs = u.pathname.toLowerCase().split("/").filter(Boolean).map((s) => decode(s).replace(/\.(html?|php|aspx?)$/, ""));
   if (!segs.length || (segs.length === 1 && segs[0] === "index")) return 100;
+  if (segs.length > 1 && WRAPPER_SEGMENTS.has(segs[0]!)) segs.shift();
   let best = 0;
   segs.forEach((s, i) => {
     for (const [re, score] of KEY_PATTERNS) {
@@ -128,6 +151,14 @@ export function keyPagePriority(u: URL): number {
     }
   });
   return best || Math.max(1, 20 - segs.length * 5);
+}
+
+// The part of a site a page belongs to, by its first path segment ("/collections/roses" -> "collections"): what a
+// catalogue, a blog or a docs tree is made of. Content pages under /pages/ and the home page are no section ("").
+export function sectionOf(u: URL): string {
+  const first = u.pathname.toLowerCase().split("/").filter(Boolean)[0] ?? "";
+  const segs = u.pathname.split("/").filter(Boolean);
+  return segs.length <= 1 || WRAPPER_SEGMENTS.has(first) ? "" : decode(first);
 }
 
 export interface SocialProfile { platform: string; handle?: string; url: string }

@@ -104,6 +104,7 @@ const ALLOWED_VALUES: Array<{ match: string; why: string }> = [
   { match: "10-company/id.pem", why: "tests: a made-up path for the vault path policy" },
   { match: "xkqzbtwhrnvdmfgjpsly", why: "tests and fixtures: a made-up 20-letter Supabase ref (random letters, not a real project)" },
   { match: "abc123", why: "tests: an invented password value" },
+  { match: "ga4_sessions", why: "src/onboard/templates.ts: the name of the GA4 sessions metric a goal reads, not a credential" },
   { match: "hunter2", why: "tests: the classic invented password" },
   { match: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", why: "tests: the standard SHA-256 test vector for \"abc\"" },
   // upstream commit ids, public, pinned in the vendored and skill notices

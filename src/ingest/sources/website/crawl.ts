@@ -14,10 +14,10 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright";
-import { BlockedUrlError, Pacer, USER_AGENT, checkUrl, guardedFetch, type FetchOpts, type FetchResult, type Resolver } from "./fetch.js";
+import { BlockedUrlError, Pacer, RedirectRefusedError, USER_AGENT, checkUrl, guardedFetch, type FetchOpts, type FetchResult, type Resolver } from "./fetch.js";
 import { allowAll, disallowAll, parseRobots, parseSitemap, type Robots } from "./robots.js";
 import { CAPTURE_SCRIPT, STYLE_SCRIPT, fromCapture, type Captured, type PageData, type StyleSample } from "./page.js";
-import { isActionPath, isBinaryPath, keyPagePriority, normalizeUrl, toSiteUrl } from "./urls.js";
+import { isActionPath, isBinaryPath, isListingVariant, keyPagePriority, normalizeUrl, sectionOf, toSiteUrl } from "./urls.js";
 import { Semaphore } from "../../llm.js";
 
 export interface CrawlOptions {
@@ -27,6 +27,7 @@ export interface CrawlOptions {
   maxHtmlBytes?: number;      // default 3 MB
   maxAssetBytes?: number;     // default 6 MB per script/style/image
   maxLinkChecks?: number;     // default 10 internal links outside the crawl, checked with HEAD
+  maxCrawlMs?: number;        // default 5 minutes for the whole crawl: after that no new page is taken
   brandPages?: number;        // default 3: home plus key pages whose styles are sampled
   allowHosts?: string[];      // exact "host:port" pairs that may be private (tests only)
   resolver?: Resolver;
@@ -47,13 +48,14 @@ export interface CrawlResult {
   linkStatus: Record<string, number>;   // internal URL → final HTTP status (0 = unreachable), crawled or link-checked
   screenshots: { desktop?: string; mobile?: string };
   requests: number;                      // crawler requests (not counting the browser's assets)
+  timedOut?: boolean;                    // the crawl used its whole time budget (maxCrawlMs) and stopped taking new pages
   startedAt: string;
   finishedAt: string;
 }
 
 const DEFAULTS = {
   maxPages: 40, pageTimeoutMs: 20_000, minDelayMs: 1_000, maxHtmlBytes: 3 * 1024 * 1024, maxAssetBytes: 6 * 1024 * 1024,
-  maxLinkChecks: 10, brandPages: 3,
+  maxLinkChecks: 10, brandPages: 3, maxCrawlMs: 5 * 60_000,
 };
 const MAX_CRAWL_DELAY_MS = 10_000;
 const MAX_SITEMAPS = 5;
@@ -97,6 +99,8 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
   const base: FetchOpts = { allowHosts: allow, resolver: o.resolver, userAgent: ua };
   const start = checkUrl(normalizeUrl(startUrl) ?? startUrl, allow).toString(); // throws BlockedUrlError
   const startedAt = new Date().toISOString();
+  const crawlStart = Date.now();
+  let timedOut = false;
   const pacer = new Pacer(o.minDelayMs);
   let requests = 0;
   const skipped: CrawlResult["skipped"] = [];
@@ -223,6 +227,26 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
     return c;
   };
 
+  // A page whose script never lets go (a busy loop) can hang the browser's own calls, which have no timeout of their
+  // own: give each browser job a hard limit, and when it passes drop the whole context (and with it the stuck page).
+  const hardLimit = async <T,>(job: Promise<T>, why: string): Promise<T> => {
+    let timer: NodeJS.Timeout | undefined;
+    const limit = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const stuck = ctx;
+        ctx = undefined;
+        void stuck?.close().catch(() => {});
+        reject(new Error(`${why} within ${Math.round((o.pageTimeoutMs + 12_000) / 1000)} s`));
+      }, o.pageTimeoutMs + 12_000);
+    });
+    job.catch(() => {}); // a job that fails after the limit is not an unhandled rejection
+    try {
+      return await Promise.race([job, limit]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
   const render = async (doc: FetchResult, brand: boolean, home: boolean, deadline: number) => {
     ctx ??= await newContext(false);
     docs.clear();
@@ -301,13 +325,28 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
     const u = new URL(site);
     if (isBinaryPath(u.pathname)) return skip(site, "binary file");
     if (isActionPath(u)) return skip(site, "login, cart, search or admin path");
+    if (isListingVariant(u)) return skip(site, "listing variant: another page, sort or filter of a list already read");
     if (!robots.isAllowed(pathOf(site))) return skip(site, "disallowed by robots.txt");
     queue.set(site, { url: site, prio: keyPagePriority(u), depth, seq: seq++ });
   };
+  // A catalogue or a blog can have hundreds of pages that all say the same kind of thing. Once a section has used its
+  // share of the page cap, pages from other sections go first; its own pages only fill what is left.
+  const sectionCap = Math.max(8, Math.ceil(o.maxPages * 0.3));
+  const sectionCount = new Map<string, number>();
+  const overCap = (it: Item): boolean => {
+    const sec = sectionOf(new URL(it.url));
+    return !!sec && (sectionCount.get(sec) ?? 0) >= sectionCap;
+  };
   const next = (): Item | undefined => {
     let best: Item | undefined;
+    let bestOver = false;
     for (const it of queue.values()) {
-      if (!best || it.prio > best.prio || (it.prio === best.prio && (it.depth < best.depth || (it.depth === best.depth && it.seq < best.seq)))) best = it;
+      const over = overCap(it);
+      const wins = !best || (bestOver && !over) || (bestOver === over && (it.prio > best.prio || (it.prio === best.prio && (it.depth < best.depth || (it.depth === best.depth && it.seq < best.seq)))));
+      if (wins) {
+        best = it;
+        bestOver = over;
+      }
     }
     if (best) queue.delete(best.url);
     return best;
@@ -317,10 +356,21 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
   const visit = async (it: Item, first: boolean): Promise<void> => {
     const deadline = Date.now() + o.pageTimeoutMs;
     let doc: FetchResult;
+    // Every redirect hop is judged before it is followed: a link that bounces to a login page, off the site or into a
+    // path robots.txt disallows is never requested. (The start URL may move origin: apex to www, http to https.)
+    const hopCheck = (n: URL): string | undefined => {
+      const to = toSiteUrl(normalizeUrl(n.toString()) ?? n.toString(), origin);
+      if (!to) return `redirects off-site to ${n.origin}`;
+      const t = new URL(to);
+      if (isActionPath(t)) return `redirects to a login, cart or admin page (${t.pathname})`;
+      if (!robots.isAllowed(pathOf(to))) return `redirects to ${t.pathname}, which robots.txt disallows`;
+      return undefined;
+    };
     try {
-      doc = await crawlerFetch(it.url);
+      doc = await crawlerFetch(it.url, first ? {} : { hopCheck });
     } catch (e) {
       statusByUrl.set(it.url, 0);
+      if (e instanceof RedirectRefusedError) return skip(it.url, e.message);
       return skip(it.url, e instanceof BlockedUrlError ? `refused: ${e.message}` : `fetch failed: ${msg(e)}`);
     }
     const final = normalizeUrl(doc.finalUrl) ?? doc.finalUrl;
@@ -348,7 +398,7 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
     } else {
       const brand = first || (brandCount < o.brandPages - 1 && it.prio >= 70);
       try {
-        const { cap, styles, loadMs } = await render({ ...doc, finalUrl: site }, brand, first, deadline);
+        const { cap, styles, loadMs } = await hardLimit(render({ ...doc, finalUrl: site }, brand, first, deadline), "the page never finished");
         if (brand && !first) brandCount++;
         const dom = fromCapture(cap, origin);
         const xrt = doc.headers["x-robots-tag"];
@@ -357,12 +407,14 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
           ...(xrt ? { robotsMeta: [dom.robotsMeta, xrt].filter(Boolean).join(", ") } : {}),
           timing: { responseMs: doc.responseMs, fetchMs: doc.totalMs, loadMs }, ...(styles ? { styles } : {}),
         };
-        if (first) await mobileShot({ ...doc, finalUrl: site });
+        if (first) await hardLimit(mobileShot({ ...doc, finalUrl: site }), "the mobile view never finished").catch((e) => log(`[crawl] mobile screenshot: ${msg(e)}`));
       } catch (e) {
         page = { ...emptyPage(it.url, doc, `render failed: ${msg(e)}`), finalUrl: site };
       }
     }
     pages.push(page);
+    const sec = sectionOf(new URL(site));
+    if (sec) sectionCount.set(sec, (sectionCount.get(sec) ?? 0) + 1);
     log(`[crawl] ${page.status} ${site}${page.title ? ` "${page.title}"` : ""}`);
     if (o.onPage) await o.onPage(page);
     if (/\bnofollow\b|\bnone\b/i.test(page.robotsMeta ?? "")) return;
@@ -403,7 +455,14 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
           }
         }
         sitemapCount = found;
-        for (let it = next(); it && pages.length < o.maxPages; it = next()) await visit(it, false);
+        for (let it = next(); it && pages.length < o.maxPages; it = next()) {
+          if (Date.now() - crawlStart > o.maxCrawlMs) {
+            timedOut = true;
+            log(`[crawl] stopped after ${Math.round(o.maxCrawlMs / 1000)} s with ${pages.length} pages: the time budget is used`);
+            break;
+          }
+          await visit(it, false);
+        }
 
         // internal links the crawl did not reach: a few HEAD checks, so broken links are found beyond the page cap
         const targets = [...new Set(pages.flatMap((p) => p.internalLinks))].filter((u) => !statusByUrl.has(u) && !skipped.some((s) => s.url === u));
@@ -430,7 +489,7 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
 
   return {
     startUrl: start, origin, pages, skipped, robots: robotsInfo, sitemapUrls: sitemapCount,
-    linkStatus: Object.fromEntries(statusByUrl), screenshots, requests, startedAt, finishedAt: new Date().toISOString(),
+    linkStatus: Object.fromEntries(statusByUrl), screenshots, requests, ...(timedOut ? { timedOut } : {}), startedAt, finishedAt: new Date().toISOString(),
   };
 }
 

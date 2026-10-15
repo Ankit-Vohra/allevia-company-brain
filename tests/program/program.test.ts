@@ -35,7 +35,7 @@ describe("region and templates", () => {
   it("industry -> template; targets from the baseline, or the template's floor with no baseline", () => {
     expect(templateFor("jobs").key).toBe("jobs_platform");
     expect(templateFor("architecture and interior design studio").key).toBe("architecture_studio");
-    expect(templateFor("bakery").key).toBe("local_business");
+    expect(templateFor("plumber").key).toBe("local_business"); // no template for the trade yet; a bakery now has one (food_and_drink)
     expect(templateFor("architecture studio").goals.map((g) => g.name)).toEqual(["Qualified enquiries per month", "Instagram reach", "Search clicks"]);
     expect(targetFor({ lift: 0.5, minTarget: 20 }, 79)).toEqual({ target: 119, basis: "baseline" });
     expect(targetFor({ lift: 0.5, minTarget: 20 }, 0)).toEqual({ target: 20, basis: "template" });
