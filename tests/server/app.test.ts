@@ -48,12 +48,12 @@ describe("server: reads (integration)", () => {
   });
 
   it("an unexpected failure is a plain JSON 500: no stack, no internals", async () => {
-    const broken = h.make({ openGraph: async () => { throw new Error("FalkorDB exploded at /Users/someone/secret.ts:12"); } });
+    const broken = h.make({ openGraph: async () => { throw new Error("FalkorDB exploded in /srv/acme/internal.ts:12"); } });
     const res = await broken.request("/api/mini/overview");
     expect(res.status).toBe(500);
     const body = await res.text();
     expect(JSON.parse(body)).toEqual({ error: expect.stringMatching(/went wrong/) });
-    expect(body).not.toMatch(/exploded|secret|\.ts|at /);
+    expect(body).not.toMatch(/exploded|acme|internal|\.ts|at /);
   });
 
   it("answers CORS only for the Vite dev origin", async () => {
