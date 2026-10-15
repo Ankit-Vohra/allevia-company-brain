@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { query, type Options, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { assertSubscription, subscriptionEnv } from "../agent/sdk-env.js";
+import { assertTenantSlug } from "../graph/slug.js";
+import { TENANT_CONFIGS } from "../tenant-config.js";
 import { sha256Hex } from "./image.js";
 
 export interface VisionImage { label: string; mime: "image/jpeg" | "image/png" | "image/webp"; data: Buffer }
@@ -18,6 +20,8 @@ export interface VisionInput { agent: string; system: string; prompt: string; im
 
 export interface VisionRunner {
   see(input: VisionInput): Promise<unknown>;
+  // A runner whose cached answers are this business's own (CachedVision); a runner with no cache is its own view.
+  forTenant?(tenant: string): VisionRunner;
 }
 
 export type VisionQueryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) => AsyncIterable<SDKMessage>;
@@ -111,24 +115,44 @@ export function visionKey(input: VisionInput): string {
   })));
 }
 
+// Answers cached on disk by everything that could change them. `forTenant` gives a view whose folder is the business's own
+// (<dir>/<tenant>/): the same photo sent by two businesses is answered for each, never replayed from the other's answer.
+// The founder's own businesses also read the shared folder of earlier versions (<dir>/) and copy a hit into their own.
+// Used without forTenant it keeps its single folder (scripts and tests).
 export class CachedVision implements VisionRunner {
-  hits = 0;
-  misses = 0;
-  constructor(private inner: VisionRunner, private dir: string) {}
+  constructor(private inner: VisionRunner, private dir: string, private legacyDir?: string, private tally = { hits: 0, misses: 0 }) {}
+
+  get hits(): number { return this.tally.hits; }   // one tally for the cache and every business's view of it
+  get misses(): number { return this.tally.misses; }
+
+  forTenant(tenant: string): VisionRunner {
+    return new CachedVision(this.inner, tenantFolder(this.dir, tenant), Object.hasOwn(TENANT_CONFIGS, tenant) ? this.dir : undefined, this.tally);
+  }
 
   async see(input: VisionInput): Promise<unknown> {
-    const file = join(this.dir, `${visionKey(input)}.json`);
+    const name = `${visionKey(input)}.json`;
+    const file = join(this.dir, name);
     if (existsSync(file)) {
-      this.hits++;
+      this.tally.hits++;
       return (JSON.parse(readFileSync(file, "utf8")) as { output: unknown }).output;
     }
-    this.misses++;
+    const old = this.legacyDir ? join(this.legacyDir, name) : undefined;
+    if (old && existsSync(old)) {
+      this.tally.hits++;
+      const text = readFileSync(old, "utf8");
+      mkdirSync(this.dir, { recursive: true });
+      writeFileSync(file, text);
+      return (JSON.parse(text) as { output: unknown }).output;
+    }
+    this.tally.misses++;
     const output = await this.inner.see(input);
     mkdirSync(this.dir, { recursive: true });
     writeFileSync(file, JSON.stringify({ agent: input.agent, model: input.model, at: new Date().toISOString(), output }, null, 2));
     return output;
   }
 }
+
+const tenantFolder = (dir: string, tenant: string): string => join(dir, assertTenantSlug(tenant));
 
 // Tests: answers per agent (a value, a list consumed in order, or a function of the input); records every call.
 export class FakeVision implements VisionRunner {

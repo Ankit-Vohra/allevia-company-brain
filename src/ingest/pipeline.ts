@@ -27,6 +27,7 @@ import { isEntityType, typeOfLabels, type EntityType } from "../graph/schema.js"
 import { closeEdge, observationId, upsertNode, writeBatch, type EdgeInput, type NodeInput, type ObservationInput, type WriteStats } from "../graph/upsert.js";
 import { noteGraphWrite } from "../graph/projection.js";
 import { searchableTypesPredicate } from "../graph/read.js";
+import { legacyCacheDir, tenantCacheDir } from "../util/cache.js";
 import { entityId, sha256 } from "../util/ids.js";
 import { istDate } from "../util/time.js";
 import { tenantConfig, type SourceName, type TenantConfig } from "../tenant-config.js";
@@ -472,13 +473,14 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
     const similar = similarFn(g, embed);
     const runner = opts.runner ?? new AgentSdkRunner({ concurrency: EXTRACT_CONCURRENCY, log });
     const sem = new Semaphore(EXTRACT_CONCURRENCY);
-    const cacheDir = join(dataDir, "cache", "extract");
+    const cacheDir = tenantCacheDir(dataDir, "extract", tc.slug);
+    const legacy = legacyCacheDir(dataDir, "extract", tc.slug);
     const business = { name: tc.name, industry: tc.description ?? tc.industry };
     let fatal: Error | undefined;
     const jobs = chosen.map((d) => sem.run(async () => {
       if (fatal) throw new Error("not attempted after a fatal model error");
       try {
-        return await extractDoc(d, business, { runner, model, cacheDir });
+        return await extractDoc(d, business, { runner, model, cacheDir, ...(legacy ? { legacyCacheDir: legacy } : {}) });
       } catch (e) {
         if (e instanceof FatalLlmError) fatal ??= e;
         throw e;

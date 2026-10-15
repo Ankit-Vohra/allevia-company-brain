@@ -17,6 +17,7 @@ import { openGraph, type GraphHandle } from "../graph/client.js";
 import { SEARCHABLE, typeOfLabels, type EntityType } from "../graph/schema.js";
 import { ensureTenant, type TenantOpts } from "../graph/tenants.js";
 import { closeEdge, upsertNode, writeBatch, type NodeInput } from "../graph/upsert.js";
+import { legacyCacheDir, tenantCacheDir } from "../util/cache.js";
 import { entityId } from "../util/ids.js";
 import { EXTRACTABLE_TYPES, type KnownEntity, type LlmRunner } from "../ingest/extract.js";
 import { embedPassages, entityText } from "../ingest/embed.js";
@@ -258,7 +259,8 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
   }
   const home = pages.find((p) => p.status >= 200 && p.status < 300 && !p.error);
   const homeDoc = home ? pageDocId(home.finalUrl) : undefined;
-  const ask = makeAsk(runner, { model, cacheDir: join(dataDir, "cache", "onboard") });
+  const legacyOnboard = legacyCacheDir(dataDir, "onboard", input.slug);
+  const ask = makeAsk(runner, { model, cacheDir: tenantCacheDir(dataDir, "onboard", input.slug), ...(legacyOnboard ? { legacyCacheDir: legacyOnboard } : {}) });
 
   // ---------- brand ----------
   stage("brand", home ? "Reading colours, fonts, logo and tone" : "Skipped: no page to read");
@@ -325,7 +327,7 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
       const existing = await retrying(() => knownEntities(g));
       const business = { id: businessId, name, ...(input.industry ? { industry: input.industry } : {}) };
       await extractPages(pages, {
-        business, runner, model, cacheDir: join(dataDir, "cache", "extract"), existing, websiteHost: domain!,
+        business, runner, model, cacheDir: tenantCacheDir(dataDir, "extract", input.slug), ...(legacyCacheDir(dataDir, "extract", input.slug) ? { legacyCacheDir: legacyCacheDir(dataDir, "extract", input.slug)! } : {}), existing, websiteHost: domain!,
         maxPages: deps.maxUnderstandPages,
         onDoc: (d) => write("understand", d.write),
         onError: (p, m) => fail("understand", `${new URL(p.finalUrl).pathname}: ${m}`),

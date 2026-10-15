@@ -21,7 +21,8 @@ export interface AskInput {
 
 export interface Ask { structured(input: AskInput): Promise<unknown> }
 
-export function makeAsk(runner: LlmRunner, opts: { model: string; cacheDir?: string }): Ask {
+// cacheDir is the business's own folder (util/cache.ts); legacyCacheDir the shared folder of earlier versions, for the founder's businesses only.
+export function makeAsk(runner: LlmRunner, opts: { model: string; cacheDir?: string; legacyCacheDir?: string }): Ask {
   const build = (i: AskInput, nonce: string) => {
     const tag = `page-${nonce}`;
     const body = stripDocTags(cutText(i.data.normalize("NFKC"), i.maxDataChars ?? 6_000)).replace(/<\/?\s*page-[^<>\n]{0,40}>/gi, "");
@@ -36,6 +37,16 @@ export function makeAsk(runner: LlmRunner, opts: { model: string; cacheDir?: str
           return (JSON.parse(readFileSync(file, "utf8")) as { output: unknown }).output;
         } catch {
           // not cached yet
+        }
+        if (opts.legacyCacheDir) {
+          try {
+            const old = (JSON.parse(readFileSync(join(opts.legacyCacheDir, `${i.label}-${key}.json`), "utf8")) as { output: unknown }).output;
+            mkdirSync(opts.cacheDir!, { recursive: true });
+            writeFileSync(file, JSON.stringify({ label: i.label, model: opts.model, copiedFrom: "shared cache", output: old }, null, 1));
+            return old;
+          } catch {
+            // not in the shared folder either
+          }
         }
       }
       const output = await runner.structured({ system: i.system, prompt: build(i, randomBytes(8).toString("hex")), schema: i.schema, model: opts.model });
