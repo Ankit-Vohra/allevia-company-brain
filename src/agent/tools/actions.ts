@@ -14,6 +14,7 @@ import {
 
 const ACTION_KINDS = ["github_issue", "content_draft", "pause_ad", "discord_post"] as const satisfies readonly ActionKind[];
 const PAYLOAD_CAP = 20_000;
+const MIN_DRAFT_BODY = 20; // a draft's text: shorter than this is a label, not copy
 
 export const staffAgentId = (rosterId: string): string => `agent:allevia-${rosterId}`;
 
@@ -25,6 +26,14 @@ async function runPropose(args: Args, ctx: ToolContext) {
   refuseIfReadOnly(ctx, "propose_action");
   const title = args.title.trim();
   if (title.length < 3) throw new InputError("title is too short.");
+  if (args.kind === "content_draft") {
+    const body = (args.payload as { body?: unknown } | undefined)?.body;
+    if (typeof body !== "string" || body.trim().length < MIN_DRAFT_BODY) {
+      throw new InputError(
+        "A content_draft needs the text to post in payload.body: every caption and the script, word for word, ready to use. " +
+        "A plan, a list of ideas or a to-do list is not a draft. Put the finished text in payload.body and propose again.");
+    }
+  }
   const payload = JSON.stringify(args.payload ?? {});
   if (payload.length > PAYLOAD_CAP) throw new InputError(`payload is ${payload.length} chars; keep it under ${PAYLOAD_CAP}.`);
   const wanted = [...new Set(args.evidence.map((s) => s.trim()).filter(Boolean))].slice(0, 20);

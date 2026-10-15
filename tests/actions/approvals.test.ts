@@ -100,10 +100,11 @@ describe("decideApproval", () => {
     expect(versions.map((v) => JSON.parse(v.s).status)).toEqual(["pending", "edited"]);
   });
 
-  it("handles an agent-proposed card with an empty payload, and an unknown id", async () => {
+  it("an agent-proposed content card with an empty payload saves no draft (it fails closed), and an unknown id is not found", async () => {
     const r = await decideApproval(g, { approvalId: "approval:t-001-1", decision: "approve", now: SEED_NOW + 4000 }, deps());
-    expect(r.approval.status).toBe("executed");
-    expect(r.action).toMatchObject({ kind: "content_draft", status: "done" });
+    expect(r.action).toMatchObject({ kind: "content_draft", status: "failed", produced: [] });
+    expect(r.action!.result).toMatch(/no text/i);
+    expect(r.approval.status).not.toBe("executed");
     await expect(decideApproval(g, { approvalId: "approval:nope", decision: "approve" }, deps())).rejects.toBeInstanceOf(ApprovalNotFound);
   });
 

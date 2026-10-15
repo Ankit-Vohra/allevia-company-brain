@@ -116,6 +116,16 @@ describe("content_draft", () => {
     const [c] = await g.roQuery<{ caption: string }>("MATCH (c:Content {id:$id}) RETURN c.caption AS caption", { id: a.produced[0] });
     expect(c!.caption).toBe("Brief: show the office.\n\nA reel tour of the office.");
   });
+
+  // Content trial 2026-10-15: a card with no text was approved into an empty draft file.
+  it("fails closed on a card with no text: no empty draft file, no Content, and the Action says why", async () => {
+    const payload = { title: "Reel plan 16-22 Oct", items: ["Fri: Applied, then silence?"], script: "Not yet written" };
+    const id = await card("content_draft", payload);
+    const a = await executeApproval(g, { approvalId: id, kind: "content_draft", payload, agent: "content-strategist", now: SEED_NOW }, deps());
+    expect(a.status).toBe("failed");
+    expect(a.result).toMatch(/no text/i);
+    expect(a.produced).toEqual([]);
+  });
 });
 
 describe("pause_ad (simulated)", () => {
