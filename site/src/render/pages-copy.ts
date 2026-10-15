@@ -23,8 +23,8 @@ export function officeLoop(): string {
 }
 
 /** "Try the live demo": absent while DEMO_URL is empty. */
-export function demoButton(): string {
-  return DEMO_URL ? `<a class="btn btn-ghost btn-lg" href="${esc(DEMO_URL)}" rel="noopener" target="_blank">Try the live demo<span class="visually-hidden"> (opens the demo in a new tab)</span></a>` : "";
+export function demoButton(url: string = DEMO_URL): string {
+  return url ? `<a class="btn btn-ghost btn-lg" href="${esc(url)}" rel="noopener" target="_blank">Try the live demo<span class="visually-hidden"> (opens the demo in a new tab)</span></a>` : "";
 }
 
 /** The scripted walkthrough: one real question from the sample business, the plan, the answer and the card. */
@@ -124,8 +124,8 @@ export const supportReply = (): string => esc(COMMITMENTS.supportReply);
 export const securityContact = (): string => mail(COMPANY.email.security, "the security reports email");
 
 /** While the demo has no address, say so plainly. Once DEMO_URL is set this block is empty. */
-export function demoStatus(): string {
-  return DEMO_URL ? "" : `<p class="fine">The live demo is being set up. Until it is, the product tour shows the same screens.</p>`;
+export function demoStatus(url: string = DEMO_URL): string {
+  return url ? "" : `<p class="fine">The live demo is being set up. Until it is, the product tour shows the same screens.</p>`;
 }
 
 /** Which businesses the public demo shows. The founder's call; the page says it is a decision, not a guess. */
@@ -137,11 +137,11 @@ export const PAGE_BLOCKS: Record<string, (current: string) => string> = {
   "about-founder": aboutFounder,
   "support-reply": supportReply,
   "security-contact": securityContact,
-  "demo-status": demoStatus,
+  "demo-status": () => demoStatus(),
   "demo-data": demoData,
   "steps-short": stepsShort,
   "office-loop": officeLoop,
-  "demo-button": demoButton,
+  "demo-button": () => demoButton(),
   "ask-walkthrough": askWalkthrough,
   "studio-compare": studioCompare,
   "examples-table": examplesTable,

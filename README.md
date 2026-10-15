@@ -321,7 +321,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 | `src/insights/`, `src/actions/`, `src/program/`, `src/capabilities/`, `src/settings/`, `src/studio/` | Detectors and brief; approvals, executors and learning; Allevia 90; capability ladder; team settings; Studio |
 | `src/discord/`, `src/mcp/` | Discord bot, MCP server |
 | `shared/` | Contracts, roster and plans shared by server, web and site |
-| `site/` | Marketing site (home and pricing) |
+| `site/` | The public website (home, how it works, product tour, demo, pricing, security, about, contact, FAQ, privacy, terms, data deletion, cookies); static, built from shared/plans.ts. See docs/website-deploy.md |
 | `evals/`, `tests/` | Eval sets and runner; the test suite |
 | `vendor/playbooks/` | Third-party playbook data, with licences and notices |
 
