@@ -1,5 +1,6 @@
 // Studio image utilities (product design §6, steps 1, 4 and 7): metadata stripped on intake, a perceptual dHash, a
 // local tilt estimate, the 4:5 straighten-and-crop plan, variant A's grade, and the SSIM-like structure score Nisha uses.
+import { randomBytes } from "node:crypto";
 import { describe, it, expect } from "vitest";
 import sharp from "sharp";
 import {
@@ -48,6 +49,20 @@ describe("studio image utilities", () => {
     await expect(normalizeUpload(tiny)).rejects.toThrow(/too small/);
     const big = await sharp({ create: { width: 3000, height: 2000, channels: 3, background: "#777" } }).png().toBuffer();
     await expect(normalizeUpload(big, { maxPixels: 4_000_000 })).rejects.toThrow(/too large/);
+  });
+
+  // Content trial 2026-10-15: a JPEG cut off mid-upload has a good header, so it passed the checks and then failed in the
+  // decode with "VipsJpeg: premature end", which the owner saw as "an unexpected problem".
+  it("a photo cut off mid-upload is refused in plain words, not as an unexpected problem", async () => {
+    const noise = (w: number, h: number) => sharp(randomBytes(w * h * 3), { raw: { width: w, height: h, channels: 3 } });
+    const full = await noise(1200, 900).jpeg().toBuffer();
+    for (const cut of [0.3, 0.6, 0.9]) {
+      const e = await normalizeUpload(full.subarray(0, Math.floor(full.length * cut))).catch((x) => x);
+      expect(e, `cut at ${cut}`).toBeInstanceOf(ImageRejected);
+      expect((e as Error).message).toMatch(/damaged|cut off|didn't finish|did not finish/i);
+    }
+    const png = await noise(800, 600).png().toBuffer();
+    expect(await normalizeUpload(png.subarray(0, Math.floor(png.length * 0.5))).catch((x) => x)).toBeInstanceOf(ImageRejected);
   });
 
   it("dHash: the same picture is close after a regrade, a different picture is far", async () => {

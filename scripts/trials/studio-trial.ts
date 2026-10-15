@@ -60,7 +60,7 @@ async function main(): Promise<void> {
     const now = Date.now();
     await ensureRoster(g, { businessId: t.businessId }, now);
     const ctx = await loadStudioContext(g, t.businessId, note);
-    const got = await intake(g, { tenant, bytes, note, ownerId: ctx.owner?.id ?? null }, { store: deps.store, now, agent: TARA });
+    const got = await intake(g, { tenant, bytes, note, ownerId: ctx.owner?.id ?? null }, { store: deps.store, now, agent: TARA, persist: false });
     const a = await assessPhoto(g, got.asset.id, got.normalized.buffer, assessContextFor(ctx, note, got.asset), { vision: deps.vision, model: DEFAULT_MODELS.assess, now });
     const tilt = chooseTilt(await estimateTilt(got.normalized.buffer), a.quality.tiltDeg);
     const plan = planCrop({ w: got.asset.w, h: got.asset.h }, tilt.deg, a.overlays);

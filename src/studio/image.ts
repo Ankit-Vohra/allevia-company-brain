@@ -41,13 +41,20 @@ export async function normalizeUpload(bytes: Buffer, opts: NormalizeOpts = {}): 
   const minSide = opts.minSide ?? DEFAULT_MIN_SIDE;
   if (Math.min(w0, h0) < minSide) throw new ImageRejected(`That image is too small (${w0}×${h0}): a post needs at least ${minSide} pixels on the short side.`);
   const maxSide = opts.maxSide ?? DEFAULT_MAX_SIDE;
-  const { data, info } = await sharp(bytes, { limitInputPixels: maxPixels, failOn: "error" })
-    .rotate() // auto-orient from EXIF before the EXIF goes
-    .flatten({ background: "#ffffff" })
-    .resize({ width: maxSide, height: maxSide, fit: "inside", withoutEnlargement: true })
-    .toColourspace("srgb")
-    .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
-    .toBuffer({ resolveWithObject: true });
+  let decoded: { data: Buffer; info: { width: number; height: number } };
+  try {
+    decoded = await sharp(bytes, { limitInputPixels: maxPixels, failOn: "error" })
+      .rotate() // auto-orient from EXIF before the EXIF goes
+      .flatten({ background: "#ffffff" })
+      .resize({ width: maxSide, height: maxSide, fit: "inside", withoutEnlargement: true })
+      .toColourspace("srgb")
+      .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
+      .toBuffer({ resolveWithObject: true });
+  } catch {
+    // a good header with a broken body: a photo cut off mid-upload (content trial 2026-10-15)
+    throw new ImageRejected("That photo looks damaged: it didn't finish uploading or the file is broken. Send it again.");
+  }
+  const { data, info } = decoded;
   return { buffer: data, w: info.width, h: info.height, mime: "image/jpeg", sha256: sha256Hex(data), dhash: await dhash(data), bytes: data.length };
 }
 
