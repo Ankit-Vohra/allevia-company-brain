@@ -107,6 +107,7 @@ describe("schema v2 (product design §7)", () => {
     expect(isAllowed("Agent", "USES", "Capability")).toBe(true);
     expect(isAllowed("Person", "AUTHORED", "Asset")).toBe(true);
     expect(isAllowed("Agent", "PRODUCED", "Asset") && isAllowed("Agent", "PRODUCED", "Task")).toBe(true);
+    expect(isAllowed("Agent", "PRODUCED", "Rule")).toBe(true); // a learned rule, distilled by the copy editor
     expect(isAllowed("Agent", "REVIEWED", "Asset")).toBe(true);
     expect(isAllowed("Goal", "SUPERSEDES", "Goal")).toBe(true);
     expect(isAllowed("Agent", "OWNS", "Goal") && isAllowed("Person", "OWNS", "Goal") && isAllowed("Team", "OWNS", "Goal")).toBe(true);

@@ -319,6 +319,7 @@ async function loadPosts(g: Read): Promise<{ posts: Post[]; hooks: Map<string, H
     if (!v || (v.status && v.status === "draft")) continue;
     posts.push({ id, name: v.name ?? id, format: v.format ?? "post", metric: v.metric, views: v.value, obsId: v.obsId, publishedAt: v.publishedAt, channel: channelOf.get(id) });
   }
+  posts.sort((a, b) => b.views - a.views || a.id.localeCompare(b.id)); // stable evidence order from run to run
   const hookRows = await ro<{ c: string; id: string; name: string | null; text: string | null; template: string | null; example: string | null }>(g,
     `MATCH (c:Content)-[u:USES_RULE]->(r:Rule) WHERE u.until IS NULL AND r.kind = 'hook'
      RETURN c.id AS c, r.id AS id, r.name AS name, r.text AS text, r.template AS template, r.example AS example ORDER BY c, id`);
@@ -455,7 +456,8 @@ const contentUnderperforming: Detector = {
       groups.set(k, byFormat);
     }
     for (const byFormat of groups.values()) {
-      const meds = [...byFormat].filter(([, ps]) => ps.length >= 2).map(([f, ps]) => ({ f, ps, md: median(ps.map((p) => p.views)) ?? 0 }));
+      const meds = [...byFormat].filter(([, ps]) => ps.length >= 2).sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([f, ps]) => ({ f, ps, md: median(ps.map((p) => p.views)) ?? 0 }));
       if (meds.length < 2) continue;
       const best = meds.reduce((a, b) => (b.md > a.md ? b : a));
       if (best.md <= 0) continue;
@@ -709,9 +711,14 @@ const adsCtrDrop: Detector = {
 const knowledgeOrphanDocs: Detector = {
   area: "knowledge",
   async run(g) {
+    // Links made by Allevia itself (a recommendation citing the doc, a brief mentioning it, a turn touching it) do not
+    // count: otherwise flagging an orphan would stop it being one.
     const rows = await ro<{ id: string; name: string | null; kind: string | null }>(g,
       `MATCH (d:Document) WHERE coalesce(d.kind, '') <> 'brief'
-       OPTIONAL MATCH (d)-[r]-(x:Entity) WHERE r.until IS NULL AND NOT type(r) IN ['HAS_CHUNK', 'AUTHORED', 'HAD_VERSION']
+       OPTIONAL MATCH (d)-[r]-(x:Entity)
+       WHERE r.until IS NULL AND NOT type(r) IN ['HAS_CHUNK', 'AUTHORED', 'HAD_VERSION', 'EVIDENCED_BY', 'TOUCHED', 'CITED']
+         AND NOT (x:Recommendation OR x:Approval OR x:Action OR x:Turn OR x:Finding OR x:Session OR x:Version)
+         AND NOT (x:Document AND x.kind = 'brief')
        WITH d, count(x) AS links WHERE links = 0
        RETURN d.id AS id, d.name AS name, d.kind AS kind ORDER BY id LIMIT 500`);
     if (!rows.length) return [];
