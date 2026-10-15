@@ -14,10 +14,10 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright";
-import { BlockedUrlError, Pacer, USER_AGENT, checkUrl, guardedFetch, type FetchOpts, type FetchResult, type Resolver } from "./fetch.js";
+import { BlockedUrlError, Pacer, RedirectRefusedError, USER_AGENT, checkUrl, guardedFetch, type FetchOpts, type FetchResult, type Resolver } from "./fetch.js";
 import { allowAll, disallowAll, parseRobots, parseSitemap, type Robots } from "./robots.js";
 import { CAPTURE_SCRIPT, STYLE_SCRIPT, fromCapture, type Captured, type PageData, type StyleSample } from "./page.js";
-import { isActionPath, isBinaryPath, keyPagePriority, normalizeUrl, toSiteUrl } from "./urls.js";
+import { isActionPath, isBinaryPath, isListingVariant, keyPagePriority, normalizeUrl, toSiteUrl } from "./urls.js";
 import { Semaphore } from "../../llm.js";
 
 export interface CrawlOptions {
@@ -301,6 +301,7 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
     const u = new URL(site);
     if (isBinaryPath(u.pathname)) return skip(site, "binary file");
     if (isActionPath(u)) return skip(site, "login, cart, search or admin path");
+    if (isListingVariant(u)) return skip(site, "listing variant: another page, sort or filter of a list already read");
     if (!robots.isAllowed(pathOf(site))) return skip(site, "disallowed by robots.txt");
     queue.set(site, { url: site, prio: keyPagePriority(u), depth, seq: seq++ });
   };
@@ -317,10 +318,21 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
   const visit = async (it: Item, first: boolean): Promise<void> => {
     const deadline = Date.now() + o.pageTimeoutMs;
     let doc: FetchResult;
+    // Every redirect hop is judged before it is followed: a link that bounces to a login page, off the site or into a
+    // path robots.txt disallows is never requested. (The start URL may move origin: apex to www, http to https.)
+    const hopCheck = (n: URL): string | undefined => {
+      const to = toSiteUrl(normalizeUrl(n.toString()) ?? n.toString(), origin);
+      if (!to) return `redirects off-site to ${n.origin}`;
+      const t = new URL(to);
+      if (isActionPath(t)) return `redirects to a login, cart or admin page (${t.pathname})`;
+      if (!robots.isAllowed(pathOf(to))) return `redirects to ${t.pathname}, which robots.txt disallows`;
+      return undefined;
+    };
     try {
-      doc = await crawlerFetch(it.url);
+      doc = await crawlerFetch(it.url, first ? {} : { hopCheck });
     } catch (e) {
       statusByUrl.set(it.url, 0);
+      if (e instanceof RedirectRefusedError) return skip(it.url, e.message);
       return skip(it.url, e instanceof BlockedUrlError ? `refused: ${e.message}` : `fetch failed: ${msg(e)}`);
     }
     const final = normalizeUrl(doc.finalUrl) ?? doc.finalUrl;

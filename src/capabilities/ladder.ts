@@ -44,6 +44,7 @@ interface LadderFacts {
   brandAssets: number;
   originals: number;                       // Asset{kind:'original'}: the owner's own photos
   benchmarkChannels: Set<string>;          // channels a benchmark Rule applies to
+  ownedChannels: Set<string>;              // channels that are PART_OF the business: a profile it has, not a bare playbook anchor
 }
 
 const toMs = (v: unknown): number | null => {
@@ -70,7 +71,7 @@ export async function findBusiness(g: GraphHandle, given?: string): Promise<stri
 async function readFacts(g: GraphHandle, businessId?: string): Promise<LadderFacts> {
   const ids = [...new Set(CAPABILITIES.flatMap((c) => [...c.systems, ...c.channels]))];
   const n = async (cypher: string): Promise<number> => (await g.roQuery<{ c: number }>(cypher))[0]?.c ?? 0;
-  const [biz, src, obs, seoChecks, crawledPages, brandAssets, originals, bench] = await Promise.all([
+  const [biz, src, obs, seoChecks, crawledPages, brandAssets, originals, bench, owned] = await Promise.all([
     findBusiness(g, businessId),
     g.roQuery<{ id: string; status: string | null; access: string | null; mode: string | null; asOf: string | null; at: number | null }>(
       `UNWIND $ids AS id MATCH (n:Entity {id:id}) WHERE n:System OR n:Channel
@@ -89,6 +90,10 @@ async function readFacts(g: GraphHandle, businessId?: string): Promise<LadderFac
     g.roQuery<{ id: string }>(
       `MATCH (r:Rule)-[e:APPLIES_TO]->(c:Channel) WHERE e.until IS NULL AND (r.kind = 'benchmark' OR r.id STARTS WITH 'rule:benchmark-')
        RETURN DISTINCT c.id AS id`),
+    // The playbooks put bare Channel anchors (Instagram, Google Search, Meta Ads) in every tenant graph. Only a channel
+    // that is PART_OF a Business is a profile the business has: the crawl found its link, or the owner gave the handle.
+    g.roQuery<{ id: string }>(
+      "MATCH (c:Channel)-[r:PART_OF]->(:Business) WHERE r.until IS NULL RETURN DISTINCT c.id AS id"),
   ]);
   const srcIds = [...new Set(obs.map((o) => o.src).filter((s): s is string => !!s))];
   const docs = srcIds.length ? await g.roQuery<{ id: string; kind: string | null }>(
@@ -102,6 +107,7 @@ async function readFacts(g: GraphHandle, businessId?: string): Promise<LadderFac
     uploadDocs: new Set(docs.filter((d) => UPLOAD_KINDS.has(lc(d.kind))).map((d) => d.id)),
     seoChecks, crawledPages, brandAssets, originals,
     benchmarkChannels: new Set(bench.map((b) => b.id)),
+    ownedChannels: new Set(owned.map((o) => o.id)),
   };
 }
 
@@ -143,7 +149,7 @@ function derive(spec: CapabilitySpec, f: LadderFacts, now: number): DerivedCapab
   let isPublic = false;
   switch (spec.key) {
     case "search_console": isPublic = f.seoChecks > 0 || f.crawledPages > 0; break;
-    case "instagram_insights": case "gbp": case "reviews": isPublic = present.some((s) => spec.channels.includes(s.id)); break;
+    case "instagram_insights": case "gbp": case "reviews": isPublic = present.some((s) => spec.channels.includes(s.id) && f.ownedChannels.has(s.id)); break;
     case "studio": isPublic = f.brandAssets > 0; break;
     default: isPublic = false;
   }

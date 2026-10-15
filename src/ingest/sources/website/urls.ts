@@ -75,6 +75,17 @@ export function isActionPath(u: URL): boolean {
   return [...u.searchParams.keys()].some((k) => ACTION_PARAM.test(k));
 }
 
+// A copy of a list rather than a page of its own: the next page of a blog or shop (?offset=, ?page=2, /page/3), or the
+// same list sorted or filtered. A page cap spent on these reads one list many times and misses the pages behind it.
+const LISTING_PARAMS = /^(offset|paged|pg|cursor|start|after|before|sort|sort_by|sortby|orderby|order|limit|per_page|perpage|view|layout|display|filter(?:\..*)?)$/i;
+export function isListingVariant(u: URL): boolean {
+  if (/\/page\/(?:[2-9]|\d{2,})\/?$/i.test(u.pathname)) return true;
+  for (const [k, v] of u.searchParams) {
+    if (/^page$/i.test(k) ? !/^0*1$/.test(v) : LISTING_PARAMS.test(k)) return true;
+  }
+  return false;
+}
+
 // Addresses a stranger's URL must never reach: loopback, private, link-local (cloud metadata lives at 169.254.169.254),
 // CGNAT, multicast, reserved and documentation ranges, in IPv4 and IPv6 (IPv4-mapped IPv6 is checked as IPv4 by
 // BlockList). Used on URL hosts and, at connect time, on every address a host name resolves to (fetch.ts).
