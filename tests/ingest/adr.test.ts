@@ -120,7 +120,7 @@ describe("parseAdr: edge cases", () => {
 
   it("redacts every text field", () => {
     const a = parseAdr("60-decisions/009-x.md",
-      "# 009 — Mail ceo@example.org\n**Date** 2026-10-05 · **Status** accepted\n\n**Context.** Call +91 98765 43210.\n\n**Decision.** Use FOO_TOKEN=abc123.\n\n**Consequences.** Host 203.0.113.45.");
+      "# 009 — Mail ceo@example.org\n**Date** 2026-10-05 · **Status** accepted\n\n**Context.** Call +91 98765 43210.\n\n**Decision.** Use FOO_TOKEN=abc1234567.\n\n**Consequences.** Host 203.0.113.45.");
     expect(JSON.stringify(a)).not.toMatch(/ceo@example|98765|abc123|203\.0\.113/);
     expect(a.title).toBe("Mail [redacted:email]");
     expect(a.decision).toBe("Use FOO_TOKEN=[redacted:secret].");
