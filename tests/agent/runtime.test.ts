@@ -117,6 +117,17 @@ describe("statusLine, summarise, forModel", () => {
     const many = result({ data: { rows: [1, 2, 3, 4] }, nodes: ["a", "b", "c", "d"].map((x) => ({ id: x, label: "Page", name: x.toUpperCase() })), note: "capped" });
     expect(summarise(many)).toBe("4 results · A, B, C +1 · capped");
   });
+  it("counts what a tool found, not the first list inside one entity or a grouped list", () => {
+    // get_entity found the task: its empty observations list is part of it, not "0 results".
+    const entity = result({
+      data: { id: "task:x", type: "Task", props: { status: "open" }, neighbors: { "in:OWNS": { total: 1 } }, observations: [] },
+      nodes: [{ id: "task:x", label: "Task", name: "X" }, { id: "person:p", label: "Person", name: "P" }],
+    });
+    expect(summarise(entity)).toBe("2 nodes · X, P");
+    // impact_of groups its 4 items by hop: the tool's own total is the count.
+    expect(summarise(result({ data: { id: "system:x", total: 4, impacted: [{ hop: 1, items: [1, 2, 3] }, { hop: 2, items: [4] }] } }))).toBe("4 results");
+    expect(summarise(result({ data: { id: "system:x", total: 0, impacted: [] } }))).toBe("0 results");
+  });
   it("flags simulated nodes to the model", () => {
     const r = result({ data: { spend: 10 }, nodes: [{ id: "campaign:x", label: "Campaign", name: "X", simulated: true }] });
     expect(JSON.parse(forModel(r)).simulated).toEqual(["campaign:x"]);

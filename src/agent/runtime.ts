@@ -107,14 +107,17 @@ export function statusLine(name: string, args: unknown): string {
   return clip(f ? f(args) : `Using ${name.replace(/_/g, " ")}`, 120);
 }
 
-// A short, data-derived line for the work log: how much came back and the first few names.
+// A short, data-derived line for the work log: how much came back and the first few names. The count is the tool's own
+// `total` when it gives one (impact_of groups its items by hop), else the length of a list result. One entity (data
+// with its own `id`, like get_entity) is not a list: its first array is a part of it (maybe empty), so nodes count.
 export function summarise(r: ToolResult): string {
   const d = r.data as unknown;
   let count: number | undefined;
   if (Array.isArray(d)) count = d.length;
   else if (d && typeof d === "object") {
-    const arr = Object.values(d as Record<string, unknown>).find(Array.isArray) as unknown[] | undefined;
-    if (arr) count = arr.length;
+    const o = d as Record<string, unknown>;
+    if (typeof o.total === "number" && Number.isFinite(o.total)) count = o.total;
+    else if (typeof o.id !== "string") count = (Object.values(o).find(Array.isArray) as unknown[] | undefined)?.length;
   }
   const names = r.nodes.slice(0, 3).map((n) => n.name).filter(Boolean);
   const parts: string[] = [];
