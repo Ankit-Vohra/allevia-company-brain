@@ -2,13 +2,14 @@
 // the US, UK, UAE and Australia (and runs its first two in India), so nothing here assumes a country: the tenant says
 // which currency it reports in and how its owner reads dates. AppProvider calls setFormatTenant when the business changes.
 
-export interface FormatTenant { locale?: string; currency?: string }
+export interface FormatTenant { locale?: string; currency?: string; timeZone?: string }
 
 const DEFAULT_LOCALE = "en-GB";
 const DEFAULT_CURRENCY = "USD";
 
 let locale = DEFAULT_LOCALE;
 let currency = DEFAULT_CURRENCY;
+let timeZone: string | undefined;
 const cache = new Map<string, Intl.NumberFormat | Intl.DateTimeFormat>();
 
 function safeLocale(l: string | undefined) {
@@ -19,6 +20,12 @@ function safeLocale(l: string | undefined) {
 export function setFormatTenant(t: FormatTenant | undefined) {
   locale = safeLocale(t?.locale);
   currency = (t?.currency ?? DEFAULT_CURRENCY).toUpperCase();
+  timeZone = safeTimeZone(t?.timeZone);
+}
+
+function safeTimeZone(z: string | undefined) {
+  if (!z) return undefined;
+  try { new Intl.DateTimeFormat("en", { timeZone: z }); return z; } catch { return undefined; }
 }
 
 export const currentLocale = () => locale;
@@ -34,10 +41,11 @@ function nf(opts: Intl.NumberFormatOptions, loc = locale): Intl.NumberFormat {
   return f;
 }
 
+/** Dates and times read on the business's own clock (its time zone), not the viewer's. */
 function df(opts: Intl.DateTimeFormatOptions, loc = locale): Intl.DateTimeFormat {
-  const key = `d|${loc}|${JSON.stringify(opts)}`;
+  const key = `d|${loc}|${timeZone ?? ""}|${JSON.stringify(opts)}`;
   let f = cache.get(key) as Intl.DateTimeFormat | undefined;
-  if (!f) { f = new Intl.DateTimeFormat(loc, opts); cache.set(key, f); }
+  if (!f) { f = new Intl.DateTimeFormat(loc, timeZone ? { ...opts, timeZone } : opts); cache.set(key, f); }
   return f;
 }
 

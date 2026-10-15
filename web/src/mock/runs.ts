@@ -266,25 +266,25 @@ As of 12 Oct 2026.`, 70, 300)
   },
 };
 
-const AVS_GSC = "observation:gsc-architect-london-2026-10";
+const AVS_GSC = "observation:gsc-architect-raipur-2026-10";
 const HOME = "page:avsatelier.in/";
 
 export const avsRun: ScriptSpec = {
   tenant: "avs-atelier",
   key: "avs-seo",
-  question: "Why don't we show up when people search 'architect in London'?",
+  question: "Why don't we show up when people search 'architect in Raipur'?",
   match: /.*/,
   build: (s) => {
     s.track("chief-of-staff", 300)
       .emit({ type: "recall", brief: "Onboarded today from avsatelier.in. No earlier threads.", ids: ["document:crawl-avsatelier-2026-10-15"] })
       .start("Read the request and plan who does what", 300)
       .status("Reading the question and what we already know", 200)
-      .tool("search", { q: "architect in london" }, 700, "The query, the home page and a Search Console observation", ["query:architect-in-london", HOME, AVS_GSC], 500)
+      .tool("search", { q: "architect in raipur" }, 700, "The query, the home page and a Search Console observation", ["query:architect-in-raipur", HOME, AVS_GSC], 500)
       .emit({
         type: "plan", by: "chief-of-staff",
         rationale: "Analytics measures where we stand, Tech finds what the page is missing, Marketing turns it into ranked fixes; the CoE and the fact checker check them.",
         steps: [
-          { agent: "data-analyst", task: "Where do we rank for 'architect in london', and how many people see us?" },
+          { agent: "data-analyst", task: "Where do we rank for 'architect in raipur', and how many people see us?" },
           { agent: "tech-lead", task: "Audit the home page against the SEO checks" },
           { agent: "growth-marketer", task: "Rank the fixes by expected effect", after: ["data-analyst", "tech-lead"] },
           { agent: "coe-lead", task: "Check the search figures", after: ["data-analyst"] },
@@ -296,11 +296,11 @@ export const avsRun: ScriptSpec = {
       .done(3000, 200);
 
     s.track("data-analyst", 3700)
-      .start("Where do we rank for 'architect in london', and how many people see us?")
+      .start("Where do we rank for 'architect in raipur', and how many people see us?")
       .status("Reading Search Console for the last 28 days")
-      .tool("seo_report", { query: "architect in london", window: "28d" }, 1500,
-        "1,240 impressions, 5 clicks, average position 18.6: page 2 of Google.", [AVS_GSC, "query:architect-in-london", HOME, "document:gsc-avs-2026-10-14"], 600)
-      .finding("f-kabir-avs", `We sit on page 2 for "architect in london": average position 18.6, 1,240 impressions and 5 clicks in 28 days [[${AVS_GSC}]] [[query:architect-in-london]].`, undefined, 800)
+      .tool("seo_report", { query: "architect in raipur", window: "28d" }, 1500,
+        "1,240 impressions, 5 clicks, average position 18.6: page 2 of Google.", [AVS_GSC, "query:architect-in-raipur", HOME, "document:gsc-avs-2026-10-14"], 600)
+      .finding("f-kabir-avs", `We sit on page 2 for "architect in raipur": average position 18.6, 1,240 impressions and 5 clicks in 28 days [[${AVS_GSC}]] [[query:architect-in-raipur]].`, undefined, 800)
       .handoff("growth-marketer", "Page 2, position 18.6", 300)
       .handoff("coe-lead", "Figures for a check", 120)
       .done(4000, 200);
@@ -321,13 +321,13 @@ export const avsRun: ScriptSpec = {
       .tool("playbook", { topic: "local seo", industry: "architecture" }, 900,
         "Open SEO audit: title and H1 first for local intent; LocalBusiness schema with a verified Google Business Profile next; speed last.",
         ["playbook:open-seo-audit", "rule:seo-generic-title", "rule:seo-missing-h1", "rule:seo-no-localbusiness-schema", "channel:google-business-profile", "task:avs-gbp-verify"], 500)
-      .finding("f-rohan-avs", `Fix in this order: 1) title and H1 "Architects in London · AVS Atelier" [[rule:seo-generic-title]]; 2) LocalBusiness schema and verify the Google Business Profile [[channel:google-business-profile]]; 3) compress the hero image to get LCP under 2.5 s [[rule:seo-slow-lcp]].`, ["f-kabir-avs", "f-arjun-avs"], 1400)
+      .finding("f-rohan-avs", `Fix in this order: 1) title and H1 "Architects in Raipur · AVS Atelier" [[rule:seo-generic-title]]; 2) LocalBusiness schema and verify the Google Business Profile [[channel:google-business-profile]]; 3) compress the hero image to get LCP under 2.5 s [[rule:seo-slow-lcp]].`, ["f-kabir-avs", "f-arjun-avs"], 1400)
       .handoff("fact-checker", "Ranked fixes for a claim check", 300)
       .done(3600, 200);
 
     s.track("coe-lead", 8200)
       .start("Check the search figures")
-      .tool("metric_trend", { metric: "search_performance", subject: "query:architect-in-london" }, 800, "Position 18.6, 1,240 impressions, 5 clicks: matches the 14 Oct export.", [AVS_GSC, "query:architect-in-london"], 400)
+      .tool("metric_trend", { metric: "search_performance", subject: "query:architect-in-raipur" }, 800, "Position 18.6, 1,240 impressions, 5 clicks: matches the 14 Oct export.", [AVS_GSC, "query:architect-in-raipur"], 400)
       .review("f-kabir-avs", "ok", "18.6 and 1,240 match the export.", 400)
       .done(1800, 200);
 
@@ -341,17 +341,17 @@ export const avsRun: ScriptSpec = {
       .start("Write the answer from 3 checked findings")
       .status("Writing the answer", 300)
       .stream(
-        `**We are on page 2 for "architect in london": average position 18.6, with 1,240 impressions and only 5 clicks in 28 days** [[${AVS_GSC}]].
+        `**We are on page 2 for "architect in raipur": average position 18.6, with 1,240 impressions and only 5 clicks in 28 days** [[${AVS_GSC}]].
 
-**Why:** the home page is titled "Home", has no H1 and no LocalBusiness schema, so Google can't tell it is an architecture studio in London [[rule:seo-generic-title]] [[rule:seo-missing-h1]] [[rule:seo-no-localbusiness-schema]]. Mobile LCP is 3.8 s [[observation:lcp-home-2026-10]].
+**Why:** the home page is titled "Home", has no H1 and no LocalBusiness schema, so Google can't tell it is an architecture studio in Raipur [[rule:seo-generic-title]] [[rule:seo-missing-h1]] [[rule:seo-no-localbusiness-schema]]. Mobile LCP is 3.8 s [[observation:lcp-home-2026-10]].
 
 **Fix in this order:**
-1. Title and H1: "Architects in London · AVS Atelier".
+1. Title and H1: "Architects in Raipur · AVS Atelier".
 2. LocalBusiness schema, and verify the Google Business Profile [[channel:google-business-profile]].
 3. Compress the hero image to bring LCP under 2.5 s.
 
 **Next:** approve the GitHub issue below with all three changes. As of 14 Oct 2026.`, 70, 300)
-      .path(["query:architect-in-london", HOME, "rule:seo-generic-title", "playbook:open-seo-audit", "rule:seo-no-localbusiness-schema"], 400)
+      .path(["query:architect-in-raipur", HOME, "rule:seo-generic-title", "playbook:open-seo-audit", "rule:seo-no-localbusiness-schema"], 400)
       .emit({ type: "proposal", agent: "chief-of-staff", recommendationId: "rec:avs-home-seo", approvalId: "appr:avs-gh-home-seo", title: "Home page: title, H1 and LocalBusiness schema", kind: "github_issue" }, 400)
       .done(7400, 300);
   },

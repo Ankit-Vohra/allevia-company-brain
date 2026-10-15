@@ -23,7 +23,7 @@ export const SUGGESTIONS: Record<string, string[]> = {
     "Which pages are losing search clicks, and why?",
     "What is waiting on me this week?",
   ],
-  "avs-atelier": ["Why don't we show up when people search 'architect in London'?"],
+  "avs-atelier": ["Why don't we show up when people search 'architect in Raipur'?"],
 };
 
 /** For a business set up a moment ago: questions any owner can ask on day one. */

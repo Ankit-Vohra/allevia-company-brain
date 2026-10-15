@@ -28,15 +28,15 @@ const STAGES: { id: Stage; title: string; idle: string }[] = [
 ];
 
 const REGIONS = [
-  { country: "United Kingdom", currency: "GBP", locale: "en-GB" },
-  { country: "United States", currency: "USD", locale: "en-US" },
-  { country: "United Arab Emirates", currency: "AED", locale: "en-AE" },
-  { country: "Australia", currency: "AUD", locale: "en-AU" },
-  { country: "Canada", currency: "CAD", locale: "en-CA" },
-  { country: "Ireland", currency: "EUR", locale: "en-IE" },
-  { country: "New Zealand", currency: "NZD", locale: "en-NZ" },
-  { country: "Singapore", currency: "SGD", locale: "en-SG" },
-  { country: "India", currency: "INR", locale: "en-IN" },
+  { country: "United Kingdom", currency: "GBP", locale: "en-GB", timeZone: "Europe/London" },
+  { country: "United States", currency: "USD", locale: "en-US", timeZone: "America/New_York" },
+  { country: "United Arab Emirates", currency: "AED", locale: "en-AE", timeZone: "Asia/Dubai" },
+  { country: "Australia", currency: "AUD", locale: "en-AU", timeZone: "Australia/Sydney" },
+  { country: "Canada", currency: "CAD", locale: "en-CA", timeZone: "America/Toronto" },
+  { country: "Ireland", currency: "EUR", locale: "en-IE", timeZone: "Europe/Dublin" },
+  { country: "New Zealand", currency: "NZD", locale: "en-NZ", timeZone: "Pacific/Auckland" },
+  { country: "Singapore", currency: "SGD", locale: "en-SG", timeZone: "Asia/Singapore" },
+  { country: "India", currency: "INR", locale: "en-IN", timeZone: "Asia/Kolkata" },
 ];
 
 const PLURAL: Record<string, [string, string]> = {

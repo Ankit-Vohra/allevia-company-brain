@@ -11,6 +11,7 @@ export interface Tenant {
   country?: string;      // "United Kingdom"
   currency?: string;     // ISO 4217, the currency the business reports in: "GBP", "AUD", "AED", "USD", "INR"
   locale?: string;       // BCP 47, how the owner reads dates and numbers: "en-GB", "en-US", "en-AU"
+  timeZone?: string;     // IANA, the owner's clock: "Asia/Kolkata", "Europe/London", "America/New_York"
 }
 
 export interface Freshness { source: string; asOf: string; status: "ok" | "stale" | "error"; note?: string }
@@ -133,6 +134,7 @@ export interface OnboardRequest {
   country?: string;
   currency?: string;   // ISO 4217
   locale?: string;     // BCP 47
+  timeZone?: string;   // IANA, the owner's clock (a first guess from the country; the owner can change it later)
 }
 
 /** A stored turn's event log, as returned by GET /api/:t/turns/:id/replay. */

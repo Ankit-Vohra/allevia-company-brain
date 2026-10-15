@@ -27,8 +27,8 @@ const shots = [
   { name: "brain", path: "/brain?mock=1&node=decision%3A007-pause-daily-posts-and-stories", wait: 3200 },
   { name: "insights", path: "/insights?mock=1", wait: 1800 },
   { name: "approvals", path: "/approvals?mock=1", wait: 1200 },
-  { name: "onboard", path: "/onboard?mock=1&url=avsatelier.in&name=AVS%20Atelier&instagram=avs.atelier&country=United%20Kingdom&go=1", wait: 9000 },
-  { name: "onboard-done", path: "/onboard?mock=1&url=avsatelier.in&name=AVS%20Atelier&instagram=avs.atelier&country=United%20Kingdom&go=1&speed=4", wait: 6000 },
+  { name: "onboard", path: "/onboard?mock=1&url=avsatelier.in&name=AVS%20Atelier&instagram=avs.atelier&country=India&go=1", wait: 9000 },
+  { name: "onboard-done", path: "/onboard?mock=1&url=avsatelier.in&name=AVS%20Atelier&instagram=avs.atelier&country=India&go=1&speed=4", wait: 6000 },
   { name: "insights-avs", path: "/insights?mock=1&tenant=avs-atelier", wait: 1800 },
   { name: "studio", path: "/studio?mock=1", wait: 1200 },
 ];

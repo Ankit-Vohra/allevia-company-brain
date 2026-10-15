@@ -6,8 +6,8 @@ import { avsGraph } from "./avs-graph";
 import { type MockGraph, edgesAmong, refs } from "./graph-kit";
 
 export const TENANTS: Tenant[] = [
-  { id: "aamdani", name: "Aamdani", domain: "aamdani.ai", industry: "Blue-collar jobs platform", city: "Raipur", country: "India", currency: "INR", locale: "en-GB" },
-  { id: "avs-atelier", name: "AVS Atelier", domain: "avsatelier.in", industry: "Architecture studio", city: "London", country: "United Kingdom", currency: "GBP", locale: "en-GB" },
+  { id: "aamdani", name: "Aamdani", domain: "aamdani.ai", industry: "Blue-collar jobs platform", city: "Raipur", country: "India", currency: "INR", locale: "en-GB", timeZone: "Asia/Kolkata" },
+  { id: "avs-atelier", name: "AVS Atelier", domain: "avsatelier.in", industry: "Architecture and interiors studio", city: "Raipur", country: "India", currency: "INR", locale: "en-GB", timeZone: "Asia/Kolkata" },
 ];
 
 export const GRAPHS: Record<string, MockGraph> = { aamdani: aamdaniGraph, "avs-atelier": avsGraph };
@@ -35,7 +35,7 @@ export const BRIEF: Record<string, string> = {
 - /jobs pages lost 26% of search clicks while impressions held [[observation:gsc-jobs-clicks-2026-10]].
 - 41% of signups still drop at OTP [[observation:funnel-otp-drop-2026-10]].
 - 3 approvals wait on you.`,
-  "avs-atelier": `**Set up from avsatelier.in.** We read 4 pages, 4 brand rules and 28 days of Search Console. The home page ranks on page 2 for "architect in london" [[observation:gsc-architect-london-2026-10]].`,
+  "avs-atelier": `**Set up from avsatelier.in.** We read 4 pages, 4 brand rules and 28 days of Search Console. The home page ranks on page 2 for "architect in raipur" [[observation:gsc-architect-raipur-2026-10]].`,
 };
 
 function rec(g: MockGraph, r: Omit<Recommendation, "evidence" | "evidenceEdges"> & { chain: string[] }): Recommendation {
@@ -87,23 +87,23 @@ export function seedRecommendations(): Record<string, Recommendation[]> {
       rec(v, {
         id: "rec:avs-home-seo", area: "seo", by: "growth-marketer", status: "proposed", score: 0.88, confidence: 0.75,
         title: "Home page: title, H1 and LocalBusiness schema",
-        why: "Page 2 for 'architect in london' (position 18.6) and the home page fails 4 checks [[observation:gsc-architect-london-2026-10]] [[rule:seo-generic-title]].",
-        impact: "Page 1 for local searches in about 6 weeks", value: { amount: 24000, currency: "GBP", note: "one won project, in fees" }, approvalId: "appr:avs-gh-home-seo", createdAt: "2026-10-14T18:30:00+05:30",
-        chain: ["query:architect-in-london", "page:avsatelier.in/", "rule:seo-generic-title", "rule:seo-no-localbusiness-schema"],
+        why: "Page 2 for 'architect in raipur' (position 18.6) and the home page fails 4 checks [[observation:gsc-architect-raipur-2026-10]] [[rule:seo-generic-title]].",
+        impact: "Page 1 for local searches in about 6 weeks", value: { amount: 650000, currency: "INR", note: "one won home project, in fees" }, approvalId: "appr:avs-gh-home-seo", createdAt: "2026-10-14T18:30:00+05:30",
+        chain: ["query:architect-in-raipur", "page:avsatelier.in/", "rule:seo-generic-title", "rule:seo-no-localbusiness-schema"],
       }),
       rec(v, {
         id: "rec:avs-gbp", area: "seo", by: "ops-manager", status: "open", score: 0.7, confidence: 0.7,
         title: "Verify the Google Business Profile",
         why: "The profile is unverified, and it feeds local results [[channel:google-business-profile]].",
         impact: "Map pack eligibility", createdAt: "2026-10-14T18:31:00+05:30",
-        chain: ["task:avs-gbp-verify", "channel:google-business-profile", "query:architect-in-london"],
+        chain: ["task:avs-gbp-verify", "channel:google-business-profile", "query:architect-in-raipur"],
       }),
       rec(v, {
-        id: "rec:avs-cap-extensions", area: "ads", by: "growth-marketer", status: "proposed", score: 0.6, confidence: 0.55, simulated: true,
-        title: "Cap 'House extensions' search ads at £20 a day (simulated)",
-        why: "Each enquiry costs £68 against an account median of £31 [[observation:google-cpe-house-extensions]], and the broad match pulls in DIY searches [[campaign:google-house-extensions]]. Ad data is simulated in v1.",
-        impact: "Save about £140 a week (simulated)", value: { amount: 140, currency: "GBP", per: "week" }, approvalId: "appr:avs-cap-extensions", createdAt: "2026-10-14T18:34:00+05:30",
-        chain: ["observation:google-cpe-house-extensions", "campaign:google-house-extensions", "channel:google-ads", "audience:homeowners-london"],
+        id: "rec:avs-cap-interior", area: "ads", by: "growth-marketer", status: "proposed", score: 0.6, confidence: 0.55, simulated: true,
+        title: "Cap 'Interior design Raipur' search ads at ₹750 a day (simulated)",
+        why: "Each enquiry costs ₹1,750 against an account median of ₹640 [[observation:google-cpe-interior-design]], and the broad match pulls in searches for design courses and DIY decor [[campaign:google-interior-design]]. Ad data is simulated in v1.",
+        impact: "Save about ₹5,000 a week (simulated)", value: { amount: 5000, currency: "INR", per: "week" }, approvalId: "appr:avs-cap-interior", createdAt: "2026-10-14T18:34:00+05:30",
+        chain: ["observation:google-cpe-interior-design", "campaign:google-interior-design", "channel:google-ads", "audience:homeowners-raipur"],
       }),
     ],
   };
@@ -151,12 +151,12 @@ export function seedApprovals(): Record<string, Approval[]> {
       {
         id: "appr:avs-gh-home-seo", kind: "github_issue", status: "pending", by: "growth-marketer", recommendationId: "rec:avs-home-seo",
         title: "Home page: title, H1 and LocalBusiness schema", createdAt: "2026-10-14T18:32:00+05:30",
-        payload: { title: "Home: title, H1, LocalBusiness schema, hero image", target: "Ankit-Vohra/allevia · label allevia-action", body: "1. Title and H1: \"Architects in London · AVS Atelier\".\n2. LocalBusiness JSON-LD with address and hours.\n3. Hero image to WebP under 200 KB (LCP 3.8 s now)." },
+        payload: { title: "Home: title, H1, LocalBusiness schema, hero image", target: "Ankit-Vohra/allevia · label allevia-action", body: "1. Title and H1: \"Architects in Raipur · AVS Atelier\".\n2. LocalBusiness JSON-LD with address and hours.\n3. Hero image to WebP under 200 KB (LCP 3.8 s now)." },
       },
       {
-        id: "appr:avs-cap-extensions", kind: "pause_ad", status: "pending", by: "growth-marketer", recommendationId: "rec:avs-cap-extensions", simulated: true,
-        title: "Cap 'House extensions' at £20 a day (simulated)", createdAt: "2026-10-14T18:35:00+05:30",
-        payload: { title: "Lower the daily budget from £40 to £20", target: "Google Ads · House extensions (simulated)", body: "£68 per enquiry over 14 days against a £31 account median. Keep exact-match terms; drop broad match on \"extension ideas\" and \"DIY extension\"." },
+        id: "appr:avs-cap-interior", kind: "pause_ad", status: "pending", by: "growth-marketer", recommendationId: "rec:avs-cap-interior", simulated: true,
+        title: "Cap 'Interior design Raipur' at ₹750 a day (simulated)", createdAt: "2026-10-14T18:35:00+05:30",
+        payload: { title: "Lower the daily budget from ₹1,500 to ₹750", target: "Google Ads · Interior design Raipur (simulated)", body: "₹1,750 per enquiry over 14 days against a ₹640 account median. Keep exact-match terms; drop broad match on \"interior design course\" and \"DIY home decor\"." },
       },
     ],
   };
@@ -177,11 +177,11 @@ export const KNOWS: Record<string, Partial<Record<AgentId, [string, number][]>>>
     librarian: [["decision:007-pause-daily-posts-and-stories", 0.95], ["decision:005-hindi-first-reels", 0.85], ["decision:006-city-role-job-pages", 0.8], ["decision:008-discord-brain-agent-subscription", 0.6], ["document:vault-decision-007", 0.9], ["document:vault-marketing-strategy", 0.7], ["person:founder", 0.75], ["agent:jarvis", 0.5], ["channel:instagram", 0.55]],
   },
   "avs-atelier": {
-    "chief-of-staff": [["business:avs-atelier", 1], ["person:principal-architect", 0.7], ["audience:homeowners-london", 0.6]],
-    "coe-lead": [["observation:gsc-architect-london-2026-10", 0.8], ["observation:ig-avs-reach-2026-10", 0.6]],
-    "data-analyst": [["observation:gsc-architect-london-2026-10", 0.9], ["query:architect-in-london", 0.85], ["query:interior-designer-london", 0.6], ["page:avsatelier.in/", 0.6]],
-    "growth-marketer": [["channel:google-business-profile", 0.8], ["query:architect-in-london", 0.7], ["playbook:open-seo-audit", 0.6], ["audience:homeowners-london", 0.6]],
-    "content-strategist": [["audience:homeowners-london", 0.8], ["need:trust-portfolio", 0.75], ["page:avsatelier.in/projects/riverside-house", 0.6], ["brandrule:avs-calm-precise", 0.7]],
+    "chief-of-staff": [["business:avs-atelier", 1], ["person:principal-architect", 0.7], ["audience:homeowners-raipur", 0.6]],
+    "coe-lead": [["observation:gsc-architect-raipur-2026-10", 0.8], ["observation:ig-avs-reach-2026-10", 0.6]],
+    "data-analyst": [["observation:gsc-architect-raipur-2026-10", 0.9], ["query:architect-in-raipur", 0.85], ["query:interior-designer-raipur", 0.6], ["page:avsatelier.in/", 0.6]],
+    "growth-marketer": [["channel:google-business-profile", 0.8], ["query:architect-in-raipur", 0.7], ["playbook:open-seo-audit", 0.6], ["audience:homeowners-raipur", 0.6]],
+    "content-strategist": [["audience:homeowners-raipur", 0.8], ["need:trust-portfolio", 0.75], ["page:avsatelier.in/projects/riverside-house", 0.6], ["brandrule:avs-calm-precise", 0.7]],
     "copy-editor": [["brandrule:avs-calm-precise", 0.9], ["brandasset:avs-palette", 0.6]],
     "fact-checker": [["rule:seo-no-localbusiness-schema", 0.5], ["page:avsatelier.in/", 0.5]],
     "tech-lead": [["page:avsatelier.in/", 0.9], ["rule:seo-missing-h1", 0.8], ["rule:seo-slow-lcp", 0.75], ["observation:lcp-home-2026-10", 0.7], ["document:crawl-avsatelier-2026-10-15", 0.6]],
