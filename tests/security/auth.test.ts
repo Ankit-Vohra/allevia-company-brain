@@ -326,6 +326,40 @@ describe("a page on another site cannot make the browser change or open anything
   });
 });
 
+describe("the Discord hub's join links are an owner's, never a demo visitor's", () => {
+  // A join link puts a person in a business's Discord area with its role: they can ask its team and decide its cards.
+  const calls: string[] = [];
+  const hub = {
+    home: async (slug: string) => { calls.push(`home:${slug}`); return { enabled: true, inviteUrl: `https://discord.gg/join-${slug}` }; },
+    newLink: async (slug: string) => { calls.push(`link:${slug}`); return { enabled: true, inviteUrl: `https://discord.gg/new-${slug}` }; },
+  } as unknown as import("../../src/discord/hub-service.js").HubService;
+  const withHub = () => make({ discordHub: async () => hub });
+
+  it("a visitor to a demo business (no token) is not shown a link, on a private or a public deployment", async () => {
+    for (const publicMode of [false, true]) {
+      calls.length = 0;
+      const h = make({ discordHub: async () => hub, publicMode });
+      const res = await h.request("/api/demo_co/discord");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ enabled: false });
+      expect((await post(h, "/api/demo_co/discord/invite", {})).status).toBe(403);
+      expect(calls, `publicMode ${publicMode}`).toEqual([]);
+    }
+  });
+
+  it("an owner is shown their own business's link, and not by asking for another's", async () => {
+    calls.length = 0;
+    const h = withHub();
+    const own = await h.request("/api/tenant_a/discord", bearer(tokenA));
+    expect(JSON.stringify(await own.json())).toContain("join-tenant_a");
+    expect((await post(h, "/api/tenant_a/discord/invite", {}, bearer(tokenA))).status).toBe(200);
+    expect((await h.request("/api/tenant_b/discord", bearer(tokenA))).status).toBe(401);
+    expect((await post(h, "/api/tenant_b/discord/invite", {}, bearer(tokenA))).status).toBe(401);
+    expect((await h.request("/api/tenant_b/discord")).status).toBe(401);
+    expect(calls).toEqual(["home:tenant_a", "link:tenant_a"]);
+  });
+});
+
 describe("onboarding with the flag on", () => {
   const start = (body: Record<string, unknown>, init?: RequestInit) => post(app, "/api/onboard", body, init);
 

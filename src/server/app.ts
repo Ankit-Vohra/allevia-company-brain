@@ -416,7 +416,9 @@ export function createApp(deps: ServerDeps): Hono {
   // ---- Discord: where the owner joins their team (the Home page and the onboarding "done" screen read this) ----
   app.get("/api/:t/discord", async (c) => {
     const { reg } = await tenantOf(c);
-    const hub = deps.publicMode ? null : await discordHub();
+    // A join link puts a person in this business's Discord area with its role, so only its owner is shown one: not the
+    // public demo view, and not (with owner links on) a visitor to a demo business.
+    const hub = isPublic() ? null : await discordHub();
     return c.json(hub ? await hub.home(reg.slug) : { enabled: false });
   });
 
