@@ -222,7 +222,7 @@ where it applies, `conf` (0–1).
 | `00-command/PENDING.md` | table/line parser | Task (id N#), `OWNS` (founder/agent), status, linked issues |
 | `60-decisions/*.md` | ADR parser plus LLM | Decision, `BASED_ON`, `AFFECTS`, `DECIDED`, `SUPERSEDES` |
 | `70-reports/daily/*.md` (Jarvis morning briefs) | LLM extraction of dated numbers | Observation (with `asOf` = report date) |
-| `registry/**.yaml` | YAML mapper | Agent, Team, System (connectors, tools), `DEPENDS_ON`, `OWNS`, `MEMBER_OF` |
+| `registry/**.yaml` | YAML mapper | Agent, Team, System (connectors, tools), `DEPENDS_ON`, `USES`, `MEMBER_OF` |
 | vault git history | `git log` | `AUTHORED`, then `KNOWS_ABOUT` |
 | GitHub issues (aamdani repos, via `gh`) | REST | Task(kind=issue), labels, assignee `OWNS`, `MENTIONS` by name match |
 | `aamdani-ops` MCP over SSH (read tools only) | MCP client over `ssh … ops-mcp-launch.sh` stdio | snapshot JSON in `data/snapshots/<tenant>/<date>/` → Observation, Content, Page, Query, Channel |
@@ -253,7 +253,7 @@ Three layers, each tested:
 3. **Redaction.** These are replaced with `[redacted:<kind>]` before any LLM or graph write:
    - IPv4 addresses, AWS ids (`i-…`, `sg-…`, `vpc-…`, `arn:aws:…`), emails, phone numbers.
    - Token and secret shapes, `NAME=value` assignments for `*KEY/*TOKEN/*SECRET/*PASSWORD`, URLs with credentials,
-     local secret paths (`~/Documents/aamdani-secrets`, `~/.config/…`, `/home/…/secrets`).
+     local secret paths (any home-directory folder with `secret` in its name, `~/.config/…`, `/home/…/secrets`).
    - CIN, D-U-N-S, Apple Team IDs and Supabase project refs.
 
 `allevia privacy-scan <tenant>` scans every string property in the graph for the same patterns and must report 0.

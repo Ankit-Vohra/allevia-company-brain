@@ -1,0 +1,10 @@
+# registry/agents/old-writer.yaml — SYNTHETIC fixture: a retired agent.
+id: old-writer
+name: Old writer
+department: research
+kind: claude-subagent
+status: retired
+retired_on: "2026-09-24"
+replaced_by: planner
+does: Wrote the first drafts of product posts. Retired when the planner took over.
+reports_to: planner

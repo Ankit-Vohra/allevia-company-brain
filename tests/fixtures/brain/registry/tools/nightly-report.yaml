@@ -1,0 +1,9 @@
+# registry/tools/nightly-report.yaml — SYNTHETIC fixture: a paused job that names its dependency only in the connector's used_by.
+id: nightly-report
+name: Nightly report
+type: cron-job
+status: paused  # paused 2026-10-03: kept timing out; the daily summary covers it now
+purpose: Posts the nightly sales digest.
+schedule: "03:45 daily"
+used_by:
+  - pinger

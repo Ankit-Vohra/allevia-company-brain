@@ -1,0 +1,7 @@
+# registry/connectors/source-host.yaml — SYNTHETIC fixture.
+id: source-host
+name: Source host
+purpose: Hosts the repos and issues.
+status: planned
+used_by:
+  - scout
