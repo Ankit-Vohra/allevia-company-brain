@@ -1,13 +1,14 @@
-// Onboard: paste a website, watch the company brain grow. The stream (POST /api/onboard) reports stages, the pages it
-// reads and the nodes it writes; the graph on the right grows node by node, and the run ends with a receipt of what
-// was done and a way into the new office.
+// Add a business: paste the website and we do the setup. A short form, then a simple seven-step progress line while the
+// team reads the site (the live map of what it learns is a small card, and the technical log sits behind "Show what's
+// happening"). The run ends with one clear next step, and the three goals we suggest to start with.
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
-import type { EdgeRef, NodeRef, OnboardEvent } from "@shared/contracts";
-import { AGENTS, DEPARTMENTS, numberWord } from "@shared/roster";
+import type { EdgeRef, NodeRef, OnboardEvent, ProgramGoal } from "@shared/contracts";
+import { AGENTS } from "@shared/roster";
 import { api } from "../api";
 import { AgentAvatar } from "../components/bits";
 import { Icon } from "../components/Icon";
+import { Reveal } from "../components/Reveal";
 import { currencySymbol, fmtMs, fmtNum, guessRegion } from "../lib/format";
 import { hueFor } from "../lib/labels";
 import { useMedia } from "../lib/useMedia";
@@ -17,16 +18,22 @@ import "./onboard.css";
 const GraphView = lazy(() => import("../components/GraphView"));
 
 type Stage = Extract<OnboardEvent, { type: "stage" }>["stage"];
-const STAFF = numberWord(AGENTS.length);
-const STAGES: { id: Stage; title: string; idle: string }[] = [
-  { id: "crawl", title: "Read the website", idle: "Every public page, as a visitor sees it" },
-  { id: "brand", title: "Pick out the brand", idle: "Colours, type and the voice you write in" },
-  { id: "seo", title: "Check search health", idle: "42 checks on every page" },
-  { id: "understand", title: "Understand the business", idle: "Who you serve, what you sell, what they need" },
-  { id: "playbooks", title: "Attach playbooks", idle: "Proven methods for your kind of business" },
-  { id: "index", title: "Index for search", idle: "So every answer can cite a source" },
-  { id: "done", title: "Brief the team", idle: `${STAFF[0]!.toUpperCase()}${STAFF.slice(1)} staff, ${numberWord(DEPARTMENTS.length)} departments, one brain` },
+
+/** The seven steps, in an owner's words. `short` labels the dot; `now` is the sentence while it is happening. */
+const STEPS = [
+  { short: "Website", now: "Reading your website" },
+  { short: "Your look", now: "Picking up your look and the way you write" },
+  { short: "Google", now: "Checking how you show up on Google" },
+  { short: "Your business", now: "Learning what you sell and who you serve" },
+  { short: "Methods", now: "Choosing methods that suit your business" },
+  { short: "Filing", now: "Filing it all, so every answer can name its source" },
+  { short: "Your team", now: "Briefing your team" },
 ];
+
+/** Which step each stage the server can report belongs to (the newer stages fold into the nearest step). */
+const STAGE_STEP: Record<Stage, number> = {
+  crawl: 0, brand: 1, seo: 2, understand: 3, profile: 3, playbooks: 4, goals: 4, baseline: 4, index: 5, capabilities: 5, done: 6,
+};
 
 const REGIONS = [
   { country: "United Kingdom", currency: "GBP", locale: "en-GB", timeZone: "Europe/London" },
@@ -41,8 +48,8 @@ const REGIONS = [
 ];
 
 const PLURAL: Record<string, [string, string]> = {
-  Page: ["page", "pages"], BrandAsset: ["brand asset", "brand assets"], BrandRule: ["voice rule", "voice rules"], Rule: ["SEO issue", "SEO issues"],
-  Product: ["service", "services"], Audience: ["audience", "audiences"], Need: ["customer need", "customer needs"], Playbook: ["playbook", "playbooks"],
+  Page: ["page", "pages"], BrandAsset: ["brand style", "brand styles"], BrandRule: ["writing rule", "writing rules"], Rule: ["website fix", "website fixes"],
+  Product: ["service", "services"], Audience: ["customer group", "customer groups"], Need: ["customer need", "customer needs"], Playbook: ["method", "methods"],
   Channel: ["channel", "channels"], Business: ["business", "businesses"], Chunk: ["passage", "passages"],
 };
 const plural = (label: string, n: number) => `${fmtNum(n)} ${(PLURAL[label] ?? [label.toLowerCase(), `${label.toLowerCase()}s`])[n === 1 ? 0 : 1]}`;
@@ -55,8 +62,15 @@ const hostOf = (url: string) => {
   try { return new URL(/^https?:/.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, ""); } catch { return url; }
 };
 
+/** "avsatelier.in" → "Avsatelier": a first guess at the name when the owner leaves it blank. */
+const nameFromHost = (url: string) => {
+  const root = hostOf(url).split(".")[0] ?? "";
+  return root ? root.charAt(0).toUpperCase() + root.slice(1) : "Your business";
+};
+
 interface RunState {
   stage?: Stage;
+  step: number;
   texts: Partial<Record<Stage, string>>;
   pages: { url: string; title: string }[];
   nodes: NodeRef[];
@@ -77,12 +91,13 @@ export default function OnboardPage() {
   const [country, setCountry] = useState(() => params.get("country") ?? (params.get("url") ? guessRegion(params.get("url")!).country : "United Kingdom"));
   const countryTouched = useRef(!!params.get("country"));
   const [run, setRun] = useState<RunState | null>(null);
+  const [goals, setGoals] = useState<ProgramGoal[]>([]);
   const abort = useRef<AbortController | null>(null);
-  const autoStarted = useRef(false);
-  const narrow = useMedia("(max-width: 900px)");
+  const narrow = useMedia("(max-width: 700px)");
 
   const region = REGIONS.find((r) => r.country === country) ?? REGIONS[0]!;
   const running = !!run && !run.done && !run.error;
+  const bizName = name.trim() || (url ? nameFromHost(url) : "Your business");
 
   const onUrl = (v: string) => {
     setUrl(v);
@@ -97,12 +112,16 @@ export default function OnboardPage() {
     abort.current?.abort();
     const ctrl = new AbortController();
     abort.current = ctrl;
-    const state: RunState = { texts: {}, pages: [], nodes: [], edges: [], startedAt: Date.now() };
+    const state: RunState = { step: -1, texts: {}, pages: [], nodes: [], edges: [], startedAt: Date.now() };
     setRun({ ...state });
+    setGoals([]);
     const seen = new Set<string>();
     const onEvent = (e: OnboardEvent) => {
-      if (e.type === "stage") { state.stage = e.stage; state.texts = { ...state.texts, [e.stage]: e.text }; }
-      else if (e.type === "page") state.pages = [...state.pages, { url: e.url, title: e.title }];
+      if (e.type === "stage") {
+        state.stage = e.stage;
+        state.step = Math.max(state.step, STAGE_STEP[e.stage] ?? state.step);
+        state.texts = { ...state.texts, [e.stage]: e.text };
+      } else if (e.type === "page") state.pages = [...state.pages, { url: e.url, title: e.title }];
       else if (e.type === "nodes") {
         const fresh = e.nodes.filter((n) => !seen.has(n.id));
         fresh.forEach((n) => seen.add(n.id));
@@ -113,7 +132,7 @@ export default function OnboardPage() {
       setRun({ ...state });
     };
     try {
-      await api.onboard({ name: name.trim() || hostOf(url), url: url.trim(), instagram: instagram.trim() || undefined, ...region }, onEvent, { signal: ctrl.signal });
+      await api.onboard({ name: name.trim() || nameFromHost(url), url: url.trim(), instagram: instagram.trim() || undefined, ...region }, onEvent, { signal: ctrl.signal });
       if (state.done) await refreshTenants();
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
@@ -122,48 +141,55 @@ export default function OnboardPage() {
     }
   };
 
-  useEffect(() => () => abort.current?.abort(), []);
+  // ?url=…&go=1 starts straight away. No "started once" guard: React's dev-mode remount aborts the first run in the
+  // cleanup, so the effect has to be free to start it again.
   useEffect(() => {
-    if (autoStarted.current || params.get("go") !== "1" || !url) return;
-    autoStarted.current = true;
-    void start();
+    if (params.get("go") === "1" && url) void start();
+    return () => abort.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // the goals we suggest: read once the business exists (none yet is fine, the card is just left out)
+  const doneTenant = run?.done?.tenant;
+  useEffect(() => {
+    if (!doneTenant) return;
+    let live = true;
+    api.program(doneTenant).then((p) => { if (live) setGoals(p?.goals.slice(0, 3) ?? []); }, () => {});
+    return () => { live = false; };
+  }, [doneTenant]);
 
   const onSubmit = (e: FormEvent) => { e.preventDefault(); void start(); };
   const openOffice = (path: string) => { if (run?.done) setTenant(run.done.tenant); nav(path); };
 
-  const stageIndex = run?.stage ? STAGES.findIndex((s) => s.id === run.stage) : -1;
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const n of run?.nodes ?? []) c[n.label] = (c[n.label] ?? 0) + 1;
     return c;
   }, [run?.nodes]);
   const centerId = run?.nodes.find((n) => n.label === "Business")?.id;
-  const bizName = name.trim() || (url ? hostOf(url) : "Your business");
+  const step = run?.done ? STEPS.length : Math.max(0, run?.step ?? 0);
 
   return (
     <div className="onboard-page">
-      <div className="onboard-left">
-        <header>
-          <h1 className="page-title">Brief a new team</h1>
-          <p className="page-lede">
-            Paste the website. Allevia reads it, builds the company brain and briefs {STAFF} staff in about two minutes.
-            Nothing is posted or changed anywhere.
-          </p>
-        </header>
-
+      <header className="ob-head">
+        <h1 className="page-title">{run?.done ? `${bizName} is ready` : running ? `Setting up ${bizName}` : "Add a business"}</h1>
         {!run || run.error ? (
-          <form className="onboard-form panel" onSubmit={onSubmit} aria-label="Set up a business">
-            <label className="label">
-              Website
-              <input className="field" inputMode="url" autoComplete="url" placeholder="yourstudio.co.uk" value={url} onChange={(e) => onUrl(e.target.value)} required />
-            </label>
-            <label className="label">
-              Business name
-              <input className="field" autoComplete="organization" placeholder="As your customers know it" value={name} onChange={(e) => setName(e.target.value)} />
-            </label>
-            <div className="form-row">
+          <p className="page-lede">Paste your website. We read it, learn your business and set your team up. It takes about two minutes, and nothing is posted or changed anywhere.</p>
+        ) : null}
+      </header>
+
+      {!run || run.error ? (
+        <form className="ob-form" onSubmit={onSubmit} aria-label="Add a business">
+          <label className="label">
+            Your website
+            <input className="field ob-field" inputMode="url" autoComplete="url" placeholder="yourstudio.co.uk" value={url} onChange={(e) => onUrl(e.target.value)} required />
+          </label>
+          <label className="label">
+            <span>Business name <span className="hint">optional</span></span>
+            <input className="field ob-field" autoComplete="organization" placeholder="As your customers know it" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <Reveal label="More details" summary={`${region.country} · money in ${region.currency}`} className="ob-more">
+            <div className="ob-more-body">
               <label className="label">
                 <span>Instagram <span className="hint">optional</span></span>
                 <input className="field" placeholder="@handle" value={instagram} onChange={(e) => setInstagram(e.target.value)} />
@@ -174,132 +200,176 @@ export default function OnboardPage() {
                   {REGIONS.map((r) => <option key={r.country} value={r.country}>{r.country}</option>)}
                 </select>
               </label>
+              <p className="ob-note">
+                Money will show in <b>{currencySymbol(region.currency)} {region.currency}</b> and dates as {region.locale === "en-US" ? "Oct 15" : "15 Oct"}.
+              </p>
             </div>
-            <p className="form-note">
-              Money will show in <b>{currencySymbol(region.currency)} {region.currency}</b> and dates as {region.locale === "en-US" ? "Oct 15" : "15 Oct"}.
-            </p>
-            {run?.error && <p className="notice notice-bad" role="alert">{run.error} Check the address and try again.</p>}
-            <button type="submit" className="btn btn-gold onboard-go" disabled={!url.trim()}>
-              Build the brain <Icon name="send" size={16} />
-            </button>
-          </form>
-        ) : (
-          <div className="onboard-who panel">
-            <span className="switcher-monogram" aria-hidden="true">{bizName.slice(0, 1).toUpperCase()}</span>
-            <div>
-              <p className="onboard-who-name">{bizName}</p>
-              <p className="small muted">{hostOf(url)}{instagram ? ` · @${instagram.replace(/^@/, "")}` : ""} · reports in {region.currency}</p>
-            </div>
-            {running && <button type="button" className="btn btn-quiet btn-sm" onClick={() => { abort.current?.abort(); setRun(null); }}>Stop</button>}
-          </div>
-        )}
+          </Reveal>
+          {run?.error && <p className="notice notice-bad" role="alert">{run.error} Check the address and try again.</p>}
+          <button type="submit" className="btn btn-gold ob-go" disabled={!url.trim()}>
+            Set up my team <Icon name="send" size={16} />
+          </button>
+        </form>
+      ) : null}
 
-        {run?.done ? (
-          <Receipt run={run} host={hostOf(url)} region={region} onOpen={openOffice} name={bizName} />
-        ) : (
-          <ol className="stages" aria-label="Set-up steps" aria-live="polite">
-            {STAGES.map((s, i) => {
-              const state = run?.done || i < stageIndex ? "done" : i === stageIndex && running ? "active" : "todo";
+      {run && !run.error && !run.done && (
+        <section className="ob-progress" aria-label="Setting up" aria-live="polite">
+          <ol className="ob-steps">
+            {STEPS.map((s, i) => {
+              const state = i < step ? "done" : i === step ? "active" : "todo";
               return (
-                <li key={s.id} className={`stage is-${state}`}>
-                  <span className="stage-mark" aria-hidden="true">{state === "done" ? <Icon name="check" size={13} /> : i + 1}</span>
-                  <span className="stage-text">
-                    <span className="stage-title">{s.title}</span>
-                    <span className="stage-sub">{run?.texts[s.id] ?? s.idle}</span>
-                  </span>
-                  <span className="visually-hidden">{state === "done" ? "done" : state === "active" ? "in progress" : "to do"}</span>
+                <li key={s.short} className={`ob-step is-${state}`} aria-current={state === "active" ? "step" : undefined}>
+                  <span className="ob-dot" aria-hidden="true">{state === "done" ? <Icon name="check" size={12} /> : i + 1}</span>
+                  <span className="ob-step-label">{s.short}</span>
+                  <span className="visually-hidden">{state === "done" ? ", done" : state === "active" ? ", in progress" : ", still to do"}</span>
                 </li>
               );
             })}
           </ol>
-        )}
-
-        {run && run.pages.length > 0 && !run.done && (
-          <div className="pages-read">
-            <h2 className="section-title">Pages read</h2>
-            <ul>
-              {run.pages.slice(-6).map((p) => (
-                <li key={p.url}><span className="mono">{pathOf(p.url)}</span><span className="muted">{p.title}</span></li>
-              ))}
-            </ul>
+          <div className="ob-now">
+            <p className="ob-now-title">{STEPS[step]!.now}</p>
+            <p className="ob-now-sub">Step {step + 1} of {STEPS.length} · {hostOf(url)}</p>
           </div>
-        )}
-      </div>
+          <button type="button" className="btn btn-quiet btn-sm ob-stop" onClick={() => { abort.current?.abort(); setRun(null); }}>Stop</button>
+        </section>
+      )}
 
-      <div className={`onboard-right${run ? "" : " is-idle"}`}>
-        <div className="onboard-canvas-head">
-          <h2 className="section-title">{run ? `${bizName}’s brain` : "The brain grows here"}</h2>
-          {run && (
-            <p className="small muted num" aria-live="off">
-              {fmtNum(run.nodes.length)} things · {fmtNum(run.edges.length)} links
-              {run.endedAt ? ` · built in ${fmtMs(run.endedAt - run.startedAt)}` : ""}
-            </p>
-          )}
-        </div>
-        <div className="onboard-canvas">
-          {run && run.nodes.length > 0 ? (
-            <Suspense fallback={null}>
-              <GraphView
-                nodes={run.nodes}
-                edges={run.edges}
-                centerId={centerId}
-                dark={effectiveTheme === "dark"}
-                reducedMotion={reducedMotion}
-                labels={narrow ? "auto" : "all"}
-                sizeBy="degree"
-                followGrowth
-                maxFitZoom={2.2}
-                fitPadding={narrow ? 36 : 80}
-                ariaLabel={`${bizName}'s company brain: ${run.nodes.length} things and ${run.edges.length} links so far`}
-              />
-            </Suspense>
-          ) : (
-            <div className="onboard-blank">
-              <p>Every page, service, audience and brand rule becomes a node here as the team reads your site.</p>
-            </div>
-          )}
-        </div>
-        {run && Object.keys(counts).length > 0 && !run.done && (
-          <ul className="tally" aria-label="Found so far">
-            {Object.entries(counts).filter(([l]) => l !== "Business").map(([label, n]) => (
-              <li key={label} style={{ ["--hue" as string]: hueFor(label) }}>{plural(label, n)}</li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {run?.done && (
+        <Ready
+          host={hostOf(url)}
+          counts={run.done.counts}
+          pages={run.pages.length}
+          goals={goals}
+          onOpen={openOffice}
+        />
+      )}
+
+      {run && !run.error && (
+        <section className="ob-graph" aria-label="What your team is learning about your business">
+          <div className="ob-graph-head">
+            <h2 className="ob-graph-title">{run.done ? "What your team learned" : "What your team is learning"}</h2>
+            <p className="ob-graph-count num">{run.nodes.length > 0 ? `${fmtNum(run.nodes.length)} things so far` : ""}</p>
+          </div>
+          <div className="ob-canvas">
+            {run.nodes.length > 0 ? (
+              <Suspense fallback={null}>
+                <GraphView
+                  nodes={run.nodes}
+                  edges={run.edges}
+                  centerId={centerId}
+                  dark={effectiveTheme === "dark"}
+                  reducedMotion={reducedMotion}
+                  labels="auto"
+                  sizeBy="degree"
+                  followGrowth
+                  maxFitZoom={1.8}
+                  fitPadding={narrow ? 24 : 44}
+                  ariaLabel={`Map of what your team learned about ${bizName}: ${run.nodes.length} things so far`}
+                />
+              </Suspense>
+            ) : (
+              <div className="ob-blank"><p>Your pages, services and customers will appear here as your team reads your site.</p></div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {run && !run.error && (
+        <Reveal label={run.done ? "Show what we did" : "Show what's happening"} summary={run.endedAt ? `done in ${fmtMs(run.endedAt - run.startedAt)}` : undefined} className="ob-log">
+          <Log run={run} counts={counts} host={hostOf(url)} regionCurrency={region.currency} />
+        </Reveal>
+      )}
     </div>
   );
 }
 
-function Receipt({ run, host, region, onOpen, name }: { run: RunState; host: string; region: (typeof REGIONS)[number]; onOpen: (path: string) => void; name: string }) {
-  const c = run.done!.counts;
-  const lines: string[] = [
-    `Read ${plural("Page", c.Page ?? run.pages.length)} of ${host}`,
-    `Picked out ${plural("BrandAsset", c.BrandAsset ?? 0)} and ${plural("BrandRule", c.BrandRule ?? 0)}`,
-    `Ran 42 search checks and filed ${plural("Rule", c.Rule ?? 0)} to fix`,
-    `Mapped ${plural("Product", c.Product ?? 0)}, ${plural("Audience", c.Audience ?? 0)} and what they need`,
-    `Attached ${plural("Playbook", c.Playbook ?? 0)}`,
-    `Indexed ${plural("Chunk", c.Chunk ?? 0)} so answers can cite them`,
-  ];
+// ---------------------------------------------------------------- done
+
+function targetWords(g: ProgramGoal, v: number | null) {
+  if (v === null) return null;
+  return `${fmtNum(v)}${g.unit ? ` ${g.unit}` : ""} a ${g.period}`;
+}
+
+function Ready({ host, counts, pages, goals, onOpen }: { host: string; counts: Record<string, number>; pages: number; goals: ProgramGoal[]; onOpen: (path: string) => void }) {
+  const read = counts.Page ?? pages;
   return (
-    <section className="receipt panel" aria-labelledby="receipt-title">
-      <div className="receipt-head">
-        <h2 id="receipt-title" className="receipt-title">What we did for you</h2>
-        <span className="badge badge-ok"><Icon name="check" size={13} /> Ready</span>
-      </div>
-      <ul className="receipt-lines">
-        {lines.map((l) => <li key={l}><Icon name="check" size={14} /> {l}</li>)}
-      </ul>
-      <div className="receipt-team">
-        <span className="receipt-avatars" aria-hidden="true">
-          {AGENTS.map((a) => <AgentAvatar key={a.id} id={a.id} size={26} />)}
-        </span>
-        <p>{AGENTS.length} staff in {DEPARTMENTS.length} departments are briefed. Money shows in {region.currency} ({currencySymbol(region.currency)}), as a business in {region.country} reports it.</p>
-      </div>
-      <div className="receipt-actions">
-        <button type="button" className="btn btn-gold" onClick={() => onOpen("/")}>Open {name}’s office</button>
-        <button type="button" className="btn btn-ghost" onClick={() => onOpen("/brain")}><Icon name="brain" size={15} /> Explore the brain</button>
+    <section className="ob-ready" aria-labelledby="ob-ready-line">
+      <p id="ob-ready-line" className="ob-ready-line">
+        Your team read {plural("Page", read)} of {host}, learned what you sell and who you serve, and has been briefed. {AGENTS.length} people are ready to work.
+      </p>
+      <span className="ob-avatars" aria-hidden="true">{AGENTS.map((a) => <AgentAvatar key={a.id} id={a.id} size={28} />)}</span>
+
+      {goals.length > 0 && (
+        <div className="ob-goals">
+          <h2 className="ob-goals-title">{goals.length === 1 ? "A goal to start with" : `${goals.length} goals to start with`}</h2>
+          <p className="ob-goals-lede">This is where we think we can get you. You can change any of these later.</p>
+          <ul className="ob-goal-list">
+            {goals.map((g) => {
+              const now = targetWords(g, g.current ?? g.baseline);
+              return (
+                <li key={g.id} className="ob-goal">
+                  <h3 className="ob-goal-name">{g.name}</h3>
+                  <dl className="ob-goal-nums">
+                    <div><dt>Where you are now</dt><dd className={now ? "" : "is-soft"}>{now ?? "We'll know after your first full week"}</dd></div>
+                    <div><dt>Where we'll get you</dt><dd>{targetWords(g, g.target) ?? "We'll suggest this after your first week"}</dd></div>
+                  </dl>
+                  {g.owner && <p className="ob-goal-owner">{g.owner.name} leads this</p>}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      <div className="ob-cta">
+        <button type="button" className="btn btn-gold ob-open" onClick={() => onOpen("/")}>Open your office <Icon name="send" size={16} /></button>
+        <button type="button" className="btn btn-quiet" onClick={() => onOpen("/ask")}>Ask your first question</button>
       </div>
     </section>
+  );
+}
+
+// ---------------------------------------------------------------- the log (behind "Show what's happening")
+
+function Log({ run, counts, host, regionCurrency }: { run: RunState; counts: Record<string, number>; host: string; regionCurrency: string }) {
+  const c = run.done?.counts;
+  const steps = (Object.entries(run.texts) as [Stage, string][]).filter(([, t]) => t);
+  return (
+    <div className="ob-log-body">
+      {steps.length > 0 && (
+        <ol className="ob-log-steps">
+          {steps.map(([s, t]) => <li key={s}>{t}</li>)}
+        </ol>
+      )}
+      {Object.keys(counts).length > 0 && (
+        <ul className="ob-tally" aria-label="Found so far">
+          {Object.entries(counts).filter(([l]) => l !== "Business").map(([label, n]) => (
+            <li key={label} style={{ ["--hue" as string]: hueFor(label) }}>{plural(label, n)}</li>
+          ))}
+        </ul>
+      )}
+      {run.pages.length > 0 && (
+        <div>
+          <p className="ob-log-title">Pages read on {host}</p>
+          <ul className="ob-pages">
+            {run.pages.slice(-12).map((p) => (
+              <li key={p.url}><code>{pathOf(p.url)}</code><span>{p.title}</span></li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {c && (
+        <ul className="ob-receipt">
+          <li>Read {plural("Page", c.Page ?? run.pages.length)} of {host}</li>
+          <li>Picked up {plural("BrandAsset", c.BrandAsset ?? 0)} and {plural("BrandRule", c.BrandRule ?? 0)}</li>
+          <li>Ran 42 website checks and found {plural("Rule", c.Rule ?? 0)} to fix</li>
+          <li>Mapped {plural("Product", c.Product ?? 0)}, {plural("Audience", c.Audience ?? 0)} and what they need</li>
+          <li>Chose {plural("Playbook", c.Playbook ?? 0)} for your kind of business</li>
+          <li>Filed {plural("Chunk", c.Chunk ?? 0)} so answers can name their sources</li>
+          <li>Money shows in {regionCurrency} ({currencySymbol(regionCurrency)}), as a business in your country reports it</li>
+        </ul>
+      )}
+      <p className="ob-log-meta num">{fmtNum(run.nodes.length)} things · {fmtNum(run.edges.length)} connections{run.endedAt ? ` · ${fmtMs(run.endedAt - run.startedAt)}` : ""}</p>
+    </div>
   );
 }

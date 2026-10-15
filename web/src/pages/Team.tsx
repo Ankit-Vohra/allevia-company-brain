@@ -1,75 +1,66 @@
-// Team settings (product design §2.4, §8): every desk on, light or off, how much it may do alone, the owner's standing
-// instructions, and the rules it learned from the owner's edits, each with a retire action. "Tell your team" turns a
-// plain sentence into typed changes, shows exactly what will change as a diff, and writes nothing until Apply.
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link } from "react-router";
+// Your team: say what you want in plain words ("Tell your team"), see exactly what would change, and apply it. Below,
+// one quiet row per person with an on/off switch; open a row to set how busy they are, how much they do without asking,
+// your instructions to them and what they learned from your edits. Switching someone on or off redraws the office.
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import type { AgentMode, DirectiveDiffLine, DirectivePreview } from "@shared/contracts";
-import { AGENTS, DEPARTMENTS } from "@shared/roster";
+import { AGENTS } from "@shared/roster";
 import { api, getPublicMode, type AgentPatch } from "../api";
-import { AgentAvatar, agentDef } from "../components/bits";
+import { AgentAvatar } from "../components/bits";
 import { Icon } from "../components/Icon";
 import { RuleRow } from "../components/Learning";
-import { avatarUrl } from "../office/sprites";
+import { Reveal } from "../components/Reveal";
 import { fmtDate } from "../lib/format";
-import { useMedia } from "../lib/useMedia";
 import { useApp, useAsync } from "../state/app";
 import type { AgentView } from "../types-ext";
 import { TEAM_CHANGED } from "./Office";
 import "./team.css";
 
 const MODES: Array<{ id: AgentMode; label: string; hint: string }> = [
-  { id: "full", label: "On", hint: "Works every request it is needed for" },
-  { id: "light", label: "Light", hint: "Fewer, shorter checks: for a quiet season" },
-  { id: "off", label: "Off", hint: "Left out of every plan until you switch it back" },
+  { id: "full", label: "Fully on", hint: "Works on every request they are needed for" },
+  { id: "light", label: "Light touch", hint: "Fewer, shorter checks. Good for a quiet season" },
+  { id: "off", label: "Resting", hint: "Left out of every plan until you switch them back on" },
 ];
 
 const AUTONOMY = [
-  { level: 0, short: "Drafts", long: "Drafts only: nothing goes out without your yes." },
+  { level: 0, short: "Drafts", long: "Drafts only. Nothing goes out without your yes." },
   { level: 1, short: "Schedules", long: "Schedules what you approved, at the right time." },
-  { level: 2, short: "Publishes", long: "Publishes on its own and tells you after, in a digest." },
-  { level: 3, short: "Acts", long: "Acts within the spending and posting caps you set." },
+  { level: 2, short: "Publishes", long: "Publishes on their own and tells you after, in a short note." },
+  { level: 3, short: "Acts", long: "Acts on their own, within the spending and posting limits you set." },
 ];
 
 const EXAMPLES = [
   "No emojis on LinkedIn; switch Arjun off",
   "Tara, always mention the free first consultation",
   "Never say cheap",
-  "Rohan light till the season starts",
+  "Rohan, go light till the season starts",
 ];
 
 const changed = () => window.dispatchEvent(new Event(TEAM_CHANGED));
+/** The roster's one-liners were written for staff; say "what we know" where they say "the graph". */
+const plain = (s?: string) => (s ?? "").replace(/\bthe graph\b/gi, "what we know");
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export default function TeamPage() {
   const { tenant } = useApp();
   const team = useAsync(() => api.team(tenant.id), [tenant.id]);
   const [agents, setAgents] = useState<AgentView[] | undefined>();
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [prefill, setPrefill] = useState<{ text: string; n: number } | null>(null);
   useEffect(() => { setAgents(team.data); }, [team.data]);
-  useEffect(() => { setAgents(undefined); }, [tenant.id]);
+  useEffect(() => { setAgents(undefined); setOpenId(null); }, [tenant.id]);
 
   const list = agents ?? team.data ?? [];
-  const counts = useMemo(() => ({
-    on: list.filter((a) => a.enabled && a.mode === "full").length,
-    light: list.filter((a) => a.enabled && a.mode === "light").length,
-    off: list.filter((a) => !a.enabled).length,
-    rules: new Set(list.flatMap((a) => a.learnedRules.map((r) => r.id))).size,
-  }), [list]);
+  const working = list.filter((a) => a.enabled).length;
 
-  // departments in reading order, each placed in the shortest column so far: a masonry that still reads left to right
-  const wide = useMedia("(min-width: 1180px)");
-  const mid = useMedia("(min-width: 780px)");
-  const columns = useMemo(() => {
-    const n = wide ? 3 : mid ? 2 : 1;
-    const cols = Array.from({ length: n }, () => ({ h: 0, items: [] as Array<{ d: (typeof DEPARTMENTS)[number]; members: AgentView[] }> }));
-    for (const d of DEPARTMENTS) {
-      const members = list.filter((a) => a.department === d.id);
-      if (!members.length) continue;
-      const h = 0.4 + members.reduce((s, a) => s + 1 + 0.12 * (a.learnedRules.length + a.instructions.length), 0);
-      const c = cols.reduce((best, x) => (x.h < best.h - 0.01 ? x : best), cols[0]!);
-      c.items.push({ d, members });
-      c.h += h;
+  // every learned rule once, with the people who follow it
+  const rules = useMemo(() => {
+    const m = new Map<string, AgentView["learnedRules"][number] & { agents: string[] }>();
+    for (const a of list) for (const r of a.learnedRules) {
+      const have = m.get(r.id);
+      if (have) have.agents.push(a.id); else m.set(r.id, { ...r, agents: [a.id] });
     }
-    return cols.map((c) => c.items);
-  }, [list, wide, mid]);
+    return [...m.values()];
+  }, [list]);
 
   const patch = async (id: string, p: AgentPatch) => {
     const before = agents;
@@ -92,168 +83,190 @@ export default function TeamPage() {
 
   return (
     <div className="team-page">
-      <header className="page-head">
-        <div>
-          <h1 className="page-title">Your team</h1>
-          <p className="page-lede">
-            {AGENTS.length} staff in {DEPARTMENTS.length} departments. Switch a desk off or to light, set how much it may do
-            on its own, or tell the whole team something once. Every change keeps the old setting in the brain, so nothing
-            is lost.
-          </p>
-        </div>
-        <dl className="kpis" aria-label="The team at a glance">
-          <div className="kpi"><dt>On</dt><dd className="num">{team.data ? counts.on : "–"}</dd></div>
-          <div className="kpi"><dt>Light</dt><dd className="num">{team.data ? counts.light : "–"}</dd></div>
-          <div className="kpi"><dt>Off</dt><dd className="num">{team.data ? counts.off : "–"}</dd></div>
-          <div className="kpi"><dt>Learned</dt><dd className="num">{team.data ? counts.rules : "–"}</dd><p>rules, from your edits</p></div>
-        </dl>
+      <header className="tm-head">
+        <h1 className="page-title">Your team</h1>
+        <p className="page-lede">
+          {team.data ? <><b>{working} of {list.length}</b> are working for you. </> : null}
+          Tell them what you want in your own words, or open anyone to change how they work.
+        </p>
       </header>
 
-      <TellYourTeam tenantId={tenant.id} onApplied={() => { team.reload(); changed(); }} />
+      <TellYourTeam tenantId={tenant.id} prefill={prefill} onApplied={() => { team.reload(); changed(); }} />
 
-      {team.error && <p className="notice notice-bad" role="alert">The team did not load: {team.error}</p>}
+      {team.error && <p className="notice notice-bad" role="alert">Your team did not load: {team.error}</p>}
       {!team.data && team.loading ? (
         <span className="skeleton" style={{ display: "block", height: 420 }} />
       ) : (
-        <div className="depts" style={{ ["--cols" as string]: columns.length }}>
-          {columns.map((col, i) => (
-            <div key={i} className="dept-col">
-              {col.map(({ d, members }) => (
-                <section key={d.id} className="dept" style={{ ["--hue" as string]: d.hue }} aria-labelledby={`dept-${d.id}`}>
-                  <header className="dept-head">
-                    <h2 id={`dept-${d.id}`} className="dept-name">{d.name}</h2>
-                    <p className="dept-blurb">{d.blurb}</p>
-                  </header>
-                  {members.map((a) => <AgentCard key={a.id} a={a} onPatch={patch} onRetire={retire} />)}
-                </section>
-              ))}
-            </div>
-          ))}
-        </div>
+        <section className="tm-list-wrap" aria-label="The people on your team">
+          <ul className="tm-list">
+            {list.map((a) => (
+              <PersonRow
+                key={a.id}
+                a={a}
+                open={openId === a.id}
+                onToggle={() => setOpenId(openId === a.id ? null : a.id)}
+                onPatch={patch}
+                onRetire={retire}
+                onTell={() => setPrefill({ text: `${a.name}, `, n: Date.now() })}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {team.data && (
+        <Reveal label="Things your team learned from your edits" summary={rules.length ? String(rules.length) : "none yet"}>
+          {rules.length ? (
+            <ul className="tm-rules">
+              {rules.map((r) => <RuleRow key={r.id} rule={r} onRetire={retire} />)}
+            </ul>
+          ) : (
+            <p className="tm-empty">Nothing yet. Change a draft before you approve it, and what you changed shows up here, so the next draft gets it right.</p>
+          )}
+        </Reveal>
       )}
     </div>
   );
 }
 
-// ---------------------------------------------------------------- one desk
+// ---------------------------------------------------------------- one person
 
-function AgentCard({ a, onPatch, onRetire }: { a: AgentView; onPatch: (id: string, p: AgentPatch) => Promise<void>; onRetire: (ruleId: string) => Promise<void> }) {
-  const def = agentDef(a.id);
+function PersonRow({ a, open, onToggle, onPatch, onRetire, onTell }: {
+  a: AgentView; open: boolean; onToggle: () => void;
+  onPatch: (id: string, p: AgentPatch) => Promise<void>; onRetire: (ruleId: string) => Promise<void>; onTell: () => void;
+}) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const ro = getPublicMode();
+  const uid = useId();
   const chief = a.id === "chief-of-staff";
   const mode: AgentMode = a.enabled ? a.mode : "off";
+  const agentDef = AGENTS.find((d) => d.id === a.id);
   const run = async (p: AgentPatch) => {
     setBusy(true);
     setError(null);
     try { await onPatch(a.id, p); } catch (e) { setError((e as Error).message || "That did not save. Try again."); } finally { setBusy(false); }
   };
   const level = AUTONOMY[Math.max(0, Math.min(3, a.autonomy))]!;
+  const status = mode === "off"
+    ? `Resting${a.statusNote ? ` ${a.statusNote}` : ""}`
+    : a.statusNote ?? (mode === "light" ? "Working with a light touch" : plain(agentDef?.persona));
+  const refuse = chief ? `${a.name} can't rest: ${a.name} plans every request and writes every answer.` : undefined;
 
   return (
-    <article className={`agent-card mode-${mode}`} aria-labelledby={`ac-${a.id}`}>
-      <header className="ac-head">
-        <span className="ac-portrait" aria-hidden="true"><img src={avatarUrl(a.id, 4)} width={48} height={48} alt="" /></span>
-        <div className="ac-id">
-          <h3 id={`ac-${a.id}`} className="ac-name">{a.name}</h3>
-          <p className="ac-title">{a.title}</p>
-        </div>
-        <div className="seg ac-mode" role="radiogroup" aria-label={`${a.name}: on, light or off`}>
-          {MODES.map((m) => {
-            const refuse = chief && m.id === "off";
-            return (
-              <button
-                key={m.id}
-                type="button"
-                role="radio"
-                aria-checked={mode === m.id}
-                className={`seg-btn${mode === m.id ? " is-on" : ""}${m.id === "off" ? " is-off-btn" : ""}`}
-                disabled={busy || ro || refuse}
-                title={refuse ? `${a.name} can't be switched off: the Chief of Staff plans every request and writes every answer.` : m.hint}
-                onClick={() => mode !== m.id && run({ mode: m.id })}
-              >
-                {m.label}
-              </button>
-            );
-          })}
-        </div>
-      </header>
+    <li className={`tm-row mode-${mode}${open ? " is-open" : ""}`}>
+      <div className="tm-line">
+        <button type="button" className="tm-open" aria-expanded={open} aria-controls={`${uid}-detail`} onClick={onToggle}>
+          <AgentAvatar id={a.id} size={40} />
+          <span className="tm-id">
+            <span className="tm-name">{a.name}<span className="tm-role">{a.title}</span></span>
+            <span className="tm-status">{status}</span>
+          </span>
+          <Icon name="chevron-right" size={16} className="tm-chevron" />
+        </button>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={mode !== "off"}
+          aria-label={`${a.name} is ${mode === "off" ? "resting" : "working"}. Switch ${mode === "off" ? "on" : "off"}`}
+          title={refuse ?? (mode === "off" ? `Switch ${a.name} on` : `Let ${a.name} rest`)}
+          className="tm-switch"
+          disabled={busy || ro || (chief && mode !== "off")}
+          onClick={() => run({ mode: mode === "off" ? "full" : "off" })}
+        >
+          <span className="tm-switch-knob" />
+        </button>
+      </div>
 
-      {!a.enabled && (
-        <p className="ac-off-note"><Icon name="pause" size={14} /> Switched off{a.statusNote ? `: ${a.statusNote}` : ""}. {a.name} sits out of every plan until you switch the desk back on.</p>
+      {open && (
+        <div className="tm-detail" id={`${uid}-detail`}>
+          <section className="tm-block" aria-labelledby={`${uid}-mode`}>
+            <h3 id={`${uid}-mode`} className="tm-label">How busy {a.name} is</h3>
+            <div className="tm-choices" role="radiogroup" aria-labelledby={`${uid}-mode`}>
+              {MODES.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={mode === m.id}
+                  className={`tm-choice${mode === m.id ? " is-on" : ""}`}
+                  disabled={busy || ro || (chief && m.id === "off")}
+                  title={chief && m.id === "off" ? refuse : m.hint}
+                  onClick={() => mode !== m.id && run({ mode: m.id })}
+                >{m.label}</button>
+              ))}
+            </div>
+            <p className="tm-help">{MODES.find((m) => m.id === mode)?.hint}.</p>
+          </section>
+
+          <section className="tm-block" aria-labelledby={`${uid}-aut`}>
+            <h3 id={`${uid}-aut`} className="tm-label">How much {a.name} does without asking</h3>
+            <div className="tm-choices" role="radiogroup" aria-labelledby={`${uid}-aut`}>
+              {AUTONOMY.map((l) => (
+                <button
+                  key={l.level}
+                  type="button"
+                  role="radio"
+                  aria-checked={a.autonomy === l.level}
+                  className={`tm-choice${a.autonomy === l.level ? " is-on" : ""}`}
+                  disabled={busy || ro || !a.enabled}
+                  title={l.long}
+                  onClick={() => a.autonomy !== l.level && run({ autonomy: l.level })}
+                >{l.short}</button>
+              ))}
+            </div>
+            <p className="tm-help">{level.long}</p>
+          </section>
+
+          <section className="tm-block" aria-labelledby={`${uid}-ins`}>
+            <h3 id={`${uid}-ins`} className="tm-label">What you told {a.name}</h3>
+            {a.instructions.length ? (
+              <ul className="tm-instructions">
+                {a.instructions.map((i) => (
+                  <li key={i.id}>
+                    <span>{i.text}{i.channel && <span className="tm-channel">{i.channel}</span>}</span>
+                    {i.at && <span className="tm-when">{fmtDate(new Date(i.at).toISOString())}</span>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="tm-help">Nothing yet.</p>
+            )}
+            {!ro && <button type="button" className="btn btn-ghost btn-sm tm-tell" onClick={onTell}>Tell {a.name} something</button>}
+          </section>
+
+          <Reveal label={`Things ${a.name} learned from your edits`} summary={a.learnedRules.length ? String(a.learnedRules.length) : "none yet"}>
+            {a.learnedRules.length ? (
+              <ul className="tm-rules">
+                {a.learnedRules.map((r) => <RuleRow key={r.id} rule={{ ...r, agents: [a.id] }} onRetire={onRetire} compact />)}
+              </ul>
+            ) : (
+              <p className="tm-empty">Nothing yet. Change one of {a.name}’s drafts before you approve it, and the change lands here.</p>
+            )}
+          </Reveal>
+
+          <p className="tm-foot">
+            {plural(a.stats.requests, "request", "requests")} handled
+            {a.stats.findings > 0 && <> · {plural(a.stats.findings, "thing", "things")} noticed</>}
+            {a.stats.proposals > 0 && <> · {plural(a.stats.proposals, "idea", "ideas")} suggested</>}
+          </p>
+          {!a.enabled && <p className="tm-help">While resting, {a.name} sits out of every plan until you switch them back on.</p>}
+          {error && <p className="notice notice-bad" role="alert">{error}</p>}
+        </div>
       )}
-      {a.enabled && a.statusNote && <p className="ac-status-note">{a.statusNote}</p>}
-      {a.enabled && !a.statusNote && <p className="ac-persona">{def?.persona}</p>}
-
-      <div className="ac-row">
-        <p className="ac-label" id={`aut-${a.id}`}>On its own</p>
-        <div className="ac-autonomy" role="radiogroup" aria-labelledby={`aut-${a.id}`}>
-          {AUTONOMY.map((l) => (
-            <button
-              key={l.level}
-              type="button"
-              role="radio"
-              aria-checked={a.autonomy === l.level}
-              className={`aut-step${a.autonomy >= l.level ? " is-reached" : ""}${a.autonomy === l.level ? " is-on" : ""}`}
-              disabled={busy || ro || !a.enabled}
-              title={l.long}
-              onClick={() => a.autonomy !== l.level && run({ autonomy: l.level })}
-            >
-              <span className="aut-level">L{l.level}</span>
-              <span className="aut-name">{l.short}</span>
-            </button>
-          ))}
-        </div>
-        <p className="ac-help">{level.long}</p>
-      </div>
-
-      <div className="ac-block">
-        <p className="ac-label">Your instructions</p>
-        {a.instructions.length ? (
-          <ul className="ac-instructions">
-            {a.instructions.map((i) => (
-              <li key={i.id}>
-                <Icon name="chat" size={14} />
-                <span>{i.text}{i.channel && <span className="ac-channel">{i.channel}</span>}</span>
-                {i.at && <span className="ac-when">{fmtDate(new Date(i.at).toISOString())}</span>}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="ac-empty">None yet. Start a line with “{a.name}, …” above.</p>
-        )}
-      </div>
-
-      <div className="ac-block">
-        <p className="ac-label">Learned from your edits {a.learnedRules.length > 0 && <span className="num">· {a.learnedRules.length}</span>}</p>
-        {a.learnedRules.length ? (
-          <ul className="ac-rules">
-            {a.learnedRules.map((r) => <RuleRow key={r.id} rule={{ ...r, agents: [a.id] }} onRetire={onRetire} compact />)}
-          </ul>
-        ) : (
-          <p className="ac-empty">Nothing yet. Edit one of {a.name}’s drafts before approving it, and the change lands here.</p>
-        )}
-      </div>
-
-      <footer className="ac-foot">
-        <span><b className="num">{a.stats.requests}</b> {a.stats.requests === 1 ? "request" : "requests"}</span>
-        <span><b className="num">{a.stats.findings}</b> {a.stats.findings === 1 ? "finding" : "findings"}</span>
-        {a.stats.proposals > 0 && <span><b className="num">{a.stats.proposals}</b> {a.stats.proposals === 1 ? "proposal" : "proposals"}</span>}
-      </footer>
-      {error && <p className="notice notice-bad" role="alert">{error}</p>}
-    </article>
+    </li>
   );
 }
 
 // ---------------------------------------------------------------- "Tell your team"
 
-function TellYourTeam({ tenantId, onApplied }: { tenantId: string; onApplied: () => void }) {
+function TellYourTeam({ tenantId, prefill, onApplied }: { tenantId: string; prefill: { text: string; n: number } | null; onApplied: () => void }) {
   const [text, setText] = useState("");
   const [preview, setPreview] = useState<DirectivePreview | null>(null);
   const [busy, setBusy] = useState<null | "preview" | "apply">(null);
   const [error, setError] = useState<string | null>(null);
   const [applied, setApplied] = useState<{ n: number; errors: string[] } | null>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
   const ro = getPublicMode();
   useEffect(() => { setText(""); setPreview(null); setApplied(null); setError(null); }, [tenantId]);
 
@@ -265,6 +278,19 @@ function TellYourTeam({ tenantId, onApplied }: { tenantId: string; onApplied: ()
     if (params.get("preview") === "1") void doPreview(seeded);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seeded]);
+
+  // "Tell Tara something" in a person's row: start the sentence here and put the cursor at its end
+  useEffect(() => {
+    if (!prefill) return;
+    setText(prefill.text);
+    setPreview(null);
+    const el = field.current;
+    if (el) {
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      el.focus({ preventScroll: true });
+      requestAnimationFrame(() => el.setSelectionRange(prefill.text.length, prefill.text.length));
+    }
+  }, [prefill]);
 
   async function doPreview(t = text) {
     if (!t.trim()) return;
@@ -293,41 +319,38 @@ function TellYourTeam({ tenantId, onApplied }: { tenantId: string; onApplied: ()
   const changes = preview?.diff.filter((d) => d.op !== "same").length ?? 0;
 
   return (
-    <section className="tell panel" aria-labelledby="tell-title">
-      <div className="tell-in">
-        <div className="tell-copy">
-          <h2 id="tell-title" className="tell-title">Tell your team</h2>
-          <p className="tell-lede">Say it the way you would to a person. You see exactly what changes before anything is saved.</p>
-        </div>
-        <form className="tell-form" onSubmit={onSubmit}>
-          <label htmlFor="tell-text" className="visually-hidden">Your instruction</label>
-          <textarea
-            id="tell-text"
-            className="field tell-field"
-            rows={2}
-            value={text}
-            placeholder="No emojis on LinkedIn; switch Arjun off till the new site launches"
-            onChange={(e) => { setText(e.target.value); if (preview) setPreview(null); }}
-            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void doPreview(); } }}
-            disabled={ro}
-          />
-          <div className="tell-actions">
-            <div className="tell-examples" aria-label="Examples">
-              {EXAMPLES.map((x) => (
-                <button key={x} type="button" className="suggest-chip" onClick={() => { setText(x); setPreview(null); }} disabled={ro}>{x}</button>
-              ))}
-            </div>
-            <button type="submit" className="btn" disabled={!text.trim() || busy !== null || ro}>
-              {busy === "preview" ? "Reading…" : "Preview changes"}
-            </button>
+    <section className="tell" aria-labelledby="tell-title">
+      <h2 id="tell-title" className="tell-title">Tell your team</h2>
+      <p className="tell-lede">Say it the way you would to a person. You will see what changes before anything is saved.</p>
+      <form className="tell-form" onSubmit={onSubmit}>
+        <label htmlFor="tell-text" className="visually-hidden">What do you want your team to know or do?</label>
+        <textarea
+          id="tell-text"
+          ref={field}
+          className="field tell-field"
+          rows={3}
+          value={text}
+          placeholder="No emojis on LinkedIn, and let Arjun rest till the new site launches"
+          onChange={(e) => { setText(e.target.value); if (preview) setPreview(null); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void doPreview(); } }}
+          disabled={ro}
+        />
+        <div className="tell-actions">
+          <div className="tell-examples" aria-label="Examples">
+            {EXAMPLES.map((x) => (
+              <button key={x} type="button" className="suggest-chip" onClick={() => { setText(x); setPreview(null); }} disabled={ro}>{x}</button>
+            ))}
           </div>
-        </form>
-      </div>
-      {ro && <p className="notice">This is the public demo: settings are read-only.</p>}
-      {error && <p className="notice notice-bad" role="alert">{error}</p>}
+          <button type="submit" className="btn btn-gold tell-go" disabled={!text.trim() || busy !== null || ro}>
+            {busy === "preview" ? "Reading…" : "Preview changes"}
+          </button>
+        </div>
+      </form>
+      {ro && <p className="notice tell-note">This is the public demo, so settings are view-only.</p>}
+      {error && <p className="notice notice-bad tell-note" role="alert">{error}</p>}
       {applied && (
-        <p className="notice notice-ok" role="status">
-          <Icon name="check" size={14} /> Applied {applied.n} {applied.n === 1 ? "change" : "changes"}. The office and the next request follow {applied.n === 1 ? "it" : "them"} now.
+        <p className="notice notice-ok tell-note" role="status">
+          <Icon name="check" size={14} /> Done. {plural(applied.n, "change", "changes")} saved, and your team {applied.n === 1 ? "follows it" : "follows them"} from now on.
           {applied.errors.length > 0 && <> Not applied: {applied.errors.join("; ")}</>}
         </p>
       )}
@@ -339,12 +362,7 @@ function TellYourTeam({ tenantId, onApplied }: { tenantId: string; onApplied: ()
 function DiffCard({ preview, changes, busy, onApply, onDiscard }: { preview: DirectivePreview; changes: number; busy: boolean; onApply: () => void; onDiscard: () => void }) {
   return (
     <div className="diff-card" aria-labelledby="diff-title">
-      <div className="diff-head">
-        <h3 id="diff-title" className="diff-title">{changes ? `${changes} ${changes === 1 ? "change" : "changes"} to review` : "Nothing would change"}</h3>
-        <span className="diff-parser" title={preview.parser === "rules" ? "Understood by Allevia's rules, no language model" : "The rules read part of it; Haiku read the rest, and every change was checked against your team"}>
-          {preview.parser === "rules" ? "Read by rules" : "Rules + Haiku"}
-        </span>
-      </div>
+      <h3 id="diff-title" className="diff-title">{changes ? `${plural(changes, "change", "changes")} to check` : "Nothing would change"}</h3>
       <p className="diff-said">“{preview.text}”</p>
       {preview.diff.length > 0 && (
         <ol className="diff-lines">
@@ -353,9 +371,9 @@ function DiffCard({ preview, changes, busy, onApply, onDiscard }: { preview: Dir
       )}
       {preview.unparsed.length > 0 && (
         <div className="diff-unparsed" role="note">
-          <p><Icon name="warn" size={14} /> Not understood, so nothing changes for:</p>
+          <p><Icon name="warn" size={14} /> We did not understand this part, so nothing changes for it:</p>
           <ul>{preview.unparsed.map((u) => <li key={u}>“{u}”</li>)}</ul>
-          <p className="diff-tip">Try naming the desk (“Tara, …”) or saying on, off, light, or always / never.</p>
+          <p className="diff-tip">Try starting with a name (“Tara, …”) or saying on, off, light, or always / never.</p>
         </div>
       )}
       {preview.notes.length > 0 && (
@@ -365,11 +383,17 @@ function DiffCard({ preview, changes, busy, onApply, onDiscard }: { preview: Dir
       )}
       <div className="diff-actions">
         <button type="button" className="btn btn-gold" onClick={onApply} disabled={busy || changes === 0}>
-          <Icon name="check" size={16} /> {busy ? "Applying…" : changes ? `Apply ${changes} ${changes === 1 ? "change" : "changes"}` : "Apply"}
+          <Icon name="check" size={16} /> {busy ? "Saving…" : changes ? `Save ${changes === 1 ? "this change" : `these ${changes} changes`}` : "Save"}
         </button>
-        <button type="button" className="btn btn-quiet" onClick={onDiscard} disabled={busy}>Discard</button>
-        <p className="diff-foot">Saved as your words, with the old settings kept. <Link to="/brain">See it in the brain</Link> after.</p>
+        <button type="button" className="btn btn-quiet" onClick={onDiscard} disabled={busy}>Never mind</button>
+        <p className="diff-foot">Your old settings are kept, so nothing is lost.</p>
       </div>
+      <Reveal label="Show how this was read" className="diff-how">
+        <p className="diff-parser">{preview.parser === "rules" ? "Read with fixed rules, no language model." : "Fixed rules read part of it and a language model read the rest. Every change was checked against your team."}</p>
+        <ul className="diff-targets">
+          {preview.diff.map((d) => <li key={`${d.patch}-${d.target}`}><code>{d.target}</code></li>)}
+        </ul>
+      </Reveal>
     </div>
   );
 }
@@ -397,7 +421,6 @@ function DiffLine({ d }: { d: DirectiveDiffLine }) {
           {d.before !== undefined && <><del>{d.before}</del><Icon name="send" size={13} className="diff-arrow" /></>}
           <ins>{d.after}</ins>
         </p>
-        <code className="diff-target">{d.target}</code>
       </div>
     </li>
   );
