@@ -61,7 +61,7 @@ export interface StudioResult {
   notices: string[];
 }
 
-const CHECKS_NA: TurnChecks = { citationsValid: true, invalidCitations: [], numbersGrounded: true, ungroundedNumbers: [], simulatedDisclosed: true, freshnessDisclosed: true };
+export const CHECKS_NA: TurnChecks = { citationsValid: true, invalidCitations: [], numbersGrounded: true, ungroundedNumbers: [], simulatedDisclosed: true, freshnessDisclosed: true };
 
 export function assessContextFor(ctx: StudioContext, note: string, a: Pick<AssetRecord, "w" | "h">): AssessContext {
   return {

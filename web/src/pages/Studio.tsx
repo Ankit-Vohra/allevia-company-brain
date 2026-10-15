@@ -1,6 +1,9 @@
 // Studio (product design §6, §8): drop a phone photo and a line about it. Tara looks at it (her boxes are drawn on the
-// photo), the studio straightens and grades it (variant A, local) and a generative edit relights it (variant B, AI),
-// Nisha checks both against the original, Dev holds the caption to the brand's voice, and the owner approves one.
+// photo), the studio straightens and grades it (option A, free and local) and the AI editor restyles it (option B, quoted
+// and shown in Studio credits), Nisha checks both against the original, Dev holds the caption to the brand's voice, and the
+// owner approves one. Under the options the owner can ask for a change in their own words (light and colour are free;
+// "make it festive", "a different background", "make this into an ad saying ..." use the AI editor), or try again when
+// Nisha held an AI edit back. One setting: "Blur people's faces in my content" (off by default).
 // The run streams as AgentEvents through the shared run store, so the office shows the content desks at work too.
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useNavigate } from "react-router";
@@ -43,7 +46,11 @@ interface Assessment {
   subject: string; angle: string; lighting: string; clutter: string; resolution: string; verdict: string; coaching?: string;
   salvageable: string[]; locks: string[]; story: string; quality: { tiltDeg: number; exposure: string; cast: string; sharpness: string };
 }
-interface Payload { title: string; body: string; studio: { recommended: string; altText: string; credits: number; privacy?: { people: boolean; note: string }; variants: { id: string; label: string; badge: string; note: string; aiEdited: boolean }[] } }
+interface PayloadVariant { id: string; label: string; badge: string; note: string; aiEdited: boolean; credits?: number; request?: string; canRetry?: boolean }
+interface Payload { title: string; body: string; studio: { recommended: string; altText: string; credits: number; notices?: string[]; privacy?: { people: boolean; note: string }; variants: PayloadVariant[] } }
+
+const creditWords = (n: number): string => `about ${Number.isInteger(n) ? n : n.toFixed(1)} Studio credit${n === 1 ? "" : "s"}`;
+const CHANGE_IDEAS = ["Make it warmer", "Make it festive", "A different background", "Make it an ad"];
 
 const parse = <T,>(v: unknown): T | null => { try { return typeof v === "string" ? (JSON.parse(v) as T) : null; } catch { return null; } };
 const assetSrc = (t: string, id: string, w: number) => `/api/${encodeURIComponent(t)}/assets/${encodeURIComponent(id)}?w=${w}`;
@@ -70,6 +77,12 @@ export default function StudioPage() {
   const [approved, setApproved] = useState<{ contentId: string; label: string } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [showBoxes, setShowBoxes] = useState(true);
+  const [settings, setSettings] = useState<{ blurFaces: boolean; language: string } | null>(null);
+  const [changeText, setChangeText] = useState("");
+  const [changing, setChanging] = useState(false);
+  const [changeLog, setChangeLog] = useState<string[]>([]);
+  const [changeNote, setChangeNote] = useState<string | null>(null);
+  const [refresh, setRefresh] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const nav = useNavigate();
 
@@ -78,14 +91,16 @@ export default function StudioPage() {
   }, [tenant.id]);
   useEffect(() => { setRunKey(undefined); setApproved(null); setNodes({}); void loadLatest(); }, [tenant.id, loadLatest]);
   useEffect(() => { let on = true; api.studioSample(tenant.id).then((s) => { if (on) setSample(s); }); return () => { on = false; }; }, [tenant.id]);
+  useEffect(() => { let on = true; api.studioSettings(tenant.id).then((x) => { if (on) setSettings(x); }).catch(() => undefined); return () => { on = false; }; }, [tenant.id]);
 
   const events = record?.events ?? latest?.events ?? [];
   const f = useMemo(() => fold(events), [events]);
   const running = record?.status === "running";
 
   // the nodes behind the events: the assessment, each variant's treatment and Nisha's numbers, the card
-  const ids = useMemo(() => [f.originalId, ...f.variants, f.proposal?.approvalId].filter((x): x is string => !!x), [f.originalId, f.variants, f.proposal?.approvalId]);
-  const idsKey = ids.join("|");
+  const [cardVariantIds, setCardVariantIds] = useState<string[]>([]);
+  const ids = useMemo(() => [...new Set([f.originalId, ...f.variants, ...cardVariantIds, f.proposal?.approvalId].filter((x): x is string => !!x))], [f.originalId, f.variants, cardVariantIds, f.proposal?.approvalId]);
+  const idsKey = `${ids.join("|")}#${refresh}`;
   useEffect(() => {
     if (!ids.length || running) return;
     let on = true;
@@ -102,8 +117,14 @@ export default function StudioPage() {
   const payload = useMemo(() => parse<Payload>(rawPayload), [rawPayload]);
   const approvalStatus = String(nodes[f.proposal?.approvalId ?? ""]?.props?.status ?? latest?.approval?.status ?? "pending");
   useEffect(() => {
-    if (payload) { setCaption((c) => c || payload.body); setChosen((c) => c ?? (payload.studio.recommended || null)); }
+    if (payload) {
+      setCaption((c) => c || payload.body);
+      setChosen((c) => c ?? (payload.studio.recommended || null));
+      setCardVariantIds(payload.studio.variants.map((v) => v.id));
+    }
   }, [payload]);
+  // the options as the card holds them (a reload shows the ones made later too); while the run is live, the ones streamed so far
+  const shownVariants = payload?.studio.variants.length ? payload.studio.variants.map((v) => v.id) : f.variants;
   const decided = approved || (approvalStatus !== "pending" && f.proposal);
   const contentId = approved?.contentId ?? latest?.approval?.contentId ?? null;
   const isSample = !!sample && (record ? record.question === `Studio: ${sample.note}` : latest?.note === sample.note);
@@ -146,6 +167,34 @@ export default function StudioPage() {
     }
   };
 
+  const toggleBlur = async (on: boolean) => {
+    try { setSettings(await api.studioSetSettings(tenant.id, { blurFaces: on })); } catch (e) { setFailure((e as Error).message); }
+  };
+
+  // A change in the owner's words (or "try again" on a held-back AI edit): streamed, then the card is read again.
+  const askChange = async (instruction: string, retryOf?: string) => {
+    if (!f.proposal || (!instruction.trim() && !retryOf) || changing) return;
+    setChanging(true); setChangeLog([]); setChangeNote(null); setFailure(null);
+    let made: { id: string; ok: boolean } | null = null;
+    try {
+      await api.studioRevise(tenant.id, { approvalId: f.proposal.approvalId, ...(retryOf ? { retryOf } : { instruction: instruction.trim() }) }, (e) => {
+        if (e.type === "agent_status") setChangeLog((l) => [...l.slice(-4), e.text]);
+        else if (e.type === "asset" && e.kind === "variant") made = { id: e.assetId, ok: false };
+        else if (e.type === "review" && made) made = { ...made, ok: e.verdict === "ok" };
+        else if (e.type === "final") setChangeNote(e.answer);
+        else if (e.type === "error") setChangeNote(e.message);
+      });
+      setChangeText("");
+      setRefresh((n) => n + 1);
+      const m = made as { id: string; ok: boolean } | null;
+      if (m?.ok) setChosen(m.id);
+    } catch (e) {
+      setFailure((e as Error).message);
+    } finally {
+      setChanging(false);
+    }
+  };
+
   const hasRun = !!f.originalId;
   return (
     <div className="studio-page">
@@ -153,9 +202,14 @@ export default function StudioPage() {
         <p className="studio-eyebrow"><Icon name="sparkle" size={14} /> Content Studio</p>
         <h1 className="page-title">A phone photo, made into a post</h1>
         <p className="studio-lede">
-          Tara reads the photo and marks what must not change. The studio straightens and grades it, a generative edit relights it,
-          and Nisha checks both against the original before you see them.
+          Tara reads the photo and marks what must not change. You get two options: a free clean-up, and an AI edit styled for your
+          business (the price is said first). Nisha checks both against the original before you see them.
         </p>
+        <label className="studio-setting">
+          <input type="checkbox" checked={!!settings?.blurFaces} disabled={!settings || !live || getPublicMode()} onChange={(e) => void toggleBlur(e.target.checked)} />
+          <span>Blur people's faces in my content</span>
+          <small>Off: people in your photos are kept as they are.</small>
+        </label>
         {hasRun && !running && (
           <button type="button" className="btn btn-ghost btn-sm studio-new" onClick={() => {
             setLatest(null); setRunKey(undefined); setFile(null); setPreview(null); setNote(""); setApproved(null); setNodes({}); setCaption(""); setChosen(null);
@@ -276,38 +330,65 @@ export default function StudioPage() {
             <p className="studio-stop" role="status"><Icon name="warn" size={16} /> {f.answer}</p>
           )}
 
-          {f.variants.length > 0 && (
+          {shownVariants.length > 0 && (
             <div className="variants" role="radiogroup" aria-label="Pick the version to post">
-              {f.variants.map((id) => {
+              {shownVariants.map((id) => {
                 const props = nodes[id]?.props ?? {};
                 const label = String(props.label ?? "");
                 const card = payload?.studio.variants.find((v) => v.id === id);
                 const review = f.reviews[id];
                 const badge = card?.badge ?? (review ? (review.verdict === "ok" ? "unchanged" : "changed") : "pending");
                 const ok = badge === "unchanged";
-                const ai = props.aiEdited === true;
+                const ai = card?.aiEdited ?? props.aiEdited === true;
+                const credits = card?.credits ?? (typeof props.hfCredits === "number" ? props.hfCredits : undefined);
+                const pick = payload?.studio.recommended === id;
                 return (
                   <label key={id} className={`variant${chosen === id ? " is-chosen" : ""}${ok ? "" : " is-held"}`}>
                     <input type="radio" name="variant" value={id} checked={chosen === id} disabled={!ok || !!decided} onChange={() => setChosen(id)} />
-                    <span className="variant-img"><img src={assetSrc(tenant.id, id, 720)} alt={`Variant ${label}`} loading="lazy" /></span>
+                    <span className="variant-img"><img src={assetSrc(tenant.id, id, 720)} alt={`Option ${label}`} loading="lazy" /></span>
                     <span className="variant-head">
                       <b>{label || "…"}</b>
-                      <span>{ai ? `Generative edit${props.recorded === true ? " · Higgsfield, pre-recorded" : ""}` : "Local edit · $0"}</span>
+                      <span>{ai ? `AI edit${props.recorded === true ? " · made earlier" : credits !== undefined ? ` · ${creditWords(credits)}` : ""}` : "Free clean-up · no credits"}</span>
                       {ai && <span className="ai-tag">AI-edited</span>}
+                      {pick && <span className="pick-tag">Our pick</span>}
                     </span>
                     <span className={`badge badge-${badge}`}>
                       <Icon name={ok ? "check" : badge === "pending" ? "clock" : "x"} size={14} />
-                      {ok ? "Building unchanged" : badge === "pending" ? "Nisha is checking" : badge === "unchecked" ? "Not checked" : "Changed"}
+                      {ok ? "Building unchanged" : badge === "pending" ? "Nisha is checking" : badge === "unchecked" ? "Not checked" : "Held back"}
                     </span>
-                    {review && <span className="variant-note">{review.note.replace(/^Building unchanged · /, "").replace(/^Changed: /, "")}</span>}
+                    {card?.request && <span className="variant-treat">You asked: {card.request}</span>}
+                    {(review || card?.note) && <span className="variant-note">{(card?.note ?? review?.note ?? "").replace(/^Building unchanged · /, "").replace(/^Changed: /, "")}</span>}
                     {props.structure !== undefined && (
                       <span className="variant-nums">edges {Number(props.structure).toFixed(2)} · dHash {String(props.dhashDistance)}/64</span>
                     )}
                     {props.treatment !== undefined && <span className="variant-treat">{String(props.treatment)}</span>}
+                    {card?.canRetry && !decided && (
+                      <button type="button" className="btn btn-ghost btn-sm" disabled={changing || getPublicMode()} onClick={(e) => { e.preventDefault(); void askChange("", label); }}>
+                        Try again{credits !== undefined ? ` (${creditWords(credits)})` : ""}
+                      </button>
+                    )}
                   </label>
                 );
               })}
             </div>
+          )}
+
+          {f.done && payload && !decided && (
+            <section className="card change" aria-label="Ask for a change">
+              <header className="card-head"><div><b>Want it different?</b><span>Say it in your own words. Light and colour are free; bigger changes use the AI editor and the price is shown.</span></div></header>
+              <div className="change-ideas">
+                {CHANGE_IDEAS.map((idea) => (
+                  <button key={idea} type="button" className="btn btn-quiet btn-sm" disabled={changing} onClick={() => setChangeText(idea === "Make it an ad" ? "Make this into an ad saying " : idea)}>{idea}</button>
+                ))}
+              </div>
+              <form className="change-row" onSubmit={(e) => { e.preventDefault(); void askChange(changeText); }}>
+                <input type="text" value={changeText} maxLength={400} disabled={changing || getPublicMode()} placeholder="For example: make it festive, or remove the pole"
+                  aria-label="What would you like changed?" onChange={(e) => setChangeText(e.target.value)} />
+                <button type="submit" className="btn btn-gold btn-sm" disabled={changing || !changeText.trim() || getPublicMode()}>{changing ? "Working…" : "Make it"}</button>
+              </form>
+              {changing && changeLog.length > 0 && <ol className="worklog" aria-live="polite">{changeLog.map((l, i) => <li key={i}><span>{l}</span></li>)}</ol>}
+              {changeNote && !changing && <p className="studio-note" role="status">{changeNote}</p>}
+            </section>
           )}
 
           {f.done && payload && (
@@ -322,6 +403,7 @@ export default function StudioPage() {
               </label>
               <p className="alt"><b>Alt text</b> {payload.studio.altText}</p>
               {payload.studio.privacy && <p className="studio-stop" role="note"><Icon name="warn" size={16} /> {payload.studio.privacy.note}</p>}
+              {(payload.studio.notices ?? []).map((n) => <p key={n} className="studio-note" role="note">{n}</p>)}
               {decided ? (
                 <p className="approved" role="status">
                   <Icon name="check" size={16} /> Approved{approved?.label ? ` variant ${approved.label}` : ""}: saved as a draft post, not published.
@@ -332,7 +414,7 @@ export default function StudioPage() {
                   <button type="button" className="btn btn-gold" disabled={!chosen || approving || getPublicMode()} onClick={approve}>
                     {approving ? "Saving…" : `Approve variant ${payload.studio.variants.find((v) => v.id === chosen)?.label ?? ""}`}
                   </button>
-                  <span className="credit">Uses {payload.studio.credits} Studio credit, only on approval</span>
+                  <span className="credit">Saved as a draft: nothing is posted until you do it</span>
                 </div>
               )}
               {failure && <p className="studio-error" role="alert">{failure}</p>}

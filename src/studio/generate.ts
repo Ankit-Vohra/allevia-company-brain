@@ -158,7 +158,7 @@ export async function generateVariant(
 
   let retryQuote: string | undefined;
   if (canRetry && deps.engine.quote) {
-    try { retryQuote = (await deps.engine.quote(editInput, prompt.prompt, opts)).words; } catch { retryQuote = undefined; }
+    try { const q = await deps.engine.quote(editInput, prompt.prompt, opts); if (q.credits > 0) retryQuote = q.words; } catch { retryQuote = undefined; }
   }
   return { ok: true, variant, fidelity, card: payload, passed, canRetry, ...(retryQuote ? { retryQuote } : {}), request: requested ?? words };
 }

@@ -4,6 +4,8 @@
 //   GET  /api/:t/assets/:id       the asset's file (?w= for a smaller copy), only when the Asset is in this tenant's graph
 //   GET  /api/:t/studio/latest    the last run's events and where its card stands (for the page after a reload)
 //   POST /api/:t/studio/approve   {approvalId, variantId?, caption?}: the owner picks a variant; writes the draft post
+//   POST /api/:t/studio/revise    {approvalId, instruction | retryOf}: a change in the owner's words (free light and colour, or the AI editor)
+//   GET|PUT /api/:t/studio/settings  "Blur people's faces in my content" and the answer language
 //   GET  /api/:t/studio/sample    the demo photo prepared for this tenant, if any (and /sample.jpg, the file)
 // Uploads are the one place the API takes more than 64 KB; one Studio run at a time per server.
 import { readFileSync } from "node:fs";
@@ -13,7 +15,14 @@ import type { AgentEvent } from "../../shared/contracts.js";
 import type { GraphHandle } from "../graph/client.js";
 import { approveStudioDraft, finalizeStudioDraft, studioCard } from "../studio/approve.js";
 import { ImageRejected, thumbnail } from "../studio/image.js";
-import { latestStudioRun, runStudio, type StudioDeps } from "../studio/pipeline.js";
+import { assetUrl } from "../studio/intake.js";
+import { CHECKS_NA, latestStudioRun, runStudio, type StudioDeps } from "../studio/pipeline.js";
+import { generateVariant } from "../studio/generate.js";
+import { reviseVariant } from "../studio/revise.js";
+import { routeRequest } from "../studio/request.js";
+import { creditsWords } from "../studio/credits.js";
+import { TARA } from "../studio/assess.js";
+import { NISHA } from "../studio/fidelity.js";
 import { loadLanguagePreference, setLanguagePreference } from "../agent/language.js";
 import { loadStudioSettings, setBlurFaces } from "../studio/settings.js";
 import { VisionError } from "../studio/vision.js";
@@ -27,6 +36,8 @@ export const STUDIO_UPLOAD_PATH = /^\/api\/[^/]+\/studio\/intake$/;
 
 export interface StudioWiring {
   deps: Omit<StudioDeps, "now" | "signal">;
+  /** The clip offer (studio/clip.ts), when video from a still is switched on. */
+  clip?: { offer(o: { tenant: string; businessId: string; approvalId: string }): Promise<{ message: string }> };
   sample?: (tenant: string) => StudioSample | null;
 }
 
@@ -101,6 +112,77 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
         throw e;
       }
     });
+
+  // The owner's words under the options, on the web: the same routing as the Discord thread (studio/request.ts). Light and
+  // colour changes are free and local; "make it festive", "change the background", "make this into an ad saying ..." and
+  // "try again" go to the AI editor, quoted and capped. Streams AgentEvents: status lines, the new option (asset), Nisha's
+  // check (review) and a final line the page shows.
+  app.post("/api/:t/studio/revise", async (c) => {
+    const { reg, g } = await h.tenantOf(c);
+    h.refuseInPublicMode();
+    const w = await wiring();
+    let body: { approvalId?: unknown; instruction?: unknown; retryOf?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      h.fail(400, "The request body must be JSON.");
+    }
+    const approvalId = typeof body!.approvalId === "string" ? body!.approvalId : "";
+    const instruction = typeof body!.instruction === "string" ? body!.instruction.trim().slice(0, 400) : "";
+    const retryOf = typeof body!.retryOf === "string" && /^[A-Z][A-Z0-9]{0,3}$/.test(body!.retryOf) ? body!.retryOf : undefined;
+    if (!approvalId || approvalId.length > 200) h.fail(400, "Say which card: approvalId.");
+    if (!instruction && !retryOf) h.fail(400, "Say what to change.");
+    if (busy) h.fail(429, "The Studio is already working on a photo. Try again in a minute.");
+    busy = true;
+    try {
+      return sse<AgentEvent>(c, { heartbeatMs: h.heartbeatMs, log: h.log }, async (send, signal) => {
+        const t0 = h.now();
+        const say = (answer: string) => send({ type: "final", turnId: approvalId, answer, citations: [], checks: CHECKS_NA, agents: [TARA], ms: Math.max(0, h.now() - t0) });
+        try {
+          const req = retryOf ? { kind: "retry" as const } : routeRequest(instruction);
+          const ids = { tenant: reg.slug, businessId: reg.businessId, approvalId };
+          send({ type: "agent_start", agent: TARA, task: "Make the change you asked for" });
+          const status = (text: string) => send({ type: "agent_status", agent: TARA, text });
+          if (req.kind === "chat") {
+            send({ type: "agent_done", agent: TARA, ms: 0, ok: true });
+            return say("Tell me what you would like changed, for example \"make it warmer\", \"make it festive\", \"a different background\", or \"make this into an ad saying ...\".");
+          }
+          if (req.kind === "clip") {
+            send({ type: "agent_done", agent: TARA, ms: 0, ok: true });
+            return say(w.clip ? (await w.clip.offer(ids)).message : "I can't make video clips here yet. I can make photos: ask for a change, or an ad.");
+          }
+          if (req.kind === "adjust") {
+            const r = await reviseVariant(g, { ...ids, instruction }, { ...w.deps, now: h.now() });
+            send({ type: "agent_done", agent: TARA, ms: Math.max(0, h.now() - t0), ok: r.ok });
+            if (!r.ok) return say(r.message);
+            send({ type: "asset", agent: TARA, assetId: r.variant.id, kind: "variant", parentId: "", thumb: assetUrl(reg.slug, r.variant.id, 640) });
+            send({ type: "review", agent: NISHA, findingId: r.variant.id, verdict: r.fidelity.badge === "unchanged" ? "ok" : "reject", note: `Variant ${r.variant.label}: ${r.fidelity.note}` });
+            return say(`Option ${r.variant.label}: ${r.adjustment.label} (free, made with the team's own light and colour tools).`);
+          }
+          const request = req.kind === "retry" ? { kind: "retry" as const, ...(retryOf ? { of: retryOf } : {}) }
+            : req.kind === "ad" ? { kind: "ad" as const, words: req.words, ...(req.headline ? { headline: req.headline } : {}), ...(req.sub ? { sub: req.sub } : {}) }
+            : { kind: "request" as const, words: req.words };
+          const r = await generateVariant(g, { ...ids, request }, { ...w.deps, now: h.now(), status });
+          send({ type: "agent_done", agent: TARA, ms: Math.max(0, h.now() - t0), ok: r.ok });
+          if (!r.ok) return say(r.message);
+          send({ type: "asset", agent: TARA, assetId: r.variant.id, kind: "variant", parentId: "", thumb: assetUrl(reg.slug, r.variant.id, 640) });
+          send({ type: "review", agent: NISHA, findingId: r.variant.id, verdict: r.passed ? "ok" : "reject", note: `Variant ${r.variant.label}: ${r.fidelity.note}` });
+          const cost = r.variant.credits !== undefined ? ` It used ${creditsWords(r.variant.credits, { about: true })}.` : "";
+          return say(r.passed ? `Option ${r.variant.label} is ready and Nisha checked it.${cost}` : `Option ${r.variant.label} was held back: ${r.fidelity.note}${cost}${r.canRetry ? ` I can try once more${r.retryQuote ? ` (${r.retryQuote})` : ""}.` : ""}`);
+        } catch (e) {
+          if (!signal.aborted) {
+            h.log(`[studio] ${reg.slug}: ${e instanceof Error ? e.message : String(e)}`);
+            send({ type: "error", message: studioErrorMessage(e) });
+          }
+        } finally {
+          busy = false;
+        }
+      });
+    } catch (e) {
+      busy = false;
+      throw e;
+    }
+  });
 
   app.get("/api/:t/assets/:id", async (c) => {
     const { reg, g } = await h.tenantOf(c);

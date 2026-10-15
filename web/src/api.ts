@@ -269,6 +269,22 @@ export const api = {
       method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body),
     });
   },
+  /** POST /api/:t/studio/revise: a change in the owner's words (or a retry), an SSE stream of AgentEvent. */
+  async studioRevise(t: string, body: { approvalId: string; instruction?: string; retryOf?: string }, onEvent: (e: AgentEvent) => void, opts: { signal?: AbortSignal } = {}): Promise<void> {
+    if (mode === "mock") throw new ApiError(STUDIO_LIVE_ONLY, 501);
+    return postSse<AgentEvent>(`/api/${enc(t)}/studio/revise`, body, onEvent, opts.signal);
+  },
+  /** GET /api/:t/studio/settings: "Blur people's faces in my content" (off by default) and the answer language. */
+  async studioSettings(t: string): Promise<{ blurFaces: boolean; language: string }> {
+    if (mode === "mock") return { blurFaces: false, language: "auto" };
+    return getJson(`/api/${enc(t)}/studio/settings`);
+  },
+  async studioSetSettings(t: string, body: { blurFaces?: boolean; language?: string }): Promise<{ blurFaces: boolean; language: string }> {
+    if (mode === "mock") throw new ApiError(STUDIO_LIVE_ONLY, 501);
+    return getJson(`/api/${enc(t)}/studio/settings`, {
+      method: "PUT", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body),
+    });
+  },
   async studioSample(t: string): Promise<{ note: string; caption: string; url: string } | null> {
     if (mode === "mock") return null;
     try {
