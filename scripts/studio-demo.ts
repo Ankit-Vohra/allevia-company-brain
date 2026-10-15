@@ -58,7 +58,7 @@ async function main(): Promise<void> {
 
   const t = await tenantInfo();
   const g = await openGraph(tenant);
-  const deps = productionStudioDeps(cfg.dataDir);
+  const deps = productionStudioDeps(cfg.dataDir, { cacheOnly: /^(1|true|yes)$/i.test(process.env.ALLEVIA_STUDIO_CACHE_ONLY ?? ""), liveEngine: false }); // replays recordings only: these scripts never spend credits
   const sample = studioSample(cfg.dataDir, tenant);
   if (!sample) throw new Error(`no sample for ${tenant}: run the rough step first`);
   const bytes = readFileSync(sample.file);
