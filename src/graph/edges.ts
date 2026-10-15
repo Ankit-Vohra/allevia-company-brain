@@ -24,10 +24,13 @@ const asOfMillis = (asOf: string | undefined): number | undefined => {
 // One statement per edge, so every decision below is all-or-nothing against the state it read. The endpoint/type
 // check is a separate read before it; nodes are never deleted, so that read cannot go stale in a way that matters.
 //
+// `since` defaults to the source's date (asOf), else now, so a fact replayed without its own since lands on the same
+// edge.
+//
 // Is it a fact we already have? Same (from, type, to), first match wins:
 //  1. an edge (open or closed) with the same `since`: a replay. Re-running an ingest never adds edges.
-//  2. the current edge.
-//  3. a closed edge whose [since, until) contains the new since.
+//  2. an edge (open or closed) whose [since, until) covers the new since: its provenance is the one to refresh.
+//  3. the current edge (it started after the new since).
 //  4. a closed edge that ended after the incoming asOf, when the new edge would be open: the source predates the
 //     ending and does not reopen the fact. "Ended" is `until` (valid time) or the date of the source that ended it
 //     (retiredAsOfMs; retiredAt, record time, on edges closed before it existed). The source's date rather than
@@ -40,6 +43,13 @@ const asOfMillis = (asOf: string | undefined): number | undefined => {
 // holder, bound it: cap = the earliest since among them that is after the new since. A slot edge whose [since, until)
 // contains the new since (open or already closed) is shortened to end there, and if it had already ended the new edge
 // ends where it did. So at any moment a functional slot has at most one holder, in whatever order the facts arrive.
+// Sources settle conflicts in a functional slot: a holder claim dated D (asOf) says it held from its since through D.
+//  - If a holder covering the new since comes from a newer source (its asOf after the incoming asOf and since), the
+//    incoming claim is contradicted: it is stored already closed and empty (until = since), and nothing else moves.
+//  - A later holder (since after the new since, up to the incoming asOf) from an older source is overruled the same
+//    way: emptied (until = its since), and it no longer bounds the new edge.
+// Empty edges hold at no moment and never bound or cover anything; a replay of one is a re-assert. Undated claims
+// neither contradict nor overrule.
 export async function upsertEdge(g: GraphHandle, e: EdgeInput, now: number = Date.now()): Promise<{ created: boolean; closed: number }> {
   validateEdge(e);
   const ends = await g.query<{ id: string; labels: string[] | null }>(
@@ -57,12 +67,14 @@ export async function upsertEdge(g: GraphHandle, e: EdgeInput, now: number = Dat
     : e.functional === true ? { rel: e.type, toType, key: "from", why: "caller marked functional" }
     : functionalRule(e.type, fromType, toType);
   const T = e.type;
-  // Slot edges that still matter: the ones not over by the new since (this fact's own edges included).
+  // Slot edges that still matter: the ones not over by the new since, and not empty (this fact's own edges included;
+  // they are set apart below).
+  const live = "(o.until IS NULL OR (o.until > $since AND o.until > coalesce(o.since, 0)))";
   const slot = !rule ? "WITH a, b, cur, closed, [] AS slot"
     : rule.key === "to"
-      ? `OPTIONAL MATCH (x:Entity)-[o:${T}]->(b) WHERE (o.until IS NULL OR o.until > $since)${rule.fromType ? ` AND x:${rule.fromType}` : ""}
+      ? `OPTIONAL MATCH (x:Entity)-[o:${T}]->(b) WHERE ${live}${rule.fromType ? ` AND x:${rule.fromType}` : ""}
          WITH a, b, cur, closed, collect(o) AS slot`
-      : `OPTIONAL MATCH (a)-[o:${T}]->(y:Entity) WHERE (o.until IS NULL OR o.until > $since)${rule.toType ? ` AND y:${rule.toType}` : ""}
+      : `OPTIONAL MATCH (a)-[o:${T}]->(y:Entity) WHERE ${live}${rule.toType ? ` AND y:${rule.toType}` : ""}
          WITH a, b, cur, closed, collect(o) AS slot`;
   const stronger = "($c > coalesce(y.conf, 1) OR ($c = coalesce(y.conf, 1) AND ($asOfMs IS NULL OR y.asOfMs IS NULL OR $asOfMs >= y.asOfMs)))";
   const cypher = `MATCH (a:Entity {id:$from}), (b:Entity {id:$to})
@@ -73,20 +85,29 @@ export async function upsertEdge(g: GraphHandle, e: EdgeInput, now: number = Dat
     WITH a, b, cur, h ORDER BY h.until DESC, h.recordedAt DESC
     WITH a, b, cur, collect(h) AS closed
     ${slot}
-    WITH a, b, cur, slot,
-         [x IN cur + closed WHERE x.since = $since] + cur + [x IN closed WHERE coalesce(x.since, 0) <= $since AND x.until > $since] AS known,
+    WITH a, b, cur, closed, slot, [x IN cur + closed | id(x)] AS own
+    WITH a, b, cur,
+         [x IN cur + closed WHERE x.since = $since]
+           + [x IN cur + closed WHERE coalesce(x.since, 0) <= $since AND (x.until IS NULL OR x.until > $since)] + cur AS known,
          [x IN closed WHERE $asOfMs IS NOT NULL AND (x.until > $asOfMs OR coalesce(x.retiredAsOfMs, x.retiredAt, 0) > $asOfMs)] AS stale,
          [x IN closed WHERE coalesce(x.since, 0) > $since] AS later,
-         [o IN slot WHERE coalesce(o.since, 0) <= $since AND (o.until IS NULL OR o.until > $since)] AS covering,
-         [o IN slot WHERE coalesce(o.since, 0) > $since] AS newer
-    WITH a, b, cur, known, stale, covering,
-         reduce(m = null, v IN [o IN later + newer | o.since] + [o IN covering WHERE o.until IS NOT NULL | o.until] |
-           CASE WHEN m IS NULL OR v < m THEN v ELSE m END) AS cap
-    WITH a, b, cur, covering, cap,
+         [o IN slot WHERE NOT id(o) IN own AND coalesce(o.since, 0) <= $since AND (o.until IS NULL OR o.until > $since)] AS covering,
+         [o IN slot WHERE NOT id(o) IN own AND coalesce(o.since, 0) > $since] AS newer
+    WITH a, b, cur, known, stale, later, covering, newer,
+         [o IN covering WHERE $asOfMs IS NOT NULL AND o.asOfMs > $asOfMs AND o.asOfMs > $since] AS contra,
+         [o IN newer WHERE $asOfMs IS NOT NULL AND o.asOfMs < $asOfMs AND o.since <= $asOfMs] AS overruled
+    WITH a, b, cur, known, stale, covering, contra, overruled,
+         reduce(m = null, v IN [o IN later | o.since] + [o IN newer WHERE NOT id(o) IN [x IN overruled | id(x)] | o.since]
+           + [o IN covering WHERE o.until IS NOT NULL | o.until] | CASE WHEN m IS NULL OR v < m THEN v ELSE m END) AS cap
+    WITH a, b, cur, known, stale, covering, overruled, size(contra) > 0 AS contradicted,
+         CASE WHEN size(contra) > 0 THEN $since ELSE cap END AS cap
+    WITH a, b, cur, covering, overruled, contradicted, cap,
          CASE WHEN size(known) > 0 THEN known[0..1] WHEN cap IS NULL THEN stale[0..1] ELSE [] END AS hit
-    WITH a, b, cur, covering, cap, hit, size(hit) = 0 AS created,
+    WITH a, b, cur, covering, overruled, contradicted, cap, hit, size(hit) = 0 AS created,
          [x IN [y IN hit WHERE y.until IS NULL] + cur | id(x)][0] AS keep
-    WITH a, b, covering, cap, hit, created, [y IN cur WHERE id(y) <> keep] AS dupes
+    WITH a, b, covering, overruled, contradicted, cap, hit, created, [y IN cur WHERE id(y) <> keep] AS dupes,
+         CASE WHEN size(hit) = 0 AND NOT contradicted THEN covering ELSE [] END AS ending,
+         CASE WHEN size(hit) = 0 AND NOT contradicted THEN overruled ELSE [] END AS emptied
     FOREACH (x IN [y IN hit WHERE ${stronger}] | SET x += $props, x.conf = $conf)
     FOREACH (x IN dupes | ${CLOSE_SET("x", "'duplicate current edge'")})
     FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END |
@@ -94,11 +115,13 @@ export async function upsertEdge(g: GraphHandle, e: EdgeInput, now: number = Dat
         r.retiredAt = CASE WHEN cap IS NULL THEN null ELSE $now END,
         r.retiredAsOfMs = CASE WHEN cap IS NULL THEN null ELSE $endedAsOf END,
         r.closedCost = CASE WHEN cap IS NULL THEN null ELSE $cost END,
-        r.closeReason = CASE WHEN cap IS NULL THEN null ELSE 'arrived before a later holder' END)
-    FOREACH (o IN CASE WHEN created THEN covering ELSE [] END | ${CLOSE_SET("o", "$reason")})
-    RETURN created, size(dupes) AS dupes, CASE WHEN created THEN size(covering) ELSE 0 END AS closed`;
-  const since = e.since ?? now;
+        r.closeReason = CASE WHEN cap IS NULL THEN null WHEN contradicted THEN 'contradicted by a newer source'
+                             ELSE 'arrived before a later holder' END)
+    FOREACH (o IN ending | ${CLOSE_SET("o", "$reason")})
+    FOREACH (o IN emptied | ${CLOSE_SET("o", "'contradicted by a newer source'")})
+    RETURN created, size(dupes) AS dupes, size(ending) + size(emptied) AS closed`;
   const asOfMs = asOfMillis(e.asOf);
+  const since = e.since ?? asOfMs ?? now;
   const rows = await g.query<{ created: boolean; dupes: number; closed: number }>(cypher, {
     from: e.from, to: e.to, now, since, end: since, cost: CLOSED_EDGE_COST, asOfMs: asOfMs ?? null, endedAsOf: asOfMs ?? now,
     props: defined({ ...e.props, src: e.src, asOf: e.asOf, asOfMs }), conf: e.conf ?? null, c: e.conf ?? 1,

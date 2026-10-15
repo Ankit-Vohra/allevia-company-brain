@@ -6,7 +6,8 @@
 // - a node's stateSince = the asOf of the write that created it or last changed a tracked value, else that write's now;
 // - a Version runs from the old state's stateSince to the asOf of the change (else now), never ending before it starts;
 // - a backdated Version (an older source, below) runs from that source's asOf to the current state's asOf.
-// A correction for the same date (an Observation re-read with a new value) is a zero-length Version.
+// A correction for the same date (an Observation re-read with a new value) is a zero-length Version; replaying an
+// earlier same-date reading from another source, whose values that Version already records, changes nothing.
 import { randomBytes } from "node:crypto";
 import type { GraphHandle } from "./client.js";
 import { TRACKED_PROPS, typeOfLabels } from "./schema.js";
@@ -37,6 +38,16 @@ const dateMs = (v: unknown): number | undefined => {
 
 const absent = (v: unknown): boolean => v === null || v === undefined;
 
+// Is this source's view of `keys` already on record? True when a Version from the same source and date holds these
+// values: the Version written when this source was current, on an earlier run of the same ingest. Replaying such a
+// source must not flip the node back to it.
+async function alreadyRecorded(g: GraphHandle, n: NodeInput, content: Record<string, Prim>, keys: string[]): Promise<boolean> {
+  const rows = await g.query<{ props: string }>(
+    "MATCH (:Entity {id:$id})-[:HAD_VERSION]->(v:Version) WHERE v.asOf = $asOf AND coalesce(v.src, '') = $src RETURN v.props AS props",
+    { id: n.id, asOf: n.asOf ?? null, src: n.src ?? "" });
+  return rows.some((v) => keys.every((k) => sameValue((JSON.parse(v.props) as Record<string, unknown>)[k], content[k])));
+}
+
 // The input describes the node as of an earlier date than its current state. Keep the current values; but
 // - what the node does not have yet (an untracked prop it lacks, a missing summary) is new information: it is added;
 // - if the older source's tracked values differ, its view is recorded as a Version bracketed by the two dates
@@ -60,14 +71,7 @@ async function writeBackdated(
   }
   const differing = tracked.filter((k) => k in content && !sameValue(old[k], content[k]));
   if (!differing.length) return { created: false, versioned: false, updated };
-  // Already on record? A Version from the same source and date with these values (the Version written when this
-  // source was current, on an earlier run of the same ingest) makes a replay a no-op.
-  const recorded = await g.query<{ props: string }>(
-    "MATCH (:Entity {id:$id})-[:HAD_VERSION]->(v:Version) WHERE v.asOf = $asOf AND coalesce(v.src, '') = $src RETURN v.props AS props",
-    { id: n.id, asOf: n.asOf ?? null, src: n.src ?? "" });
-  if (recorded.some((v) => differing.every((k) => sameValue((JSON.parse(v.props) as Record<string, unknown>)[k], content[k])))) {
-    return { created: false, versioned: false, updated };
-  }
+  if (await alreadyRecorded(g, n, content, differing)) return { created: false, versioned: false, updated };
   const { rev: _rev, ...current } = old;
   const view = JSON.stringify({ ...current, ...content, ...prov });
   const key = sha256(JSON.stringify([differing.map((k) => [k, content[k]]), n.src ?? null])).slice(0, 8);
@@ -132,6 +136,12 @@ export async function upsertNode(g: GraphHandle, n: NodeInput, now: number = Dat
     // A tracked value appearing for the first time is new information, not a change of state.
     const tracked = (TRACKED_PROPS[n.type] ?? []).filter((k) => changed.includes(k) && !absent(old[k]));
     if (!changed.length && !provChanged && !n.embedding) return { created: false, versioned: false, updated: false };
+    // Same date, another source: if this source's values are already a Version (two same-day readings, replayed),
+    // the later reading stays current.
+    if (tracked.length && inAsOf !== undefined && inAsOf === curAsOf && n.src !== undefined && n.src !== old.src
+        && await alreadyRecorded(g, n, content, tracked)) {
+      return { created: false, versioned: false, updated: false };
+    }
 
     const params: Record<string, unknown> = { ...base, rev: num(old.rev) ?? 0 };
     let cypher = "MATCH (n:Entity {id:$id}) WHERE coalesce(n.rev, 0) = $rev";
