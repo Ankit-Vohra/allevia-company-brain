@@ -16,6 +16,7 @@
 //   #support-inbox with the business name and a link.
 import type { AlleviaBot, ButtonPort, CommandPort, MessagePort } from "./bot.js";
 import { attributeJoin } from "./hub-join.js";
+import { isStudioButton, type StudioDiscord } from "./studio-bot.js";
 import type { AreaRecord, ChannelKind, HubPort, HubStore } from "./hub-types.js";
 
 export interface JoinPort {
@@ -32,6 +33,8 @@ export interface HubBotDeps {
   hub: HubPort;
   /** The business's own bot (its graph, its ask deps). Called once per business; the result is kept. */
   botFor(area: AreaRecord): Promise<AlleviaBot> | AlleviaBot;
+  /** The business's Studio on Discord (photos and videos in #studio). Absent: the Studio is not wired, and those messages are ignored. */
+  studioFor?(area: AreaRecord): Promise<StudioDiscord | undefined> | StudioDiscord | undefined;
   now?: () => number;
   log?: (line: string) => void;
 }
@@ -51,6 +54,7 @@ export const neutralize = (s: string): string => s.replace(/@(everyone|here)/gi,
 
 export class HubBot {
   private bots = new Map<string, Promise<AlleviaBot>>();
+  private studios = new Map<string, Promise<StudioDiscord | undefined>>();
   private joins: Promise<void> = Promise.resolve();
 
   constructor(private d: HubBotDeps) {}
@@ -83,6 +87,17 @@ export class HubBot {
     return b;
   }
 
+  private studio(area: AreaRecord): Promise<StudioDiscord | undefined> {
+    const key = `${area.slug}|${area.channels.studio}`;
+    let s = this.studios.get(key);
+    if (!s) {
+      s = Promise.resolve(this.d.studioFor?.(area));
+      s.catch(() => this.studios.delete(key));
+      this.studios.set(key, s);
+    }
+    return s;
+  }
+
   // ----- messages -----
 
   async onMessage(m: MessagePort): Promise<void> {
@@ -90,8 +105,21 @@ export class HubBot {
     const r = await this.resolve(m.guildId, m.channelId, m.threadParentId);
     if (!r) return;
     if (r.kind === "support") return this.mirrorSupport(m, r);
-    if (r.kind !== "your-team") return; // the other channels are read-only for people
+    if (r.kind !== "your-team" && r.kind !== "studio") return; // the other channels are read-only for people
     if (!this.hasRole(m.memberRoleIds, r.area.roleId)) return;
+    // photos and videos (in #studio, or attached in #your-team) go to the Studio; everything else in #your-team is a question
+    const studio = await this.studio(r.area);
+    if (studio?.hasMedia(m)) return studio.onMedia(m, m.threadParentId ? m.thread() : null);
+    if (r.kind === "studio") {
+      if (!studio) return;
+      if (m.threadParentId) {
+        const t = m.thread();
+        if (t) await studio.onReply(m, t);
+      } else if (m.content.trim()) {
+        await m.reply("Drop a photo or a video here. To ask your team a question, use #your-team.");
+      }
+      return;
+    }
     await (await this.bot(r.area)).onMessage(asMember(m, { authorIsOwner: true }));
   }
 
@@ -135,6 +163,12 @@ export class HubBot {
     const r = await this.resolve(b.guildId, b.channelId, b.threadParentId);
     if (!r || r.kind === "support") return b.reply("This button does not belong to a team space I know.", { ephemeral: true });
     if (!this.hasRole(b.memberRoleIds, r.area.roleId)) return b.reply(`Only people on ${r.area.businessName}'s team can say OK or No here.`, { ephemeral: true });
+    if (isStudioButton(b.customId)) {
+      const studio = r.kind === "studio" || r.kind === "your-team" ? await this.studio(r.area) : undefined;
+      if (!studio) return b.reply("This button does not belong to a team space I know.", { ephemeral: true });
+      await studio.onButton(asMember(b, { isOwner: true }));
+      return;
+    }
     await (await this.bot(r.area)).onButton(asMember(b, { isOwner: true }));
   }
 

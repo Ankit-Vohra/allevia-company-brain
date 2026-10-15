@@ -20,6 +20,7 @@ import type { GraphHandle } from "../graph/client.js";
 import { DecisionError, decideAndNotify, type ActionOpts, type OnDecision } from "../server/approvals.js";
 import { approvals as listApprovals, latestBrief, sessionDetail } from "../server/reads.js";
 import type { ApprovalDto } from "../server/types.js";
+import type { AttachmentRef } from "./attachments.js";
 import { pathViewUrl, renderAnswer, renderCitations, splitMessage, threadName } from "./format.js";
 import { findThreadSession, linkSessionThread, openThreadSession, recentUnlinkedSessions } from "./sessions.js";
 import { ThrottledEditor, WorkLogState } from "./worklog.js";
@@ -27,7 +28,8 @@ import { ThrottledEditor, WorkLogState } from "./worklog.js";
 // ---------- ports ----------
 
 export interface ButtonSpec { customId: string; label: string; style: "success" | "danger" | "secondary" }
-export type Outgoing = string | { content: string; buttons?: ButtonSpec[] };
+export interface OutFile { name: string; data: Buffer }
+export type Outgoing = string | { content: string; buttons?: ButtonSpec[]; files?: OutFile[] };
 
 export interface PostedPort { id: string; edit(m: Outgoing): Promise<void> }
 export interface ThreadPort { id: string; send(m: Outgoing): Promise<PostedPort> }
@@ -44,6 +46,7 @@ export interface MessagePort {
   content: string;                // the bot's own mention removed
   memberRoleIds?: string[];       // the author's roles in the guild (hub mode)
   attachments?: number;           // how many files came with it (hub mode: the support copy)
+  files?: AttachmentRef[];        // those files (hub mode: photos and videos for the Studio)
   thread(): ThreadPort | null;    // the thread it was posted in
   startThread(name: string): Promise<ThreadPort>;
   reply(m: Outgoing): Promise<void>;

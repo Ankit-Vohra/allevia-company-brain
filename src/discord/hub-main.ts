@@ -3,12 +3,14 @@
 // running turns across them all, and every minute posts new approval cards and the day's note into the customer's own
 // channels. Provisioning retries run here too (the same claim keeps two processes from doing one business twice).
 import { loadConfig } from "../config.js";
+import { businessId } from "../graph/tenants.js";
 import { ask } from "../agent/ask.js";
 import type { GraphHandle } from "../graph/client.js";
 import { approval as readApproval, approvals as readApprovals, latestBrief } from "../server/reads.js";
 import { AlleviaBot } from "./bot.js";
 import { HubBot } from "./hub-bot.js";
 import { sweepOfflineJoins } from "./hub-join.js";
+import { StudioDiscord, StudioGate } from "./studio-bot.js";
 import { syncArea, type TenantSource } from "./hub-provision.js";
 import { hubSettings, productionHub } from "./hub-service.js";
 import { tenantTimeZone } from "./main.js";
@@ -38,6 +40,12 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
   const { productionDeps } = await import("../server/main.js");
   const { onDecision, actions } = productionDeps({ publicMode: false });
   const shared = { live: 0 };
+  const gate = new StudioGate();
+  const { productionStudioDeps } = await import("../studio/wiring.js");
+  const { realFfmpeg } = await import("../studio/video.js");
+  const studioDeps = productionStudioDeps(cfg.dataDir);
+  const ffmpeg = realFfmpeg();
+  if (!(await ffmpeg.available())) log("[hub] ffmpeg is not installed: videos are kept but not looked at (install ffmpeg to assess their first frame).");
 
   const hubBot = new HubBot({
     guildId, staffRoleId, store: service.deps.store, hub: service.deps.hub, log,
@@ -51,6 +59,10 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
         ...(onDecision ? { onDecision } : {}), ...(actions ? { actions } : {}), log,
       });
     },
+    studioFor: async (area) => new StudioDiscord({
+      tenant: area.slug, businessId: businessId(area.slug), graph: await tenantGraph(area.slug), studio: studioDeps, ffmpeg, gate,
+      ...(onDecision ? { onDecision } : {}), ...(actions ? { actions } : {}), log,
+    }),
   });
 
   // A join link used while the bot was not running: nobody can tell who joined, so staff are told to give the role by hand.

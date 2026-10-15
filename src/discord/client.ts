@@ -6,7 +6,7 @@
 // Developer Portal). If Discord refuses MessageContent, the bot starts without it and says so: slash commands and
 // messages that @mention the bot still work.
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client, Events, GatewayIntentBits, MessageFlags, MessageType,
+  ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client, Events, GatewayIntentBits, MessageFlags, MessageType,
   REST, Routes, SlashCommandBuilder, ThreadAutoArchiveDuration,
   type ButtonInteraction, type ChatInputCommandInteraction, type GuildMember, type Interaction, type Message, type MessageCreateOptions,
   type MessageEditOptions, type SendableChannels, type ThreadChannel, type APIInteractionGuildMember,
@@ -52,7 +52,10 @@ function components(buttons: ButtonSpec[] | undefined) {
 
 function payload(m: Outgoing): MessageCreateOptions & MessageEditOptions {
   if (typeof m === "string") return { content: m, allowedMentions: NO_PINGS };
-  return { content: m.content, components: components(m.buttons), allowedMentions: NO_PINGS };
+  return {
+    content: m.content, components: components(m.buttons), allowedMentions: NO_PINGS,
+    ...(m.files?.length ? { files: m.files.map((f) => new AttachmentBuilder(f.data, { name: f.name })) } : {}),
+  };
 }
 
 const posted = (msg: Message): PostedPort => ({ id: msg.id, edit: async (m) => { await msg.edit(payload(m)); } });
@@ -84,6 +87,7 @@ export function messagePort(m: Message, botUserId: string): MessagePort {
     content: m.content.replace(mention, " ").trim(),
     memberRoleIds: roleIdsOf(m.member),
     attachments: m.attachments?.size ?? 0,
+    files: m.attachments ? [...m.attachments.values()].map((a) => ({ url: a.url, name: a.name, size: a.size, contentType: a.contentType ?? null })) : [],
     thread: () => (inThread ? threadPort(m.channel as ThreadChannel) : null),
     startThread: async (name) => threadPort(await m.startThread({ name, autoArchiveDuration: ThreadAutoArchiveDuration.OneDay })),
     reply: async (out) => { await m.reply(payload(out)); },
