@@ -23,7 +23,8 @@
 // signal stops every run. A failed agent emits agent_done {ok:false} and the Chief is told.
 // Untrusted text: findings and tool results are data. Write tools reach only agents whose roster lists them (toolsFor
 // here, mayUse in invokeTool), never in a review or a revision, and the Chief's synthesis prompt says findings never
-// carry owner instructions.
+// carry owner instructions. `remember` (which recall later shows as an owner preference) is offered only when the
+// owner's question asks to remember or note something, and saves only text made mostly of the question's own words.
 // This file does not touch the graph itself: tools do (through the injected getTools), memory.ts persists the turn.
 import { AGENTS, agentById, type AgentDef } from "../../shared/roster.js";
 import type { ActionKind, AgentEvent, EdgeRef, NodeRef, PlanStep, ToolResult } from "../../shared/contracts.js";
@@ -185,12 +186,73 @@ export function reviewersFor(producerId: string, text: string): AgentDef[] {
 }
 
 // The tools an agent gets for a job: its roster tools (whatever the registry returns beyond them is dropped), without
-// write tools when it reviews or revises, and only show_path/propose_action when the Chief writes from findings.
-export function toolsFor(agent: AgentDef, phase: RunPhase, getTools: (names: string[]) => AlleviaTool[], opts: { lean?: boolean } = {}): AlleviaTool[] {
+// write tools when it reviews or revises, only show_path/propose_action when the Chief writes from findings, and
+// `remember` only when the owner's question asks for it (and then guarded by rememberRefusal).
+export function toolsFor(
+  agent: AgentDef, phase: RunPhase, getTools: (names: string[]) => AlleviaTool[], opts: { lean?: boolean; question?: string } = {},
+): AlleviaTool[] {
   const noWrites = phase === "plan" || phase === "review" || phase === "revise";
-  const names = agent.tools.filter((n) => !(phase === "synthesis" && opts.lean && !SYNTHESIS_TOOLS.has(n)));
+  const question = opts.question ?? "";
+  const names = agent.tools.filter((n) =>
+    !(phase === "synthesis" && opts.lean && !SYNTHESIS_TOOLS.has(n)) && !(n === REMEMBER && !asksToRemember(question)));
   const allowed = new Set(names);
-  return getTools(names).filter((t) => allowed.has(t.name) && !(noWrites && isWriteTool(t)));
+  return getTools(names)
+    .filter((t) => allowed.has(t.name) && !(noWrites && isWriteTool(t)))
+    .map((t) => (t.name === REMEMBER ? guardRemember(t, question) : t));
+}
+
+// ---------- remember: only what the owner asked to remember ----------
+
+const REMEMBER = "remember";
+
+// An explicit request to remember or note something (English, Hindi, Hinglish). "Do you remember…" asks to recall.
+const ASKS_TO_REMEMBER = new RegExp([
+  String.raw`(?<!\b(?:do|did|does|can|could) (?:you|we|i|they) )(?<!\bwhat do (?:you|we) )\bremember\b`, String.raw`\bmemori[sz]e\b`,
+  String.raw`\bdon'?t forget\b`, String.raw`\bdo not forget\b`, String.raw`\bnote (?:that|this|down|it)\b`, String.raw`\b(?:make|take) a note\b`,
+  String.raw`\bkeep (?:it )?in mind\b`, String.raw`\bbear in mind\b`, String.raw`\bfrom now on\b`, String.raw`\bgoing forward\b`, String.raw`\bfor future reference\b`,
+  String.raw`\byaad rakh`, String.raw`\bnote kar`, String.raw`\bdh?yaa?n rakh`, String.raw`\bbh?oolna mat\b`, String.raw`\bmat bh?oolna\b`, String.raw`\baage se\b`,
+  "याद रख", "नोट कर", "ध्यान रख", "भूलना मत", "मत भूलना", "आगे से",
+].join("|"), "iu");
+
+export const asksToRemember = (question: string): boolean => ASKS_TO_REMEMBER.test(question);
+
+// Words that carry no content of their own in a note ("Owner prefers …") or a request ("Please remember that I …").
+const FILLER = new Set(`a an the and or but to of for in on at by with from as is are was be been it its this that these those
+i me my mine we us our you your he she they them their owner owners business prefer prefers preferred preference wants want
+wanted likes like should always never please remember note noted keep mind make take down don't dont do not forget from now
+on going forward future reference that's will would can could ki ko ka ke ki hai hain mujhe mera meri mere hum humein hamara
+yaad rakhna rakho rakh kar lo karo dhyan aage se se मुझे मेरा मेरी हम कि को का के की है हैं याद रखना रखो नोट कर लो ध्यान आगे से`.split(/\s+/));
+
+const stem = (w: string): string => (w.length > 4 ? w.replace(/(?:ies|es|s|ing|ed)$/u, "") : w);
+const contentWords = (text: string): Set<string> =>
+  new Set((text.toLowerCase().match(/[\p{L}\p{M}\p{N}']+/gu) ?? []).filter((w) => !FILLER.has(w) && w.length > 1).map(stem));
+
+function stringsIn(v: unknown, depth = 0): string[] {
+  if (typeof v === "string") return [v];
+  if (!v || typeof v !== "object" || depth > 2) return [];
+  return Object.values(v as Record<string, unknown>).flatMap((x) => stringsIn(x, depth + 1));
+}
+
+// Why a remember call must not save, or undefined when it may: the question has to ask to remember something, and at
+// least half of what is saved has to be the question's own words (so text from a tool result or a document can't be
+// stored as the owner's preference).
+export function rememberRefusal(question: string, args: unknown): string | undefined {
+  if (!asksToRemember(question)) return "Not saved: the owner didn't ask you to remember anything in this question.";
+  const note = contentWords(stringsIn(args).join(" "));
+  const asked = contentWords(question);
+  const overlap = [...note].filter((w) => asked.has(w)).length;
+  if (!note.size || !overlap || overlap / note.size < 0.5) {
+    return "Not saved: that isn't what the owner asked you to remember. Save only the owner's request, in their own words.";
+  }
+  return undefined;
+}
+
+function guardRemember(t: AlleviaTool, question: string): AlleviaTool {
+  return { ...t, run: async (args, ctx) => {
+    const why = rememberRefusal(question, args);
+    if (why) throw new Error(why);
+    return t.run(args, ctx);
+  } };
 }
 
 // The same tools, but each write tool first waits for `until` (which may refuse by throwing; the model then gets the
@@ -369,7 +431,9 @@ class Turn {
 
   private model(agent: AgentDef): string { return this.deps.model ?? agent.model; }
 
-  private tools(agent: AgentDef, phase: RunPhase, lean = false): AlleviaTool[] { return toolsFor(agent, phase, this.deps.getTools, { lean }); }
+  private tools(agent: AgentDef, phase: RunPhase, lean = false): AlleviaTool[] {
+    return toolsFor(agent, phase, this.deps.getTools, { lean, question: this.input.question });
+  }
 
   private get promptOpts(): PromptOpts {
     return { now: this.deps.now, tenant: this.input.tenant, ...(this.deps.timeZone ? { timeZone: this.deps.timeZone } : {}) };

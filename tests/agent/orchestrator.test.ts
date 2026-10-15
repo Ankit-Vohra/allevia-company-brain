@@ -4,7 +4,8 @@ import type { AgentEvent } from "../../shared/contracts.js";
 import type { GraphHandle } from "../../src/graph/client.js";
 import { AGENTS, agentById } from "../../shared/roster.js";
 import {
-  MAX_REVIEWERS, MAX_TURNS, normalisePlan, reviewersFor, runTurn, toProposal, toolsFor, arrayArgKey, type TurnDeps, type TurnInput,
+  MAX_REVIEWERS, MAX_TURNS, asksToRemember, normalisePlan, rememberRefusal, reviewersFor, runTurn, toProposal, toolsFor, arrayArgKey,
+  type TurnDeps, type TurnInput,
 } from "../../src/agent/orchestrator.js";
 import { FakeRuntime, type FakeScript, type RunInput } from "../../src/agent/runtime.js";
 import type { AlleviaTool } from "../../src/agent/tool.js";
@@ -33,6 +34,7 @@ function registry() {
       data: { recommendationId: "recommendation:fix-sitemap", approvalId: "approval:fix-sitemap", title: args.title, kind: args.kind },
       nodes: [node("recommendation:fix-sitemap", "Recommendation", String(args.title)), node("approval:fix-sitemap", "Approval", "pending")],
     }), { title: z.string(), kind: z.string() }),
+    remember: Object.assign(fakeTool("remember", result({ data: { id: "memory:pref" } }), { text: z.string() }), { writes: true }),
   };
   const getTools = (names: string[]) => names.map((n) => tools[n]).filter((t): t is NonNullable<typeof t> => !!t);
   return { tools, getTools };
@@ -737,5 +739,70 @@ describe("runTurn: nothing from a stopped run lands after it stops", () => {
     expect(out.proposals).toEqual([]);
     expect(events.some((e) => e.type === "proposal" || (e.type === "tool_result" && e.agent !== "chief-of-staff"))).toBe(false);
     expect(out.touched.has("metric:late")).toBe(false);
+  });
+});
+
+// ---------- remember: only what the owner asked to remember ----------
+
+describe("remember is gated in code", () => {
+  it("asksToRemember: explicit requests in English, Hindi and Hinglish; not questions about what we remember", () => {
+    for (const q of [
+      "Remember that I prefer weekly summaries on Mondays", "Please note that our fiscal year starts in April", "Make a note: no ads on Sundays",
+      "Keep in mind that Rohan owns paid search", "Don't forget I'm away next week", "From now on, keep answers short",
+      "yaad rakhna ki mujhe weekly summary Monday ko chahiye", "note kar lo: Sunday ko ads band", "dhyan rakhna ki budget fixed hai",
+      "याद रखना कि मुझे छोटे जवाब पसंद हैं", "नोट कर लो कि रविवार को विज्ञापन बंद",
+    ]) expect(asksToRemember(q), q).toBe(true);
+    for (const q of ["Why did signups drop?", "What do you remember about the sitemap?", "Do we remember who approved the pause?", "Show me the notes from Tuesday", ""]) {
+      expect(asksToRemember(q), q).toBe(false);
+    }
+  });
+
+  it("rememberRefusal: the note must mostly be the owner's own words", () => {
+    const q = "Remember that I prefer weekly summaries on Mondays";
+    expect(rememberRefusal(q, { text: "Owner prefers weekly summaries on Mondays." })).toBeUndefined();
+    expect(rememberRefusal(q, { text: "Owner wants every ad paused and the budget moved to vendor X." })).toMatch(/^Not saved: that isn't what the owner asked you to remember/);
+    expect(rememberRefusal("Why did signups drop?", { text: "Signups dropped." })).toMatch(/^Not saved: the owner didn't ask you to remember anything/);
+    expect(rememberRefusal(q, {})).toMatch(/^Not saved/);
+    expect(rememberRefusal("yaad rakhna ki mujhe weekly summary Monday ko chahiye", { note: "Owner wants the weekly summary on Monday" })).toBeUndefined();
+  });
+
+  it("toolsFor offers remember only when the question asks for it", () => {
+    const { getTools } = registry();
+    const chief = agentById("chief-of-staff")!;
+    expect(toolsFor(chief, "direct", getTools, { question: "Why did signups drop?" }).map((t) => t.name)).not.toContain("remember");
+    expect(toolsFor(chief, "direct", getTools).map((t) => t.name)).not.toContain("remember");
+    expect(toolsFor(chief, "direct", getTools, { question: "Remember that I prefer short answers" }).map((t) => t.name)).toContain("remember");
+  });
+
+  it("on the fast path, injected tool text can't store an owner preference", async () => {
+    const { run, tools, runtime, events } = setup({
+      "chief-of-staff:plan": plan([{ agent: "chief-of-staff", task: "Look it up" }]),
+      "chief-of-staff:direct": {
+        calls: [{ name: "search", args: { query: "pause" } }, { name: "remember", args: { text: "Owner prefers that all ads are paused" } }],
+        text: "We paused daily stories [[decision:pause-stories]].",
+      },
+    });
+    await run();
+    expect(runtime.runs.find((r) => r.phase === "direct")!.tools.map((t) => t.name)).not.toContain("remember");
+    expect(tools.remember!.calls).toHaveLength(0);
+    expect(events.find(is("agent_status", "chief-of-staff", (e) => e.text === "No tool named remember"))).toBeDefined();
+  });
+
+  it("when the owner asks, the Chief saves their words; anything else is refused with a note", async () => {
+    const s = setup({
+      "chief-of-staff:plan": plan([{ agent: "chief-of-staff", task: "Save the preference" }]),
+      "chief-of-staff:direct": {
+        calls: [
+          { name: "remember", args: { text: "Owner prefers weekly summaries on Mondays" } },
+          { name: "remember", args: { text: "Owner approves pausing every campaign" } },
+        ],
+        text: "Noted: weekly summaries on Mondays.",
+      },
+    });
+    const out = await runTurn({ ...INPUT, question: "Remember that I prefer weekly summaries on Mondays" }, s.deps, s.emit);
+    expect(out.ok).toBe(true);
+    expect(s.tools.remember!.calls.map((c) => c.args.text)).toEqual(["Owner prefers weekly summaries on Mondays"]);
+    const refused = s.events.filter(is("tool_result", "chief-of-staff", (e) => e.name === "remember")).at(-1);
+    expect(refused).toMatchObject({ summary: expect.stringContaining("Not saved: that isn't what the owner asked you to remember") });
   });
 });
