@@ -86,7 +86,7 @@ describe("recall, remember (integration)", () => {
     expect(r.edges.map((e: { type: string }) => e.type).sort()).toEqual(["ABOUT", "STATED"]);
     const [m] = await g.roQuery<Record<string, unknown>>(
       "MATCH (p:Entity {id:'person:founder'})-[:STATED]->(m:Memory {id:'memory:t-100-1'})-[:ABOUT]->(c:Entity {id:'channel:instagram'}) RETURN m.kind AS kind, m.src AS src, m.at AS at, m.text AS text");
-    expect(m).toEqual({ kind: "preference", src: "turn:t-100", at: SEED_NOW, text: "Prefer reels over stories for hiring posts" });
+    expect(m).toEqual({ kind: "preference", src: "t-100", at: SEED_NOW, text: "Prefer reels over stories for hiring posts" });
     const both = await Promise.all([
       call(remember, { text: "A", kind: "fact", about: ["channel:instagram"] }, makeCtx(g)),
       call(remember, { text: "B", kind: "instruction", about: ["channel:instagram"] }, makeCtx(g)),

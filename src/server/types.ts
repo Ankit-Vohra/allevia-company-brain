@@ -80,6 +80,8 @@ export interface NodeDetailDto {
   neighbors: { edge: EdgeRef; node: NodeRef; direction: "out" | "in" }[];
   versions: VersionRecordDto[];
   sources: SourceRef[];
+  // The answers whose "How we know" path walked through this node, newest first (memory.ts answersThrough).
+  answers?: { turnId: string; question: string; at: string; sessionId?: string; pathIndex: number }[];
 }
 
 export interface AgentStatsDto {

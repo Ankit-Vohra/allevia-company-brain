@@ -148,7 +148,7 @@ async function runRemember(args: { text: string; kind: "preference" | "fact" | "
   const skipped = about.filter((id) => !found.has(id));
   if (!linked.length) throw new InputError(`None of the about ids exist (${about.join(", ") || "none given"}). Pass ids returned by a tool, e.g. the business or a channel.`);
   const embedding = ctx.embedQuery ? await ctx.embedQuery(text).catch(() => undefined) : undefined;
-  const src = `turn:${ctx.turnId}`;
+  const src = ctx.turnId; // already `turn:<date>-<id>`
   const asOf = isoDate(ctx.now);
 
   const { id, stated } = await serial(ctx.graph.name, async () => {

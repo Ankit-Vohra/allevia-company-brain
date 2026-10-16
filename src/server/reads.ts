@@ -6,7 +6,7 @@ import { AGENTS, agentById } from "../../shared/roster.js";
 import type { GraphHandle } from "../graph/client.js";
 import { SEARCHABLE } from "../graph/schema.js";
 import { STOPPED_MESSAGE } from "../agent/ask.js";
-import { agentNodeId } from "../agent/memory.js";
+import { agentNodeId, answersThrough } from "../agent/memory.js";
 import { TouchedSet, type ToolContext } from "../agent/tool.js";
 import { search } from "../agent/tools/search.js";
 import { NODE, toRef, type NodeRow } from "../agent/tools/common.js";
@@ -22,7 +22,7 @@ import {
 export const READ_MS = 10_000;
 export const LIMITS = {
   sessions: 50, turns: 100, search: 25, neighbors: 40, versions: 20, sources: 10, focusNodes: 150, overviewNodes: 400,
-  overviewEdges: 3000, recommendations: 50, approvals: 100, findings: 6, knows: 25, knowledgeEdges: 200, playbooks: 6,
+  overviewEdges: 3000, recommendations: 50, approvals: 100, findings: 6, knows: 25, knowledgeEdges: 200, playbooks: 6, answers: 10,
 } as const;
 
 // Props never returned: vectors, write bookkeeping, and a Turn's raw event log (served by the replay endpoint).
@@ -237,12 +237,15 @@ export async function nodeDetail(g: GraphHandle, id: string): Promise<NodeDetail
      RETURN type(r) AS type, r.since AS since, ${NODE("m")} AS n
      ORDER BY CASE WHEN m:Observation OR m:Turn OR m:Finding THEN 1 ELSE 0 END, type, m.id LIMIT $limit`,
     { id, skipRels: ["HAD_VERSION"], plumbing: PLUMBING, limit: LIMITS.neighbors });
-  const [outs, ins, versions, sources] = await Promise.all([nbQuery("out"), nbQuery("in"), versionsOf(g, id), sourcesOf(g, id, props.src)]);
+  const [outs, ins, versions, sources, through] = await Promise.all([
+    nbQuery("out"), nbQuery("in"), versionsOf(g, id), sourcesOf(g, id, props.src), answersThrough(g, id, LIMITS.answers).catch(() => []),
+  ]);
   const neighbors: NodeDetailDto["neighbors"] = [
     ...outs.map((r) => ({ edge: edgeRef(id, r.type, r.n.id, r.since), node: toRef(r.n), direction: "out" as const })),
     ...ins.map((r) => ({ edge: edgeRef(r.n.id, r.type, id, r.since), node: toRef(r.n), direction: "in" as const })),
   ];
-  return { node, props, neighbors, versions, sources };
+  const answers = through.map((a) => ({ turnId: a.turnId, question: a.question, at: iso(a.at) ?? new Date(0).toISOString(), ...(a.sessionId ? { sessionId: a.sessionId } : {}), pathIndex: a.pathIndex }));
+  return { node, props, neighbors, versions, sources, ...(answers.length ? { answers } : {}) };
 }
 
 const edgeRef = (from: string, type: string, to: string, since?: number | null): EdgeRef =>

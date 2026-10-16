@@ -41,7 +41,7 @@ describe("propose_action (integration)", () => {
       `MATCH (a:Agent {id:'agent:allevia-tech-lead'})-[:PRODUCED]->(rec:Recommendation {id:'recommendation:add-meta-description-to-jobs'})-[:PROPOSES]->(ap:Approval {id:'approval:t-100-1'})
        RETURN a.name AS agent, rec.status AS status, rec.by AS by, rec.confidence AS confidence, rec.area AS area, rec.src AS src,
          ap.status AS apStatus, ap.kind AS kind, ap.payload AS payload`);
-    expect(row).toMatchObject({ agent: "Arjun", status: "open", by: "tech-lead", confidence: 0.8, area: "seo", src: "turn:t-100", apStatus: "pending", kind: "github_issue" });
+    expect(row).toMatchObject({ agent: "Arjun", status: "open", by: "tech-lead", confidence: 0.8, area: "seo", src: "t-100", apStatus: "pending", kind: "github_issue" });
     expect(JSON.parse(String(row!.payload))).toEqual(args.payload);
     const ev = await g.roQuery<{ id: string }>("MATCH (:Entity {id:'recommendation:add-meta-description-to-jobs'})-[:EVIDENCED_BY]->(x) RETURN x.id AS id ORDER BY id");
     expect(ev.map((e) => e.id)).toEqual(["page:www.aamdani.ai/jobs", "rule:seo-meta-description"]);

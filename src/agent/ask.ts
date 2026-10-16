@@ -192,6 +192,8 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
         ...(target ? { target } : {}), checks, agents, events: log, touched: outcome?.touched ?? [], citations,
         findings: outcome?.findings ?? [], reviews: outcome?.reviews ?? [], guidedBy: outcome?.guidedBy ?? [],
         ...(outcome?.skills?.length ? { skills: outcome.skills } : {}),
+        made: [...(outcome?.proposals ?? []).flatMap((p) => [p.recommendationId, p.approvalId]), ...(outcome?.memories ?? [])].filter(Boolean),
+        ...(outcome?.path?.nodes.length ? { pathIds: outcome.path.nodes.map((n) => n.id), ...(outcome.pathGrounded !== undefined ? { pathGrounded: outcome.pathGrounded } : {}) } : {}),
         cost: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, cacheReadTokens: usage.cacheReadTokens, cacheWriteTokens: usage.cacheWriteTokens, modelCalls: usage.modelCalls, toolCalls: usage.toolCalls },
       });
       if (saved.errors.length) deliver({ type: "error", message: `Saved the turn with ${saved.errors.length} skipped write(s): ${saved.errors[0]}` });

@@ -42,7 +42,7 @@ export async function runPropose(args: ProposeArgs, ctx: ToolContext) {
   const skipped = wanted.filter((id) => !found.has(id));
   if (!evidence.length) throw new InputError(`None of the evidence ids exist (${wanted.join(", ") || "none given"}). Cite ids returned by tools.`);
   const confidence = args.confidence === undefined ? undefined : Math.min(1, Math.max(0, args.confidence));
-  const src = `turn:${ctx.turnId}`;
+  const src = ctx.turnId; // already `turn:<date>-<id>`
   const asOf = isoDate(ctx.now);
   const recId = entityId("Recommendation", title);
   const agentId = staffAgentId(ctx.agentId);
