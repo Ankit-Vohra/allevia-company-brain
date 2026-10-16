@@ -56,6 +56,18 @@ describe("RestHubPort", () => {
     expect(ch).toMatchObject({ kind: "text", parentId: "cat" });
   });
 
+  it("moves a role with PATCH on the role list and reads every role's new place from the answer", async () => {
+    const after = [{ id: G, name: "@everyone", position: 0 }, { id: "r1", name: "customer-aamdani", position: 6 }, { id: "bot", name: "Allevia", position: 7 }];
+    const { rest, calls } = fakeRest({ [`PATCH /guilds/${G}/roles`]: after });
+    const placed = await new RestHubPort(rest, G).setRolePosition("r1", 6);
+    expect(calls[0]).toMatchObject({ method: "PATCH", route: `/guilds/${G}/roles`, body: [{ id: "r1", position: 6 }] });
+    expect(placed.find((r) => r.id === "r1")).toEqual({ id: "r1", name: "customer-aamdani", position: 6 });
+    // an answer that is not a list is no list of roles
+    expect(await new RestHubPort(fakeRest({}).rest, G).setRolePosition("r1", 6)).toEqual([]);
+    // a refusal reaches the caller as it is
+    await expect(new RestHubPort(fakeRest({ [`PATCH /guilds/${G}/roles`]: httpError(403) }).rest, G).setRolePosition("r1", 6)).rejects.toThrow(/403/);
+  });
+
   it("creates categories as type 4", async () => {
     const { rest, calls } = fakeRest({ [`POST /guilds/${G}/channels`]: { id: "k", name: "Aamdani", type: 4 } });
     const c = await new RestHubPort(rest, G).createChannel({ name: "Aamdani", kind: "category", overwrites: [] });
@@ -244,6 +256,44 @@ describe("discord-hub status checks", () => {
     const cs = await checkHub({ settings: full(staff.id), hub });
     expect(failing(cs)).toEqual(["The bot's role sits above the customer roles"]);
     expect(cs.find((c) => !c.ok)!.fix).toContain("customer-aamdani");
+  });
+
+  it("a customer role level with the bot's role is explained as a tie, in plain words, with what to do", async () => {
+    const { hub, staff } = setup();
+    hub.botPosition = 1;
+    hub.addRole(roleNameFor("aamdani"), 1);
+    hub.addRole(roleNameFor("avs_atelier"), 1);
+    const cs = await checkHub({ settings: full(staff.id), hub });
+    expect(failing(cs)).toEqual(["The bot's role sits above the customer roles"]);
+    const fix = cs.find((c) => !c.ok)!.fix!;
+    expect(fix).toContain("customer-aamdani, customer-avs_atelier are level with the bot's role");
+    expect(fix).toContain("they share place 1 in the role list");
+    expect(fix).toMatch(/counts them as level, not as one above the other/);
+    expect(fix).toMatch(/very bottom of the list/); // nothing can sit below place 1: only dragging helps
+    expect(fix).not.toMatch(/discord-hub provision/);
+    expect(formatChecks(cs)).toMatch(/^FAIL {2}The bot's role sits above the customer roles\n {6}customer-aamdani/m);
+  });
+
+  it("a tie higher up says so and offers both fixes (drag, or provision again); roles above the bot are named apart", async () => {
+    const { hub, staff } = setup();
+    hub.botPosition = 50;
+    hub.addRole(roleNameFor("aamdani"), 50);
+    hub.addRole(roleNameFor("avs_atelier"), 60);
+    hub.addRole(roleNameFor("fine"), 49);
+    const cs = await checkHub({ settings: full(staff.id), hub });
+    const fix = cs.find((c) => !c.ok)!.fix!;
+    expect(fix).toContain("customer-aamdani is level with the bot's role: it shares place 50 in the role list with it.");
+    expect(fix).toContain("customer-avs_atelier sits above the bot's role (the bot's is at place 50).");
+    expect(fix).toContain("drag the bot's role above them");
+    expect(fix).toContain("discord-hub provision aamdani ; discord-hub provision avs_atelier");
+    expect(fix).not.toContain("customer-fine");
+  });
+
+  it("a customer role just below the bot's role passes", async () => {
+    const { hub, staff } = setup();
+    hub.botPosition = 50;
+    hub.addRole(roleNameFor("aamdani"), 49);
+    expect(failing(await checkHub({ settings: full(staff.id), hub }))).toEqual([]);
   });
 
   it("warns before the server's role and channel limits", async () => {

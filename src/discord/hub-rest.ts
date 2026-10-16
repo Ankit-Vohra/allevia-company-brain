@@ -22,6 +22,8 @@ const fromBits = (v: unknown): PermName[] => {
   return (Object.keys(PERM) as PermName[]).filter((k) => (n & PERM[k]) === PERM[k]);
 };
 
+const roleFrom = (r: Json): RoleInfo => ({ id: String(r.id), name: String(r.name), position: Number(r.position ?? 0) });
+
 const overwriteJson = (o: Overwrite) => ({ id: o.id, type: o.type === "role" ? 0 : 1, allow: toBits(o.allow), deny: toBits(o.deny) });
 const overwriteFrom = (j: Json): Overwrite => ({ id: String(j.id), type: j.type === 0 ? "role" : "member", allow: fromBits(j.allow), deny: fromBits(j.deny) });
 
@@ -88,13 +90,18 @@ export class RestHubPort implements HubPort {
   }
 
   async listRoles(): Promise<RoleInfo[]> {
-    return ((await this.rest.get(Routes.guildRoles(this.guildId))) as Json[]).map((r) => ({ id: String(r.id), name: String(r.name), position: Number(r.position ?? 0) }));
+    return ((await this.rest.get(Routes.guildRoles(this.guildId))) as Json[]).map(roleFrom);
   }
 
   async createRole(name: string): Promise<RoleInfo> {
     // no permissions, not shown separately, not mentionable: the role only unlocks the customer's own area
-    const r = (await this.rest.post(Routes.guildRoles(this.guildId), { body: { name, permissions: "0", hoist: false, mentionable: false } })) as Json;
-    return { id: String(r.id), name: String(r.name), position: Number(r.position ?? 0) };
+    return roleFrom((await this.rest.post(Routes.guildRoles(this.guildId), { body: { name, permissions: "0", hoist: false, mentionable: false } })) as Json);
+  }
+
+  // PATCH /guilds/{id}/roles takes a list of { id, position } and answers with every role in the server as it stands after.
+  async setRolePosition(roleId: string, position: number): Promise<RoleInfo[]> {
+    const all = await this.rest.patch(Routes.guildRoles(this.guildId), { body: [{ id: roleId, position }] });
+    return Array.isArray(all) ? (all as Json[]).map(roleFrom) : [];
   }
 
   private channelFrom(j: Json): ChannelInfo {

@@ -58,7 +58,23 @@ export class FakeHub implements HubPort {
   async botPermissions() { this.guildOnly("botPermissions"); return this.botPerms; }
   async intents() { this.op("intents"); return this.appIntents; }
   async listRoles() { this.guildOnly("listRoles"); return copy([...this.roles.values()]); }
+  /** Like Discord today: a new role lands at the bottom (place 1), whatever is already there, so it can tie with the bot's. */
   async createRole(name: string) { this.guildOnly("createRole", name); return copy(this.addRole(name)); }
+  /**
+   * Discord's hierarchy rule for a bot: it may move only a role that sits strictly below its own highest role, and only to
+   * a place strictly below it (a tie counts as level, so both are refused with 403). Making room is simplified: every other
+   * role at or above the new place moves up one, the bot's own role with them. Answers with every role, like Discord.
+   */
+  async setRolePosition(roleId: string, position: number) {
+    this.guildOnly("setRolePosition", roleId);
+    const r = this.roles.get(roleId);
+    if (!r || roleId === this.guildId) throw Object.assign(new Error("Unknown Role"), { status: 404 });
+    if (r.position >= this.botPosition || position >= this.botPosition) throw Object.assign(new Error("Missing Permissions"), { status: 403 });
+    for (const o of this.roles.values()) if (o.id !== roleId && o.position >= position) o.position += 1;
+    this.botPosition += 1;
+    r.position = position;
+    return copy([...this.roles.values()]);
+  }
   async listChannels() { this.guildOnly("listChannels"); return copy([...this.channels.values()]); }
   async createChannel(spec: ChannelSpec) {
     this.guildOnly("createChannel", spec.name);

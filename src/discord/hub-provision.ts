@@ -193,6 +193,7 @@ export async function provisionCustomer(slug: string, d: ProvisionDeps, opts: Pr
     // 1. the role
     const roleName = roleNameFor(slug);
     let role = (area.roleId ? roles.find((r) => r.id === area.roleId) : undefined) ?? roles.find((r) => r.name === roleName);
+    const madeRole = !role;
     if (!role) {
       role = await hub.createRole(roleName);
       roles.push(role);
@@ -200,6 +201,7 @@ export async function provisionCustomer(slug: string, d: ProvisionDeps, opts: Pr
     } else did(`kept the role ${roleName}`);
     if (role.id === d.staffRoleId || role.id === hub.guildId) throw new Error(`the customer role for ${slug} resolved to the staff or @everyone role; refusing to continue`);
     await store.saveArea(slug, base, { roleId: role.id }, now());
+    await seatRole(hub, role, roles, madeRole, did);
 
     const who: Who = { everyone: hub.guildId, role: role.id, staff: d.staffRoleId, bot: botId };
 
@@ -290,6 +292,37 @@ export async function provisionCustomer(slug: string, d: ProvisionDeps, opts: Pr
   } finally {
     await store.release(slug, token).catch(() => undefined);
   }
+}
+
+// Discord lets a bot give out only roles that sit strictly below its own highest role, and two roles at the same place in
+// the list count as level, not as one above the other. Discord puts a new role at the bottom (place 1), which is the
+// bot's own place on a fresh server, so a new customer role is put just below the bot's role straight away. An existing
+// one is left where it is while it is below the bot, and moved back when it has become level with it or risen above it.
+// Where Discord will not allow the move (it refuses a bot a role that is not already below its own), or the bot's role is
+// at the very bottom, the run stops with the fix in plain words; the queued retry carries on once the role list is fixed.
+const LIST_FIX = "In Server Settings > Roles, drag the bot's role above the customer roles, then run provision again.";
+
+async function seatRole(hub: HubPort, role: RoleInfo, roles: RoleInfo[], isNew: boolean, did: (s: string) => void): Promise<void> {
+  const top = await hub.botTopRolePosition();
+  if (!isNew && role.position < top) return;
+  if (top < 2) throw new Error(`The bot's role is at the very bottom of the role list, so nothing can sit below it and it could not give out ${role.name}. ${LIST_FIX}`);
+  const want = top - 1;
+  if (role.position === want) return;
+  let placed: RoleInfo[];
+  try {
+    placed = await hub.setRolePosition(role.id, want);
+  } catch (e) {
+    const why = (e instanceof Error ? e.message : String(e)).slice(0, 80);
+    throw new Error(`Discord would not let the bot move ${role.name} below its own role (${why}). ${LIST_FIX}`);
+  }
+  for (const r of placed) {
+    const mine = roles.find((x) => x.id === r.id);
+    if (mine) mine.position = r.position;
+  }
+  const now = placed.find((r) => r.id === role.id)?.position ?? want;
+  role.position = now;
+  if (now >= await hub.botTopRolePosition()) throw new Error(`${role.name} is still level with the bot's role (both at place ${now} in the list), so the bot could not give it out. ${LIST_FIX}`);
+  did(`put the role ${role.name} just below the bot's role`);
 }
 
 // The business has a live join link, or somebody has already joined with one. With newInvite, the old open link is
