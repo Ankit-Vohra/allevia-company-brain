@@ -8,13 +8,16 @@
 // or more of the words goes to the optional Haiku summary (off unless an LlmRunner is passed).
 // Later drafts apply the active rules: deterministic ones (replace, remove_emoji, no_exclaim) rewrite the text directly;
 // the rest go into the drafting instructions. The draft records USES_RULE for each and the rule's appliedCount grows.
-// The same lesson learned again reinforces its rule (confidence +0.1, up to 0.95); a substitution that reverses an
-// active one retires the old rule (Version) and records CONTRADICTS.
+// The same lesson learned again reinforces its rule (confidence +0.1, up to 0.95, each step a Version); a substitution that
+// reverses an active one retires the old rule (Version) and records CONTRADICTS.
+// In the graph: a card (Recommendation and Approval) is GUIDED_BY each rule that shaped it, with how it did ("rewrote" the
+// text, with find and replace, or "instructed" the writer), and so is the draft's USES_RULE; LEARNED_FROM carries the
+// approval as its src, the date, the rule's confidence and the fragment before and after the owner's edit.
 // recordLearningMetrics writes the Business's allevia.first_pass_rate (30 days), allevia.learned_rules and
 // allevia.deliverables_approved Observations, one per day, so the curve is history, not a single number.
 import type { AgentEvent } from "../../shared/contracts.js";
 import type { GraphHandle } from "../graph/client.js";
-import { addObservation, upsertEdge, upsertNode } from "../graph/upsert.js";
+import { addObservation, closeEdge, upsertEdge, upsertNode } from "../graph/upsert.js";
 import type { LlmRunner } from "../ingest/llm.js";
 import { entityId } from "../util/ids.js";
 import { isoDate } from "../util/time.js";
@@ -262,14 +265,41 @@ export async function applyLearnedRules(g: Read, input: { title: string; body: s
   return applyRules(input, await activeRules(g, scope));
 }
 
+// How a rule shaped a draft: a rule the code applies (replace, no emoji, no exclamation marks) rewrote its text, and says what
+// it swapped; any other (a style note, a length, a brand rule) was handed to whoever wrote it as an instruction.
+export interface RuleUse { how: "rewrote" | "instructed"; find?: string; replace?: string }
+export function ruleUse(r: { op?: string | null; find?: string | null; replace?: string | null }): RuleUse {
+  if (!r.op || !DETERMINISTIC_OPS.has(r.op as RuleOp)) return { how: "instructed" };
+  return { how: "rewrote", ...(r.find ? { find: r.find } : {}), ...(typeof r.replace === "string" ? { replace: r.replace } : {}) };
+}
+const useProps = (u: RuleUse): Record<string, string> => ({ how: u.how, ...(u.find ? { find: u.find } : {}), ...(u.replace !== undefined ? { replace: u.replace } : {}) });
+
+// A card (its Recommendation and Approval) is GUIDED_BY the rules that shaped its draft, each with how. Rules that stopped
+// applying (a re-run of a card still waiting for the owner) are closed, kept as history. Best effort: a card without the edges is
+// still a card, so nothing here throws. `src` is the id of the Recommendation that applied them.
+export async function guideCards(g: GraphHandle, cardIds: string[], rules: ReadonlyArray<Pick<ActiveRule, "id" | "op" | "find" | "replace">>, now: number, src: string): Promise<void> {
+  const asOf = isoDate(now);
+  const want = new Map(rules.map((r) => [r.id, r] as const));
+  for (const from of cardIds) {
+    try {
+      const had = await g.roQuery<{ id: string }>("MATCH (c:Entity {id:$id})-[e:GUIDED_BY]->(r:Entity) WHERE e.until IS NULL RETURN r.id AS id ORDER BY id", { id: from });
+      for (const r of want.values()) await upsertEdge(g, { from, type: "GUIDED_BY", to: r.id, props: useProps(ruleUse(r)), src, asOf, since: now }, now);
+      for (const h of had) if (!want.has(h.id)) await closeEdge(g, from, "GUIDED_BY", h.id, now, "no longer applied");
+    } catch {
+      // the card keeps its payload.rulesApplied either way
+    }
+  }
+}
+
 // USES_RULE from the draft to every rule that shaped it, and appliedCount + 1 on each learned one.
 export async function markRulesApplied(g: GraphHandle, contentId: string, ruleIds: string[], now: number): Promise<string[]> {
   const ids = [...(await existingIds(g, ruleIds))];
   if (!ids.length) return [];
-  const rows = await g.roQuery<{ id: string; name: string; kind: string | null; n: number | null; labels: string[] }>(
-    "UNWIND $ids AS id MATCH (r:Entity {id:id}) RETURN r.id AS id, r.name AS name, r.kind AS kind, r.appliedCount AS n, labels(r) AS labels", { ids });
+  const rows = await g.roQuery<{ id: string; name: string; kind: string | null; n: number | null; labels: string[]; op: string | null; find: string | null; replace: string | null }>(
+    `UNWIND $ids AS id MATCH (r:Entity {id:id})
+     RETURN r.id AS id, r.name AS name, r.kind AS kind, r.appliedCount AS n, labels(r) AS labels, r.op AS op, r.find AS find, r.replace AS replace`, { ids });
   for (const r of rows) {
-    const { created } = await upsertEdge(g, { from: contentId, type: "USES_RULE", to: r.id, props: { applied: true } }, now);
+    const { created } = await upsertEdge(g, { from: contentId, type: "USES_RULE", to: r.id, props: { applied: true, ...useProps(ruleUse(r)) } }, now);
     if (created && r.kind === "learned" && r.labels.includes("Rule")) {
       await upsertNode(g, { type: "Rule", id: r.id, name: r.name, props: { appliedCount: (r.n ?? 0) + 1, lastAppliedAt: now } }, now);
     }
@@ -307,6 +337,23 @@ async function summarise(llm: LlmRunner, model: string, input: LearnInput): Prom
   return texts.slice(0, 2).map((t) => ({ id: ruleId(t.slice(0, 60)), op: "instruction" as const, text: t.trim(), confidence: 0.5 }));
 }
 
+// The bit of the draft the lesson is about, before and after the owner's edit (what LEARNED_FROM keeps, so a judge can read
+// "villa -> home" on the edge). A lesson in words (a change note, a model's summary) has no fragment.
+export function editFragment(s: RuleSpec, original: string, edited: string): { before?: string; after?: string } {
+  const frag = (v: string): string => clip(v.replace(/\s+/g, " ").trim(), 120);
+  switch (s.op) {
+    case "replace": return s.find && s.replace !== undefined ? { before: frag(s.find), after: frag(s.replace) } : {};
+    case "remove_emoji": return { before: frag([...new Set(original.match(EMOJI_ALL) ?? [])].join(" ")), after: "" };
+    case "no_exclaim": {
+      const sentence = original.split(/(?<=[.!?])\s+/).find((x) => x.includes("!"));
+      return sentence ? { before: frag(sentence), after: frag(applyRule(sentence, { op: "no_exclaim" })) } : {};
+    }
+    case "avoid_words": return s.words?.length ? { before: frag(s.words.join(", ")), after: "" } : {};
+    case "max_words": return { before: `${words(original).length} words`, after: `${words(edited).length} words` };
+    default: return {};
+  }
+}
+
 // Writes the lessons in one edit and returns them. Never throws on the optional model: a failed summary learns nothing.
 export async function learnFromEdit(g: GraphHandle, input: LearnInput, deps: LearnDeps = {}): Promise<LearnedRule[]> {
   const orig = `${input.original.title}\n\n${input.original.body}`;
@@ -332,6 +379,8 @@ export async function learnFromEdit(g: GraphHandle, input: LearnInput, deps: Lea
     const [old] = await g.roQuery<{ confidence: number | null; status: string | null; n: number | null; applied: number | null }>(
       "MATCH (r:Entity:Rule {id:$id}) RETURN r.confidence AS confidence, r.status AS status, r.learnedCount AS n, r.appliedCount AS applied", { id: s.id });
     const confidence = old ? Math.min(0.95, Math.round(((old.confidence ?? s.confidence) + 0.1) * 100) / 100) : s.confidence;
+    // Where it came from: the approval whose edit taught it, and the day.
+    const from = { src: input.approvalId, asOf: date, since: now } as const;
     await upsertNode(g, {
       type: "Rule", id: s.id, name: s.text,
       summary: `Learned from the owner's edit on ${date} (${input.approvalId}).`,
@@ -343,11 +392,13 @@ export async function learnFromEdit(g: GraphHandle, input: LearnInput, deps: Lea
         ...(s.find ? { find: s.find } : {}), ...(s.replace !== undefined ? { replace: s.replace } : {}),
         ...(s.words ? { words: s.words } : {}), ...(s.max !== undefined ? { max: s.max } : {}),
       },
+      src: input.approvalId, asOf: date,
     }, now);
-    await upsertEdge(g, { from: s.id, type: "LEARNED_FROM", to: input.approvalId }, now);
-    await upsertEdge(g, { from: editor, type: "PRODUCED", to: s.id }, now);
-    if (drafter) await upsertEdge(g, { from: s.id, type: "APPLIES_TO", to: drafter }, now);
-    if (channel) await upsertEdge(g, { from: s.id, type: "APPLIES_TO", to: channel }, now);
+    const fragment = editFragment(s, orig, edit);
+    await upsertEdge(g, { from: s.id, type: "LEARNED_FROM", to: input.approvalId, conf: confidence, props: { op: s.op, ...fragment }, ...from }, now);
+    await upsertEdge(g, { from: editor, type: "PRODUCED", to: s.id, ...from }, now);
+    if (drafter) await upsertEdge(g, { from: s.id, type: "APPLIES_TO", to: drafter, ...from }, now);
+    if (channel) await upsertEdge(g, { from: s.id, type: "APPLIES_TO", to: channel, ...from }, now);
     // The owner reversed an earlier lesson ("home" -> "villa" after "villa" -> "home"): the old rule retires.
     const retired: string[] = [];
     if (s.op === "replace") {
@@ -357,7 +408,7 @@ export async function learnFromEdit(g: GraphHandle, input: LearnInput, deps: Lea
         { find: s.replace, replace: s.find, id: s.id });
       for (const r of rev) {
         await upsertNode(g, { type: "Rule", id: r.id, name: r.name, props: { status: "retired", retiredAt: now, retiredBy: s.id } }, now);
-        await upsertEdge(g, { from: s.id, type: "CONTRADICTS", to: r.id }, now);
+        await upsertEdge(g, { from: s.id, type: "CONTRADICTS", to: r.id, ...from }, now);
         retired.push(r.id);
       }
     }

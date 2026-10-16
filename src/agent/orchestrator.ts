@@ -572,6 +572,19 @@ export function notePathFirst(tools: AlleviaTool[], written: () => boolean): All
   }));
 }
 
+// What use_skill's result says it showed the agent: its business-skill rule ids (each with the channel it is scoped to, if one) and the
+// ids of the learned rules. Both are Memory or Rule nodes, so the turn can be GUIDED_BY them.
+export function skillRulesShown(agent: string, data: Record<string, unknown>): Array<{ agent: string; id: string; channel?: { id: string; name: string } }> {
+  const out: Array<{ agent: string; id: string; channel?: { id: string; name: string } }> = [];
+  for (const r of Array.isArray(data.rules) ? data.rules : []) {
+    const o = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+    const ch = (o.channel && typeof o.channel === "object" ? o.channel : undefined) as { id?: unknown; name?: unknown } | undefined;
+    if (typeof o.id === "string" && o.id) out.push({ agent, id: o.id, ...(typeof ch?.id === "string" ? { channel: { id: ch.id, name: typeof ch.name === "string" ? ch.name : ch.id } } : {}) });
+  }
+  for (const id of Array.isArray(data.learned) ? data.learned : []) if (typeof id === "string" && id) out.push({ agent, id });
+  return out;
+}
+
 // show_path's result says what it could not draw: ids nobody looked up (refused), unknown ids, pairs with no link within the
 // hops or not checked in time. A path with none of those is fully grounded; the Turn keeps the answer (Turn.pathGrounded).
 export function pathIsGrounded(data: unknown): boolean | undefined {
@@ -616,6 +629,7 @@ class Turn {
   readonly reviews: ReviewRecord[] = [];
   readonly proposals: ProposalRecord[] = [];
   readonly skillsUsed: SkillUse[] = [];
+  private readonly skillRules: Array<{ agent: string; id: string; channel?: { id: string; name: string } }> = []; // what use_skill showed: the business's rules for the skill, and lessons learned from edits
   readonly memories: string[] = [];
   readonly deliverables: DeliverableRecord[] = [];
   private readonly creative?: CreativeDeps;               // the request's own copy: one credit count for every tool call of the turn
@@ -714,6 +728,18 @@ class Turn {
     return { turn: unique([...byAgent.values()].flat()), byAgent };
   }
 
+  // The rules use_skill showed an agent that applied to this turn, by agent: one scoped to a channel applies like an owner
+  // instruction does (the turn touched the channel or named it); the rest always do.
+  skillGuidance(texts: string[]): Map<string, string[]> {
+    const corpus = [this.input.question, ...texts].join("\n");
+    const out = new Map<string, string[]>();
+    for (const r of this.skillRules) {
+      if (r.channel && !this.touched.has(r.channel.id) && !namesChannel(corpus, r.channel)) continue;
+      out.set(r.agent, unique([...(out.get(r.agent) ?? []), r.id]));
+    }
+    return out;
+  }
+
   private guidanceFor(agents: string[], texts: string[]): InstructionNote[] {
     const { byAgent } = this.guidance(texts);
     const ids = new Set(agents.flatMap((a) => byAgent.get(a) ?? []));
@@ -741,6 +767,8 @@ class Turn {
           emit({ type: "skill_used", ...use });
           emit({ type: "agent_status", agent, text: `${nameOf(agent)} is using: ${use.name}` });
           commit(() => { if (!this.skillsUsed.some((u) => u.agent === agent && u.skillId === use.skillId)) this.skillsUsed.push(use); });
+          const shown = skillRulesShown(agent, d);
+          if (shown.length) commit(() => { this.skillRules.push(...shown); });
         }
       } else if (name === "remember") {
         const id = (result.data && typeof result.data === "object" ? (result.data as Record<string, unknown>).id : undefined);
@@ -1261,10 +1289,13 @@ export async function runTurn(input: TurnInput, deps: TurnDeps, emit: Emit): Pro
   const text = ok ? await t.polish(answered.text, plan) : answered.text;
 
   const findings = plan.steps.map((s) => t.findings.get(s.agent)).filter((f): f is FindingRecord => !!f);
-  const { turn: guidedBy, byAgent } = t.guidance([...plan.steps.map((s) => s.task), ...findings.map((f) => f.text), text]);
+  const corpus = [...plan.steps.map((s) => s.task), ...findings.map((f) => f.text), text];
+  const { turn: owned, byAgent } = t.guidance(corpus);
+  const skillRules = t.skillGuidance(corpus);
+  const guidedBy = unique([...owned, ...[...skillRules.values()].flat()]);
   for (const f of findings) {
-    const ids = byAgent.get(f.agent);
-    if (ids?.length) f.guidedBy = ids;
+    const ids = unique([...(byAgent.get(f.agent) ?? []), ...(skillRules.get(f.agent) ?? [])]);
+    if (ids.length) f.guidedBy = ids;
     const used = t.skillsUsed.filter((u) => u.agent === f.agent).map((u) => u.skillId);
     if (used.length) f.skills = used;
   }

@@ -28,10 +28,12 @@ import type { GraphHandle } from "../graph/client.js";
 export const MCP_SERVER_NAME = "allevia";
 export const MCP_SERVER_VERSION = "0.1.0";
 
-// The read-only tools Jarvis gets (spec §10, plus the other pure reads it needs to explain an answer).
+// The read-only tools Jarvis gets (spec §10, plus the other pure reads it needs to explain an answer): `important` and `topics`
+// are the graph algorithms (PageRank, label propagation), `history` is what a node used to be, `show_path` joins the ids a client
+// names into the path that explains them (it only reads: each call is its own turn, so it is not held to a touched set).
 export const MCP_TOOL_NAMES = [
   "search", "get_entity", "neighbors", "find_paths", "trace_decision", "who_owns", "who_knows", "impact_of",
-  "metric_trend", "recall", "cypher",
+  "metric_trend", "important", "topics", "history", "show_path", "recall", "cypher",
 ] as const;
 
 // Who the calls are attributed to in a ToolContext. Read tools do not record it; it only names the caller in errors.
@@ -48,9 +50,9 @@ export interface McpServerOpts {
 
 const INSTRUCTIONS =
   "Allevia's company brain for one business, read-only. Start with `search` to find ids, then follow them with " +
-  "get_entity, neighbors, trace_decision, who_owns/who_knows, impact_of, metric_trend, find_paths or recall. Every " +
-  "result is JSON: data plus the nodes and sources it came from, so cite node ids and source titles. `cypher` is " +
-  "GRAPH.RO_QUERY only. Nothing here can change the graph.";
+  "get_entity, neighbors, history, trace_decision, who_owns/who_knows, impact_of, metric_trend, find_paths, show_path, " +
+  "important, topics or recall. Every result is JSON: data plus the nodes and sources it came from, so cite node ids and " +
+  "source titles. `cypher` is GRAPH.RO_QUERY only. Nothing here can change the graph.";
 
 let callSeq = 0;
 

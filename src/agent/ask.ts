@@ -12,6 +12,7 @@ import { agentById } from "../../shared/roster.js";
 import { loadTeamSettings } from "../settings/team.js";
 import { loadLanguagePreference } from "./language.js";
 import { fillInFromSession, isFillItIn } from "./fillin.js";
+import { VECTOR_DIM } from "../graph/indexes.js";
 import { checkTurn, extractCitations } from "./checks.js";
 import { getSession, newSessionId, newTurnId, recallBrief, saveTurn, startSession } from "./memory.js";
 import { runTurn, type TurnOutcome } from "./orchestrator.js";
@@ -79,6 +80,19 @@ export interface AskResult {
 }
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+// The question's vector, saved on the Turn so "have we been asked something like this" is a vector search (recall, search with
+// types:["Turn"]). Best effort and short: no embedder, a wrong-sized vector or a slow one is simply no embedding.
+const EMBED_TURN_MS = 4_000;
+async function embedQuestion(embed: AskDeps["embedQuery"], question: string): Promise<number[] | undefined> {
+  if (!embed || !question) return undefined;
+  try {
+    const v = await Promise.race([embed(question), new Promise<undefined>((r) => setTimeout(() => r(undefined), EMBED_TURN_MS).unref())]);
+    return v && v.length === VECTOR_DIM && v.every(Number.isFinite) ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
 export const STOPPED_MESSAGE = "Stopped before the answer was finished.";
 const EMPTY_BRIEF: RecallBrief = { text: "", ids: [] };
 
@@ -187,10 +201,12 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
 
   if (g && !input.ephemeral) {
     try {
+      const embedding = await embedQuestion(deps.embedQuery, question);
       const saved = await saveTurn(g, {
         turnId, sessionId, question, answer, asker, source: input.channel, at: now, ms, status: failure ? "failed" : "ok", ...(failure ? { error: failure } : {}),
         ...(target ? { target } : {}), checks, agents, events: log, touched: outcome?.touched ?? [], citations,
         findings: outcome?.findings ?? [], reviews: outcome?.reviews ?? [], guidedBy: outcome?.guidedBy ?? [],
+        ...(embedding ? { embedding } : {}),
         ...(outcome?.skills?.length ? { skills: outcome.skills } : {}),
         made: [...(outcome?.proposals ?? []).flatMap((p) => [p.recommendationId, p.approvalId]), ...(outcome?.memories ?? [])].filter(Boolean),
         ...(outcome?.path?.nodes.length ? { pathIds: outcome.path.nodes.map((n) => n.id), ...(outcome.pathGrounded !== undefined ? { pathGrounded: outcome.pathGrounded } : {}) } : {}),

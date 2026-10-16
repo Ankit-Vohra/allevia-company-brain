@@ -4,8 +4,10 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { GraphHandle } from "../../src/graph/client.js";
 import { decideApproval } from "../../src/actions/approvals.js";
+import { writeBatch } from "../../src/graph/upsert.js";
 import {
-  applyRule, applyRules, editDistance, extractRules, learnFromEdit, wordDiff, words, type ActiveRule, type LearnedEvent,
+  applyRule, applyRules, editDistance, editFragment, extractRules, guideCards, learnFromEdit, ruleUse, wordDiff, words,
+  type ActiveRule, type LearnedEvent, type RuleOp, type RuleSpec,
 } from "../../src/actions/learning.js";
 import type { Candidate } from "../../src/insights/detectors.js";
 import { writeRecommendation } from "../../src/insights/recommend.js";
@@ -135,11 +137,27 @@ describe("the learning loop, end to end", () => {
     expect(await count(`MATCH (:Rule {id:$r})-[:APPLIES_TO]->(x) WHERE x.id IN ['agent:allevia-content-strategist', 'channel:instagram'] RETURN count(*) AS c`, { r: ruleId })).toBe(2);
     expect(await count("MATCH (:Agent {id:'agent:allevia-copy-editor'})-[:PRODUCED]->(:Rule {id:$r}) RETURN count(*) AS c", { r: ruleId })).toBe(1);
     expect(r1.metrics).toMatchObject({ firstPassRate: 0, learnedRules: 1, deliverablesApproved: 1 });
+    // ... and the rule says where it came from: the approval as its src, the day, the confidence, and the words before and after
+    const [lf] = await g.roQuery<Record<string, unknown>>(
+      `MATCH (r:Rule {id:$r})-[e:LEARNED_FROM]->(:Approval {id:$a}) RETURN e.src AS src, e.asOf AS asOf, e.conf AS conf, e.before AS before, e.after AS after, e.op AS op, r.src AS ruleSrc, r.asOf AS ruleAsOf, r.confidence AS confidence`,
+      { r: ruleId, a: first.approvalId });
+    expect(lf).toEqual({ src: first.approvalId, asOf: new Date(t1).toISOString().slice(0, 10), conf: 0.7, before: "villa", after: "home", op: "replace", ruleSrc: first.approvalId, ruleAsOf: new Date(t1).toISOString().slice(0, 10), confidence: 0.7 });
 
     // 4. The next draft says "villa" again; the card already shows "home" ...
     const second = await writeRecommendation(g, draft("test:draft-2", "Before and after: a villa kitchen", "This villa kitchen got a skylight."), { now: t1 });
     const [card] = await g.roQuery<{ payload: string }>("MATCH (a:Approval {id:$id}) RETURN a.payload AS payload", { id: second.approvalId });
     expect(JSON.parse(card!.payload)).toMatchObject({ title: "Before and after: a home kitchen", body: "This home kitchen got a skylight.", rulesApplied: [ruleId] });
+
+    // The card is GUIDED_BY the rule that rewrote it (both the idea and the card), and says what it swapped.
+    const guided = await g.roQuery<Record<string, unknown>>(
+      `MATCH (c:Entity)-[e:GUIDED_BY]->(r:Rule {id:$r}) WHERE c.id IN [$rec, $ap] AND e.until IS NULL RETURN c.id AS card, e.how AS how, e.find AS find, e.replace AS replace, e.src AS src ORDER BY card`,
+      { r: ruleId, rec: second.id, ap: second.approvalId });
+    expect(guided).toEqual([
+      { card: second.approvalId, how: "rewrote", find: "villa", replace: "home", src: second.id },
+      { card: second.id, how: "rewrote", find: "villa", replace: "home", src: second.id },
+    ]); // "approval:" sorts before "recommendation:"
+    // the first card was drafted before the rule existed: nothing guided it
+    expect(await count("MATCH (:Entity {id:$ap})-[e:GUIDED_BY]->() WHERE ID(e) >= 0 RETURN count(e) AS c", { ap: first.approvalId })).toBe(0);
 
     // ... so the owner approves it as it is: first pass.
     const t2 = SEED_NOW + 7_200_000;
@@ -148,6 +166,8 @@ describe("the learning loop, end to end", () => {
     expect(r2.learned).toBeUndefined();
     const contentId = r2.action!.produced[0]!;
     expect(await count("MATCH (c:Content {id:$c})-[:USES_RULE]->(:Rule {id:$r}) WHERE c.status = 'draft' RETURN count(*) AS c", { c: contentId, r: ruleId })).toBe(1);
+    const [uses] = await g.roQuery<Record<string, unknown>>("MATCH (:Content {id:$c})-[e:USES_RULE]->(:Rule {id:$r}) RETURN e.applied AS applied, e.how AS how, e.find AS find, e.replace AS replace", { c: contentId, r: ruleId });
+    expect(uses).toEqual({ applied: true, how: "rewrote", find: "villa", replace: "home" });
     expect(await count("MATCH (r:Rule {id:$r}) WHERE r.appliedCount = 1 RETURN count(*) AS c", { r: ruleId })).toBe(1);
     const [c2] = await g.roQuery<{ path: string; title: string }>("MATCH (c:Content {id:$c}) RETURN c.draftPath AS path, c.title AS title", { c: contentId });
     expect(c2!.title).toBe("Before and after: a home kitchen");
@@ -186,5 +206,64 @@ describe("the learning loop, end to end", () => {
     const bad = await learnFromEdit(g, { approvalId: "approval:t-001-1", original, edited, now }, { llm: { structured: async () => { throw new Error("offline"); } } });
     expect(bad).toEqual([]);
     expect(await learnFromEdit(g, { approvalId: "approval:t-001-1", original, edited, now })).toEqual([]); // no model: nothing
+  });
+});
+
+describe("a card is GUIDED_BY the rules that shaped it", () => {
+  let g: GraphHandle;
+  let cleanup: () => Promise<void>;
+  const rows = <T>(q: string, p: Record<string, unknown> = {}) => g.roQuery<T>(q, p);
+  const rule = (id: string, op: ActiveRule["op"], extra: Partial<ActiveRule> = {}): ActiveRule => ({ id, kind: "learned", text: id, op, confidence: 0.7, appliedCount: 0, ...extra });
+
+  beforeAll(async () => {
+    ({ g, cleanup } = await seededGraph());
+    const s = await writeBatch(g, { nodes: [
+      { type: "Recommendation", id: "recommendation:guided", name: "A guided idea", props: { status: "open" } },
+      { type: "Approval", id: "approval:guided", name: "content_draft: guided", props: { status: "pending" } },
+      { type: "Rule", id: "rule:learned-swap", name: "Say home", props: { kind: "learned", status: "active", op: "replace", find: "villa", replace: "home" } },
+      { type: "Rule", id: "rule:learned-short", name: "Keep it short", props: { kind: "learned", status: "active", op: "max_words", max: 30 } },
+      { type: "BrandRule", id: "brand-rule:warm", name: "Warm voice", props: { text: "Sound warm." } },
+    ] }, SEED_NOW);
+    expect(s.errors).toEqual([]);
+  });
+  afterAll(async () => { await cleanup?.(); });
+
+  it("a rule the code applied 'rewrote' the text (with what it swapped); any other 'instructed' the writer", () => {
+    expect(ruleUse({ op: "replace", find: "villa", replace: "home" })).toEqual({ how: "rewrote", find: "villa", replace: "home" });
+    expect(ruleUse({ op: "remove_emoji" })).toEqual({ how: "rewrote" });
+    expect(ruleUse({ op: "max_words" })).toEqual({ how: "instructed" });
+    expect(ruleUse({ op: "instruction" })).toEqual({ how: "instructed" });
+    expect(ruleUse({})).toEqual({ how: "instructed" }); // a brand rule
+  });
+
+  it("writes GUIDED_BY from the idea and the card to each rule, to a brand rule too, and closes one that stops applying", async () => {
+    const swap = rule("rule:learned-swap", "replace", { find: "villa", replace: "home" });
+    const short = rule("rule:learned-short", "max_words", { max: 30 });
+    const brand: ActiveRule = { id: "brand-rule:warm", kind: "brand", text: "Sound warm.", op: "instruction", confidence: 1, appliedCount: 0 };
+    await guideCards(g, ["recommendation:guided", "approval:guided"], [swap, short, brand], SEED_NOW, "recommendation:guided");
+    const now = await rows<{ card: string; rule: string; how: string; find: string | null; src: string; asOf: string }>(
+      `MATCH (c:Entity)-[e:GUIDED_BY]->(r:Entity) WHERE c.id IN ['recommendation:guided', 'approval:guided'] AND e.until IS NULL
+       RETURN c.id AS card, r.id AS rule, e.how AS how, e.find AS find, e.src AS src, e.asOf AS asOf ORDER BY card, rule`);
+    expect(now.map((r) => [r.card, r.rule, r.how, r.find])).toEqual([
+      ["approval:guided", "brand-rule:warm", "instructed", null], ["approval:guided", "rule:learned-short", "instructed", null], ["approval:guided", "rule:learned-swap", "rewrote", "villa"],
+      ["recommendation:guided", "brand-rule:warm", "instructed", null], ["recommendation:guided", "rule:learned-short", "instructed", null], ["recommendation:guided", "rule:learned-swap", "rewrote", "villa"],
+    ]);
+    expect(now.every((r) => r.src === "recommendation:guided" && r.asOf === new Date(SEED_NOW).toISOString().slice(0, 10))).toBe(true);
+
+    // a re-run where only the swap still applies: the others are closed (kept as history), the swap stays, nothing doubles
+    await guideCards(g, ["recommendation:guided", "approval:guided"], [swap], SEED_NOW + 1000, "recommendation:guided");
+    const after = await rows<{ rule: string; open: number; closed: number }>(
+      `MATCH (:Entity {id:'approval:guided'})-[e:GUIDED_BY]->(r:Entity) WITH r, sum(CASE WHEN e.until IS NULL THEN 1 ELSE 0 END) AS open, sum(CASE WHEN e.until IS NULL THEN 0 ELSE 1 END) AS closed
+       RETURN r.id AS rule, open, closed ORDER BY rule`);
+    expect(after).toEqual([{ rule: "brand-rule:warm", open: 0, closed: 1 }, { rule: "rule:learned-short", open: 0, closed: 1 }, { rule: "rule:learned-swap", open: 1, closed: 0 }]);
+  });
+
+  it("LEARNED_FROM keeps the fragment of the edit: emoji, an exclamation sentence, hype words, length", () => {
+    const spec = (op: RuleOp, extra: Partial<RuleSpec> = {}): RuleSpec => ({ id: `rule:x-${op}`, op, text: "x", confidence: 0.6, ...extra });
+    expect(editFragment(spec("remove_emoji"), "New jobs today 🎉🔥 apply", "New jobs today apply")).toEqual({ before: "🎉🔥", after: "" });
+    expect(editFragment(spec("no_exclaim"), "Hello there. New jobs today! Apply now.", "x")).toEqual({ before: "New jobs today!", after: "New jobs today." });
+    expect(editFragment(spec("avoid_words", { words: ["stunning", "amazing"] }), "", "")).toEqual({ before: "stunning, amazing", after: "" });
+    expect(editFragment(spec("max_words"), "one two three four five six", "one two three")).toEqual({ before: "6 words", after: "3 words" });
+    expect(editFragment(spec("instruction"), "a", "b")).toEqual({});
   });
 });

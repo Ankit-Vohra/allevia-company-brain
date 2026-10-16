@@ -16,6 +16,7 @@ import { AGENTS, DEPARTMENTS, agentById } from "../../shared/roster.js";
 import type { AgentEvent, NodeRef, TurnChecks } from "../../shared/contracts.js";
 import type { GraphHandle } from "../graph/client.js";
 import { noteGraphWrite } from "../graph/projection.js";
+import { VECTOR_DIM } from "../graph/indexes.js";
 import { writeBatch, type EdgeInput, type NodeInput, type Prim } from "../graph/upsert.js";
 import { typeFromId } from "../util/ids.js";
 import { isoDate, istDate } from "../util/time.js";
@@ -24,6 +25,8 @@ import type { FindingRecord, RecallBrief, ReviewRecord } from "./types.js";
 
 export const agentNodeId = (rosterId: string): string => `agent:allevia-${rosterId}`;
 export const teamNodeId = (departmentId: string): string => `team:allevia-${departmentId}`;
+// A skill (the way the team does one kind of job) is a Playbook{kind:'skill'} in the business's graph once a turn opens it.
+export const skillNodeId = (skillId: string): string => `playbook:skill-${skillId}`;
 
 const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
 const oneLine = (s: string): string => s.replace(/\s+/g, " ").trim();
@@ -220,7 +223,7 @@ export interface SaveTurnInput {
   reviews: ReviewRecord[];
   guidedBy?: string[];              // the owner's instructions (Memory, Rule, BrandRule ids) the turn worked under
   target?: string;                  // a direct chat: the roster agent the owner talked to (saved as Turn.target)
-  skills?: Array<{ agent: string; skillId: string }>; // the skills agents opened (saved as Turn.skills: "agent/skill-id")
+  skills?: Array<{ agent: string; skillId: string }>; // the skills agents opened (saved as Turn.skills: "agent/skill-id", and as edges to their Playbook nodes)
   // The path the answer shows ("How we know"): the node ids in order, kept as Turn.pathIds and as onPath/pathIndex on the
   // TOUCHED edge to each, so "which answers walked through this node" is a read (answersThrough). pathGrounded: show_path
   // drew it with no id nobody looked up and no pair left unlinked.
@@ -229,6 +232,8 @@ export interface SaveTurnInput {
   // Cards (Recommendation, Approval) and memories the turn's tools made: each one whose own `src` is this turn gets
   // SOURCED_FROM this Turn (one a tool only reused, made by an earlier turn, does not).
   made?: string[];
+  // The question's vector (384-d, the same embedder the search tool uses): saved on the Turn so earlier questions can be found by meaning.
+  embedding?: number[];
   // What the answer cost the model (src/agent/runtime.ts Usage, summed over every run of the turn) and how many graph tool
   // calls it made: saved on the Turn, so "a few hops, few tokens" is a question the graph answers (docs/graph-audit.md).
   cost?: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; modelCalls: number; toolCalls: number };
@@ -251,7 +256,10 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   const touchedIds = t.touched instanceof TouchedSet ? [...t.touched.nodes().map((n) => n.id), ...t.touched.sources().map((s) => s.id)] : t.touched;
   const findingIds = new Set(t.findings.map((f) => f.id));
   const guideIds = [...(t.guidedBy ?? []), ...t.findings.flatMap((f) => f.guidedBy ?? [])].filter((id) => GUIDES.has(typeFromId(id) ?? ""));
-  const known = await existing(g, [...touchedIds, ...(t.pathIds ?? []), ...t.citations, ...t.findings.flatMap((f) => [...f.citations, ...f.basedOn]), ...guideIds]);
+  // The skills opened this turn that are in the graph as Playbook nodes (use_skill writes them): the Turn TOUCHED them, the agent
+  // that opened one USES it, and the Finding of a desk that used it is GUIDED_BY it.
+  const skillIds = unique([...(t.skills ?? []).map((s) => s.skillId), ...t.findings.flatMap((f) => f.skills ?? [])]).map(skillNodeId);
+  const known = await existing(g, [...touchedIds, ...(t.pathIds ?? []), ...skillIds, ...t.citations, ...t.findings.flatMap((f) => [...f.citations, ...f.basedOn]), ...guideIds]);
   const guide = (id: string): boolean => known.has(id) && GUIDES.has(typeFromId(id) ?? ""); // an instruction still in the graph
   const exists = (id: string): boolean => known.has(id) && id !== t.turnId;
   const seen = new Set(touchedIds);
@@ -283,7 +291,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   // Every node and edge the turn writes carries where it came from (this turn) and the date; edges start when the turn did.
   const asOf = isoDate(now);
   const stamp = { src: t.turnId, asOf, since: now } as const;
-  const nodes: NodeInput[] = [{ type: "Turn", id: t.turnId, name: clip(oneLine(t.question), 120) || t.turnId, summary: clip(t.answer, 600), props: turnProps, src: t.turnId, asOf }];
+  const nodes: NodeInput[] = [{ type: "Turn", id: t.turnId, name: clip(oneLine(t.question), 120) || t.turnId, summary: clip(t.answer, 600), props: turnProps, src: t.turnId, asOf, ...(t.embedding?.length === VECTOR_DIM && t.embedding.every(Number.isFinite) ? { embedding: t.embedding } : {}) }];
   const edges: EdgeInput[] = [{ from: t.turnId, type: "IN_SESSION", to: t.sessionId }];
   if (askerOk) edges.push({ from: t.asker, type: "ASKED", to: t.turnId });
   for (const a of unique(t.agents)) if (agentById(a)) edges.push({ from: t.turnId, type: "HANDLED_BY", to: agentNodeId(a), ...stamp });
@@ -294,6 +302,11 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   }
   for (const id of unique(t.citations)) if (cited(id)) edges.push({ from: t.turnId, type: "CITED", to: id, ...stamp });
   for (const id of unique(t.guidedBy ?? [])) if (guide(id)) edges.push({ from: t.turnId, type: "GUIDED_BY", to: id, ...stamp });
+  for (const id of skillIds) if (exists(id)) edges.push({ from: t.turnId, type: "TOUCHED", to: id, ...stamp }); // a way of working, never a citation
+  for (const u of unique((t.skills ?? []).map((s) => `${s.agent}|${s.skillId}`))) {
+    const [agent, skill] = u.split("|") as [string, string];
+    if (agentById(agent) && exists(skillNodeId(skill))) edges.push({ from: agentNodeId(agent), type: "USES", to: skillNodeId(skill), ...stamp });
+  }
   // What the turn's tools made (a card, a memory) is SOURCED_FROM the turn: only when its own `src` is this turn.
   const made = unique((t.made ?? []).filter((id) => MADE_BY_TURN.has(typeFromId(id) ?? "")));
   if (made.length) {
@@ -316,6 +329,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
     for (const id of unique(f.citations)) if (cited(id)) edges.push({ from: f.id, type: "CITED", to: id, ...stamp });
     for (const id of unique(f.basedOn)) if (id !== f.id && (findingIds.has(id) || known.has(id))) edges.push({ from: f.id, type: "BASED_ON", to: id, ...stamp });
     for (const id of unique(f.guidedBy ?? [])) if (guide(id)) edges.push({ from: f.id, type: "GUIDED_BY", to: id, ...stamp });
+    for (const k of unique(f.skills ?? [])) if (exists(skillNodeId(k))) edges.push({ from: f.id, type: "GUIDED_BY", to: skillNodeId(k), ...stamp });
   }
   for (const r of t.reviews) {
     if (agentById(r.reviewer) && findingIds.has(r.findingId)) {
@@ -431,9 +445,12 @@ export async function recallBrief(g: GraphHandle, o: { question: string; seedIds
       for (const c of cards) { ref(c.id, "Approval", c.title); if (c.task) ref(c.task, "Task", c.title); }
     }
 
+    // A note a newer one replaced (SUPERSEDES, written by `remember` when a preference or fact changes) is not "what we know".
     const notes = await g.roQuery<{ id: string; name: string; text: string | null; kind: string | null; asOf: string | null }>(
       `MATCH (m:Memory)-[r:ABOUT]->(x:Entity) WHERE x.id IN $ids AND r.until IS NULL
-       WITH DISTINCT m RETURN m.id AS id, m.name AS name, coalesce(m.text, m.summary, m.name) AS text, m.kind AS kind, m.asOf AS asOf
+       WITH DISTINCT m OPTIONAL MATCH (newer:Memory)-[s:SUPERSEDES]->(m) WHERE s.until IS NULL
+       WITH m, count(newer) AS superseded WHERE superseded = 0
+       RETURN m.id AS id, m.name AS name, coalesce(m.text, m.summary, m.name) AS text, m.kind AS kind, m.asOf AS asOf
        ORDER BY coalesce(m.createdAt, 0) DESC, m.id LIMIT 8`, { ids: seeds });
     if (notes.length) {
       sections.push({ title: "Notes from the owner and the team:", lines: notes.map((m) => `- [[${m.id}]]${m.kind ? ` (${m.kind})` : ""}${m.asOf ? ` as of ${m.asOf}` : ""}: ${clip(oneLine(m.text ?? ""), 240)}`) });
@@ -456,7 +473,8 @@ export async function recallBrief(g: GraphHandle, o: { question: string; seedIds
   }
 
   const prefs = await g.roQuery<{ id: string; name: string; text: string | null }>(
-    `MATCH (m:Memory) WHERE m.kind = 'preference'
+    `MATCH (m:Memory) WHERE m.kind = 'preference' OPTIONAL MATCH (newer:Memory)-[s:SUPERSEDES]->(m) WHERE s.until IS NULL
+     WITH m, count(newer) AS superseded WHERE superseded = 0
      RETURN m.id AS id, m.name AS name, coalesce(m.text, m.summary, m.name) AS text ORDER BY coalesce(m.createdAt, 0) DESC, m.id LIMIT 8`);
   if (prefs.length) {
     sections.push({ title: "Owner preferences:", lines: prefs.map((m) => `- [[${m.id}]] ${clip(oneLine(m.text ?? ""), 200)}`) });

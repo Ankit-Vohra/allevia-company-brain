@@ -10,6 +10,10 @@ import {
 } from "./common.js";
 
 const RRF_K = 60;
+// The entity vector index also holds the Turns (each question's vector, saved by saveTurn) and they are filtered out of a search
+// afterwards, so the nearest-neighbour list is asked for this many more: an earlier copy of the very question being asked is the
+// nearest thing to it and must not crowd the entities out.
+const VECTOR_HEADROOM = 30;
 
 interface ChunkRow { c: NodeRow; text: string | null; doc: NodeRow | null; score: number }
 interface EntRow { n: NodeRow; summary: string | null; score: number }
@@ -44,8 +48,9 @@ async function run(args: { query: string; types?: string[]; limit?: number }, ct
 
   const entCols = `${NODE("node")} AS n, node.summary AS summary, score`;
   const chunkCols = `${NODE("node")} AS c, node.text AS text, ${NODE("d")} AS doc, score`;
-  // a skill (the team's way of working) is never a search hit: it is not evidence, so it must not be found and cited
-  const typeFilter = "WITH node, score WHERE any(l IN labels(node) WHERE l IN $types) AND NOT node:Chunk AND NOT (node:Memory AND coalesce(node.kind, '') IN ['skill', 'skill_rule'])";
+  // a skill (the team's way of working: a Memory the owner wrote, or a Playbook{kind:'skill'} a turn opened) is never a search hit:
+  // it is not evidence, so it must not be found and cited
+  const typeFilter = "WITH node, score WHERE any(l IN labels(node) WHERE l IN $types) AND NOT node:Chunk AND NOT ((node:Memory OR node:Playbook) AND coalesce(node.kind, '') IN ['skill', 'skill_rule'])";
   const q = terms.length ? ftQuery(terms) : null;
   let vec: number[] | null = null;
   if (ctx.embedQuery) {
@@ -65,7 +70,7 @@ async function run(args: { query: string; types?: string[]; limit?: number }, ct
     // The `node.id` tiebreak is load-bearing: FalkorDB 6.0.2 panics (and restarts) sorting on score alone when two
     // scores tie and map columns are projected ("comparison function does not correctly implement a total order").
     vec && entityTypes.length ? safe(ro<EntRow>(ctx, `CALL db.idx.vector.queryNodes('Searchable', 'embedding', $k, vecf32($v)) YIELD node, score ${typeFilter}
-      RETURN ${entCols} ORDER BY score ASC, node.id`, { v: vec, types: entityTypes, k: limit * 2 }), errors, "vector") : [],
+      RETURN ${entCols} ORDER BY score ASC, node.id`, { v: vec, types: entityTypes, k: limit * 2 + VECTOR_HEADROOM }), errors, "vector") : [],
     vec && wantChunks ? safe(ro<ChunkRow>(ctx, `CALL db.idx.vector.queryNodes('Chunk', 'textEmbedding', $k, vecf32($v)) YIELD node, score
       OPTIONAL MATCH (d:Document)-[:HAS_CHUNK]->(node) RETURN ${chunkCols} ORDER BY score ASC, node.id`, { v: vec, k: limit * 2 }), errors, "chunk vector") : [],
   ]);

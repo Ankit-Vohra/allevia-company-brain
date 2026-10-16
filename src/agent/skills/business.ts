@@ -122,14 +122,18 @@ export function skillsForLearnedRule(o: { agentId?: string | undefined; draft: s
   return out;
 }
 
-// The things this business's edits taught the team that belong to one skill, most confident first.
-export async function learnedRulesForSkill(g: Read, skillId: string): Promise<string[]> {
+// The things this business's edits taught the team that belong to one skill, most confident first (the Rule's id and its words).
+export async function learnedRuleRefsForSkill(g: Read, skillId: string): Promise<Array<{ id: string; text: string }>> {
   try {
-    const rows = await g.roQuery<{ text: string | null; name: string | null }>(
+    const rows = await g.roQuery<{ id: string; text: string | null; name: string | null }>(
       `MATCH (r:Rule) WHERE r.kind = 'learned' AND r.status = 'active' AND $skill IN coalesce(r.skills, [])
-       RETURN r.text AS text, r.name AS name ORDER BY coalesce(r.confidence, 0) DESC, r.id LIMIT 8`, { skill: skillId });
-    return rows.map((r) => (r.text ?? r.name ?? "").trim()).filter(Boolean);
+       RETURN r.id AS id, r.text AS text, r.name AS name ORDER BY coalesce(r.confidence, 0) DESC, r.id LIMIT 8`, { skill: skillId });
+    return rows.map((r) => ({ id: r.id, text: (r.text ?? r.name ?? "").trim() })).filter((r) => r.text);
   } catch {
     return []; // a skill still opens without them
   }
+}
+
+export async function learnedRulesForSkill(g: Read, skillId: string): Promise<string[]> {
+  return (await learnedRuleRefsForSkill(g, skillId)).map((r) => r.text);
 }

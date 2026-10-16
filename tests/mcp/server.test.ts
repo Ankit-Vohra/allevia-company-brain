@@ -37,10 +37,13 @@ describe("Allevia MCP server", () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([...MCP_TOOL_NAMES].sort());
-    expect(names).toEqual(["cypher", "find_paths", "get_entity", "impact_of", "metric_trend", "neighbors", "recall", "search", "trace_decision", "who_knows", "who_owns"]);
+    expect(names).toEqual([
+      "cypher", "find_paths", "get_entity", "history", "impact_of", "important", "metric_trend", "neighbors", "recall", "search", "show_path",
+      "topics", "trace_decision", "who_knows", "who_owns",
+    ]);
     const writers = ALL_TOOLS.filter(isWriteTool).map((t) => t.name);
     expect(writers.length).toBeGreaterThan(0);
-    for (const w of [...writers, "show_path"]) expect(names).not.toContain(w);
+    for (const w of writers) expect(names).not.toContain(w);
     for (const t of tools) {
       expect(t.annotations?.readOnlyHint).toBe(true);
       expect(t.description).toBeTruthy();
@@ -68,6 +71,38 @@ describe("Allevia MCP server", () => {
     const ids = out.nodes.map((n) => n.id);
     expect(ids).toContain("decision:003-daily-stories");
     expect(out.sources.map((s) => s.id)).toContain("document:adr-007");
+  });
+
+  it("show_path joins the ids a client names into the path, over MCP (each call is its own turn: no touched set to hold it to)", async () => {
+    const r = await client.callTool({
+      name: "show_path", arguments: { ids: ["decision:007-pause-daily-stories", "channel:instagram", "system:ig-connector"] },
+    }) as CallOut;
+    expect(r.isError).toBeFalsy();
+    const out = parse(r);
+    expect(out.data.ordered).toEqual(["decision:007-pause-daily-stories", "channel:instagram", "system:ig-connector"]);
+    expect(out.data.unconnected).toEqual([]);
+    expect(out.edges.map((e) => e.type)).toEqual(["AFFECTS", "DEPENDS_ON"]);
+    // an id that is not in the records is named, not drawn
+    const bad = parse(await client.callTool({ name: "show_path", arguments: { ids: ["decision:007-pause-daily-stories", "decision:nope"] } }) as CallOut);
+    expect(bad.data.missing).toEqual(["decision:nope"]);
+  });
+
+  it("important and topics run the graph algorithms; history returns what a node used to be", async () => {
+    const ranked = await client.callTool({ name: "important", arguments: { limit: 5 } }) as CallOut;
+    expect(ranked.isError).toBeFalsy();
+    expect(parse(ranked).nodes.length).toBeGreaterThan(0);
+    const grouped = await client.callTool({ name: "topics", arguments: {} }) as CallOut;
+    expect(grouped.isError).toBeFalsy();
+    expect(Object.keys(parse(grouped))).toEqual(expect.arrayContaining(["data", "nodes", "edges", "sources"]));
+    const past = await client.callTool({ name: "history", arguments: { id: "decision:007-pause-daily-stories" } }) as CallOut;
+    expect(past.isError).toBeFalsy();
+    expect(parse(past).nodes.map((n) => n.id)).toContain("decision:007-pause-daily-stories");
+  });
+
+  it("recall is there too: what earlier threads said about a node", async () => {
+    const r = await client.callTool({ name: "recall", arguments: { ids: ["decision:007-pause-daily-stories"] } }) as CallOut;
+    expect(r.isError).toBeFalsy();
+    expect(parse(r).data.about.map((a: { id: string }) => a.id)).toEqual(["decision:007-pause-daily-stories"]);
   });
 
   it("a write through cypher is refused and changes nothing", async () => {
