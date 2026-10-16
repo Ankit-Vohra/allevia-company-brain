@@ -72,7 +72,7 @@ describe("capability ladder (integration)", () => {
     const caps = await deriveCapabilities(g, { now: NOW });
     const by = Object.fromEntries(caps.map((c) => [c.key, c]));
     const brief = (k: string) => ({ mode: by[k]!.accessMode, status: by[k]!.status });
-    expect(caps.map((c) => c.key)).toEqual(["ga4", "search_console", "gbp", "instagram_insights", "reviews", "studio", "ads"]);
+    expect(caps.map((c) => c.key)).toEqual(["ga4", "search_console", "gbp", "instagram_insights", "reviews", "studio", "ads", "calendar", "email"]);
     expect(brief("ga4")).toEqual({ mode: "delegated", status: "ok" });                 // fresh data through delegated access
     expect(brief("search_console")).toEqual({ mode: "public", status: "stale" });      // 20-day-old data: falls back to the crawl
     expect(brief("gbp")).toEqual({ mode: "public", status: "not_connected" });         // only the public listing
@@ -92,8 +92,8 @@ describe("capability ladder (integration)", () => {
   it("writes Capability nodes PART_OF the Business and DEPENDS_ON their sources, idempotently", async () => {
     const first = await syncCapabilities(g, { now: NOW });
     expect(first.errors).toEqual([]);
-    expect(await count("MATCH (c:Capability) RETURN count(c) AS c")).toBe(7);
-    expect(await count("MATCH (:Capability)-[r:PART_OF]->(:Business {id:'business:kestrel-oak'}) WHERE r.until IS NULL RETURN count(r) AS c")).toBe(7);
+    expect(await count("MATCH (c:Capability) RETURN count(c) AS c")).toBe(9);
+    expect(await count("MATCH (:Capability)-[r:PART_OF]->(:Business {id:'business:kestrel-oak'}) WHERE r.until IS NULL RETURN count(r) AS c")).toBe(9);
     expect(await count("MATCH (:Capability {id:'capability:instagram-insights'})-[r:DEPENDS_ON]->(x) WHERE x.id IN ['channel:instagram','system:instagram'] RETURN count(r) AS c")).toBe(2);
     const [ig] = await g.roQuery<{ mode: string; status: string; key: string }>("MATCH (c:Capability {id:'capability:instagram-insights'}) RETURN c.accessMode AS mode, c.status AS status, c.key AS key");
     expect(ig).toEqual({ mode: "public", status: "down", key: "instagram_insights" });
@@ -170,7 +170,7 @@ describe("capability evidence and disclosure (pure)", () => {
   it("writes plain-language upgrade hints", () => {
     expect(upgradeHint("instagram_insights", "public", "not_connected", null))
       .toBe("Reading your public Instagram profile only. Give Allevia partner access in your Meta business portfolio to read reach, saves and follower growth.");
-    expect(upgradeHint("ga4", "none", "not_connected", null)).toMatch(/^Not connected yet\. Add Allevia's service account as a Viewer/);
-    expect(upgradeHint("ads", "benchmark", "not_connected", null)).toMatch(/^Using industry benchmarks, not your own numbers\. Share your Meta or Google Ads/);
+    expect(upgradeHint("ga4", "none", "not_connected", null)).toMatch(/^Not connected yet\. Connect Google Analytics on the Connections page/);
+    expect(upgradeHint("ads", "benchmark", "not_connected", null)).toMatch(/^Using industry benchmarks, not your own numbers\. Connect your Google Ads account on the Connections page/);
   });
 });

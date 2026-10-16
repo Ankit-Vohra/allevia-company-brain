@@ -58,12 +58,12 @@ describe("server: product endpoints (integration)", () => {
     expect(card.goals.every((g) => g.baselineConf === "unknown" ? g.baseline === null && g.status === "no_data" : typeof g.baseline === "number")).toBe(true);
     expect(card.checkpoints[0]).toMatchObject({ day: 0, status: "done" });
     expect(card.firstPass.series.at(-1)!.date).toBe(card.today);
-    expect(Object.values(card.capabilities.byMode).reduce((a, b) => a + b, 0)).toBe(7);
+    expect(Object.values(card.capabilities.byMode).reduce((a, b) => a + b, 0)).toBe(9);
   });
 
   it("capabilities: the ladder in key order", async () => {
     const caps = await json<Array<{ key: string; accessMode: string }>>(await h.app.request("/api/mini/capabilities"));
-    expect(caps.map((c) => c.key)).toEqual(["ga4", "search_console", "gbp", "instagram_insights", "reviews", "studio", "ads"]);
+    expect(caps.map((c) => c.key)).toEqual(["ga4", "search_console", "gbp", "instagram_insights", "reviews", "studio", "ads", "calendar", "email"]);
   });
 
   it("agents: stats merged with settings; PATCH switches a desk off (old state kept as a Version) and refuses what it can't do", async () => {
