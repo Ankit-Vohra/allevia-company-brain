@@ -22,6 +22,7 @@ import { getBrandAsset } from "./brand.js";
 import { researchTool } from "./research.js";
 import { writeCopyTool } from "./copy.js";
 import { generateImageTool, makePosterTool, makeReelTool } from "./creative.js";
+import { adLibrary, competitorWatch, googleListing, instagramPublic } from "./publicdata.js";
 
 export const ALL_TOOLS: AlleviaTool[] = [
   search, getEntity, neighbors, findPaths, traceDecision, whoOwns, whoKnows, impactOf, important, topics, metricTrend,
@@ -29,6 +30,8 @@ export const ALL_TOOLS: AlleviaTool[] = [
   useSkill,
   // what the team can make and what it can use to make it (the brand library); see shared/toolkits.ts for who holds them
   getBrandAsset, writeCopyTool, makePosterTool, generateImageTool, makeReelTool, researchTool,
+  // public data (Apify, budgeted): the business's listing and public profile, competitors and the ad libraries
+  googleListing, instagramPublic, competitorWatch, adLibrary,
 ];
 
 const BY_NAME = new Map(ALL_TOOLS.map((t) => [t.name, t]));

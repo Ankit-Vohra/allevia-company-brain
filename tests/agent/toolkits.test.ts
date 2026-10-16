@@ -23,10 +23,11 @@ const BEFORE: Record<string, string[]> = {
   librarian: ["trace_decision", "who_knows", "history", "topics", "important", "find_paths", "search"],
 };
 // What was added: new tools only, to the agents that should have them.
+const PUBLIC_DATA = ["google_listing", "instagram_public", "competitor_watch", "ad_library"];
 const ADDED: Record<string, string[]> = {
-  "data-analyst": ["research"], "growth-marketer": ["research"],
+  "data-analyst": ["research", ...PUBLIC_DATA], "growth-marketer": ["research", ...PUBLIC_DATA],
   "chief-of-staff": ["make_poster", "generate_image", "make_reel_script_and_clip", "get_brand_asset", "write_copy", "research"],
-  "content-strategist": ["write_copy", "get_brand_asset", "research"],
+  "content-strategist": ["write_copy", "get_brand_asset", "research", ...PUBLIC_DATA],
 };
 
 describe("toolkits", () => {
@@ -39,7 +40,7 @@ describe("toolkits", () => {
     for (const m of TOOL_META) {
       expect(m.summary.length, m.name).toBeGreaterThan(10);
       expect(["read", "create", "write"]).toContain(m.mode);
-      expect(["free", "model", "credits"]).toContain(m.cost);
+      expect(["free", "model", "credits", "paid"]).toContain(m.cost);
       const tool = ALL_TOOLS.find((t) => t.name === m.name)!;
       // anything that creates or writes is roster-gated by the runtime; reads are not
       expect(isWriteTool(tool), m.name).toBe(m.mode !== "read");
@@ -48,6 +49,8 @@ describe("toolkits", () => {
       if (m.mode === "create" || m.name === "propose_action") expect(m.needsOk, m.name).toBe(true);
       // credits are spent only by the tools that make pictures and clips
       if (m.cost === "credits") expect(["creative"]).toContain(m.domain);
+      // dollars are spent only by the public-data lookups, which save what they read and post nothing
+      if (m.cost === "paid") expect([m.domain, m.mode, m.needsOk], m.name).toEqual(["research", "write", false]);
     }
   });
 

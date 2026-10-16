@@ -23,6 +23,7 @@ import { TouchedSet, type ToolContext } from "./tool.js";
 import { toolsByName } from "./tools/index.js";
 import { loadConfig } from "../config.js";
 import type { CreativeDeps } from "../creative/ports.js";
+import type { PublicDataPort } from "../publicdata/service.js";
 import { search } from "./tools/search.js";
 
 export const SEED_LIMIT = 8;
@@ -39,6 +40,7 @@ export interface WiringOverrides {
   embedQuery?: EmbedQuery | null;
   modelsDir?: string;
   creative?: CreativeDeps | null;  // the creating tools' deps; null: creating is off (the tools say so)
+  publicData?: PublicDataPort | null; // public-data lookups; null: off (default: from config, off without APIFY_TOKEN)
 }
 
 export function embedModelReady(dir: string, model: string): boolean {
@@ -88,6 +90,8 @@ export async function createAskDeps(opts: { tenant: string; model?: string }, ov
   const embedQuery = over.embedQuery === null ? undefined : over.embedQuery ?? await localEmbedder(over.modelsDir);
   // The tools that make things: files per business under the data dir, vision on the subscription, the capped image engine.
   const creative = over.creative === null ? undefined : over.creative ?? (await import("../creative/wiring.js")).productionCreativeDeps(loadConfig().dataDir, { tenant: opts.tenant });
+  // Public data (Apify): always present so the tools can say plainly when it is off; it runs only with APIFY_TOKEN set.
+  const publicData = over.publicData === null ? undefined : over.publicData ?? (await import("../publicdata/service.js")).productionPublicData(loadConfig(), { log: (l) => console.error(l) });
   const runtime = over.runtime
     ?? new ClaudeAgentSdkRuntime({ onInit: (init) => { assertSubscription(init); }, ...(over.sdk ? { sdk: over.sdk } : {}) });
   return {
@@ -96,6 +100,7 @@ export async function createAskDeps(opts: { tenant: string; model?: string }, ov
     graph,
     seedSearch: searchSeeds(graph, opts.tenant, embedQuery),
     ...(creative ? { creative } : {}),
+    ...(publicData ? { publicData } : {}),
     ...(embedQuery ? { embedQuery } : {}),
     ...(opts.model ? { model: opts.model } : {}),
     // The shipped skill packs, unless ALLEVIA_SKILLS=off (how the quality trials run the team without them).

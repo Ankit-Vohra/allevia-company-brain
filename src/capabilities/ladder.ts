@@ -6,7 +6,8 @@
 //   upload     numbers the owner gave us: Observations from an upload/screenshot/CSV Document, or reported ones
 //              (conf < 1, e.g. read off a screenshot);
 //   public     what the website crawl or a public profile shows (an SEO check on a crawled Page, the Instagram channel
-//              the site links to, a Google listing, the brand assets on the site);
+//              the site links to, a Google listing, the brand assets on the site), and numbers read from public data
+//              (Observations from a Document of kind 'public' or 'review': src/publicdata), which are never "live";
 //   benchmark  playbook benchmarks for its channels, or simulated stand-ins built from them;
 //   none.
 // status: ok (working at its mode), stale (connector data over 7 days old), down (a connector feeding it reports an
@@ -27,6 +28,7 @@ const DAY_MS = 86_400_000;
 const OK_STATUS = new Set(["ok", "connected", "active", "healthy", "live", "configured"]);
 const DOWN_STATUS = new Set(["error", "down", "failed", "failing", "expired", "revoked", "broken", "disconnected", "unauthorized", "invalid"]);
 const UPLOAD_KINDS = new Set(["upload", "screenshot", "csv", "export"]);
+const PUBLIC_KINDS = new Set(["public", "review"]); // public data lookups (src/publicdata): a public profile, a listing, a review
 const lc = (v: unknown): string => (typeof v === "string" ? v.trim().toLowerCase() : "");
 
 // ---------- what the graph holds ----------
@@ -39,6 +41,7 @@ interface LadderFacts {
   sources: Map<string, Source>;            // Systems and Channels any capability reads, by id
   obs: ObsGroup[];
   uploadDocs: Set<string>;
+  publicDocs: Set<string>;                 // Documents of public data (a public profile or listing read through src/publicdata)
   seoChecks: number;                       // SEO checks recorded on crawled pages
   crawledPages: number;
   brandAssets: number;
@@ -105,6 +108,7 @@ async function readFacts(g: GraphHandle, businessId?: string): Promise<LadderFac
     }])),
     obs: obs.filter((o) => typeof o.metric === "string"),
     uploadDocs: new Set(docs.filter((d) => UPLOAD_KINDS.has(lc(d.kind))).map((d) => d.id)),
+    publicDocs: new Set(docs.filter((d) => PUBLIC_KINDS.has(lc(d.kind))).map((d) => d.id)),
     seoChecks, crawledPages, brandAssets, originals,
     benchmarkChannels: new Set(bench.map((b) => b.id)),
     ownedChannels: new Set(owned.map((o) => o.id)),
@@ -139,8 +143,11 @@ function derive(spec: CapabilitySpec, f: LadderFacts, now: number): DerivedCapab
   const down = present.some((s) => DOWN_STATUS.has(s.status));
   const delegatedGrant = present.some((s) => s.delegated);
   const mine = f.obs.filter((o) => spec.observes(o.metric, o.subject));
-  const fromUpload = (o: ObsGroup) => o.reported || (!!o.src && f.uploadDocs.has(o.src));
-  const measured = mine.filter((o) => !o.simulated && !fromUpload(o));
+  // A public reading (a follower count off a public profile, a listing's rating) is never live data and never the owner's
+  // own upload: it is the public rung, whatever its conf.
+  const fromPublic = (o: ObsGroup) => !!o.src && f.publicDocs.has(o.src);
+  const fromUpload = (o: ObsGroup) => !fromPublic(o) && (o.reported || (!!o.src && f.uploadDocs.has(o.src)));
+  const measured = mine.filter((o) => !o.simulated && !fromUpload(o) && !fromPublic(o));
   const newest = measured.map((o) => toMs(o.newest)).filter((t): t is number => t !== null).reduce<number | null>((a, b) => (a === null || b > a ? b : a), null);
   const uploads = mine.some((o) => !o.simulated && fromUpload(o));
   const simulated = mine.some((o) => o.simulated);
@@ -153,6 +160,7 @@ function derive(spec: CapabilitySpec, f: LadderFacts, now: number): DerivedCapab
     case "studio": isPublic = f.brandAssets > 0; break;
     default: isPublic = false;
   }
+  if (mine.some((o) => !o.simulated && fromPublic(o))) isPublic = true;
   const benchmark = simulated || spec.channels.some((c) => f.benchmarkChannels.has(c));
 
   let accessMode: AccessMode;

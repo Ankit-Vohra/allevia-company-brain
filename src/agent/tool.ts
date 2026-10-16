@@ -7,6 +7,7 @@ import type { GraphHandle } from "../graph/client.js";
 import type { EdgeRef, NodeRef, SourceRef, ToolResult } from "../../shared/contracts.js";
 import type { SkillCatalog } from "./skills/catalog.js";
 import type { CreativeDeps } from "../creative/ports.js";
+import type { PublicDataPort } from "../publicdata/service.js";
 
 export interface ToolContext {
   graph: GraphHandle;
@@ -21,6 +22,7 @@ export interface ToolContext {
   readOnly?: boolean;       // MCP/public mode: write tools refuse
   question?: string;        // the owner's own words for this turn: what a poster's claims are grounded in
   creative?: CreativeDeps;  // what the creating tools may use (files, vision, the capped image engine); absent: creating is not set up
+  publicData?: PublicDataPort; // public-data lookups (Apify, budgeted); absent or off: those tools say they aren't switched on
   signal?: AbortSignal;     // aborted when the agent's run is stopped (timeout, turn stopped): a write tool checks it
                             // right before it commits, so a run that was stopped mid-call changes nothing
 }

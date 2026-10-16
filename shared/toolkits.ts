@@ -6,7 +6,8 @@
 //   mode    - "read" (looks something up), "create" (makes a file or a draft: a poster, an image, a clip, copy) or
 //             "write" (changes company memory or raises a card)
 //   cost    - "free" (graph reads), "model" (spends the Claude subscription: a model call or a web search),
-//             "credits" (spends image-generator credits, always through the capped engine and quoted first)
+//             "credits" (spends image-generator credits, always through the capped engine and quoted first),
+//             "paid" (a public-data lookup through Apify: cents, estimated first, from a budget per business per month)
 //   needsOk - whether the owner's OK is needed before the tool's result does anything outside the company: true for
 //             everything that creates or proposes (it waits as a card), false for reads
 // A roster agent is given toolkits plus a few named extras (shared/roster.ts), not a hard-coded array of names. The Chief
@@ -14,7 +15,7 @@
 
 export type ToolDomain = "knowledge" | "analytics" | "marketing" | "content" | "tech" | "ops" | "research" | "brand" | "creative" | "memory" | "answer";
 export type ToolMode = "read" | "create" | "write";
-export type ToolCost = "free" | "model" | "credits";
+export type ToolCost = "free" | "model" | "credits" | "paid";
 
 export interface ToolMeta {
   name: string;
@@ -57,6 +58,12 @@ export const TOOL_META: ToolMeta[] = [
   read("who_owns", "ops", "Finds who owns something and what is waiting"),
   // research
   { name: "research", domain: "research", mode: "read", cost: "model", needsOk: false, summary: "Looks something up on the web and cites where it found it" },
+  // public data (Apify): paid lookups that save public numbers to the records (write), inside a monthly budget; nothing
+  // goes out and nothing is posted, so no OK is needed
+  { name: "google_listing", domain: "research", mode: "write", cost: "paid", needsOk: false, summary: "Reads a Google Maps listing: address, hours, rating and recent reviews" },
+  { name: "instagram_public", domain: "research", mode: "write", cost: "paid", needsOk: false, summary: "Reads the public numbers of an Instagram profile: followers, posting rate, likes and top posts" },
+  { name: "competitor_watch", domain: "research", mode: "write", cost: "paid", needsOk: false, summary: "Checks competitors' public Instagram numbers and the ads they run, and keeps each reading" },
+  { name: "ad_library", domain: "research", mode: "write", cost: "paid", needsOk: false, summary: "Reads the public ad libraries (Meta and Google) for a brand or website" },
   // the brand library
   read("get_brand_asset", "brand", "Finds the business's logo, colours, fonts, guide and pictures"),
   // making things
@@ -86,6 +93,8 @@ export const TOOLKITS: Toolkit[] = [
   { id: "tech", label: "What depends on what", domain: "tech", tools: ["impact_of"] },
   { id: "ops", label: "Who owns what", domain: "ops", tools: ["who_owns"] },
   { id: "research", label: "Web research", domain: "research", tools: ["research"] },
+  { id: "public-profiles", label: "Public listings and profiles", domain: "research", tools: ["google_listing", "instagram_public"] },
+  { id: "competitors", label: "Competitors and their ads", domain: "research", tools: ["competitor_watch", "ad_library"] },
   { id: "brand", label: "The brand library", domain: "brand", tools: ["get_brand_asset"] },
   { id: "copywriting", label: "Write copy", domain: "content", tools: ["write_copy"] },
   { id: "creative", label: "Make posters, images and clips", domain: "creative", tools: ["make_poster", "generate_image", "make_reel_script_and_clip"] },
