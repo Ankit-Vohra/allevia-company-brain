@@ -369,7 +369,7 @@ Next step
 
 // ---------------------------------------------------------------- team settings
 
-interface Settings { enabled: boolean; mode: AgentMode; autonomy: number; statusNote?: string; instructions: AgentSettings["instructions"] }
+interface Settings { enabled: boolean; mode: AgentMode; autonomy: number; statusNote?: string; skillsOff?: string[]; instructions: AgentSettings["instructions"] }
 const team: Record<string, Record<string, Settings>> = {};
 
 function settingsOf(t: string): Record<string, Settings> {
@@ -391,7 +391,8 @@ export function teamOf(t: string): AgentSettings[] {
   return AGENTS.map((a) => ({
     id: a.id, nodeId: `agent:allevia-${a.id}`, name: a.name, title: a.title, department: a.department,
     enabled: s[a.id]!.enabled, mode: s[a.id]!.mode, autonomy: s[a.id]!.autonomy,
-    ...(s[a.id]!.statusNote ? { statusNote: s[a.id]!.statusNote } : {}), instructions: [...s[a.id]!.instructions],
+    ...(s[a.id]!.statusNote ? { statusNote: s[a.id]!.statusNote } : {}), ...(s[a.id]!.skillsOff?.length ? { skillsOff: [...s[a.id]!.skillsOff!] } : {}),
+    instructions: [...s[a.id]!.instructions],
   }));
 }
 
@@ -402,13 +403,14 @@ export function activeRulesFor(t: string, agent: AgentId) {
 
 const CHIEF_REFUSAL = "Meera can't be switched off: the Chief of Staff plans every request and writes every answer.";
 
-export function setAgent(t: string, id: string, patch: { enabled?: boolean; mode?: AgentMode; autonomy?: number; statusNote?: string | null }) {
+export function setAgent(t: string, id: string, patch: { enabled?: boolean; mode?: AgentMode; autonomy?: number; statusNote?: string | null; skillsOff?: string[] }) {
   const s = settingsOf(t)[id];
   if (!s) throw new Error("No such agent on the team.");
   if (id === "chief-of-staff" && (patch.enabled === false || patch.mode === "off")) throw new Error(CHIEF_REFUSAL);
   if (patch.mode !== undefined) { s.mode = patch.mode; s.enabled = patch.mode !== "off"; }
   if (patch.enabled !== undefined) { s.enabled = patch.enabled; if (!s.enabled) s.mode = "off"; else if (s.mode === "off") s.mode = "full"; }
   if (patch.autonomy !== undefined) s.autonomy = patch.autonomy;
+  if (patch.skillsOff !== undefined) { if (patch.skillsOff.length) s.skillsOff = [...new Set(patch.skillsOff)]; else delete s.skillsOff; }
   if (patch.statusNote !== undefined) { if (patch.statusNote) s.statusNote = patch.statusNote; else delete s.statusNote; }
 }
 

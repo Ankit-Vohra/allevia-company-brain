@@ -10,6 +10,7 @@ import type {
 import type { AgentPatch } from "../api";
 import { BRIEF, FRESHNESS, GRAPHS, KNOWS, PLAYBOOKS, TENANTS, seedApprovals, seedRecommendations } from "./data";
 import { type MockGraph, buildGraph, graphData, neighborhood, nodeDetail, refOf, searchGraph } from "./graph-kit";
+import { directRun, skillsOf, toolsOf } from "./chat";
 import { onboardScript } from "./onboard";
 import * as p90 from "./program";
 import { SCRIPTS, avsRun, pickScript, pendingRun, seoRun, storiesRun } from "./runs";
@@ -29,18 +30,19 @@ for (const [t, list] of Object.entries(approvals)) if (graphs[t]) p90.addLearnin
 const briefs: Record<string, Brief> = {};
 let counter = 100;
 
-function store(tenant: string, sessionId: string, title: string, at: string, events: AgentEvent[]) {
+function store(tenant: string, sessionId: string, title: string, at: string, events: AgentEvent[], from: { agent?: AgentId; door?: "web" | "discord" } = {}) {
   const final = events.find((e): e is Extract<AgentEvent, { type: "final" }> => e.type === "final");
   const session = events.find((e): e is Extract<AgentEvent, { type: "session" }> => e.type === "session");
   if (!final || !session) return;
   const record: TurnRecord = {
     id: final.turnId, question: session.question, answer: final.answer, at, ms: final.ms,
     agents: final.agents, citations: final.citations, checks: final.checks,
+    source: from.door ?? "web", ...(from.agent ? { target: from.agent } : {}),
   };
   const list = (sessions[tenant] ??= []);
   let s = list.find((x) => x.summary.id === sessionId);
   if (!s) {
-    s = { summary: { id: sessionId, title, startedAt: at, lastAt: at, turns: 0, channel: "web" }, turns: [] };
+    s = { summary: { id: sessionId, title, startedAt: at, lastAt: at, turns: 0, channel: from.door ?? "web", ...(from.agent ? { agent: from.agent } : {}) }, turns: [] };
     list.unshift(s);
   }
   s.turns.push({ record, events });
@@ -62,6 +64,25 @@ function seed() {
   }
 }
 seed();
+
+// Direct chats with one person, and a conversation that began in Discord: so the chat's rail has something in every door.
+function seedChat() {
+  const direct: Array<[string, AgentId, string, string, string]> = [
+    ["aamdani", "content-strategist", "s-aamdani-tara-reels", "What reels should we make this week?", "2026-10-15T10:40:00+05:30"],
+    ["aamdani", "data-analyst", "s-aamdani-kabir-signups", "Where do people drop off when they sign up?", "2026-10-14T16:10:00+05:30"],
+    ["avs-atelier", "tech-lead", "s-avs-arjun-home", "What is wrong with our home page?", "2026-10-15T09:30:00+05:30"],
+  ];
+  for (const [tenant, agent, sid, q, at] of direct) {
+    const spec = directRun(tenant, agent, q);
+    const events = compile(spec, graphs[tenant]!, { sessionId: sid, turnId: `t-${sid.slice(2)}` }).map((x) => x.event);
+    store(tenant, sid, q.replace(/\?$/, ""), at, events, { agent });
+  }
+  // a team conversation the owner started from their phone in Discord
+  const discordRun = pendingRun;
+  const events = compile(discordRun, graphs.aamdani!, { sessionId: "s-aamdani-discord", turnId: "t-aamdani-discord" }).map((x) => x.event);
+  store("aamdani", "s-aamdani-discord", "What's waiting on me", "2026-10-15T08:05:00+05:30", events, { door: "discord" });
+}
+seedChat();
 
 const sleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -153,7 +174,7 @@ export const mockApi = {
   async session(t: string, id: string): Promise<SessionDetail> {
     const s = (sessions[t] ?? []).find((x) => x.summary.id === id);
     if (!s) throw new Error(`No thread ${id}`);
-    return { id, title: s.summary.title, turns: s.turns.map((x) => x.record) };
+    return { id, title: s.summary.title, ...(s.summary.agent ? { agent: s.summary.agent } : {}), turns: s.turns.map((x) => x.record) };
   },
 
   async replay(t: string, turnId: string): Promise<AgentEvent[]> {
@@ -227,7 +248,7 @@ export const mockApi = {
   async capabilities(t: string): Promise<CapabilityState[]> { return p90.capabilitiesOf(t); },
   async team(t: string): Promise<AgentView[]> {
     const stats = await mockApi.agents(t);
-    return p90.teamOf(t).map((s) => ({ ...stats.find((x) => x.id === s.id)!, ...s, learnedRules: p90.activeRulesFor(t, s.id) }));
+    return p90.teamOf(t).map((s) => ({ ...stats.find((x) => x.id === s.id)!, ...s, learnedRules: p90.activeRulesFor(t, s.id), tools: toolsOf(s.id), skills: skillsOf(s.id, s.skillsOff) }));
   },
   async setAgent(t: string, id: string, patch: AgentPatch): Promise<AgentView> {
     await sleep(250);
@@ -248,8 +269,9 @@ export const mockApi = {
     return (briefs[t] = { id: `document:brief-${t}`, title: "Today's note", asOf: today().slice(0, 10), date: today().slice(0, 10), text: p90.briefText(t, name) });
   },
 
-  async ask(t: string, body: { question: string; sessionId?: string }, onEvent: (e: AgentEvent) => void, opts: PlayOpts) {
-    const spec = pickScript(t, body.question) ?? SCRIPTS[0]!;
+  async ask(t: string, body: { question: string; sessionId?: string; target?: AgentId }, onEvent: (e: AgentEvent) => void, opts: PlayOpts) {
+    const direct = body.target && body.target !== "chief-of-staff" ? body.target : undefined;
+    const spec = direct ? directRun(t, direct, body.question.trim()) : pickScript(t, body.question) ?? SCRIPTS[0]!;
     const sessionId = body.sessionId ?? `s-${t}-${++counter}`;
     const turnId = `t-${t}-${++counter}`;
     const g = graphs[spec.tenant] ?? graphOf(t);
@@ -258,7 +280,7 @@ export const mockApi = {
     await play(timed, (e) => { seen.push(e); onEvent(e); }, opts);
     if (seen.some((e) => e.type === "final")) {
       const title = body.question.trim().replace(/\?$/, "").slice(0, 60);
-      store(t, sessionId, title, today(), seen);
+      store(t, sessionId, title, today(), seen, direct ? { agent: direct } : {});
     }
   },
 

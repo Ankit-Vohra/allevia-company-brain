@@ -19,6 +19,8 @@ export interface RunRecord {
   tenant: string;
   question: string;
   sessionId?: string;
+  /** A direct chat: the one person asked. Absent: the whole team. */
+  target?: string;
   turnId?: string;
   events: AgentEvent[];
   status: "running" | "done" | "error" | "stopped";
@@ -98,14 +100,14 @@ class RunStore {
     return !!r && r.kind === "live" && !!r.turnId && getMode() === "live" && !getPublicMode();
   }
 
-  start(tenant: string, question: string, opts: { sessionId?: string; seekMs?: number } = {}): string {
+  start(tenant: string, question: string, opts: { sessionId?: string; seekMs?: number; target?: string } = {}): string {
     const key = `run-${++this.seq}`;
     const ctrl = new AbortController();
     this.controllers.set(key, ctrl);
-    this.put({ key, tenant, question, sessionId: opts.sessionId, events: [], status: "running", kind: "live", startedAt: Date.now() - (opts.seekMs ?? 0) });
+    this.put({ key, tenant, question, sessionId: opts.sessionId, ...(opts.target ? { target: opts.target } : {}), events: [], status: "running", kind: "live", startedAt: Date.now() - (opts.seekMs ?? 0) });
     let following = false;
     api
-      .ask(tenant, { question, sessionId: opts.sessionId }, (e) => this.append(key, e), { signal: ctrl.signal, seekMs: opts.seekMs })
+      .ask(tenant, { question, sessionId: opts.sessionId, ...(opts.target ? { target: opts.target } : {}) }, (e) => this.append(key, e), { signal: ctrl.signal, seekMs: opts.seekMs })
       .then(() => {
         const r = this.runs.get(key);
         if (!r || r.events.some((e) => e.type === "final")) return;
@@ -137,7 +139,7 @@ class RunStore {
     }
     const key = `attach-${++this.seq}`;
     this.put({
-      key, tenant, question: t.question, sessionId: t.sessionId, turnId: t.turnId, events: [], status: "running", kind: "live",
+      key, tenant, question: t.question, sessionId: t.sessionId, turnId: t.turnId, ...(t.agent ? { target: t.agent } : {}), events: [], status: "running", kind: "live",
       startedAt: Date.parse(t.startedAt) || Date.now(),
     });
     this.follow(key);

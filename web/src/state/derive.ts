@@ -69,6 +69,8 @@ export interface RunView {
   nodeOrder: string[];
   activeAgents: AgentId[];
   speaker?: AgentId;
+  /** Who wrote the answer the owner reads: the Chief for the team, the person asked in a direct chat. */
+  answerer?: AgentId;
   count: number;
   /** A work clock per event index: streamed answer text barely moves it, tool calls move it most. Timelines use it as
    *  their x axis so a long answer does not squash the desk work. clock[count] is the end. */
@@ -206,9 +208,11 @@ export function deriveRun(events: AgentEvent[]): RunView {
         break;
       }
       case "text":
-        v.answer += e.delta;
+        // `reset`: what was shown so far was a working note, or the answer re-written plainer; the delta replaces it
+        v.answer = e.reset ? e.delta : v.answer + e.delta;
         v.answerStarted = true;
         v.speaker = e.agent;
+        v.answerer = e.agent;
         break;
       case "path":
         v.path = { nodes: e.nodes, edges: e.edges };

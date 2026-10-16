@@ -103,6 +103,14 @@ async function ensurePerson(g: GraphHandle, id: string, now: number): Promise<bo
 export function compactEvents(events: AgentEvent[]): AgentEvent[] {
   const out: AgentEvent[] = [];
   for (const e of events) {
+    // A reset replaces the answer shown so far (a working note taken back, or the answer re-written plainer): what the
+    // agent streamed before it is dropped, and what is kept is the replacement alone.
+    if (e.type === "text" && e.reset) {
+      for (let i = out.length - 1; i >= 0; i--) if (out[i]!.type === "text" && (out[i] as { agent: string }).agent === e.agent) out.splice(i, 1);
+      const { reset: _reset, ...replaced } = e;
+      if (replaced.delta) out.push(replaced);
+      continue;
+    }
     const last = out.at(-1);
     if (e.type === "text" && last?.type === "text" && last.agent === e.agent) out[out.length - 1] = { ...last, delta: last.delta + e.delta };
     else out.push(e);
