@@ -9,6 +9,38 @@ Status (15 October 2026): the demo video is **not recorded yet**; the founder ho
 Scenario 3 (a poster with the owner's logo) depends on the creative tools another builder is finishing; until they land
 it is skipped, not faked.
 
+## The hero: "Why did sign-ups drop this week, and what should we do?"
+
+One question, about two minutes, and every part of the product shows up in it: the office, the graph path, the depth contrast, memory,
+approval cards and learning. Run it live on the synthetic business `demo_growth` (public; this is what the repo ships) or on Aamdani (private,
+real records, where the honest answer is "the records do not show the cause"). It runs on the Claude subscription, nothing pre-played.
+
+**Set up (once, 30 seconds).** `npm run cli -- seed-demo` builds Shiftly, a synthetic shift-jobs app, as the graph `allevia_demo_growth` and registers it
+(no model, no network). Open it in the web app. Its story, written into the records the way ingestion writes them: the 2.8.0 release (7 Oct) put a new
+phone-number box on the sign-up screen, it crashes, and new accounts fell from about 250 a day to about 50 that day. Around it: Google sign-ups unchanged, an ad
+campaign paused three days *after* the fall began (a red herring), a hotfix waiting in the App Store's review queue, a decision from last week and the thread
+it came from.
+
+| Step | Type or do | Point at | Graph at work |
+|---|---|---|---|
+| 1. Ask | In Ask (web) or the Discord thread: `Why did sign-ups drop this week, and what should we do?` | **The office.** Meera plans five people at once instead of one: Kabir (what moved, and the day), Zoya (what crashed on those screens), Imran (what shipped, what waits in review), Sara (what we decided before), then Arjun (what else it takes down). Each desk's tool calls stream in the work log. | One question becomes five different traversals of the same graph. |
+| 2. The answer | Read the first two sentences aloud. | It names the cause and how sure it is ("proven": a record links the release to the crash; "likely": only the dates fit; "not shown"). Numbers carry dates; the paused ad is ruled out by its date. | `metric_trend` on every funnel step: the step where the level stepped (`shift`: the date, the average before and after). |
+| 3. The path | Open "Show how we got this". | **The path**, lit node by node: the step that fell, the sign-up screen, the crash, the 2.8.0 release, Farhan. Click a node: its source and date. | `Feature -DEPENDS_ON-> Page <-AFFECTS- Event <-AFFECTS- Event`; one `algo.SPpaths` call between the step and the release ([`falkordb-queries.md` §13](falkordb-queries.md)). |
+| 4. Depth 1 against depth 4 | Brain page, **What breaks if something stops**, choose the sign-up screen. | Left: what a table lookup sees one step away (the next step, the ad campaign that sends people in). Right: four steps away (job-alert texts, the employer applicant inbox, the first-hire promise to employers), each with its path and owner. | `impact_of`, one traversal per hop (§3). |
+| 5. Memory | Point at the sentence about last week. | "On 10 Oct you chose a hotfix over a rollback; it is waiting on the iPhone review." It remembers the earlier Discord thread, the decision and the rule "tell users only when a fix is on its way". | Recall: from the nodes in the question to the turns, decisions and notes that touched them (§11). |
+| 6. Cards | Open Approvals. | Two cards wait for OK, none sent: **the fix task** (evidence ids, numbers, dates) and **a two-line message to users**. | `propose_action`: Recommendation `PROPOSES` Approval, `EVIDENCED_BY` the crash and screen. |
+| 7. Learning | Edit the message card (cut a few words) and approve it. | A **learned rule** appears ("Keep it under 25 words"), linked to that approval. The next draft already follows it. | `Rule -[:LEARNED_FROM]-> Approval` (`src/actions/learning.ts`). |
+| 8. A day later | Ask the same question again, `npm run cli -- ask demo_growth "..." --now 2026-10-17T20:00:00Z` (demo businesses only). | It remembers: reports where yesterday's cards stand ("the fix task you approved is open, the message is saved with your edit") and does not draft them again. | Recall now reads each earlier answer's cards and the task an approved card made (§13). |
+
+**If a viewer asks "is this scripted?"** Ask them for a different why-question on the same business ("Why did our job-feed views fall?", "Did the ad pause cause it?", "What
+did store reviews say?"). The last one has no records behind it, and the answer is "not in your records", never an invented quote.
+
+**On Aamdani (real, private).** Same question. The honest answer today: sign-ups per day are recorded, the funnel steps and the crash-free sessions are recorded, the iOS build
+is waiting in review since 7 Oct, and a login-screen timeout was seen on 1 Oct, but **no record links a release to a crash or a crash to the sign-up step**, so it says "cause not
+shown" and what to connect. The mapper links a crash to its screen and a release to its crash the day the tracker's data carries them (`firstRelease`, the route in `where`).
+
+**Fallbacks (labelled on screen):** the office's "Replay the last request"; the recorded turn marked as showcase for this question.
+
 ## Before going live
 
 - [ ] FalkorDB up; `npm run cli -- db:check` lists the businesses; `npm run cli -- privacy-scan <tenant>` reports 0 for
@@ -23,7 +55,7 @@ it is skipped, not faked.
 - [ ] Nothing on screen shows a token, an email address, a phone number or a server address (terminal history cleared,
       env file closed). Simulated ad numbers are called simulated wherever they show.
 
-## The five live scenarios
+## The five live scenarios (after the hero)
 
 ### 1. Onboard a company from its URL
 
