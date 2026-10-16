@@ -238,8 +238,15 @@ function Options({ tenantId, media }: { tenantId: string; media: NonNullable<Non
             <span className="hm-option-label"><b>{many ? `Option ${o.label}` : `The ${noun}`}</b>{o.pick && many ? <span className="hm-pick">Our pick</span> : o.held ? <span className="hm-held">Held back</span> : null}</span>
           </li>
         ))}
+        {(media.extras ?? []).map((x) => (
+          <li key={x.id} className="hm-option">
+            <video className="hm-option-img is-clip" src={rawSrc(tenantId, x.id)} muted playsInline controls preload="metadata" aria-label={`${x.label}: ${x.note}`} />
+            <span className="hm-option-label"><b>{x.label}</b></span>
+          </li>
+        ))}
       </ul>
       {many && <p className="hm-hint">Approving uses our pick.</p>}
+      {(media.extras ?? []).length > 0 && <p className="hm-hint">The clip goes with the picture you approve.</p>}
     </div>
   );
 }

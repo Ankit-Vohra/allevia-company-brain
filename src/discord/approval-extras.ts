@@ -19,9 +19,10 @@ type Read = Pick<GraphHandle, "roQuery">;
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
 interface StudioVariant { id: string; label: string; badge?: string; note?: string; aiEdited?: boolean }
+interface StudioExtra { id: string; label?: string; kind?: string; note?: string }
 interface RawPayload {
   to?: unknown; recipient?: unknown; recipients?: unknown; subject?: unknown;
-  studio?: { variants?: StudioVariant[]; recommended?: string; creative?: { kind?: string } };
+  studio?: { variants?: StudioVariant[]; recommended?: string; creative?: { kind?: string }; extras?: StudioExtra[] };
 }
 
 function parse(raw: unknown): RawPayload {
@@ -84,7 +85,7 @@ export async function approvalExtras(a: ApprovalDto, d: ExtrasDeps, standupWhy?:
   if (variants.length) {
     const recommended = p.studio?.recommended;
     const options: CardOption[] = variants.map((v) => ({
-      label: `Option ${v.label}`, note: (v.note ?? "").replace(/^Building unchanged · /, "").replace(/^Changed: /, ""), pick: v.id === recommended, held: v.badge === "held",
+      label: `Option ${v.label}`, note: (v.note ?? "").replace(/^(?:Building|Product) unchanged · /, "").replace(/^Changed: /, ""), pick: v.id === recommended, held: v.badge === "held",
     }));
     out.options = options;
     if (d.store) {
@@ -97,6 +98,12 @@ export async function approvalExtras(a: ApprovalDto, d: ExtrasDeps, standupWhy?:
         if (files.length >= MAX_ATTACH_FILES || bytes + f.data.length > MAX_ATTACH_BYTES) { skipped++; continue; }
         bytes += f.data.length;
         files.push({ name: `option-${v.label.toLowerCase()}.${ext}`, data: f.data });
+      }
+      // a clip made from one of the options goes with the card (a video, attached after the pictures)
+      for (const x of (p.studio?.extras ?? []).filter((e) => e.kind === "clip").slice(0, 1)) {
+        const f = await loadAssetFile(d.graph, d.store, d.tenant, x.id, undefined).catch(() => null);
+        if (f && files.length < MAX_ATTACH_FILES && bytes + f.data.length <= MAX_ATTACH_BYTES) { bytes += f.data.length; files.push({ name: `clip.${f.name.split(".").pop() ?? "mp4"}`, data: f.data }); out.options = [...(out.options ?? []), { label: "Clip (5 seconds, silent)", note: x.note ?? "", pick: false, held: false }]; }
+        else if (f) skipped++;
       }
       if (files.length) out.files = files;
       if (skipped) {

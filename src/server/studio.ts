@@ -21,6 +21,7 @@ import { ImageRejected, thumbnail } from "../studio/image.js";
 import { assetUrl } from "../studio/intake.js";
 import { CHECKS_NA, latestStudioRun, runStudio, type StudioDeps } from "../studio/pipeline.js";
 import { generateVariant } from "../studio/generate.js";
+import { makePremiumAd } from "../studio/premium.js";
 import type { ClipPort } from "../studio/clip.js";
 import { reviseVariant } from "../studio/revise.js";
 import { routeRequest } from "../studio/request.js";
@@ -162,6 +163,17 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
             send({ type: "asset", agent: TARA, assetId: r.variant.id, kind: "variant", parentId: "", thumb: assetUrl(reg.slug, r.variant.id, 640) });
             send({ type: "review", agent: NISHA, findingId: r.variant.id, verdict: r.fidelity.badge === "unchanged" ? "ok" : "reject", note: `Variant ${r.variant.label}: ${r.fidelity.note}` });
             return say(`Option ${r.variant.label}: ${r.adjustment.label} (free, made with the team's own light and colour tools).`);
+          }
+          if (req.kind === "premium") {
+            const r = await makePremiumAd(g, { ...ids, request: { words: req.words, ...(req.headline ? { headline: req.headline } : {}), ...(req.sub ? { sub: req.sub } : {}) } }, { ...w.deps, now: h.now(), status });
+            send({ type: "agent_done", agent: TARA, ms: Math.max(0, h.now() - t0), ok: r.ok });
+            if (!r.ok) return say(r.message);
+            send({ type: "asset", agent: TARA, assetId: r.variant.id, kind: "variant", parentId: "", thumb: assetUrl(reg.slug, r.variant.id, 640) });
+            send({ type: "review", agent: NISHA, findingId: r.variant.id, verdict: r.passed ? "ok" : "reject", note: `Variant ${r.variant.label}: ${r.fidelity.note}` });
+            const cost = r.variant.credits !== undefined && r.variant.credits > 0 ? ` It used ${creditsWords(r.variant.credits, { about: true })}.` : "";
+            return say(r.passed
+              ? `Option ${r.variant.label} is your premium ad picture, and Nisha checked that the product is unchanged.${cost} Ask for "a clip" and I will price a 5 second vertical clip from it first.`
+              : `Option ${r.variant.label} was held back: ${r.fidelity.note}${cost} You can ask for it again in other words, or pick another option.`);
           }
           const request = req.kind === "retry" ? { kind: "retry" as const, ...(retryOf ? { of: retryOf } : {}) }
             : req.kind === "ad" ? { kind: "ad" as const, words: req.words, ...(req.headline ? { headline: req.headline } : {}), ...(req.sub ? { sub: req.sub } : {}) }

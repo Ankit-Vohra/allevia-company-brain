@@ -86,12 +86,18 @@ export function previewOf(raw: unknown, o: { kind: ActionKind; why?: string }): 
       const id = text(v.id, 200);
       const label = text(v.label, 20);
       if (!id || !label) return [];
-      return [{ id, label, note: (text(v.note, 200) ?? "").replace(/^Building unchanged · /, "").replace(/^Changed: /, ""), pick: id === recommended, held: v.badge === "held" }];
+      return [{ id, label, note: (text(v.note, 200) ?? "").replace(/^(?:Building|Product) unchanged · /, "").replace(/^Changed: /, ""), pick: id === recommended, held: v.badge === "held" }];
     });
     if (options.length) {
       const creative = isObj(studio.creative) ? studio.creative : undefined;
       const kind = creative?.kind === "poster" || creative?.kind === "image" || creative?.kind === "clip" ? creative.kind : "photo";
-      out.media = { kind, options };
+      const extras = Array.isArray(studio.extras)
+        ? studio.extras.filter(isObj).slice(0, 2).flatMap((x) => {
+          const id = text(x.id, 200);
+          return id && x.kind === "clip" ? [{ id, label: text(x.label, 20) ?? "Clip", kind: "clip" as const, note: text(x.note, 200) ?? "" }] : [];
+        })
+        : [];
+      out.media = { kind, options, ...(extras.length ? { extras } : {}) };
     }
   }
 

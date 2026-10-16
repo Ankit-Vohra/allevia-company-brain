@@ -24,6 +24,7 @@ import { runStudio, type StudioDeps, type StudioResult } from "../studio/pipelin
 import { parseStudioSetting, setBlurFaces, SETTING_REPLY } from "../studio/settings.js";
 import { reviseVariant, type ReviseResult } from "../studio/revise.js";
 import { generateVariant, type GenerateRequest, type GenerateResult } from "../studio/generate.js";
+import { makePremiumAd, type PremiumRequest } from "../studio/premium.js";
 import { creditsWords } from "../studio/credits.js";
 import { routeRequest } from "../studio/request.js";
 import type { ClipPort } from "../studio/clip.js";
@@ -278,6 +279,7 @@ export class StudioDiscord {
     const req = routeRequest(words);
     if (req.kind === "chat") return void await thread.send("Tell me what you would like changed, for example \"make it warmer\", \"make it festive\", \"a different background\", or \"make this into an ad saying ...\".");
     if (req.kind === "clip") return void await this.d.gate.run(() => this.clip(thread, approvalId));
+    if (req.kind === "premium") return void await this.d.gate.run(() => this.premium(thread, approvalId, { words: req.words, ...(req.headline ? { headline: req.headline } : {}), ...(req.sub ? { sub: req.sub } : {}) }));
     if (req.kind === "generate" || req.kind === "ad" || req.kind === "retry") {
       return void await this.d.gate.run(() => this.generate(thread, approvalId, req.kind === "retry" ? { kind: "retry" } : req.kind === "ad" ? { kind: "ad", words: req.words, ...(req.headline ? { headline: req.headline } : {}), ...(req.sub ? { sub: req.sub } : {}) } : { kind: "request", words: req.words }));
     }
@@ -323,6 +325,27 @@ export class StudioDiscord {
       head: `**Option ${r.variant.label}** (edited with AI${r.variant.credits !== undefined ? `, ${creditsWords(r.variant.credits, { about: true })}` : ""}): ${clip(r.request, 120)}${r.passed ? " · our pick" : ""}`,
       canRetry: r.canRetry, ...(r.variant.credits !== undefined ? { credits: r.variant.credits } : {}),
     });
+  }
+
+  // "make this a premium ad": a UGC-style ad picture of the product (Higgsfield's product-photoshoot), priced first and checked by Nisha.
+  private async premium(thread: ThreadPort, approvalId: string, request: PremiumRequest): Promise<void> {
+    const log = await thread.send("Making a premium ad picture from your photo...");
+    const lines: string[] = [];
+    let r: Awaited<ReturnType<typeof makePremiumAd>>;
+    try {
+      r = await makePremiumAd(this.d.graph, { tenant: this.d.tenant, businessId: this.d.businessId, approvalId, request },
+        { ...this.d.studio, now: this.now(), status: (t) => { lines.push(t); void log.edit(clip(`${lines.map((x) => `· ${x}`).join("\n")}`, 1900)).catch(() => undefined); } });
+    } catch (e) {
+      this.log(`${this.d.tenant}: premium ad failed: ${message(e)}`);
+      return void await thread.send(studioErrorMessage(e));
+    }
+    if (!r.ok) return void await thread.send(r.message);
+    const f = r.fidelity;
+    await this.postOption(thread, approvalId, r.variant, { badge: f.badge, note: f.note }, {
+      head: `**Option ${r.variant.label}** (premium ad picture, made with AI${r.variant.credits !== undefined && r.variant.credits > 0 ? `, ${creditsWords(r.variant.credits, { about: true })}` : ""})${r.passed ? " · our pick" : ""}`,
+      canRetry: false, ...(r.variant.credits !== undefined ? { credits: r.variant.credits } : {}),
+    });
+    if (r.passed) await thread.send("Say \"make a clip\" and I will price a 5 second vertical clip from it first. Nothing is spent until you press the button.");
   }
 
   // "make a clip": a short video from the recommended option, priced first; nothing is spent until the button is pressed.

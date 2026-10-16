@@ -480,6 +480,21 @@ describe("runTurn: fast path", () => {
       expect(shown(events)).toBe(ANSWER);
     });
 
+    it("a closing line that only points back at an answer taken back as a note does not replace it", async () => {
+      const { events, run } = setup({
+        "chief-of-staff:plan": plan([{ agent: "chief-of-staff", task: "Look it up" }]),
+        "chief-of-staff:direct": {
+          turns: [
+            { text: ANSWER, calls: [{ name: "search", args: { query: "double-check" } }] },
+            { text: "I've written the answer above and have nothing to add after the path check." },
+          ],
+        },
+      });
+      const out = await run();
+      expect(out.answer).toBe(ANSWER);
+      expect(shown(events)).toBe(ANSWER);
+    });
+
     it("the direct and synthesis prompts tell the Chief to write nothing before its lookups are done", () => {
       expect(directPrompt({ question: "q", recall: "" })).toMatch(/nothing before/i);
       expect(synthesisPrompt({ question: "q", recall: "", findings: [], failed: [] })).toMatch(/nothing before/i);

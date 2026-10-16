@@ -25,8 +25,8 @@ import { closeAll, openGraph, type GraphHandle } from "../src/graph/client.js";
 import { ask } from "../src/agent/ask.js";
 import { checkTurn } from "../src/agent/checks.js";
 import { createAskDeps, localEmbedder } from "../src/agent/wiring.js";
-import { addUsage, EMPTY_USAGE, tokensRead, toolNameNote, type RunInput, type Usage } from "../src/agent/runtime.js";
-import { TouchedSet, type ToolContext } from "../src/agent/tool.js";
+import { addUsage, EMPTY_USAGE, forModel, tokensRead, toolNameNote, type RunInput, type Usage } from "../src/agent/runtime.js";
+import { TouchedSet, type AlleviaTool, type ToolContext } from "../src/agent/tool.js";
 import { toolsByName } from "../src/agent/tools/index.js";
 import type { AgentEvent } from "../shared/contracts.js";
 
@@ -123,11 +123,19 @@ interface ArmResult {
   tokensOut: number;
   toolCalls: number;
   nodesTouched: number;
+  /** What the tools handed the model, in tokens (4 characters each): the business data it actually read, against the corpus. */
+  evidenceTokens: number;
   answer: string;
   hits: number;
   hitsOf: number;
   checksOk?: boolean;
   promptTokensEstimate?: number;
+}
+
+// Counts what each tool call handed to the model (the compact JSON the runtime sends: forModel), so "how much of the business
+// did it have to read" is measured, not guessed.
+function metered(tools: AlleviaTool[], counter: { chars: number }): AlleviaTool[] {
+  return tools.map((t) => ({ ...t, run: async (args, ctx) => { const r = await t.run(args, ctx); counter.chars += forModel(r).length; return r; } }));
 }
 
 const hits = (q: Q, answer: string): number => q.match.filter((r) => r.test(answer)).length;
@@ -154,7 +162,7 @@ async function runStuff(runtime: AskDepsRuntime, g: GraphHandle, set: Set, q: Q,
     const r = await runtime.run(input, (e) => events.push(e));
     const usage = r.usage ?? EMPTY_USAGE;
     return { arm: "stuff", ok: true, ms: Date.now() - t0, usage, tokensRead: tokensRead(usage), tokensFresh: usage.inputTokens, tokensOut: usage.outputTokens,
-      toolCalls: 0, nodesTouched: 0, answer: r.text, hits: hits(q, r.text), hitsOf: q.match.length, promptTokensEstimate: approxTokens(input.prompt + input.system) };
+      toolCalls: 0, nodesTouched: 0, evidenceTokens: approxTokens(corpus), answer: r.text, hits: hits(q, r.text), hitsOf: q.match.length, promptTokensEstimate: approxTokens(input.prompt + input.system) };
   } catch (e) {
     return failed("stuff", Date.now() - t0, e, q, approxTokens(input.prompt));
   } finally { to.done(); }
@@ -165,7 +173,8 @@ async function runSolo(runtime: AskDepsRuntime, g: GraphHandle, set: Set, q: Q, 
   const to = withTimeout();
   const t0 = Date.now();
   const ctx = ctxFor(g, set.tenant, embedQuery, Date.now());
-  const tools = toolsByName(GRAPH_TOOLS);
+  const counter = { chars: 0 };
+  const tools = metered(toolsByName(GRAPH_TOOLS), counter);
   const input: RunInput = {
     agentId: "chief-of-staff", model, system: SYSTEM_SOLO, prompt: `The owner asks: ${q.question}`, tools, ctx, maxTurns: 14, signal: to.signal, phase: "direct",
   };
@@ -175,7 +184,7 @@ async function runSolo(runtime: AskDepsRuntime, g: GraphHandle, set: Set, q: Q, 
     const checks = checkTurn(r.text, ctx.touched, { now: ctx.now, question: q.question });
     const ok = Object.values(checks).every((v) => (typeof v === "boolean" ? v : true));
     return { arm: "solo", ok: true, ms: Date.now() - t0, usage, tokensRead: tokensRead(usage), tokensFresh: usage.inputTokens, tokensOut: usage.outputTokens,
-      toolCalls: events.filter((e) => e.type === "tool_call").length, nodesTouched: ctx.touched.nodes().length, answer: r.text,
+      toolCalls: events.filter((e) => e.type === "tool_call").length, nodesTouched: ctx.touched.nodes().length, evidenceTokens: approxTokens("x".repeat(counter.chars)), answer: r.text,
       hits: hits(q, r.text), hitsOf: q.match.length, checksOk: ok };
   } catch (e) {
     return failed("solo", Date.now() - t0, e, q);
@@ -184,15 +193,16 @@ async function runSolo(runtime: AskDepsRuntime, g: GraphHandle, set: Set, q: Q, 
 
 async function runTeam(tenant: string, q: Q, model: string | undefined): Promise<ArmResult> {
   const deps = await createAskDeps({ tenant, ...(model ? { model } : {}) });
+  const counter = { chars: 0 };
   const events: AgentEvent[] = [];
   const to = withTimeout();
   const t0 = Date.now();
   try {
-    const r = await ask({ tenant, question: q.question, channel: "cli", ephemeral: true }, { ...deps, readOnly: true, signal: to.signal }, (e) => events.push(e));
+    const r = await ask({ tenant, question: q.question, channel: "cli", ephemeral: true }, { ...deps, getTools: (names) => metered(deps.getTools(names), counter), readOnly: true, signal: to.signal }, (e) => events.push(e));
     const usage = r.usage ?? { ...EMPTY_USAGE, toolCalls: 0 };
     const checksOk = Object.values(r.checks).every((v) => (typeof v === "boolean" ? v : Array.isArray(v) ? v.length === 0 : true));
     return { arm: "team", ok: r.ok, ms: Date.now() - t0, usage, tokensRead: tokensRead(usage), tokensFresh: usage.inputTokens, tokensOut: usage.outputTokens,
-      toolCalls: usage.toolCalls, nodesTouched: r.outcome?.touched.nodes().length ?? 0, answer: r.answer, hits: hits(q, r.answer), hitsOf: q.match.length, checksOk,
+      toolCalls: usage.toolCalls, nodesTouched: r.outcome?.touched.nodes().length ?? 0, evidenceTokens: approxTokens("x".repeat(counter.chars)), answer: r.answer, hits: hits(q, r.answer), hitsOf: q.match.length, checksOk,
       ...(r.ok ? {} : { error: "the team could not finish" }) };
   } catch (e) {
     return failed("team", Date.now() - t0, e, q);
@@ -201,7 +211,7 @@ async function runTeam(tenant: string, q: Q, model: string | undefined): Promise
 
 function failed(arm: ArmResult["arm"], ms: number, e: unknown, q: Q, promptTokens?: number): ArmResult {
   return { arm, ok: false, error: e instanceof Error ? e.message : String(e), ms, usage: EMPTY_USAGE, tokensRead: 0, tokensFresh: 0, tokensOut: 0, toolCalls: 0, nodesTouched: 0,
-    answer: "", hits: 0, hitsOf: q.match.length, ...(promptTokens ? { promptTokensEstimate: promptTokens } : {}) };
+    evidenceTokens: 0, answer: "", hits: 0, hitsOf: q.match.length, ...(promptTokens ? { promptTokensEstimate: promptTokens } : {}) };
 }
 
 type AskDepsRuntime = Awaited<ReturnType<typeof createAskDeps>>["runtime"];
@@ -243,7 +253,7 @@ async function main(): Promise<void> {
         : arm === "solo" ? await runSolo(deps.runtime, g, set, q, model, embedQuery)
         : await runTeam(set.tenant, q, model);
       row.push(r);
-      console.log(`  ${arm.padEnd(5)} ${r.ok ? "ok " : "ERR"} ${(r.ms / 1000).toFixed(1).padStart(6)}s  read ${fmt(r.tokensRead).padStart(9)}  fresh ${fmt(r.tokensFresh).padStart(8)}  out ${fmt(r.tokensOut).padStart(6)}  calls ${String(r.usage.modelCalls).padStart(2)}  tools ${String(r.toolCalls).padStart(2)}  nodes ${String(r.nodesTouched).padStart(3)}  says ${r.hits}/${r.hitsOf}${r.checksOk === undefined ? "" : r.checksOk ? "  checks ok" : "  checks FAIL"}${r.error ? `  ${r.error.slice(0, 160)}` : ""}`);
+      console.log(`  ${arm.padEnd(5)} ${r.ok ? "ok " : "ERR"} ${(r.ms / 1000).toFixed(1).padStart(6)}s  read ${fmt(r.tokensRead).padStart(9)}  evidence ${fmt(r.evidenceTokens).padStart(8)}  out ${fmt(r.tokensOut).padStart(6)}  calls ${String(r.usage.modelCalls).padStart(2)}  tools ${String(r.toolCalls).padStart(2)}  nodes ${String(r.nodesTouched).padStart(3)}  says ${r.hits}/${r.hitsOf}${r.checksOk === undefined ? "" : r.checksOk ? "  checks ok" : "  checks FAIL"}${r.error ? `  ${r.error.slice(0, 160)}` : ""}`);
     }
     results.push({ q, arms: row });
   }
