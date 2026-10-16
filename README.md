@@ -237,7 +237,7 @@ running), give the owner a team instead of a tool, and make every answer carry i
   Dev writes the caption and the owner approves ([`src/studio/`](src/studio)). Spend and the live check are in
   [`docs/higgsfield-spend.md`](docs/higgsfield-spend.md).
 - **Other surfaces.** A Discord bot (a thread per conversation, live work log, approval buttons), a read-only MCP server
-  for other agents, a CLI for everything, and a static marketing site with pricing in four currencies (`site/`).
+  for other agents, a CLI for everything, and a static marketing site (`site/`): one scroll story about the company brain, drawn from the real graph, with prices in US dollars.
 
 ## Hero use case, in detail
 
@@ -658,8 +658,8 @@ edges nothing refers to; the suite holds both rules (see Tests).
   pinned commits, each with its LICENSE: [`vendor/playbooks/NOTICE.md`](vendor/playbooks/NOTICE.md).
 - **brag-slim** (MIT, latent-spaces/brag), vendored unmodified in `.claude/skills/brag-slim/` to render the launch
   video.
-- **Visuals:** the marketing site's illustrations, hero loop and the Studio demo's generated variant were made with
-  Higgsfield; every generation is logged in [`docs/higgsfield-spend.md`](docs/higgsfield-spend.md). The office
+- **Visuals:** the marketing site (v6) draws the company brain from the real graph and shows a real recorded run, with no
+  generated pictures; the Studio demo's generated variant and the posters and reels the team made were made with Higgsfield; every generation is logged in [`docs/higgsfield-spend.md`](docs/higgsfield-spend.md). The office
   sprites are drawn in code by us.
 - Libraries: FalkorDB and its Node client, the Claude Agent SDK, Hono, React, Vite, transformers.js, sharp,
   Playwright, discord.js and the MCP SDK, each under its own licence.

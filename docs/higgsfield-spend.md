@@ -51,3 +51,5 @@ Daily stand-up trials total: 4 credits (2 used, 2 wasted on a poster that could 
 Website redesign v4 (issue #5): 0 credits spent of the 35 allowed. The page is built only from footage recorded from the running app (demo mode) and the real posters, ad and reel in docs/creative-live/v2, so no real gap remained.
 
 Proactive follow-ups (impact first, Hindi posters, Change teaches) total: 0 credits; every path used was free. Balance unchanged.
+
+Website v6 (issue #37, up to 35 credits allowed): 0 credits spent. The one idea that live footage could not show, a company brain forming and growing, is drawn instead: an SVG built at compile time from the real graph of the sample business (`scripts/site-brain-export.ts`), moved by the page's scroll. Everything else is the running product: a real run of "Why did sign-ups drop this week, and what should we do?" filmed in the app (`site/scripts/record-live.mjs`), real screens, and the real posters, ad and reply the team made. Balance unchanged.

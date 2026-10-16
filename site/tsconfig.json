@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
@@ -12,8 +16,15 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
-    "types": ["vite/client"],
-    "noEmit": true
+    "types": [
+      "vite/client"
+    ],
+    "noEmit": true,
+    "resolveJsonModule": true
   },
-  "include": ["src", "../shared/plans.ts", "../shared/roster.ts"]
+  "include": [
+    "src",
+    "../shared/plans.ts",
+    "../shared/roster.ts"
+  ]
 }

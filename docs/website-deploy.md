@@ -14,18 +14,18 @@ npm run build               # type-checks, then writes site/dist/
 npm run check               # build + dead-link check + the list of placeholders still to fill
 ```
 
-`site/dist/` is the whole site: 13 pages (`/`, `/how-it-works/`, `/product/`, `/demo/`, `/pricing/`, `/security/`, `/faq/`,
+`site/dist/` is the whole site: 12 pages (`/`, `/product/`, `/demo/`, `/pricing/`, `/security/`, `/faq/`,
 `/about/`, `/contact/`, `/privacy/`, `/terms/`, `/data-deletion/`, `/cookies/`), `404.html`, `sitemap.xml`, `robots.txt`,
-`site.webmanifest`, the icons, and `assets/` and `img/`. About 4 MB, most of it the two short videos and the pictures. Every
-page works with JavaScript switched off (prices then show in US dollars).
+`site.webmanifest`, the icons, and `assets/` and `img/`. About 12 MB on disk, most of it the office clip (2.7 MB, fetched only when the visitor nears it), its phone loop and the pictures. Every
+page works with JavaScript switched off: the home page is then a plain page with every picture finished.
 
-The only script is `assets/main-*.js` (about 5 KB): the currency toggle, the pause button on the loops and the contents list on
-the legal pages. There are no cookies, no analytics and nothing is loaded from another company's servers, so the site works under
+The scripts are `assets/main-*.js` (about 13 KB: the home page's motion, the pause button on the loops, the contents list on the
+legal pages) and, on the home page only, `assets/scrollcraft-*.js` (the vendored scroll engine, 21 KB, loaded when the page is wide and motion is welcome). Prices are in US dollars only; the site stores nothing in the browser. There are no cookies, no analytics and nothing is loaded from another company's servers, so the site works under
 this strict policy (checked against every page):
 
 ```
 default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';
-media-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 ```
 
 (`'unsafe-inline'` is for style attributes only, which colour the office rooms.)

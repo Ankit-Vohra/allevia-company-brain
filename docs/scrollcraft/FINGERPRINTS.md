@@ -67,3 +67,11 @@ constrain yours.
 | Build | Grammar | Nav treatment | Hero device | Act-sequence shape | Close pattern | Signature move |
 |---|---|---|---|---|---|---|
 | allevia-site (2026-10) | Courier route (stops on a delivery route), product tour as gallery | Fixed route strip at the bottom with six named stops | Real input field beside layered, scrubbed footage of the live office | scrub, flow, scrub (peak), flow, pin (waterline), pan, flow, flow, pin, flow, pin | Arrival: courier sits, one button, page holds | The office dog carries what you type as "your website" down the route |
+
+## Rows appended after v6 (2026-10-16, issue #37)
+
+| Build | Grammar | Nav treatment | Hero device | Act-sequence shape | Close pattern | Signature move |
+|---|---|---|---|---|---|---|
+| allevia-site v6 (2026-10) | Live diagram: one drawn object, the company brain, that the story builds, grows and then travels through; the product tour stays a gallery | Fixed route strip with six named stops (shared with v4), dots only on a phone | The finished brain, breathing, with small pulses travelling real links, beside the headline | flow, pin (the brain forms, then tools snap in), scrub (the question's run), pan, flow (wipe), pin (count), flow | A price line, then one button on a still page | The route of a real question is drawn through the graph in the seconds of its own recording, with the office clip scrubbed to the same second |
+
+Differs from the v4 row on five of six dimensions (the nav treatment is shared), and from nothing else in this registry. What v6 takes: a persistent SVG diagram built from the product's own graph as the page's only drawn object; the recorded run's clock as the scroll's meaning.

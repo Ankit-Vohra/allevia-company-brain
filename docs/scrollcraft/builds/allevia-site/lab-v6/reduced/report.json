@@ -1,0 +1,2349 @@
+{
+ "doc": {
+  "height": 900,
+  "vh": 900,
+  "acts": [
+   {
+    "id": "top",
+    "kind": "flow",
+    "span": null
+   },
+   {
+    "id": "brain",
+    "kind": "pin",
+    "span": "4.4"
+   },
+   {
+    "id": "ask",
+    "kind": "scrub",
+    "span": "5"
+   },
+   {
+    "id": "made",
+    "kind": "pan",
+    "span": "2.6"
+   },
+   {
+    "id": "ok",
+    "kind": "flow",
+    "span": null
+   },
+   {
+    "id": "plan",
+    "kind": "pin",
+    "span": "1.8"
+   },
+   {
+    "id": "begin",
+    "kind": "flow",
+    "span": null
+   }
+  ],
+  "scrollMode": false,
+  "width": 1440,
+  "reduced": true
+ },
+ "report": [
+  {
+   "i": 0,
+   "act": "top",
+   "id": "top",
+   "f": 0.02,
+   "y": 0,
+   "file": "00.png",
+   "cues": [],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 0,
+   "contrast": []
+  },
+  {
+   "i": 1,
+   "act": "top",
+   "id": "top",
+   "f": 0.34,
+   "y": 0,
+   "file": "01.png",
+   "cues": [],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 0,
+   "contrast": []
+  },
+  {
+   "i": 2,
+   "act": "top",
+   "id": "top",
+   "f": 0.66,
+   "y": 310,
+   "file": "02.png",
+   "cues": [
+    {
+     "t": "Paste your website. Your brain starts. Your te",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": true
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 310,
+   "contrast": [
+    {
+     "t": "Paste your website. Your brain starts.",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 14.95
+    }
+   ]
+  },
+  {
+   "i": 3,
+   "act": "brain",
+   "id": "top",
+   "f": 0.98,
+   "y": 793,
+   "file": "03.png",
+   "cues": [
+    {
+     "t": "Paste your website. Your brain starts. Your te",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "Connect your tools. It grows. Reading is insta",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": true
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 793,
+   "contrast": [
+    {
+     "t": "Paste your website. Your brain starts.",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 13.66
+    },
+    {
+     "t": "Your team reads your pages and learns wh",
+     "size": 19,
+     "worst": 9.2,
+     "mean": 8.21
+    },
+    {
+     "t": "Connect your tools. It grows.",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 13.62
+    },
+    {
+     "t": "Reading is instant. Anything that sends ",
+     "size": 19,
+     "worst": 9.2,
+     "mean": 8.35
+    }
+   ]
+  },
+  {
+   "i": 4,
+   "act": "top",
+   "id": "brain",
+   "f": 0.02,
+   "y": 90,
+   "file": "04.png",
+   "cues": [
+    {
+     "t": "Paste your website. Your brain starts. Your te",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": true
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 90,
+   "contrast": [
+    {
+     "t": "Paste your website. Your brain starts.",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 14.95
+    }
+   ]
+  },
+  {
+   "i": 5,
+   "act": "brain",
+   "id": "brain",
+   "f": 0.34,
+   "y": 587,
+   "file": "05.png",
+   "cues": [
+    {
+     "t": "Paste your website. Your brain starts. Your te",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "Connect your tools. It grows. Reading is insta",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": true
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 587,
+   "contrast": [
+    {
+     "t": "Paste your website. Your brain starts.",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 13.66
+    },
+    {
+     "t": "Your team reads your pages and learns wh",
+     "size": 19,
+     "worst": 9.2,
+     "mean": 8.21
+    },
+    {
+     "t": "Connect your tools. It grows.",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 13.52
+    }
+   ]
+  },
+  {
+   "i": 6,
+   "act": "brain",
+   "id": "brain",
+   "f": 0.66,
+   "y": 1083,
+   "file": "06.png",
+   "cues": [
+    {
+     "t": "Paste your website. Your brain starts. Your te",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "Connect your tools. It grows. Reading is insta",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": true
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": true
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 1083,
+   "contrast": [
+    {
+     "t": "Paste your website. Your brain starts.",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 13.89
+    },
+    {
+     "t": "Your team reads your pages and learns wh",
+     "size": 19,
+     "worst": 9.2,
+     "mean": 8.21
+    },
+    {
+     "t": "Connect your tools. It grows.",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 13.62
+    },
+    {
+     "t": "Reading is instant. Anything that sends ",
+     "size": 19,
+     "worst": 9.2,
+     "mean": 8.35
+    }
+   ]
+  },
+  {
+   "i": 7,
+   "act": "ask",
+   "id": "brain",
+   "f": 0.98,
+   "y": 1580,
+   "file": "07.png",
+   "cues": [
+    {
+     "t": "Meera splits the question. Four colleagues rea",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "The new phone-number box crashes sign-up. It s",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": true
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": true
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 1580,
+   "contrast": [
+    {
+     "t": "Meera splits the question.",
+     "size": 16,
+     "worst": 5.71,
+     "mean": 5.68
+    },
+    {
+     "t": "Four colleagues read the brain.",
+     "size": 16,
+     "worst": 5.71,
+     "mean": 5.68
+    },
+    {
+     "t": "The answer comes back with its path.",
+     "size": 16,
+     "worst": 14.95,
+     "mean": 14.59
+    },
+    {
+     "t": "The new phone-number box crashes sign-up",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.22
+    },
+    {
+     "t": "The new phone-number box crashes sign-up",
+     "size": 17,
+     "worst": 14.95,
+     "mean": 14.95
+    },
+    {
+     "t": "Release 2.8.0Crash on sign-up",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.86
+    },
+    {
+     "t": "People still came, but phone numbers ent",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.25
+    },
+    {
+     "t": "People still came, but phone numbers ent",
+     "size": 17,
+     "worst": 14.95,
+     "mean": 14.95
+    },
+    {
+     "t": "Saw sign-upPhone number entered",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.93
+    },
+    {
+     "t": "Farhan owns the screen. The fix, 2.8.1, ",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.13
+    },
+    {
+     "t": "Farhan owns the screen. The fix, 2.8.1, ",
+     "size": 17,
+     "worst": 14.95,
+     "mean": 14.95
+    },
+    {
+     "t": "FarhanHotfix 2.8.1",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.55
+    },
+    {
+     "t": "Two things wait for your OK.",
+     "size": 15,
+     "worst": 9.2,
+     "mean": 9.12
+    }
+   ]
+  },
+  {
+   "i": 8,
+   "act": "brain",
+   "id": "ask",
+   "f": 0.02,
+   "y": 880,
+   "file": "08.png",
+   "cues": [
+    {
+     "t": "Paste your website. Your brain starts. Your te",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "Connect your tools. It grows. Reading is insta",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": true
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": true
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 880,
+   "contrast": [
+    {
+     "t": "Paste your website. Your brain starts.",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 13.66
+    },
+    {
+     "t": "Your team reads your pages and learns wh",
+     "size": 19,
+     "worst": 9.2,
+     "mean": 8.21
+    },
+    {
+     "t": "Connect your tools. It grows.",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 13.62
+    },
+    {
+     "t": "Reading is instant. Anything that sends ",
+     "size": 19,
+     "worst": 9.2,
+     "mean": 8.35
+    }
+   ]
+  },
+  {
+   "i": 9,
+   "act": "ask",
+   "id": "ask",
+   "f": 0.34,
+   "y": 1424,
+   "file": "09.png",
+   "cues": [
+    {
+     "t": "Connect your tools. It grows. Reading is insta",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "Meera splits the question. Four colleagues rea",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "The new phone-number box crashes sign-up. It s",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": true
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": true
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 1424,
+   "contrast": [
+    {
+     "t": "Connect your tools. It grows.",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 14.95
+    },
+    {
+     "t": "Reading is instant. Anything that sends ",
+     "size": 19,
+     "worst": 9.2,
+     "mean": 9.2
+    },
+    {
+     "t": "Meera splits the question.",
+     "size": 16,
+     "worst": 5.71,
+     "mean": 5.68
+    },
+    {
+     "t": "Four colleagues read the brain.",
+     "size": 16,
+     "worst": 5.71,
+     "mean": 5.68
+    },
+    {
+     "t": "The answer comes back with its path.",
+     "size": 16,
+     "worst": 14.95,
+     "mean": 14.59
+    },
+    {
+     "t": "The new phone-number box crashes sign-up",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.22
+    },
+    {
+     "t": "The new phone-number box crashes sign-up",
+     "size": 17,
+     "worst": 14.95,
+     "mean": 14.95
+    },
+    {
+     "t": "Release 2.8.0Crash on sign-up",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.86
+    },
+    {
+     "t": "People still came, but phone numbers ent",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.16
+    },
+    {
+     "t": "People still came, but phone numbers ent",
+     "size": 17,
+     "worst": 14.95,
+     "mean": 14.95
+    },
+    {
+     "t": "Saw sign-upPhone number entered",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.95
+    }
+   ]
+  },
+  {
+   "i": 10,
+   "act": "ask",
+   "id": "ask",
+   "f": 0.66,
+   "y": 1968,
+   "file": "10.png",
+   "cues": [
+    {
+     "t": "Meera splits the question. Four colleagues rea",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "The new phone-number box crashes sign-up. It s",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": true
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 1968,
+   "contrast": [
+    {
+     "t": "Meera splits the question.",
+     "size": 16,
+     "worst": 5.71,
+     "mean": 5.68
+    },
+    {
+     "t": "Four colleagues read the brain.",
+     "size": 16,
+     "worst": 5.71,
+     "mean": 5.68
+    },
+    {
+     "t": "The answer comes back with its path.",
+     "size": 16,
+     "worst": 14.95,
+     "mean": 14.59
+    },
+    {
+     "t": "The new phone-number box crashes sign-up",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.22
+    },
+    {
+     "t": "The new phone-number box crashes sign-up",
+     "size": 17,
+     "worst": 14.95,
+     "mean": 14.95
+    },
+    {
+     "t": "Release 2.8.0Crash on sign-up",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.86
+    },
+    {
+     "t": "People still came, but phone numbers ent",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.25
+    },
+    {
+     "t": "People still came, but phone numbers ent",
+     "size": 17,
+     "worst": 14.95,
+     "mean": 14.95
+    },
+    {
+     "t": "Saw sign-upPhone number entered",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.93
+    },
+    {
+     "t": "Farhan owns the screen. The fix, 2.8.1, ",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.13
+    },
+    {
+     "t": "Farhan owns the screen. The fix, 2.8.1, ",
+     "size": 17,
+     "worst": 14.95,
+     "mean": 14.95
+    },
+    {
+     "t": "FarhanHotfix 2.8.1",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.55
+    },
+    {
+     "t": "Two things wait for your OK.",
+     "size": 15,
+     "worst": 9.2,
+     "mean": 9.12
+    }
+   ]
+  },
+  {
+   "i": 11,
+   "act": "made",
+   "id": "ask",
+   "f": 0.98,
+   "y": 2512,
+   "file": "11.png",
+   "cues": [],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": true
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 2512,
+   "contrast": []
+  },
+  {
+   "i": 12,
+   "act": "ask",
+   "id": "made",
+   "f": 0.02,
+   "y": 1809,
+   "file": "12.png",
+   "cues": [
+    {
+     "t": "Meera splits the question. Four colleagues rea",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "The new phone-number box crashes sign-up. It s",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": true
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 1809,
+   "contrast": [
+    {
+     "t": "Meera splits the question.",
+     "size": 16,
+     "worst": 5.71,
+     "mean": 5.32
+    },
+    {
+     "t": "Four colleagues read the brain.",
+     "size": 16,
+     "worst": 5.71,
+     "mean": 5.26
+    },
+    {
+     "t": "The answer comes back with its path.",
+     "size": 16,
+     "worst": 14.95,
+     "mean": 12.98
+    },
+    {
+     "t": "The new phone-number box crashes sign-up",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 13.81
+    },
+    {
+     "t": "The new phone-number box crashes sign-up",
+     "size": 17,
+     "worst": 14.95,
+     "mean": 13.15
+    },
+    {
+     "t": "Release 2.8.0Crash on sign-up",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 14.98
+    },
+    {
+     "t": "People still came, but phone numbers ent",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 13.77
+    },
+    {
+     "t": "People still came, but phone numbers ent",
+     "size": 17,
+     "worst": 14.95,
+     "mean": 13.12
+    },
+    {
+     "t": "Saw sign-upPhone number entered",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 14.9
+    },
+    {
+     "t": "Farhan owns the screen. The fix, 2.8.1, ",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 14.2
+    },
+    {
+     "t": "Farhan owns the screen. The fix, 2.8.1, ",
+     "size": 17,
+     "worst": 14.95,
+     "mean": 13.74
+    },
+    {
+     "t": "FarhanHotfix 2.8.1",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.01
+    },
+    {
+     "t": "Two things wait for your OK.",
+     "size": 15,
+     "worst": 9.2,
+     "mean": 8.75
+    }
+   ]
+  },
+  {
+   "i": 13,
+   "act": "made",
+   "id": "made",
+   "f": 0.34,
+   "y": 2269,
+   "file": "13.png",
+   "cues": [
+    {
+     "t": "The new phone-number box crashes sign-up. It s",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": true
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 2269,
+   "contrast": [
+    {
+     "t": "People still came, but phone numbers ent",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 13.91
+    },
+    {
+     "t": "People still came, but phone numbers ent",
+     "size": 17,
+     "worst": 14.95,
+     "mean": 13.13
+    },
+    {
+     "t": "Saw sign-upPhone number entered",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 14.9
+    },
+    {
+     "t": "Farhan owns the screen. The fix, 2.8.1, ",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 14.2
+    },
+    {
+     "t": "Farhan owns the screen. The fix, 2.8.1, ",
+     "size": 17,
+     "worst": 14.95,
+     "mean": 13.74
+    },
+    {
+     "t": "FarhanHotfix 2.8.1",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.01
+    },
+    {
+     "t": "Two things wait for your OK.",
+     "size": 15,
+     "worst": 9.2,
+     "mean": 8.75
+    }
+   ]
+  },
+  {
+   "i": 14,
+   "act": "made",
+   "id": "made",
+   "f": 0.66,
+   "y": 2728,
+   "file": "14.png",
+   "cues": [],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 2728,
+   "contrast": []
+  },
+  {
+   "i": 15,
+   "act": "ok",
+   "id": "made",
+   "f": 0.98,
+   "y": 3187,
+   "file": "15.png",
+   "cues": [],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 3187,
+   "contrast": []
+  },
+  {
+   "i": 16,
+   "act": "made",
+   "id": "ok",
+   "f": 0.02,
+   "y": 2482,
+   "file": "16.png",
+   "cues": [],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": true
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 2482,
+   "contrast": []
+  },
+  {
+   "i": 17,
+   "act": "ok",
+   "id": "ok",
+   "f": 0.34,
+   "y": 2984,
+   "file": "17.png",
+   "cues": [],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 2984,
+   "contrast": []
+  },
+  {
+   "i": 18,
+   "act": "ok",
+   "id": "ok",
+   "f": 0.66,
+   "y": 3486,
+   "file": "18.png",
+   "cues": [
+    {
+     "t": "Your plan moves. Three goals, one bar each.",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "Your plan · month 1, week 4 sample numbers Wee",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 3486,
+   "contrast": [
+    {
+     "t": "Your plan moves. Three goals, one bar ea",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 13.41
+    },
+    {
+     "t": "Your plan · month 1, week 4 sample numbe",
+     "size": 12,
+     "worst": 6.6,
+     "mean": 6.23
+    },
+    {
+     "t": "Weekly signupsGoing well 312 a week Goal",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.1
+    },
+    {
+     "t": "Going well",
+     "size": 13,
+     "worst": 7.93,
+     "mean": 6.52
+    },
+    {
+     "t": "312 a week Goal 360 Rohan",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 6.14
+    },
+    {
+     "t": "Instagram reachGoing well 61,900 account",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 14.5
+    },
+    {
+     "t": "Going well",
+     "size": 13,
+     "worst": 7.93,
+     "mean": 6.13
+    }
+   ]
+  },
+  {
+   "i": 19,
+   "act": "plan",
+   "id": "ok",
+   "f": 0.98,
+   "y": 3988,
+   "file": "19.png",
+   "cues": [
+    {
+     "t": "Your plan moves. Three goals, one bar each.",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "Your plan · month 1, week 4 sample numbers Wee",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 3988,
+   "contrast": [
+    {
+     "t": "Your plan moves. Three goals, one bar ea",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 13.48
+    },
+    {
+     "t": "Your plan · month 1, week 4 sample numbe",
+     "size": 12,
+     "worst": 6.6,
+     "mean": 6.23
+    },
+    {
+     "t": "Weekly signupsGoing well 312 a week Goal",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.1
+    },
+    {
+     "t": "Going well",
+     "size": 13,
+     "worst": 7.93,
+     "mean": 6.52
+    },
+    {
+     "t": "312 a week Goal 360 Rohan",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 6.14
+    },
+    {
+     "t": "Instagram reachGoing well 61,900 account",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.05
+    },
+    {
+     "t": "Going well",
+     "size": 13,
+     "worst": 7.93,
+     "mean": 6.52
+    },
+    {
+     "t": "61,900 accounts a month Goal 78,600 Tara",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 5.92
+    },
+    {
+     "t": "Search clicksNeeds a push 10,100 clicks ",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.07
+    },
+    {
+     "t": "Needs a push",
+     "size": 13,
+     "worst": 5.79,
+     "mean": 4.89
+    },
+    {
+     "t": "10,100 clicks a month Goal 12,700 Kabir",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 5.97
+    }
+   ]
+  },
+  {
+   "i": 20,
+   "act": "ok",
+   "id": "plan",
+   "f": 0.02,
+   "y": 3280,
+   "file": "20.png",
+   "cues": [
+    {
+     "t": "Your plan moves. Three goals, one bar each.",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "Your plan · month 1, week 4 sample numbers Wee",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 3280,
+   "contrast": [
+    {
+     "t": "Your plan moves. Three goals, one bar ea",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 14.95
+    }
+   ]
+  },
+  {
+   "i": 21,
+   "act": "plan",
+   "id": "plan",
+   "f": 0.34,
+   "y": 3691,
+   "file": "21.png",
+   "cues": [
+    {
+     "t": "Your plan moves. Three goals, one bar each.",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "Your plan · month 1, week 4 sample numbers Wee",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 3691,
+   "contrast": [
+    {
+     "t": "Your plan moves. Three goals, one bar ea",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 13.48
+    },
+    {
+     "t": "Your plan · month 1, week 4 sample numbe",
+     "size": 12,
+     "worst": 6.6,
+     "mean": 6.23
+    },
+    {
+     "t": "Weekly signupsGoing well 312 a week Goal",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.1
+    },
+    {
+     "t": "Going well",
+     "size": 13,
+     "worst": 7.93,
+     "mean": 6.52
+    },
+    {
+     "t": "312 a week Goal 360 Rohan",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 6.14
+    },
+    {
+     "t": "Instagram reachGoing well 61,900 account",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.05
+    },
+    {
+     "t": "Going well",
+     "size": 13,
+     "worst": 7.93,
+     "mean": 6.52
+    },
+    {
+     "t": "61,900 accounts a month Goal 78,600 Tara",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 5.92
+    },
+    {
+     "t": "Search clicksNeeds a push 10,100 clicks ",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.04
+    },
+    {
+     "t": "Needs a push",
+     "size": 13,
+     "worst": 5.79,
+     "mean": 4.89
+    },
+    {
+     "t": "10,100 clicks a month Goal 12,700 Kabir",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 5.93
+    }
+   ]
+  },
+  {
+   "i": 22,
+   "act": "begin",
+   "id": "plan",
+   "f": 0.66,
+   "y": 4102,
+   "file": "22.png",
+   "cues": [
+    {
+     "t": "Your plan moves. Three goals, one bar each.",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "Your plan · month 1, week 4 sample numbers Wee",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 4102,
+   "contrast": [
+    {
+     "t": "Your plan moves. Three goals, one bar ea",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 14.95
+    },
+    {
+     "t": "Your plan · month 1, week 4 sample numbe",
+     "size": 12,
+     "worst": 6.6,
+     "mean": 6.57
+    },
+    {
+     "t": "Weekly signupsGoing well 312 a week Goal",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.67
+    },
+    {
+     "t": "Going well",
+     "size": 13,
+     "worst": 7.93,
+     "mean": 7.93
+    },
+    {
+     "t": "312 a week Goal 360 Rohan",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 6.47
+    },
+    {
+     "t": "Instagram reachGoing well 61,900 account",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.76
+    },
+    {
+     "t": "Going well",
+     "size": 13,
+     "worst": 7.93,
+     "mean": 7.93
+    },
+    {
+     "t": "61,900 accounts a month Goal 78,600 Tara",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 6.46
+    },
+    {
+     "t": "Search clicksNeeds a push 10,100 clicks ",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.71
+    },
+    {
+     "t": "Needs a push",
+     "size": 13,
+     "worst": 5.79,
+     "mean": 5.79
+    },
+    {
+     "t": "10,100 clicks a month Goal 12,700 Kabir",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 6.47
+    }
+   ]
+  },
+  {
+   "i": 23,
+   "act": "begin",
+   "id": "plan",
+   "f": 0.98,
+   "y": 4513,
+   "file": "23.png",
+   "cues": [
+    {
+     "t": "Your plan · month 1, week 4 sample numbers Wee",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 4513,
+   "contrast": []
+  },
+  {
+   "i": 24,
+   "act": "plan",
+   "id": "begin",
+   "f": 0.02,
+   "y": 3801,
+   "file": "24.png",
+   "cues": [
+    {
+     "t": "Your plan moves. Three goals, one bar each.",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "Your plan · month 1, week 4 sample numbers Wee",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 3801,
+   "contrast": [
+    {
+     "t": "Your plan moves. Three goals, one bar ea",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 13.48
+    },
+    {
+     "t": "Your plan · month 1, week 4 sample numbe",
+     "size": 12,
+     "worst": 6.6,
+     "mean": 6.23
+    },
+    {
+     "t": "Weekly signupsGoing well 312 a week Goal",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.1
+    },
+    {
+     "t": "Going well",
+     "size": 13,
+     "worst": 7.93,
+     "mean": 6.52
+    },
+    {
+     "t": "312 a week Goal 360 Rohan",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 6.14
+    },
+    {
+     "t": "Instagram reachGoing well 61,900 account",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.05
+    },
+    {
+     "t": "Going well",
+     "size": 13,
+     "worst": 7.93,
+     "mean": 6.52
+    },
+    {
+     "t": "61,900 accounts a month Goal 78,600 Tara",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 5.92
+    },
+    {
+     "t": "Search clicksNeeds a push 10,100 clicks ",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.07
+    },
+    {
+     "t": "Needs a push",
+     "size": 13,
+     "worst": 5.79,
+     "mean": 4.89
+    },
+    {
+     "t": "10,100 clicks a month Goal 12,700 Kabir",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 5.97
+    }
+   ]
+  },
+  {
+   "i": 25,
+   "act": "begin",
+   "id": "begin",
+   "f": 0.34,
+   "y": 4239,
+   "file": "25.png",
+   "cues": [
+    {
+     "t": "Your plan moves. Three goals, one bar each.",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    },
+    {
+     "t": "Your plan · month 1, week 4 sample numbers Wee",
+     "o": 1,
+     "on": true,
+     "color": "rgb(31, 26, 20)"
+    }
+   ],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 4239,
+   "contrast": [
+    {
+     "t": "Your plan moves. Three goals, one bar ea",
+     "size": 59,
+     "worst": 14.95,
+     "mean": 14.95
+    },
+    {
+     "t": "Weekly signupsGoing well 312 a week Goal",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15
+    },
+    {
+     "t": "312 a week Goal 360 Rohan",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 6.47
+    },
+    {
+     "t": "Instagram reachGoing well 61,900 account",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.76
+    },
+    {
+     "t": "Going well",
+     "size": 13,
+     "worst": 7.93,
+     "mean": 7.93
+    },
+    {
+     "t": "61,900 accounts a month Goal 78,600 Tara",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 6.46
+    },
+    {
+     "t": "Search clicksNeeds a push 10,100 clicks ",
+     "size": 17,
+     "worst": 17.27,
+     "mean": 15.71
+    },
+    {
+     "t": "Needs a push",
+     "size": 13,
+     "worst": 5.79,
+     "mean": 5.79
+    },
+    {
+     "t": "10,100 clicks a month Goal 12,700 Kabir",
+     "size": 14,
+     "worst": 6.6,
+     "mean": 6.47
+    }
+   ]
+  },
+  {
+   "i": 26,
+   "act": "begin",
+   "id": "begin",
+   "f": 0.66,
+   "y": 4676,
+   "file": "26.png",
+   "cues": [],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 4676,
+   "contrast": []
+  },
+  {
+   "i": 27,
+   "act": null,
+   "id": "begin",
+   "f": 0.98,
+   "y": 5114,
+   "file": "27.png",
+   "cues": [],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 4841,
+   "contrast": []
+  },
+  {
+   "i": 28,
+   "act": null,
+   "id": "bottom",
+   "f": 1,
+   "y": 1000000,
+   "file": "28.png",
+   "cues": [],
+   "scenes": [
+    {
+     "scene": "form",
+     "sig": "47:60:11:15",
+     "runT": null,
+     "rect": false
+    },
+    {
+     "scene": "ask",
+     "sig": "44:0:4:2",
+     "runT": 101,
+     "rect": false
+    }
+   ],
+   "videos": [],
+   "rails": [
+    0
+   ],
+   "wipes": [
+    "none"
+   ],
+   "goals": [
+    430,
+    391,
+    394
+   ],
+   "scroll": 4841,
+   "contrast": []
+  }
+ ],
+ "keyboard": [
+  {
+   "tag": "a",
+   "text": "Skip to content",
+   "inView": true,
+   "opacity": 1,
+   "href": "#main"
+  },
+  {
+   "tag": "a",
+   "text": "Allevia, homeallevia",
+   "inView": true,
+   "opacity": 1,
+   "href": "/"
+  },
+  {
+   "tag": "a",
+   "text": "Product tour",
+   "inView": true,
+   "opacity": 1,
+   "href": "/product/"
+  },
+  {
+   "tag": "a",
+   "text": "Pricing",
+   "inView": true,
+   "opacity": 1,
+   "href": "/pricing/"
+  },
+  {
+   "tag": "a",
+   "text": "Security",
+   "inView": true,
+   "opacity": 1,
+   "href": "/security/"
+  },
+  {
+   "tag": "a",
+   "text": "FAQ",
+   "inView": true,
+   "opacity": 1,
+   "href": "/faq/"
+  },
+  {
+   "tag": "a",
+   "text": "Get a free Brain Snapshot",
+   "inView": true,
+   "opacity": 1,
+   "href": "/contact/"
+  },
+  {
+   "tag": "a",
+   "text": "Get a free Brain Snapshot",
+   "inView": true,
+   "opacity": 1,
+   "href": "/contact/"
+  },
+  {
+   "tag": "a",
+   "text": "See how it works",
+   "inView": true,
+   "opacity": 1,
+   "href": "#brain"
+  },
+  {
+   "tag": "div",
+   "text": "They make things. Each one waits for you",
+   "inView": true,
+   "opacity": 1,
+   "href": null
+  },
+  {
+   "tag": "a",
+   "text": "Get a free Brain Snapshot",
+   "inView": true,
+   "opacity": 1,
+   "href": "/contact/"
+  },
+  {
+   "tag": "a",
+   "text": "See the plans",
+   "inView": true,
+   "opacity": 1,
+   "href": "/pricing/"
+  },
+  {
+   "tag": "a",
+   "text": "Home",
+   "inView": true,
+   "opacity": 1,
+   "href": "/"
+  },
+  {
+   "tag": "a",
+   "text": "Product tour",
+   "inView": true,
+   "opacity": 1,
+   "href": "/product/"
+  },
+  {
+   "tag": "a",
+   "text": "Live demo",
+   "inView": true,
+   "opacity": 1,
+   "href": "/demo/"
+  },
+  {
+   "tag": "a",
+   "text": "Pricing",
+   "inView": true,
+   "opacity": 1,
+   "href": "/pricing/"
+  },
+  {
+   "tag": "a",
+   "text": "Security",
+   "inView": true,
+   "opacity": 1,
+   "href": "/security/"
+  },
+  {
+   "tag": "a",
+   "text": "FAQ",
+   "inView": true,
+   "opacity": 1,
+   "href": "/faq/"
+  },
+  {
+   "tag": "a",
+   "text": "About",
+   "inView": true,
+   "opacity": 1,
+   "href": "/about/"
+  },
+  {
+   "tag": "a",
+   "text": "Contact and support",
+   "inView": true,
+   "opacity": 1,
+   "href": "/contact/"
+  },
+  {
+   "tag": "a",
+   "text": "Privacy Policy",
+   "inView": true,
+   "opacity": 1,
+   "href": "/privacy/"
+  },
+  {
+   "tag": "a",
+   "text": "Terms of Service",
+   "inView": true,
+   "opacity": 1,
+   "href": "/terms/"
+  },
+  {
+   "tag": "a",
+   "text": "Delete your data",
+   "inView": true,
+   "opacity": 1,
+   "href": "/data-deletion/"
+  },
+  {
+   "tag": "a",
+   "text": "Cookies and analytics",
+   "inView": true,
+   "opacity": 1,
+   "href": "/cookies/"
+  }
+ ],
+ "findings": []
+}

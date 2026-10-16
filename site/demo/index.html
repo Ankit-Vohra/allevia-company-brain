@@ -11,8 +11,8 @@
       <section class="page-head" aria-labelledby="h1">
         <div class="wrap page-head__in page-head__in--one">
           <div>
-            <h1 id="h1" class="page-head__h">Look around the real&nbsp;thing.</h1>
-            <p class="lede">The demo is the same app your team uses, in a read-only mode. You can open every screen. Nothing you do there is saved or sent, and you do not need to sign up.</p>
+            <h1 id="h1" class="page-head__h">Look around the real&nbsp;app.</h1>
+            <p class="lede">Read-only. Nothing you do is saved or sent, and there is no sign-up.</p>
             <div class="hero__cta">
               <!-- @render demo-button -->
               <a class="btn btn-gold btn-lg" href="/product/">Take the product tour</a>
@@ -22,59 +22,16 @@
         </div>
       </section>
 
-      <section class="section" aria-labelledby="can-h">
-        <div class="wrap split">
-          <div class="split__text">
-            <h2 id="can-h" class="section__h">What you can do in the&nbsp;demo.</h2>
-            <ul class="ticks">
-              <li>Walk around the <strong>office</strong> and see the team, the growth plan and today's note.</li>
-              <li>Open <strong>Insights</strong>, the list of things the team noticed, each with its reason.</li>
-              <li>Read <strong>Waiting for your OK</strong> and everything decided before.</li>
-              <li>Explore the company's memory on the <strong>Brain</strong> page: pick any point and follow how it connects.</li>
-              <li>Open <strong>Ask</strong> and replay a recorded question, to see an answer with its sources and the path behind it, and how the team worked.</li>
-            </ul>
-          </div>
-          <div class="split__text">
-            <h2 class="section__h section__h--small">What it will not do.</h2>
-            <ul class="ticks ticks--cross">
-              <li>It will not take new questions. Ask replays answers we recorded earlier, so it never calls the AI model and costs nothing to run.</li>
-              <li>It will not save, approve, post, send or upload anything. Every action that would change something is refused with a polite message.</li>
-              <li>It will not set up your business. For that, <a href="__CONTACT_URL__">ask for a free Brain Snapshot</a>.</li>
-            </ul>
-            <!-- @render demo-data -->
-          </div>
-        </div>
-      </section>
-
       <section class="section" aria-labelledby="see-h">
         <div class="wrap">
-          <h2 id="see-h" class="section__h">What it looks&nbsp;like.</h2>
-          <div class="split">
-            <div class="split__text">
-              <p class="lede">The office, a short loop of the real thing. The numbers here are sample numbers.</p>
-            </div>
-            <!-- @render office-loop -->
-          </div>
-          <div class="shots2">
-            <figure class="shot">
-              <img src="/img/tour-insights-1600.webp" srcset="/img/tour-insights-800.webp 800w, /img/tour-insights-1600.webp 1600w" sizes="(min-width: 64rem) 36rem, 100vw" width="1600" height="1000" loading="lazy" decoding="async"
-                alt="The Insights screen: a short list of things the team noticed, each with a one-line reason." />
-              <figcaption>Insights. <span class="tag">sample numbers</span></figcaption>
-            </figure>
-            <figure class="shot">
-              <img src="/img/tour-path-1600.webp" srcset="/img/tour-path-800.webp 800w, /img/tour-path-1600.webp 1600w" sizes="(min-width: 64rem) 36rem, 100vw" width="1600" height="1000" loading="lazy" decoding="async"
-                alt="An answer in Ask with 'How we know' open: the seven steps behind the answer joined by a gold line." />
-              <figcaption>An answer, and the path behind it. <span class="tag">sample numbers</span></figcaption>
-            </figure>
-          </div>
-        </div>
-      </section>
-
-      <section class="section close" aria-labelledby="close-h">
-        <div class="wrap close__in">
-          <h2 id="close-h">Want it on your own business?</h2>
-          <p>Send us your website. We send back what we learned about your business and five ranked fixes, free, before you pay anything.</p>
-          <a class="btn btn-gold btn-lg" href="__CONTACT_URL__">Get a free Brain Snapshot</a>
+          <h2 id="see-h" class="visually-hidden">What the demo looks like</h2>
+          <figure class="shot">
+            <img src="/media/shot-office-sales.webp" width="1200" height="515" loading="lazy" decoding="async"
+              alt="The office: people at desks in coloured zones, Sales between Analytics and the cafeteria, a dog on the floor." />
+            <figcaption>The office. <span class="tag">made-up data</span></figcaption>
+          </figure>
+          <p class="fine demo__note">Questions replay answers we recorded earlier. <a href="__CONTACT_URL__">Ask for a free Brain Snapshot</a> to see it on your business.</p>
+          <!-- @render demo-data -->
         </div>
       </section>
     </main>

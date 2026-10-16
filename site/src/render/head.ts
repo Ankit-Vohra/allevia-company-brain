@@ -14,7 +14,7 @@ const abs = (path: string) => `${SITE_URL}${path}`;
 const json = (o: unknown) => JSON.stringify(o).replace(/</g, "\\u003c");
 
 const DEFAULT_IMAGE = "/img/og.jpg";
-const DEFAULT_ALT = "A drawing of a studio owner with a cup of tea while a tiny pixel-art team works at small desks on a sheet of ledger paper.";
+const DEFAULT_ALT = "The Allevia home page: the headline A brain for your business, and a team that works from it, beside a drawing of a sample business's company brain.";
 
 function organization() {
   const email = COMPANY.email.general || COMPANY.email.support;
@@ -98,7 +98,6 @@ export function head(page: PageDef): string {
   const image = abs(page.image ?? DEFAULT_IMAGE);
   const alt = page.imageAlt ?? DEFAULT_ALT;
   const ld = jsonLd(page).map((o) => `    <script type="application/ld+json">${json({ "@context": "https://schema.org", ...o })}</script>`).join("\n");
-  const home = page.path === "/";
   return [
     `<meta charset="utf-8" />`,
     `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />`,
@@ -127,15 +126,12 @@ export function head(page: PageDef): string {
     `<link rel="icon" href="/favicon-48.png" sizes="48x48" type="image/png" />`,
     `<link rel="apple-touch-icon" href="/apple-touch-icon.png" />`,
     `<link rel="manifest" href="/site.webmanifest" />`,
-    home
-      ? `<link rel="preload" as="image" href="/media/office-poster.webp" media="(min-width: 861px)" fetchpriority="high" /><link rel="preload" as="image" href="/media/office-phone-poster.webp" media="(max-width: 860px)" fetchpriority="high" />`
-      : "",
     ld,
     `<script type="module" src="/src/main.ts"></script>`,
   ].filter(Boolean).join("\n    ");
 }
 
-/** The page whose source file Vite is transforming: ctx.path is "/how-it-works/index.html" (or "/index.html"). */
+/** The page whose source file Vite is transforming: ctx.path is "/pricing/index.html" (or "/index.html"). */
 export function pageForRequest(requestPath: string): PageDef | undefined {
   const clean = requestPath.replace(/index\.html$/, "").split("?")[0]!;
   return PAGES.find((p) => p.path === clean);
