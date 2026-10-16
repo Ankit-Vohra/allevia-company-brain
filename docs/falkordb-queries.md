@@ -291,6 +291,34 @@ MATCH (x:Entity) WHERE x.id IN $ids WITH x MATCH (t:Turn)-[:TOUCHED|CITED]->(x) 
 WITH DISTINCT t RETURN t.id AS id, t.question AS q, t.answer AS a, t.at AS at ORDER BY t.at DESC, t.id LIMIT 8
 ```
 
+**What else a turn leaves in the graph (17 October 2026).** The Turn and its Findings carry `src` (the turn) and `asOf`, and so does
+every `TOUCHED`, `CITED`, `HANDLED_BY`, `PRODUCED`, `REVIEWED`, `GUIDED_BY`, `BASED_ON` and `PART_OF` edge `saveTurn` writes
+(`src/agent/memory.ts:249`). Four more things became edges so they can be traversed:
+
+- **The path under an answer.** `Turn.pathIds` holds the ids the "How we know" path drew, in order, and each `TOUCHED` edge to a node
+  on it is marked `onPath = true, pathIndex = n`. `show_path` only draws ids a tool returned that turn (`ctx.touched`, which includes
+  the recall brief) and leaves out a pair with no link within four hops. "Which answers walked through this node" is
+  `answersThrough` (`src/agent/memory.ts:380`), and the node-detail API carries it as `answers`:
+
+```cypher
+MATCH (n:Entity {id:$id}) WITH n
+MATCH (t:Turn)-[r:TOUCHED]->(n) WHERE r.onPath = true AND r.until IS NULL AND coalesce(t.status, 'ok') = 'ok'
+RETURN t.id AS id, t.question AS q, t.at AS at, r.pathIndex AS idx, t.sessionId AS sid ORDER BY at DESC, id LIMIT $limit
+```
+
+- **Skills and the rules that shaped a turn.** A skill a turn opens is a `Playbook{kind:'skill'}` (`playbook:skill-<id>`,
+  `src/agent/tools/skills.ts:20`): the agent `USES` it, the Turn `TOUCHED` it, the desk's Finding is `GUIDED_BY` it, and the Turn and
+  Finding are `GUIDED_BY` the business's own rules for the skill and the lessons learned from the owner's edits that `use_skill`
+  showed. A card is `GUIDED_BY` each learned rule that rewrote its draft, with `how` (`rewrote` with `find` and `replace`, or
+  `instructed`) on the edge (`src/actions/learning.ts:280`), and `LEARNED_FROM` keeps `src` (the approval), `asOf`, `conf` and the
+  words before and after the edit. Search never returns a skill.
+- **What a turn made.** A card or a memory whose own `src` is the turn is `SOURCED_FROM` that Turn; a chat proposal `ADVANCES` the goal
+  tracking the metric it is evidenced by (else a goal of its area), like the detectors' cards.
+- **A changed preference.** `remember` writes `newMemory -SUPERSEDES-> old` when an active note of the same kind about the same entity
+  says something different about the same thing (`src/agent/tools/memory.ts:167`, `:176`), so recall and the brief show one, not two.
+  Turns are embedded (`Turn.embedding`, the question), so `recall` with a query also finds an earlier question by meaning
+  (`src/agent/tools/memory.ts:31`): a vector search on the `Searchable` index, kept to the nearest few within a cosine distance of 0.12.
+
 ## 12. Provenance behind a cited answer
 
 | | |

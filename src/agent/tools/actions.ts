@@ -7,6 +7,7 @@ import type { ActionKind } from "../../../shared/contracts.js";
 import { agentById } from "../../../shared/roster.js";
 import { upsertEdge, upsertNode } from "../../graph/upsert.js";
 import { entityId } from "../../util/ids.js";
+import { isArea, loadGoals, relatedGoals } from "../../insights/goals.js";
 import { isoDate } from "../../util/time.js";
 import {
   Collector, InputError, clip, defineTool, getNode, getNodes, nextId, refuseIfReadOnly, refuseIfStopped, ro, serial,
@@ -47,6 +48,7 @@ export async function runPropose(args: ProposeArgs, ctx: ToolContext) {
   const recId = entityId("Recommendation", title);
   const agentId = staffAgentId(ctx.agentId);
 
+  const advances: string[] = [];
   const { approvalId, reused } = await serial(ctx.graph.name, async () => {
     refuseIfStopped(ctx, "propose_action");
     if (!(await getNode(ctx, agentId))) {
@@ -79,19 +81,36 @@ export async function runPropose(args: ProposeArgs, ctx: ToolContext) {
     await upsertEdge(ctx.graph, { from: recId, type: "PROPOSES", to: approvalId, src, asOf }, ctx.now);
     for (const to of evidence) await upsertEdge(ctx.graph, { from: recId, type: "EVIDENCED_BY", to, src, asOf }, ctx.now);
     await upsertEdge(ctx.graph, { from: agentId, type: "PRODUCED", to: recId, src, asOf }, ctx.now);
+    // Which goal it moves, as the detectors' cards do (the goal tracking a metric it is evidenced by, else one of its area).
+    // Best effort: a proposal never fails over a goal.
+    try {
+      const metricIds = evidence.filter((id) => id.startsWith("metric:"));
+      const keyed = metricIds.length ? await ro<{ id: string; key: string | null }>(ctx, "UNWIND $ids AS id MATCH (m:Entity:Metric {id:id}) RETURN m.id AS id, m.key AS key", { ids: metricIds }) : [];
+      const metrics = [...new Set([...keyed.map((m) => m.key), ...metricIds.map((id) => id.slice("metric:".length))].filter((k): k is string => !!k))];
+      const area = args.area?.trim().toLowerCase();
+      const goals = relatedGoals({ area: isArea(area) ? area : "knowledge", metrics }, await loadGoals(ctx.graph));
+      for (const gl of goals) {
+        await upsertEdge(ctx.graph, { from: recId, type: "ADVANCES", to: gl.id, src, asOf }, ctx.now);
+        await upsertEdge(ctx.graph, { from: approvalId, type: "ADVANCES", to: gl.id, src, asOf }, ctx.now);
+        advances.push(gl.id);
+      }
+    } catch {
+      // no goal edge
+    }
     return { approvalId, reused: false };
   });
 
-  const nodes = await getNodes(ctx, [recId, approvalId, agentId, ...evidence]);
+  const nodes = await getNodes(ctx, [recId, approvalId, agentId, ...evidence, ...advances]);
   const col = new Collector();
-  for (const id of [recId, approvalId, agentId, ...evidence]) col.node(nodes.get(id));
+  for (const id of [recId, approvalId, agentId, ...evidence, ...advances]) col.node(nodes.get(id));
   const edge = (from: string, type: string, to: string) => col.edge({ from, type, to, since: ctx.now, until: null });
   edge(recId, "PROPOSES", approvalId);
   for (const to of evidence) edge(recId, "EVIDENCED_BY", to);
+  for (const to of advances) edge(recId, "ADVANCES", to);
   edge(agentId, "PRODUCED", recId);
   const said = reused ? `Already proposed and waiting for the owner (${approvalId}); added the evidence.` : `Proposed for the owner's approval (${approvalId}); nothing has been executed.`;
   return col.result(ctx, {
-    recommendationId: recId, approvalId, kind: args.kind, status: "pending", title, evidence, ...(reused ? { alreadyPending: true } : {}),
+    recommendationId: recId, approvalId, kind: args.kind, status: "pending", title, evidence, ...(advances.length ? { advances } : {}), ...(reused ? { alreadyPending: true } : {}),
     ...(skipped.length ? { skipped } : {}),
   }, `${said}${skipped.length ? ` Unknown evidence skipped: ${skipped.join(", ")}.` : ""}`);
 }

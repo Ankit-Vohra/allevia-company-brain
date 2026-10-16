@@ -9,7 +9,7 @@ import { upsertEdge, upsertNode } from "../../graph/upsert.js";
 import { DisallowedRelationship } from "../../graph/errors.js";
 import { isoDate } from "../../util/time.js";
 import {
-  Collector, EDGE, InputError, NODE, SEARCH_TYPES, brief, clip, defineTool, ftEntities, getNodes, isoOrNull, nextId,
+  Collector, EDGE, InputError, NODE, SEARCH_TYPES, brief, clip, defineTool, ftEntities, ftTerms, getNodes, isoOrNull, nextId,
   refuseIfReadOnly, refuseIfStopped, ro, serial, type EdgeRow, type NodeRow,
 } from "./common.js";
 
@@ -23,6 +23,26 @@ const toMs = (v: number | string | null): number => (typeof v === "number" ? v :
 const TURN_CITED = 12; // entities returned per earlier turn, from what it cited
 const NOT_SUPERSEDED = "OPTIONAL MATCH (newer:Memory)-[s:SUPERSEDES]->(m) WHERE s.until IS NULL";
 
+// Earlier questions that mean the same as this text, by vector (the Turn's own embedding, saved with it): "have we been asked
+// something like this". Only close ones: the e5 vectors of unrelated questions still sit fairly near each other, so a cap on
+// the cosine distance keeps it to the same question in other words. No embedder, or none saved yet: none.
+export const SIMILAR_TURN_DISTANCE = 0.12;
+const SIMILAR_TURNS = 3;
+async function similarTurns(ctx: ToolContext, text: string): Promise<string[]> {
+  if (!ctx.embedQuery) return [];
+  try {
+    const v = await ctx.embedQuery(text);
+    if (v.length !== VECTOR_DIM) return [];
+    const hits = await ro<{ id: string }>(ctx,
+      `CALL db.idx.vector.queryNodes('Searchable', 'embedding', $k, vecf32($v)) YIELD node, score
+       WITH node, score WHERE node:Turn AND score <= $cap AND coalesce(node.status, 'ok') = 'ok'
+       RETURN node.id AS id ORDER BY score ASC, node.id LIMIT $limit`, { v, k: 100, cap: SIMILAR_TURN_DISTANCE, limit: SIMILAR_TURNS });
+    return hits.map((h) => h.id);
+  } catch {
+    return []; // by meaning is an extra: the words still find earlier turns
+  }
+}
+
 async function runRecall(args: { ids?: string[]; query?: string }, ctx: ToolContext) {
   const given = [...new Set((args.ids ?? []).map((s) => s.trim()).filter(Boolean))].slice(0, 20);
   if (!given.length && !args.query?.trim()) throw new InputError("Pass the ids you are working with (preferred) or a query.");
@@ -31,9 +51,9 @@ async function runRecall(args: { ids?: string[]; query?: string }, ctx: ToolCont
   const targets = [...found.values()];
   let queryTurns: string[] = [];
   if (args.query?.trim()) {
-    const [ents, turnHits] = await Promise.all([ftEntities(ctx, args.query, SEARCH_TYPES, 5), ftEntities(ctx, args.query, ["Turn"], 5)]);
+    const [ents, turnHits, similar] = await Promise.all([ftEntities(ctx, args.query, SEARCH_TYPES, 5), ftEntities(ctx, args.query, ["Turn"], 5), similarTurns(ctx, args.query)]);
     for (const h of ents) if (!targets.some((t) => t.id === h.n.id)) targets.push(h.n);
-    queryTurns = turnHits.map((h) => h.n.id);
+    queryTurns = [...new Set([...turnHits.map((h) => h.n.id), ...similar])];
   }
   const ids = targets.map((t) => t.id);
   const turnCols = `${NODE("t")} AS t, t.question AS question, t.answer AS answer, t.at AS at, t.agents AS agents, s.id AS session`;
@@ -138,6 +158,29 @@ export const recall = defineTool({
 
 // ---------- remember ----------
 
+// Memory words that carry its subject: lowercase, no filler, a rough stem ("stories" and "story" are one thing).
+const subjectWords = (text: string): Set<string> => new Set(ftTerms(text, 30).map((w) => (w.length > 4 ? w.replace(/(?:ies|es|s|ing|ed)$/u, "") : w)));
+
+// Does a new note say something different about the same thing as an old one? The same subject is two or more shared words that
+// are at least half of the shorter note ("Stories stay paused until Diwali" / "Stories resume after Diwali"); the same words
+// again, or two notes about different things on one entity ("no emojis" / "prices in rupees"), are not a change.
+export function changesTheSame(newText: string, oldText: string): boolean {
+  const flat = (t: string): string => t.toLowerCase().replace(/\s+/g, " ").trim();
+  if (flat(newText) === flat(oldText)) return false;
+  const a = subjectWords(newText), b = subjectWords(oldText);
+  const shared = [...a].filter((w) => b.has(w)).length;
+  return shared >= 2 && shared * 2 >= Math.min(a.size, b.size);
+}
+
+// Active notes of the same kind about any of these entities (none already replaced by a newer one) that the new text changes.
+async function sameSubjectNotes(ctx: ToolContext, n: { kind: string; text: string; about: string[] }): Promise<Array<{ id: string; text: string }>> {
+  const rows = await ro<{ id: string; text: string | null }>(ctx,
+    `MATCH (x:Entity) WHERE x.id IN $about WITH x MATCH (m:Memory)-[r:ABOUT]->(x) WHERE r.until IS NULL AND m.kind = $kind AND coalesce(m.status, 'active') <> 'retired'
+     WITH DISTINCT m ${NOT_SUPERSEDED} WITH m, count(newer) AS superseded WHERE superseded = 0
+     RETURN m.id AS id, coalesce(m.text, m.summary, m.name) AS text ORDER BY id LIMIT 30`, { about: n.about, kind: n.kind });
+  return rows.filter((r) => r.text && changesTheSame(n.text, r.text)).map((r) => ({ id: r.id, text: r.text! }));
+}
+
 async function runRemember(args: { text: string; kind: "preference" | "fact" | "instruction"; about: string[] }, ctx: ToolContext) {
   refuseIfReadOnly(ctx, "remember");
   const text = args.text.trim();
@@ -151,14 +194,26 @@ async function runRemember(args: { text: string; kind: "preference" | "fact" | "
   const src = ctx.turnId; // already `turn:<date>-<id>`
   const asOf = isoDate(ctx.now);
 
-  const { id, stated } = await serial(ctx.graph.name, async () => {
+  const { id, stated, replaced } = await serial(ctx.graph.name, async () => {
     refuseIfStopped(ctx, "remember");
     const id = await nextId(ctx, `memory:${ctx.turnId}-`);
+    // What this replaces, found before the new note exists: an active note of the same kind about the same thing.
+    const earlier = await sameSubjectNotes(ctx, { kind: args.kind, text, about: linked });
     await upsertNode(ctx.graph, {
       type: "Memory", id, name: clip(text, 80)!, summary: clip(text, 400), props: { kind: args.kind, text: text.slice(0, 2000), at: ctx.now },
       src, asOf, ...(embedding?.length === VECTOR_DIM ? { embedding } : {}),
     }, ctx.now);
     for (const to of linked) await upsertEdge(ctx.graph, { from: id, type: "ABOUT", to, src, asOf }, ctx.now);
+    // A changed preference or fact does not leave two active: the new note SUPERSEDES the old (recall and the brief skip it from now on).
+    const replaced: string[] = [];
+    for (const old of earlier) {
+      try {
+        await upsertEdge(ctx.graph, { from: id, type: "SUPERSEDES", to: old.id, src, asOf }, ctx.now);
+        replaced.push(old.id);
+      } catch (e) {
+        if (!(e instanceof DisallowedRelationship) && !/missing endpoint/i.test(String((e as Error).message))) throw e;
+      }
+    }
     let stated = false;
     try {
       await upsertEdge(ctx.graph, { from: ctx.asker, type: "STATED", to: id, src, asOf }, ctx.now);
@@ -166,16 +221,19 @@ async function runRemember(args: { text: string; kind: "preference" | "fact" | "
     } catch (e) {
       if (!(e instanceof DisallowedRelationship) && !/missing endpoint/i.test(String((e as Error).message))) throw e;
     }
-    return { id, stated };
+    return { id, stated, replaced };
   });
 
-  const nodes = await getNodes(ctx, [id, ...linked, ...(stated ? [ctx.asker] : [])]);
+  const nodes = await getNodes(ctx, [id, ...linked, ...replaced, ...(stated ? [ctx.asker] : [])]);
   const col = new Collector();
-  for (const n of [id, ...linked, ...(stated ? [ctx.asker] : [])]) col.node(nodes.get(n));
+  for (const n of [id, ...linked, ...replaced, ...(stated ? [ctx.asker] : [])]) col.node(nodes.get(n));
   for (const to of linked) col.edge({ from: id, type: "ABOUT", to, since: ctx.now, until: null });
+  for (const to of replaced) col.edge({ from: id, type: "SUPERSEDES", to, since: ctx.now, until: null });
   if (stated) col.edge({ from: ctx.asker, type: "STATED", to: id, since: ctx.now, until: null });
-  return col.result(ctx, { id, kind: args.kind, text: clip(text, 300), about: linked, ...(skipped.length ? { skipped } : {}), statedBy: stated ? ctx.asker : null },
-    `Saved ${id}.${skipped.length ? ` Unknown ids skipped: ${skipped.join(", ")}.` : ""}`);
+  return col.result(ctx, {
+    id, kind: args.kind, text: clip(text, 300), about: linked, ...(skipped.length ? { skipped } : {}), statedBy: stated ? ctx.asker : null,
+    ...(replaced.length ? { replaces: replaced } : {}),
+  }, `Saved ${id}.${replaced.length ? ` It replaces the earlier note${replaced.length === 1 ? "" : "s"} ${replaced.join(", ")}.` : ""}${skipped.length ? ` Unknown ids skipped: ${skipped.join(", ")}.` : ""}`);
 }
 
 export const remember = defineTool({
