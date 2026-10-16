@@ -48,7 +48,8 @@ interface Assessment {
   salvageable: string[]; locks: string[]; story: string; quality: { tiltDeg: number; exposure: string; cast: string; sharpness: string };
 }
 interface PayloadVariant { id: string; label: string; badge: string; note: string; aiEdited: boolean; credits?: number; request?: string; canRetry?: boolean }
-interface Payload { title: string; body: string; studio: { recommended: string; altText: string; credits: number; notices?: string[]; privacy?: { people: boolean; note: string }; variants: PayloadVariant[] } }
+// `publish`: set when approving POSTS the picture (a card for an account the business connected): where it goes, in the business's own words
+interface Payload { title: string; body: string; target?: string; publish?: { platform: string; account: { name: string; handle?: string }; at?: number; tz?: string }; studio: { recommended: string; altText: string; credits: number; notices?: string[]; privacy?: { people: boolean; note: string }; variants: PayloadVariant[] } }
 
 const creditWords = (n: number): string => `about ${Number.isInteger(n) ? n : n.toFixed(1)} Studio credit${n === 1 ? "" : "s"}`;
 const CHANGE_IDEAS = ["Make it warmer", "Make it festive", "A different background", "Make it an ad"];
@@ -75,7 +76,7 @@ export default function StudioPage() {
   const [chosen, setChosen] = useState<string | null>(null);
   const [caption, setCaption] = useState<string>("");
   const [approving, setApproving] = useState(false);
-  const [approved, setApproved] = useState<{ contentId: string; label: string } | null>(null);
+  const [approved, setApproved] = useState<{ contentId: string; label: string; result?: string } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [showBoxes, setShowBoxes] = useState(true);
   const [settings, setSettings] = useState<{ blurFaces: boolean; language: string } | null>(null);
@@ -162,7 +163,7 @@ export default function StudioPage() {
     try {
       const r = await api.studioApprove(tenant.id, { approvalId: f.proposal.approvalId, variantId: chosen, caption });
       const label = payload?.studio.variants.find((v) => v.id === chosen)?.label ?? "";
-      setApproved({ contentId: r.contentId, label });
+      setApproved({ contentId: r.contentId, label, ...(payload?.publish && r.approval?.result ? { result: r.approval.result } : {}) });
       await loadLatest();
     } catch (e) {
       setFailure((e as Error).message);
@@ -438,7 +439,7 @@ export default function StudioPage() {
               {(payload.studio.notices ?? []).map((n) => <p key={n} className="studio-note" role="note">{n}</p>)}
               {decided ? (
                 <p className="approved" role="status">
-                  <Icon name="check" size={16} /> Approved{approved?.label ? ` variant ${approved.label}` : ""}: saved as a draft post, not published.
+                  <Icon name="check" size={16} /> Approved{approved?.label ? ` variant ${approved.label}` : ""}: {payload.publish ? (approved?.result ?? latest?.approval?.result ?? "on its way to your account.") : "saved as a draft post, not published."}
                   {contentId && <code>{contentId}</code>}
                 </p>
               ) : (
@@ -446,7 +447,7 @@ export default function StudioPage() {
                   <button type="button" className="btn btn-gold" disabled={!chosen || approving || getPublicMode()} onClick={approve}>
                     {approving ? "Saving…" : `Approve variant ${payload.studio.variants.find((v) => v.id === chosen)?.label ?? ""}`}
                   </button>
-                  <span className="credit">Saved as a draft: nothing is posted until you do it</span>
+                  <span className="credit">{payload.publish ? `Approving posts it to ${payload.target ?? "your account"}${payload.publish.at ? ", at the time set" : ""}. Nothing is posted until you do.` : "Saved as a draft: nothing is posted until you do it"}</span>
                 </div>
               )}
               {failure && <p className="studio-error" role="alert">{failure}</p>}

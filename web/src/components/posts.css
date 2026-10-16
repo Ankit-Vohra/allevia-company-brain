@@ -1,0 +1,15 @@
+/* Your posts: one line of state, the reason when it did not go out, and the one or two things the owner can do. */
+.posts-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3, 12px); }
+.posts-list > li { display: grid; gap: 4px; padding-bottom: var(--space-3, 12px); border-bottom: 1px solid var(--line, rgba(0, 0, 0, 0.08)); }
+.posts-list > li:last-child { border-bottom: 0; padding-bottom: 0; }
+.post-title { margin: 0; font-weight: 600; }
+.post-line { display: grid; gap: 6px; }
+.post-line.is-quiet { opacity: 0.85; }
+.post-state { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.post-state svg { flex: none; }
+.post-where { color: var(--muted, #6b6457); }
+.post-line.is-failed .post-state { color: var(--bad, #a23b2a); }
+.post-line.is-published .post-state { color: var(--ok, #2f6b3f); }
+.post-why, .post-said { margin: 0; font-size: 0.9em; color: var(--muted, #6b6457); overflow-wrap: anywhere; }
+.post-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.post-actions:empty { display: none; }

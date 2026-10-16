@@ -11,6 +11,8 @@ import { ApprovalNotFound, decideApproval } from "../actions/approvals.js";
 import type { ActionView, Drafter, ExecutorDeps, GhRunner, HttpFn } from "../actions/executors.js";
 import type { ConnectionsPort } from "../connections/service.js";
 import type { PublishRuntime } from "../publish/executor.js";
+import { toDto } from "../publish/dto.js";
+import { postOfApproval } from "../publish/record.js";
 import { demoConnections, isSalesDemo } from "../sales/demo.js";
 import type { LlmRunner } from "../ingest/llm.js";
 import { loadConfig } from "../config.js";
@@ -86,8 +88,10 @@ export async function decide(g: GraphHandle, tenant: string, id: string, d: Deci
       (o.log ?? ((l: string) => console.error(l)))(`[approvals] onDecision for ${id} failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
+  const made = before.kind === "publish_post" && d.decision === "approve" ? await postOfApproval(g, id).catch(() => null) : null;
   return {
     ...((await readApproval(g, id)) ?? after),
+    ...(made ? { post: toDto(made, o.now ?? Date.now()) } : {}),
     learned,
     action: action ? { id: action.id, kind: action.kind, status: action.status, result: action.result, ...(action.url ? { url: action.url } : {}), ...(action.simulated ? { simulated: true } : {}) } : null,
   };

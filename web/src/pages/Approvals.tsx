@@ -11,13 +11,14 @@ import { AgentAvatar, agentDef } from "../components/bits";
 import { Icon } from "../components/Icon";
 import { whenWords, withoutSim } from "../components/insights-words";
 import { LearnedChips, LearnedPathDialog, RuleRow, ruleClause } from "../components/Learning";
+import { PostLine, PostsList } from "../components/PostsList";
 import { Reveal } from "../components/Reveal";
 import { APPROVALS_CHANGED } from "../components/TopBar";
 import { ACTION } from "../lib/actions";
 import { kindWords } from "../lib/approval-words";
 import { wordDiff } from "../lib/diff";
 import { useApp, useAsync } from "../state/app";
-import type { Approval, LearnedEvent } from "../types-ext";
+import type { Approval, LearnedEvent, PostView } from "../types-ext";
 import { TEAM_CHANGED } from "./Office";
 import "./approvals.css";
 
@@ -32,7 +33,7 @@ const OUTCOME: Record<Approval["status"], { text: string; cls: string }> = {
   failed: { text: "Did not go through", cls: "is-bad" },
 };
 
-interface Last { id: string; title: string; kind: ActionKind; outcome: "approved" | "edited" | "rejected" }
+interface Last { id: string; title: string; kind: ActionKind; outcome: "approved" | "edited" | "rejected"; result?: string }
 
 export default function ApprovalsPage() {
   const { tenant } = useApp();
@@ -43,10 +44,13 @@ export default function ApprovalsPage() {
   // what each decision taught, from POST /approvals/:id's `learned` events (for the drafts decided on this visit)
   const [taught, setTaught] = useState<Record<string, LearnedEvent[]>>({});
   const [last, setLast] = useState<Last | null>(null);
+  // a "post it" card decided on this visit: what became of it, with Cancel or Try again at once
+  const [lastPost, setLastPost] = useState<PostView | null>(null);
+  const posts = useAsync(() => api.publishPosts(tenant.id).catch(() => [] as PostView[]), [tenant.id]);
   const [openRule, setOpenRule] = useState<LearnedRuleDto | null>(null);
   const [hash, setHash] = useState(() => safeDecode(location.hash.slice(1)));
 
-  useEffect(() => { setRecent(new Set()); setTaught({}); setLast(null); }, [tenant.id]);
+  useEffect(() => { setRecent(new Set()); setTaught({}); setLast(null); setLastPost(null); }, [tenant.id]);
   useEffect(() => {
     const on = () => setHash(safeDecode(location.hash.slice(1)));
     window.addEventListener("hashchange", on);
@@ -80,7 +84,9 @@ export default function ApprovalsPage() {
     const out = await api.decide(tenant.id, a.id, { decision, editedPayload });
     setTaught((t) => ({ ...t, [a.id]: out.learned ?? [] }));
     setRecent((s) => new Set(s).add(a.id));
-    setLast({ id: a.id, title: withoutSim(a.title), kind: a.kind, outcome: decision === "reject" ? "rejected" : editedPayload ? "edited" : "approved" });
+    setLast({ id: a.id, title: withoutSim(a.title), kind: a.kind, outcome: decision === "reject" ? "rejected" : editedPayload ? "edited" : "approved", ...(out.action?.result && a.kind === "publish_post" ? { result: out.action.result } : {}) });
+    setLastPost(out.post ?? null);
+    posts.reload();
     window.dispatchEvent(new Event(APPROVALS_CHANGED));
     if (out.learned?.length) window.dispatchEvent(new Event(TEAM_CHANGED));
     list.reload();
@@ -128,7 +134,8 @@ export default function ApprovalsPage() {
               <Icon name={last.outcome === "rejected" ? "x" : "check"} size={15} />
               <span><b>{last.outcome === "rejected" ? "You said no" : last.outcome === "edited" ? "Approved with your edits" : "Approved"}</b>: {last.title}</span>
             </p>
-            <p className="small muted">{last.outcome === "rejected" ? "Nothing was changed." : kindWords({ kind: last.kind, title: last.title }).done}</p>
+            <p className="small muted">{last.outcome === "rejected" ? "Nothing was changed." : last.result ?? kindWords({ kind: last.kind, title: last.title }).done}</p>
+            {lastPost && lastPost.approvalId === last.id && <PostLine tenantId={tenant.id} post={lastPost} onChanged={(p) => { setLastPost(p); posts.reload(); }} quiet />}
             <LearnedChips events={taught[last.id]} edited={last.outcome === "edited"} />
           </div>
         )}
@@ -144,6 +151,10 @@ export default function ApprovalsPage() {
       </section>
 
       <div className="appr-more">
+        <Reveal tone="row" label="Your posts" summary={posts.data?.length ? `${posts.data.filter((p) => p.status === "scheduled").length} set for later` : "none yet"}>
+          <PostsList tenantId={tenant.id} posts={posts.data ?? []} onChanged={posts.reload} />
+        </Reveal>
+
         <Reveal tone="row" label="Recently decided" summary={history.length ? `${history.length}` : "none yet"}>
           {history.length === 0 ? (
             <p className="muted small appr-none">What you decide shows up here, with what happened next.</p>
@@ -246,7 +257,9 @@ function ApprovalCard({ a, advanced, recTitle, onDecide, tz, locale }: { a: Appr
         </div>
       ) : (
         <>
-          <p className="appr-effect">{k.effect(a.payload.target)}</p>
+          <p className="appr-effect">{a.kind === "publish_post" && a.preview?.post
+            ? `If you say OK, this is posted to ${a.preview.post.where}${a.preview.post.when ? `, set for ${a.preview.post.when.words}${a.preview.post.when.timeZone ? ` (${a.preview.post.when.timeZone.replace(/_/g, " ")})` : ""}` : " straight away"}. Nothing is posted before.${a.preview.post.textOnly ? " LinkedIn posts from here are text only, so the picture stays out." : ""}`
+            : k.effect(a.payload.target)}</p>
           <Reveal className="appr-details" label="Details" summary="the full draft and where it goes">
             <div className="appr-detail">
               {a.payload.target && (

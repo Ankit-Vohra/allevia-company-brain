@@ -179,6 +179,8 @@ export interface ApprovalDto {
 export interface DecisionDto extends ApprovalDto {
   learned: Array<Extract<AgentEvent, { type: "learned" }>>;
   action: { id: string; kind: ActionKind; status: "done" | "failed" | "skipped" | "dry_run"; result: string; url?: string; simulated?: boolean } | null;
+  /** A "post it" card: the post it made (scheduled, posted or failed), so the page can offer Cancel or Try again at once. */
+  post?: import("../publish/dto.js").PostDto;
 }
 
 export interface BriefDto { id: string; title: string; asOf?: string; text: string }
