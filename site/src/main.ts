@@ -1,13 +1,17 @@
-// The only script on the site: fonts and styles, the currency toggle, and the hero and office loops. Everything else is plain HTML
+// The only script on the site: fonts and styles, the currency toggle, the loops, and the scroll story (story.ts, which
+// loads the vendored scrollcraft engine as its own chunk on the pages that use it). Everything else is plain HTML
 // built at compile time, and the pages read fine with this script switched off (prices then show in US dollars).
 import "@fontsource-variable/newsreader/opsz.css";
 import "@fontsource/ibm-plex-sans/latin-400.css";
 import "@fontsource/ibm-plex-sans/latin-500.css";
 import "@fontsource/ibm-plex-sans/latin-600.css";
 import "@fontsource/ibm-plex-mono/latin-400.css";
+import "../vendor/scrollcraft/scrollcraft.css";
 import "./styles/site.css";
+import "./styles/story.css";
 import { CURRENCIES, isCurrency, type Currency } from "../../shared/plans.ts";
 import { formatMoney } from "./money.ts";
+import { mountStory, prepareStory } from "./story.ts";
 
 // ---------- currency ----------
 
@@ -119,6 +123,8 @@ function setupLoops() {
 // the table of contents on the legal pages starts open on a wide screen and closed on a phone
 document.querySelectorAll<HTMLDetailsElement>("[data-toc]").forEach((d) => { d.open = window.matchMedia("(min-width: 64rem)").matches; });
 
+// the story mounts straight away (module scripts run once the page is parsed); the loops wait for the load event
+void mountStory(prepareStory());
 const boot = () => { startLoop(); setupLoops(); };
 if (document.readyState === "complete") boot();
 else window.addEventListener("load", boot, { once: true });
