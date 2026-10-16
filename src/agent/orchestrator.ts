@@ -86,6 +86,10 @@ export interface TurnInput {
   turnId: string;
   asker: string;
   recall: RecallBrief;
+  // A direct chat: the owner talks to this one roster agent. No planning and no other desks; the agent answers with its own
+  // tools, skills and the owner's instructions about it, and the answer still goes through the Chief's checks (citations,
+  // numbers, plain words) and the humanizer pass. Absent, or the Chief itself: the whole team, the Chief routes.
+  target?: string;
 }
 
 export interface TurnDeps {
@@ -244,7 +248,7 @@ export function reviewersFor(producerId: string, text: string, opts: { checked?:
 // write tools when it reviews or revises, only show_path/propose_action when the Chief writes from findings, and
 // `remember` only when the owner's question asks for it (and then guarded by rememberRefusal).
 export function toolsFor(
-  agent: AgentDef, phase: RunPhase, getTools: (names: string[]) => AlleviaTool[], opts: { lean?: boolean; question?: string; skills?: SkillCatalog } = {},
+  agent: AgentDef, phase: RunPhase, getTools: (names: string[]) => AlleviaTool[], opts: { lean?: boolean; question?: string; skills?: SkillCatalog; extra?: string[] } = {},
 ): AlleviaTool[] {
   const noWrites = phase === "plan" || phase === "review" || phase === "revise";
   const question = opts.question ?? "";
@@ -252,6 +256,7 @@ export function toolsFor(
     !(phase === "synthesis" && opts.lean && !SYNTHESIS_TOOLS.has(n)) && !(n === REMEMBER && !asksToRemember(question)));
   // An agent with skills can open them in every job (a plan too: the Chief's planning skill), at no cost when it doesn't.
   if (opts.skills?.has(agent.id) && (phase !== "plan" || agent.id === CHIEF)) names.push(USE_SKILL);
+  for (const n of opts.extra ?? []) if (!names.includes(n)) names.push(n);
   const allowed = new Set(names);
   return getTools(names)
     .filter((t) => allowed.has(t.name) && !(noWrites && isWriteTool(t)))
@@ -468,17 +473,17 @@ export class AnswerStream {
   private sealed = false;
   private any = false;          // has any text streamed at all
 
-  constructor(private out: Emit) {}
+  constructor(private out: Emit, private readonly who: string = CHIEF) {}
 
   private current(): string { return this.kept + this.parts.join(""); }
 
   readonly emit: Emit = (e) => {
-    if (e.type === "tool_call" && e.agent === CHIEF && !this.sealed) {
+    if (e.type === "tool_call" && e.agent === this.who && !this.sealed) {
       if (e.name === "show_path" && this.written()) this.sealed = true;
       else if (isWriteTool({ name: e.name })) { this.kept = this.current(); this.parts = []; }
       else this.takeBackNote();
     }
-    if (e.type === "text" && e.agent === CHIEF) {
+    if (e.type === "text" && e.agent === this.who) {
       if (this.sealed) return;
       // The answer never starts with blank lines (the paragraph break the SDK puts before a new text block).
       const blank = !this.current().trim();
@@ -498,8 +503,8 @@ export class AnswerStream {
     this.parts = [];
     if (!note) return;
     this.notes.push(note);
-    this.out({ type: "text", agent: CHIEF, delta: this.kept, reset: true });
-    this.out({ type: "agent_status", agent: CHIEF, text: clip(note.replace(/\s+/g, " "), NOTE_STATUS_CHARS) });
+    this.out({ type: "text", agent: this.who, delta: this.kept, reset: true });
+    this.out({ type: "agent_status", agent: this.who, text: clip(note.replace(/\s+/g, " "), NOTE_STATUS_CHARS) });
   }
 
   // The answer, if it was written in full and its path drawn (show_path called after it).
@@ -515,12 +520,12 @@ export class AnswerStream {
     // there is, and better than the run's whole text, which holds every note.
     const best = [...this.notes].reverse().find((n) => n.length >= MIN_ANSWER_CHARS) ?? this.notes.at(-1);
     if (best) {
-      this.out({ type: "text", agent: CHIEF, delta: best, reset: true });
+      this.out({ type: "text", agent: this.who, delta: best, reset: true });
       return best;
     }
     if (this.any) return "";
     const text = finalText.trim();
-    if (text) this.out({ type: "text", agent: CHIEF, delta: text });
+    if (text) this.out({ type: "text", agent: this.who, delta: text });
     return text;
   }
 }
@@ -617,8 +622,19 @@ class Turn {
   private model(agent: AgentDef): string { return this.deps.model ?? (this.light.has(agent.id) ? LIGHT_MODEL : agent.model); }
 
   private tools(agent: AgentDef, phase: RunPhase, lean = false): AlleviaTool[] {
-    return toolsFor(agent, phase, this.deps.getTools, { lean, question: this.input.question, ...(this.deps.skills ? { skills: this.deps.skills } : {}) });
+    // A desk the owner talks to directly draws its own path (show_path), as the Chief does when it answers.
+    const extra = agent.id !== CHIEF && phase === "direct" ? ["show_path"] : [];
+    return toolsFor(agent, phase, this.deps.getTools, { lean, question: this.input.question, extra, ...(this.deps.skills ? { skills: this.deps.skills } : {}) });
   }
+
+  // The roster agent a direct chat is with (never the Chief: asking the Chief is asking the team).
+  get targetAgent(): AgentDef | undefined {
+    const id = this.input.target;
+    return id && id !== CHIEF ? agentById(id) : undefined;
+  }
+
+  // Who writes the answer the owner reads: the agent they chose, or the Chief.
+  private get answerer(): string { return this.targetAgent?.id ?? CHIEF; }
 
   private get promptOpts(): PromptOpts {
     return { now: this.deps.now, tenant: this.input.tenant, ...(this.deps.timeZone ? { timeZone: this.deps.timeZone } : {}), language: this.languageNote };
@@ -781,6 +797,11 @@ class Turn {
 
   // The plan schema and the planner's desk list hold only the desks the owner has on.
   async plan(): Promise<Plan> {
+    const target = this.targetAgent;
+    if (target) {
+      // A direct chat: no planner, no other desks. The one step is the owner's own words.
+      return { steps: [{ agent: target.id, task: this.input.question.trim() }], rationale: `You asked ${target.name} directly.` };
+    }
     const chief = agentById(CHIEF)!;
     const enabled = AGENTS.map((a) => a.id).filter((id) => !this.off.has(id));
     // The planner has no lookups, but it may open its planning skill (the desks' skills are named in its prompt).
@@ -1034,14 +1055,14 @@ class Turn {
         return typeof s?.text === "string" ? s.text : undefined;
       },
     });
-    if (r.changed) this.emit({ type: "text", agent: CHIEF, delta: r.text, reset: true });
+    if (r.changed) this.emit({ type: "text", agent: this.answerer, delta: r.text, reset: true });
     return r.text;
   }
 
   // ----- answer -----
 
   async answer(plan: Plan, fast: boolean, work?: WorkGates): Promise<{ text: string; ok: boolean }> {
-    const chief = agentById(CHIEF)!;
+    const chief = (fast ? agentById(plan.steps[0]!.agent) : undefined) ?? agentById(CHIEF)!;
     const open = work ? await this.whenToWrite(plan, work) : [];
     let failure = "";
     const text = await this.step(chief, fast ? plan.steps[0]!.task : "Writing the answer", async () => {
@@ -1063,11 +1084,12 @@ class Turn {
     }
     // The Chief failed: answer with what the desks found, so the owner isn't left with nothing.
     const findings = this.planFindings(plan);
-    this.emit({ type: "error", agent: CHIEF, message: `The Chief of Staff could not write the answer${failure ? `: ${failure}` : ""}.` });
+    const who = chief.id === CHIEF ? "The Chief of Staff" : chief.name;
+    this.emit({ type: "error", agent: chief.id, message: `${who} could not write the answer${failure ? `: ${failure}` : ""}.` });
     const fallback = findings.length
       ? `I couldn't finish writing the full answer. Here is what the team found:\n\n${findings.map((f) => `**${nameOf(f.agent)}:** ${f.text}`).join("\n\n")}`
       : "I couldn't answer this one just now. Please ask again in a moment.";
-    this.emit({ type: "text", agent: CHIEF, delta: fallback });
+    this.emit({ type: "text", agent: chief.id, delta: fallback });
     return { text: fallback, ok: false };
   }
 
@@ -1128,7 +1150,7 @@ class Turn {
     const phase: RunPhase = fast ? "direct" : "synthesis";
     const own = this.tools(chief, phase, lean);
     const out = held ? held.hold.emit : this.emit;
-    const stream = new AnswerStream(out);
+    const stream = new AnswerStream(out, chief.id);
     const tools = notePathFirst(held ? gateWrites(own, () => held.hold.opened(held.abort)) : own, () => stream.written());
     // A held draft treats the findings still under review as final: it is only shown if their reviews come back ok.
     const views = findings.map(this.view).map((v) => (held ? { ...v, draft: undefined } : v));
@@ -1169,7 +1191,7 @@ class Turn {
     if (!showPath || !ids.length) return;
     const key = arrayArgKey(showPath.input) ?? "ids";
     const input = this.runInput(chief, { phase: "synthesis", system: "", prompt: "", tools: [showPath], maxTurns: 1 });
-    await invokeTool(showPath, { [key]: ids }, input, this.emit, nextCallId(CHIEF));
+    await invokeTool(showPath, { [key]: ids }, input, this.emit, nextCallId(chief.id));
   }
 }
 
@@ -1184,7 +1206,7 @@ export async function runTurn(input: TurnInput, deps: TurnDeps, emit: Emit): Pro
   emit({ type: "recall", brief: input.recall.text, ids: input.recall.ids } satisfies AgentEvent);
 
   const plan = await t.plan();
-  const fastPath = plan.steps.length === 1 && plan.steps[0]!.agent === CHIEF;
+  const fastPath = plan.steps.length === 1 && (plan.steps[0]!.agent === CHIEF || plan.steps[0]!.agent === t.targetAgent?.id);
   const work = fastPath ? undefined : t.work(plan.steps);
   work?.final.catch(() => {}); // awaited below; this only keeps an early rejection from going unhandled
   const answered = await t.answer(plan, fastPath, work);

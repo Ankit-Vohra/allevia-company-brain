@@ -14,7 +14,7 @@ import type { AgentEvent } from "../../shared/contracts.js";
 export type LiveStatus = "running" | "done" | "failed" | "stopped";
 
 // GET /api/:t/turns/live, and `running` on a thread
-export interface LiveTurnDto { turnId: string; sessionId: string; question: string; startedAt: string; status: LiveStatus }
+export interface LiveTurnDto { turnId: string; sessionId: string; question: string; startedAt: string; status: LiveStatus; agent?: string }
 
 export interface LiveTurnsOpts {
   now?: () => number;       // the app's clock, for startedAt
@@ -37,7 +37,7 @@ export class LiveTurn {
   private stopped = false;
   private finish!: () => void;
 
-  constructor(readonly tenant: string, readonly question: string, readonly startedAt: number) {
+  constructor(readonly tenant: string, readonly question: string, readonly startedAt: number, readonly agent?: string) {
     this.done = new Promise<void>((r) => { this.finish = r; });
   }
 
@@ -82,7 +82,7 @@ export class LiveTurn {
   }
 
   dto(): LiveTurnDto {
-    return { turnId: this.turnId, sessionId: this.sessionId, question: this.question, startedAt: new Date(this.startedAt).toISOString(), status: this.status };
+    return { turnId: this.turnId, sessionId: this.sessionId, question: this.question, startedAt: new Date(this.startedAt).toISOString(), status: this.status, ...(this.agent ? { agent: this.agent } : {}) };
   }
 }
 
@@ -102,9 +102,9 @@ export class LiveTurns {
 
   // Runs `run` as a live turn. `run` must emit the `session` event first (ask() does, synchronously), so the turn is
   // findable by id as soon as start() returns. A run that throws ends the turn as failed (ask() itself never throws).
-  start(tenant: string, question: string, run: (emit: (e: AgentEvent) => void, signal: AbortSignal) => Promise<{ ok: boolean }>): LiveTurn {
+  start(tenant: string, question: string, run: (emit: (e: AgentEvent) => void, signal: AbortSignal) => Promise<{ ok: boolean }>, agent?: string): LiveTurn {
     this.prune();
-    const t = new LiveTurn(tenant, question, this.now());
+    const t = new LiveTurn(tenant, question, this.now(), agent);
     const cap = this.maxTurnMs > 0 ? setTimeout(() => t.stop("the turn ran past its time limit"), this.maxTurnMs) : undefined;
     cap?.unref?.();
     const result = run((e) => {

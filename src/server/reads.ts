@@ -121,30 +121,30 @@ export const DEFAULT_CHECKS: TurnChecks = {
 
 // `showcaseOnly`: public mode shows only the turns marked Turn.showcase = true, and the threads that hold one.
 export async function sessions(g: GraphHandle, o: { showcaseOnly: boolean; limit?: number }): Promise<SessionSummaryDto[]> {
-  const rows = await ro<{ id: string; name: string | null; channel: string | null; startedAt: number | null; n: number; last: number | null }>(g,
+  const rows = await ro<{ id: string; name: string | null; channel: string | null; agent: string | null; startedAt: number | null; n: number; last: number | null }>(g,
     `MATCH (s:Session)
      OPTIONAL MATCH (t:Turn)-[r:IN_SESSION]->(s) WHERE r.until IS NULL ${o.showcaseOnly ? "AND t.showcase = true" : ""}
      WITH s, count(t) AS n, max(t.at) AS last
      ${o.showcaseOnly ? "WHERE n > 0" : ""}
-     RETURN s.id AS id, s.name AS name, s.channel AS channel, coalesce(s.startedAt, s.createdAt) AS startedAt, n, last
+     RETURN s.id AS id, s.name AS name, s.channel AS channel, s.agent AS agent, coalesce(s.startedAt, s.createdAt) AS startedAt, n, last
      ORDER BY coalesce(last, s.startedAt, s.createdAt, 0) DESC, s.id LIMIT $limit`,
     { limit: Math.min(o.limit ?? LIMITS.sessions, LIMITS.sessions) });
   return rows.map((r) => ({
-    id: r.id, title: r.name || "Thread", channel: toChannel(r.channel), turns: r.n,
+    id: r.id, title: r.name || "Thread", channel: toChannel(r.channel), turns: r.n, ...(r.agent && agentById(r.agent) ? { agent: r.agent } : {}),
     startedAt: iso(r.startedAt) ?? iso(r.last) ?? new Date(0).toISOString(), lastAt: iso(r.last) ?? iso(r.startedAt) ?? new Date(0).toISOString(),
   }));
 }
 
 export async function sessionDetail(g: GraphHandle, id: string, o: { showcaseOnly: boolean }): Promise<SessionDetailDto | null> {
-  const [s] = await ro<{ name: string | null }>(g, "MATCH (s:Entity:Session {id:$id}) RETURN s.name AS name LIMIT 1", { id });
+  const [s] = await ro<{ name: string | null; agent: string | null }>(g, "MATCH (s:Entity:Session {id:$id}) RETURN s.name AS name, s.agent AS agent LIMIT 1", { id });
   if (!s) return null;
   const rows = await ro<Record<string, unknown>>(g,
     `MATCH (s:Entity:Session {id:$id}) WITH s
      MATCH (t:Turn)-[r:IN_SESSION]->(s) WHERE r.until IS NULL ${o.showcaseOnly ? "AND t.showcase = true" : ""}
      RETURN t.id AS id, t.question AS question, t.answer AS answer, t.at AS at, t.ms AS ms, t.agents AS agents, t.skills AS skills, t.citations AS citations,
-       t.checks AS checks, t.status AS status, t.error AS error, t.source AS source ORDER BY t.at, t.id LIMIT $limit`, { id, limit: LIMITS.turns });
+       t.checks AS checks, t.status AS status, t.error AS error, t.source AS source, t.target AS target ORDER BY t.at, t.id LIMIT $limit`, { id, limit: LIMITS.turns });
   if (o.showcaseOnly && !rows.length) return null;
-  return { id, title: s.name || "Thread", turns: rows.map(turnRecord) };
+  return { id, title: s.name || "Thread", ...(s.agent && agentById(s.agent) ? { agent: s.agent } : {}), turns: rows.map(turnRecord) };
 }
 
 function turnRecord(r: Record<string, unknown>): TurnRecordDto {
@@ -153,6 +153,7 @@ function turnRecord(r: Record<string, unknown>): TurnRecordDto {
   return {
     id: str(r.id), question: str(r.question), answer: str(r.answer), at: iso(r.at) ?? new Date(0).toISOString(), ms: numOr(r.ms, 0),
     ...(r.source === "web" || r.source === "discord" || r.source === "cli" ? { source: r.source } : {}),
+    ...(typeof r.target === "string" && agentById(r.target) ? { target: r.target } : {}),
     agents: strList(r.agents), ...(strList(r.skills).length ? { skills: strList(r.skills) } : {}), citations: strList(r.citations), checks: { ...DEFAULT_CHECKS, ...(isObj(checks) ? (checks as Partial<TurnChecks>) : {}) },
     ...(r.status === "failed" ? { ended: error === STOPPED_MESSAGE ? "stopped" as const : "failed" as const, ...(error ? { error } : {}) } : {}),
   };

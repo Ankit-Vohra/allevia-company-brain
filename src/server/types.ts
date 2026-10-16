@@ -31,7 +31,8 @@ export interface OverviewDto {
 export type Channel = "web" | "discord" | "cli";
 
 // running: a turn in this thread is still working on the server (turns.ts); set only then.
-export interface SessionSummaryDto { id: string; title: string; startedAt: string; lastAt: string; turns: number; channel: Channel; running?: boolean }
+// agent: a direct chat with that one roster agent (Session.agent); absent: the whole team.
+export interface SessionSummaryDto { id: string; title: string; startedAt: string; lastAt: string; turns: number; channel: Channel; running?: boolean; agent?: AgentId }
 
 export interface TurnRecordDto {
   id: string;
@@ -39,6 +40,7 @@ export interface TurnRecordDto {
   answer: string;
   at: string;
   ms: number;
+  target?: AgentId;             // a direct chat: the agent the owner asked (Turn.target); absent: the whole team
   source?: Channel;             // the door it came through: "web" or "discord" (a thread can be continued from either)
   agents: AgentId[];
   skills?: string[];            // the skills the team opened for it, "agent-id/skill-id" (Turn.skills)
@@ -50,7 +52,7 @@ export interface TurnRecordDto {
 
 // running: the thread's turn still working on the server (not yet among `turns`); the web app re-attaches to it with
 // GET /api/:t/turns/:id/events.
-export interface SessionDetailDto { id: string; title: string; turns: TurnRecordDto[]; running?: LiveTurnDto }
+export interface SessionDetailDto { id: string; title: string; agent?: AgentId; turns: TurnRecordDto[]; running?: LiveTurnDto }
 
 // GET /api/:t/turns/:id/events?after=N: the turn's events from index N (at most a page of them), `next` the index to ask
 // from next time, `done` once the turn has ended and every event has been sent. A turn no longer live on this server

@@ -28,6 +28,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { z } from "zod";
 import type { AgentEvent, OnboardEvent } from "../../shared/contracts.js";
 import { ask, STOPPED_MESSAGE, type AskDeps } from "../agent/ask.js";
+import { agentById } from "../../shared/roster.js";
 import type { ToolContext } from "../agent/tool.js";
 import { loadConfig } from "../config.js";
 import type { GraphHandle } from "../graph/client.js";
@@ -142,6 +143,7 @@ const AskBody = z.object({
   question: z.string().max(2000),
   sessionId: z.string().min(1).max(200).optional(),
   turnId: z.string().min(1).max(200).optional(), // public mode: replay this showcase turn
+  target: z.string().refine((id) => !!agentById(id), { message: "is not on the team" }).optional(), // a direct chat with this roster agent
 });
 
 const Payload = z.object({ title: z.string().max(500), body: z.string().max(20_000), target: z.string().max(500).optional() });
@@ -476,7 +478,7 @@ export function createApp(deps: ServerDeps): Hono {
     // a new thread whose first turn is still being set up is not in the graph yet: listed from the live turn
     const fresh = working.filter((t) => t.sessionId && !list.some((s) => s.id === t.sessionId)).map((t): SessionSummaryDto => {
       const d = t.dto();
-      return { id: d.sessionId, title: d.question, startedAt: d.startedAt, lastAt: d.startedAt, turns: 0, channel: "web", running: true };
+      return { id: d.sessionId, title: d.question, startedAt: d.startedAt, lastAt: d.startedAt, turns: 0, channel: "web", running: true, ...(d.agent ? { agent: d.agent } : {}) };
     });
     return c.json([...fresh, ...list.map((s) => (ids.has(s.id) ? { ...s, running: true } : s))]);
   });
@@ -639,10 +641,10 @@ export function createApp(deps: ServerDeps): Hono {
       const tz = (await tenantDto(reg, g)).timeZone;
       const askDeps = await deps.askDeps(reg.slug, tz ? { timeZone: tz } : {});
       turn = turns.start(reg.slug, question, (emit, signal) => ask(
-        { tenant: reg.slug, question, channel: "web", ...(body.sessionId ? { sessionId: body.sessionId } : {}) },
+        { tenant: reg.slug, question, channel: "web", ...(body.sessionId ? { sessionId: body.sessionId } : {}), ...(body.target ? { target: body.target } : {}) },
         { ...askDeps, ...(tz ? { timeZone: tz } : {}), signal },
         emit,
-      ));
+      ), body.target !== "chief-of-staff" ? body.target : undefined);
     } catch (e) {
       release();
       throw e;
