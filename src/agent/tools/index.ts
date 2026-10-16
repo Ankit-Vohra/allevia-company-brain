@@ -25,6 +25,7 @@ import { generateImageTool, makePosterTool, makeReelTool } from "./creative.js";
 import { adLibrary, competitorWatch, googleListing, instagramPublic } from "./publicdata.js";
 import { aiVisibility, keywordIdeas, websiteCheckup } from "./website.js";
 import { CONNECTION_TOOLS } from "./connections.js";
+import { SALES_TOOLS } from "./sales.js";
 
 export const ALL_TOOLS: AlleviaTool[] = [
   search, getEntity, neighbors, findPaths, traceDecision, whoOwns, whoKnows, impactOf, important, topics, metricTrend,
@@ -38,6 +39,8 @@ export const ALL_TOOLS: AlleviaTool[] = [
   websiteCheckup, aiVisibility, keywordIdeas,
   // the business's connected tools (src/connections): Calendar, Gmail, Analytics, Search Console, Ads, and any connected toolkit
   ...CONNECTION_TOOLS,
+  // the Sales desk: enquiries waiting, the pipeline, leads and deals in the records (src/sales)
+  ...SALES_TOOLS,
 ];
 
 const BY_NAME = new Map(ALL_TOOLS.map((t) => [t.name, t]));

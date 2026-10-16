@@ -39,7 +39,8 @@ export interface BusinessContext { name: string; industry?: string }
 //   Goal              set in the onboarding wizard against a measured baseline, not read out of a document
 //   Supplier, Partner, Client   another business is extracted as a Business; onboarding's tidy pass (src/ingest/tidy.ts)
 //                     retypes it, so the prompt (and every tenant's extraction cache) stays as it was
-const NOT_EXTRACTED = new Set<EntityType>(["Document", "Recommendation", "Finding", "Memory", "Page", "Metric", "Playbook", "Rule", "Goal", "Supplier", "Partner", "Client"]);
+//   Lead, Deal, Meeting   the Sales department's own records (src/sales), written from the inbox and the calendar
+const NOT_EXTRACTED = new Set<EntityType>(["Document", "Recommendation", "Finding", "Memory", "Page", "Metric", "Playbook", "Rule", "Goal", "Supplier", "Partner", "Client", "Lead", "Deal", "Meeting"]);
 export const EXTRACTABLE_TYPES: EntityType[] = SEARCHABLE.filter((t) => !NOT_EXTRACTED.has(t));
 
 // One line each, written for a small business owner's records.

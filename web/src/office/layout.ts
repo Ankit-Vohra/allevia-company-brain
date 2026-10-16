@@ -102,6 +102,7 @@ const KIT: Record<string, { board: WallKind[]; floor: FloorKind[]; desk: DeskSpo
   content: { board: ["clapper", "frame"], floor: ["camera", "plant"], desk: "laptop" },
   tech: { board: ["screen-code", "status"], floor: ["server", "plant"], desk: "monitor" },
   ops: { board: ["kanban"], floor: ["cabinet", "plant"], desk: "laptop" },
+  sales: { board: ["pinboard", "chart"], floor: ["sofa", "plant"], desk: "laptop" },
   knowledge: { board: [], floor: ["bookshelf", "cabinets", "plant"], desk: "laptop" },
 };
 const DEFAULT_KIT = { board: [] as WallKind[], floor: ["plant"] as FloorKind[], desk: "laptop" as const };

@@ -29,6 +29,8 @@ export const SEASON_GAP_DAYS = 5;    // after a festival or season draft, the ne
 export const KIND_WORDS: Record<OpportunityKind, [string, string]> = {
   post: ["post", "posts"], poster: ["poster", "posters"], reply: ["review reply", "review replies"], website_fix: ["website fix", "website fixes"],
   follow_up: ["follow-up message", "follow-up messages"], offer: ["offer idea", "offer ideas"],
+  sales_reply: ["reply to an enquiry", "replies to enquiries"], sales_nudge: ["nudge for a quiet deal", "nudges for quiet deals"],
+  sales_reminder: ["call reminder", "call reminders"],
 };
 
 export interface PastCard { id: string; key: string; kind: string; status: string; at: number }

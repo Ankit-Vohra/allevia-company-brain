@@ -23,7 +23,7 @@ export const STANDUP_SOURCE = "standup";
 
 // ---------- the drafting port ----------
 
-export type TextKind = "post" | "reply" | "website_text" | "follow_up" | "offer" | "headline";
+export type TextKind = "post" | "reply" | "website_text" | "follow_up" | "offer" | "headline" | "sales_email";
 export interface TextJob {
   agent: string;                // roster id of who drafts it
   kind: TextKind;
@@ -51,6 +51,8 @@ export interface Drafters {
   covers?(job: { tenant: string; businessId: string; texts: string[]; now: number }): Promise<boolean>;
   /** Absent: no creating tools on this server; a poster pick is drafted as a post instead. */
   poster?(job: PosterJob): Promise<PosterDraft>;
+  /** Three real free times on the owner's calendar for a reply to an enquiry. Absent or empty: the reply asks when suits them. */
+  times?(job: { tenant: string; now: number; timeZone?: string }): Promise<Array<{ label: string; start: string; end: string }>>;
 }
 
 // ---------- ids ----------
@@ -59,11 +61,15 @@ const suffix = (key: string): string => `${slugify(key).slice(0, 50).replace(/-+
 export const standupRecId = (key: string, date: string): string => `recommendation:standup-${suffix(key)}-${date.replace(/-/g, "")}`;
 export const standupApprovalId = (key: string, date: string): string => `approval:standup-${suffix(key)}-${date.replace(/-/g, "")}`;
 
-const AREA: Record<OpportunityKind, string> = { post: "content", poster: "content", reply: "content", website_fix: "seo", follow_up: "funnel", offer: "ads" };
-const TARGET: Record<Exclude<OpportunityKind, "poster" | "website_fix">, string> = {
+const AREA: Record<OpportunityKind, string> = {
+  post: "content", poster: "content", reply: "content", website_fix: "seo", follow_up: "funnel", offer: "ads", sales_reply: "sales", sales_nudge: "sales", sales_reminder: "sales",
+};
+type Plain = Exclude<OpportunityKind, "poster" | "sales_reply" | "sales_nudge" | "sales_reminder">;
+const TARGET: Record<Exclude<Plain, "website_fix">, string> = {
   post: "Instagram post", reply: "Reply on Google", follow_up: "Message to send (WhatsApp or email)", offer: "Offer to test",
 };
-const TEXT_KIND: Record<Exclude<OpportunityKind, "poster">, TextKind> = { post: "post", reply: "reply", website_fix: "website_text", follow_up: "follow_up", offer: "offer" };
+const TEXT_KIND: Record<Plain, TextKind> = { post: "post", reply: "reply", website_fix: "website_text", follow_up: "follow_up", offer: "offer" };
+export const isSalesKind = (k: OpportunityKind): k is "sales_reply" | "sales_nudge" | "sales_reminder" => k === "sales_reply" || k === "sales_nudge" || k === "sales_reminder";
 
 export interface DraftedItem {
   key: string;
@@ -101,13 +107,14 @@ export async function draftPick(g: GraphHandle, p: Picked, ctx: DraftCtx): Promi
   const base: DraftedItem = { key: p.key, kind: p.kind, agent: p.agent, title: p.title, why: p.why, purpose: p.purpose, status: "failed", notes: [] };
   const skill = ctx.skills?.(p.skill.agent, p.skill.id);
   try {
+    if (isSalesKind(p.kind) && p.sales) return await draftSales(g, p, ctx, skill, base);
     if (p.kind === "poster" && ctx.drafters.poster && ctx.businessId) {
       const made = await draftPoster(g, p, ctx, skill);
       if (made.item) return made.item;
       if (made.paidTried) base.paidTried = true;
       base.notes.push(`The poster could not be made${made.why ? ` (${made.why})` : ""}, so this is the post on its own.`);
     }
-    const kind: Exclude<OpportunityKind, "poster"> = p.kind === "poster" ? "post" : p.kind;
+    const kind: Plain = p.kind === "poster" ? "post" : isSalesKind(p.kind) ? "follow_up" : p.kind;
     const t = await ctx.drafters.text({ agent: p.agent, kind: TEXT_KIND[kind], brief: p.purpose, facts: facts(p), question: question(p), ...(skill ? { skill } : {}) });
     if (!t.ok || !t.text.trim()) return { ...base, kind, notes: [...base.notes, t.why ?? "the writer did not return a draft"] };
     const card = await writeCard(g, p, kind, t, ctx);
@@ -177,7 +184,7 @@ async function link(g: GraphHandle, recId: string, p: Picked, now: number): Prom
   for (const gl of p.goals) if (present.has(gl)) await upsertEdge(g, { from: recId, type: "ADVANCES", to: gl }, now).catch(() => undefined);
 }
 
-function bodyOf(kind: Exclude<OpportunityKind, "poster">, t: TextDraft, p: Picked): string {
+function bodyOf(kind: Plain, t: TextDraft, p: Picked): string {
   const checks = t.warnings.length ? ["", `Check before you use it: ${t.warnings.slice(0, 3).join("; ")}.`] : [];
   if (kind === "website_fix") {
     const where = p.facts.filter((f) => /^(Page|Address):/.test(f));
@@ -186,7 +193,7 @@ function bodyOf(kind: Exclude<OpportunityKind, "poster">, t: TextDraft, p: Picke
   return [t.text.trim(), ...(t.hashtags.length ? ["", t.hashtags.join(" ")] : []), ...checks].join("\n");
 }
 
-async function writeCard(g: GraphHandle, p: Picked, kind: Exclude<OpportunityKind, "poster">, t: TextDraft, ctx: DraftCtx): Promise<{ approvalId: string; recommendationId: string }> {
+async function writeCard(g: GraphHandle, p: Picked, kind: Plain, t: TextDraft, ctx: DraftCtx): Promise<{ approvalId: string; recommendationId: string }> {
   const { now } = ctx;
   const date = isoDate(now);
   const recId = standupRecId(p.key, date);
@@ -231,6 +238,63 @@ async function writeCard(g: GraphHandle, p: Picked, kind: Exclude<OpportunityKin
   await upsertEdge(g, { from: recId, type: "PROPOSES", to: approvalId }, now);
   for (const gl of p.goals) await upsertEdge(g, { from: approvalId, type: "ADVANCES", to: gl }, now).catch(() => undefined);
   return { approvalId, recommendationId: recId };
+}
+
+// ---------- Sales: an email to the person, waiting for the owner's OK ----------
+
+// A reply to an enquiry, a nudge for a quiet deal or a reminder for tomorrow's call, as an email the owner approves (the card
+// shows the recipient, the subject and every word). With no email address for the person (a WhatsApp enquiry) it is a message
+// draft for the owner to send themselves. A reply carries three real times from the calendar when there is one.
+const SUBJECT = {
+  sales_reply: (s: Picked): string => (s.sales?.subject ? `Re: ${s.sales.subject.replace(/^re:\s*/i, "")}` : "Your enquiry"),
+  sales_nudge: (s: Picked): string => `Following up: ${s.sales?.name ?? "our conversation"}`,
+  sales_reminder: (s: Picked): string => `Our call tomorrow${s.sales?.meetingTitle ? `: ${s.sales.meetingTitle}` : ""}`.slice(0, 120),
+} as const;
+
+async function draftSales(g: GraphHandle, p: Picked, ctx: DraftCtx, skill: TextJob["skill"], base: DraftedItem): Promise<DraftedItem> {
+  const sales = p.sales!;
+  const kind = p.kind as "sales_reply" | "sales_nudge" | "sales_reminder";
+  const notes: string[] = [];
+  let times: Array<{ label: string; start: string; end: string }> = [];
+  if (kind === "sales_reply" && ctx.drafters.times) {
+    times = await ctx.drafters.times({ tenant: ctx.tenant, now: ctx.now }).catch(() => []);
+    if (!times.length) notes.push("The calendar could not be read, so the reply asks when suits them instead of offering times.");
+  }
+  const jobFacts = [
+    ...facts(p),
+    ...(kind === "sales_reply" ? [times.length ? `Three free times (use exactly these, in this order, each with its time zone): ${times.map((t) => t.label).join("; ")}` : "No calendar is connected: do not offer times; ask when suits them."] : []),
+  ];
+  const t = await ctx.drafters.text({ agent: p.agent, kind: "sales_email", brief: p.purpose, facts: jobFacts, question: [p.purpose, ...jobFacts].join("\n"), ...(skill ? { skill } : {}) });
+  if (!t.ok || !t.text.trim()) return { ...base, notes: [...notes, t.why ?? "the writer did not return a draft"] };
+  const { now } = ctx;
+  const date = isoDate(now);
+  const recId = standupRecId(p.key, date);
+  const approvalId = standupApprovalId(p.key, date);
+  const email = sales.email;
+  const actionKind: ActionKind = email ? "email_send" : "content_draft";
+  const subject = SUBJECT[kind](p);
+  const agentId = await ensureAgentNode(g, p.agent, now);
+  await upsertNode(g, {
+    type: "Recommendation", id: recId, name: p.title, summary: p.why,
+    props: { status: "open", source: STANDUP_SOURCE, standupKey: p.key, standupKind: kind, standupDate: date, kind: actionKind, by: p.agent, area: AREA[kind], purpose: clip(p.purpose, 1000), score: p.score, confidence: 0.7 },
+    asOf: date,
+  }, now);
+  await upsertEdge(g, { from: agentId, type: "PRODUCED", to: recId }, now);
+  await link(g, recId, p, now);
+  const body = [t.text.trim(), ...(t.warnings.length ? ["", `Check before you use it: ${t.warnings.slice(0, 3).join("; ")}.`] : [])].join("\n");
+  let payload: Record<string, string | string[] | boolean> = email
+    ? { title: subject, subject, to: [email], body, send: true, target: `Email to ${email}`, standup: true }
+    : { title: p.title, body, target: `Message to ${sales.name} (WhatsApp or email)`, format: "message", standup: true };
+  const applied = await applyLearnedRules(g, { title: String(payload.title), body: String(payload.body) }, { agentId: agentNodeId(p.agent), businessId: ctx.businessId });
+  payload = { ...payload, title: applied.title, body: applied.body, ...(applied.applied.length ? { rulesApplied: applied.applied.map((r) => r.id) } : {}) };
+  const [existing] = await g.roQuery<{ status: string | null }>("MATCH (a:Entity:Approval {id:$id}) RETURN a.status AS status", { id: approvalId });
+  await upsertNode(g, {
+    type: "Approval", id: approvalId, name: `${actionKind}: ${p.title}`,
+    props: { kind: actionKind, payload: JSON.stringify(payload), title: String(payload.title), recommendation: recId, by: p.agent, area: AREA[kind], standup: true, standupKey: p.key, standupKind: kind, ...(existing ? {} : { status: "pending" }) },
+    asOf: date,
+  }, now);
+  await upsertEdge(g, { from: recId, type: "PROPOSES", to: approvalId }, now);
+  return { ...base, status: "drafted", approvalId, recommendationId: recId, notes: [...notes, ...t.warnings] };
 }
 
 /** "Tara drafted a Dussehra post" for the note. */

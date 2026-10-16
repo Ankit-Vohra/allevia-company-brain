@@ -20,6 +20,7 @@ const BEFORE: Record<string, string[]> = {
   "oncall-engineer": ["metric_trend", "impact_of", "get_entity", "neighbors", "history", "search", "cypher", "propose_action", "find_paths"],
   "qa-release": ["metric_trend", "history", "get_entity", "search", "cypher", "propose_action", "neighbors", "find_paths"],
   "ops-manager": ["who_owns", "search", "get_entity", "recall", "cypher", "propose_action"],
+  "sales-lead": ["search", "get_entity", "cypher", "propose_action", "history", "recall", "neighbors", "enquiries_read", "crm_read", "crm_write", "calendar_free_slots", "calendar_book", "gmail_draft", "gmail_send", "gmail_inbox", "connections_available", "connection_tools", "connection_read", "connection_act"],
   librarian: ["trace_decision", "who_knows", "history", "topics", "important", "find_paths", "search"],
 };
 // What was added: new tools only, to the agents that should have them.

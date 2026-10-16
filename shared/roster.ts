@@ -42,6 +42,7 @@ export const DEPARTMENTS: DepartmentDef[] = [
   { id: "content", name: "Content Studio", blurb: "Briefs, hooks and scripts in the brand's voice, checked before anyone sees them.", hue: 330 },
   { id: "tech", name: "Tech", blurb: "Website and app health, systems and what depends on what, issues to fix.", hue: 160 },
   { id: "ops", name: "Operations", blurb: "What's pending, who owns it, approvals and follow-ups.", hue: 200 },
+  { id: "sales", name: "Sales", blurb: "New enquiries, replies, calls booked on your calendar, and following up so no lead goes cold.", hue: 120 },
   { id: "knowledge", name: "Library", blurb: "Keeps the company memory current: sources, decisions, who knows what.", hue: 60 },
 ];
 
@@ -127,6 +128,13 @@ export const AGENTS: AgentDef[] = ([
     sprite: { skin: "#F1C27D", hair: "#3B3B3B", shirt: "#1D5C7A", accent: "#E0E1DD" },
   },
   {
+    id: "sales-lead", name: "Neel", title: "Sales Lead", department: "sales", model: "sonnet",
+    persona: "Answers every new enquiry fast, offers real times from the calendar, books the call once you say OK, and follows up so no lead goes quiet.",
+    handles: ["new enquiries", "leads", "reply to a customer", "book a call", "meetings", "follow up", "stalled deals", "pipeline"],
+    toolkits: ["lookup", "sql", "proposals", "history", "sales", "calendar", "inbox", "connections"], extras: ["recall", "neighbors"],
+    sprite: { skin: "#B5764A", hair: "#1A1210", shirt: "#2F7D4F", accent: "#F6E27F" },
+  },
+  {
     id: "librarian", name: "Sara", title: "Librarian", department: "knowledge", model: "haiku",
     persona: "Traces decisions to their sources, knows who knows what, and keeps facts current.",
     handles: ["why did we", "who knows", "history", "sources"],
@@ -140,7 +148,7 @@ export const AGENTS: AgentDef[] = ([
 const ROLE_WORD: Record<string, string> = {
   "chief-of-staff": "chief of staff", "coe-lead": "numbers", "data-analyst": "analytics", "growth-marketer": "marketing",
   "content-strategist": "content", "copy-editor": "writing", "fact-checker": "fact checks", "tech-lead": "tech",
-  "oncall-engineer": "on call", "qa-release": "app releases", "ops-manager": "follow-ups", librarian: "records",
+  "oncall-engineer": "on call", "qa-release": "app releases", "ops-manager": "follow-ups", "sales-lead": "sales", librarian: "records",
 };
 /** "Tara, content" for a roster id; the id itself when it is not on the roster. */
 export function plainWho(id: string): string {
@@ -151,7 +159,7 @@ export function plainWho(id: string): string {
 export const agentById = (id: string): AgentDef | undefined => AGENTS.find((a) => a.id === id);
 export const departmentById = (id: string): DepartmentDef | undefined => DEPARTMENTS.find((d) => d.id === id);
 
-// The roster's size, for copy that says how big the team is ("twelve staff in eight departments"). Derived, so the
+// The roster's size, for copy that says how big the team is ("thirteen staff in nine departments"). Derived, so the
 // copy can't drift when a desk is added.
 export const STAFF_COUNT = AGENTS.length;
 export const DEPARTMENT_COUNT = DEPARTMENTS.length;

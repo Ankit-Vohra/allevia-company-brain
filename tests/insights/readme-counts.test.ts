@@ -13,8 +13,8 @@ describe("README counts", () => {
     for (const n of said) expect(n).toBe(DETECTOR_NAMES.length);
   });
   it("says how many staff and departments there are", () => {
-    expect(readme).toMatch(/Twelve AI staff in eight departments/);
-    expect(AGENTS).toHaveLength(12);
-    expect(DEPARTMENTS).toHaveLength(8);
+    expect(readme).toMatch(/Thirteen AI staff in nine departments/);
+    expect(AGENTS).toHaveLength(13);
+    expect(DEPARTMENTS).toHaveLength(9);
   });
 });

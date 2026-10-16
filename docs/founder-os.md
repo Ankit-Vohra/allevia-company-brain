@@ -73,13 +73,17 @@ Working:
 - the Apify public data;
 - spreadsheet upload;
 - tenant isolation;
-- nightly backups.
+- nightly backups;
+- a Sales department (issue #41): Neel, the Sales Lead, reads new enquiries, drafts the reply with three real times from the
+  calendar, books the call and sends the invite after the OK, reminds before it and follows up after it, nudges deals that
+  went quiet, and adds new leads from the inbox. Leads, deals, meetings and messages are in the business's own brain with
+  every stage change kept, so "what moved this week" is a question. Everything that goes out is a card waiting for the OK
+  (`gmail_send`, `calendar_book`); the demo business `demo_growth` has a sample inbox and calendar, so the whole flow runs
+  without a real customer. The stand-up includes Sales.
 
 Missing for the Founder OS:
 
-- connections beyond upload and Apify;
-- a Sales department;
-- acting through the founder's tools (calendar, email);
+- connections beyond upload and Apify (the layer is built; each business still has to connect its tools);
 - one founder workspace that ties chat, waiting-for-OK, connections, the plan and the team together;
 - an end-to-end check that every screen and flow works.
 

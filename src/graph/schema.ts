@@ -23,6 +23,9 @@ export const ENTITY_TYPES = [
   // other businesses the owner's own pages name (onboarding, src/ingest/tidy.ts): who supplies it, whom it works with,
   // whom it works for. The owner's Business is the one business in its graph; a third party is never typed Business.
   "Supplier", "Partner", "Client",
+  // the Sales department (src/sales): who asked (Lead), the chance of a sale (Deal), a call or visit (Meeting) and what was
+  // said to whom (Message). Written by the sales tools and the inbox reader, never extracted from a document.
+  "Lead", "Deal", "Meeting", "Message",
 ] as const;
 export type EntityType = (typeof ENTITY_TYPES)[number];
 
@@ -52,6 +55,9 @@ export const REL_TYPES = [
   "COMPETES_WITH",
   // the owner's suppliers, partners and clients (src/ingest/tidy.ts)
   "SUPPLIES", "PARTNERS_WITH", "CLIENT_OF",
+  // sales: a lead is by a person and came through a channel; a deal belongs to a lead; a meeting is for a deal or lead and
+  // with a person; a message is in a lead, deal or meeting, sent by someone to someone; a follow-up task is for one of them
+  "ENQUIRED_BY", "CAME_VIA", "DEAL_OF", "MEETING_FOR", "MEETING_WITH", "MESSAGE_IN", "SENT_BY", "SENT_TO", "FOLLOWS_UP",
 ] as const;
 export type RelType = (typeof REL_TYPES)[number];
 
@@ -69,7 +75,7 @@ const ACTORS: EntityType[] = ["Person", "Agent"];
 const OWNERS: EntityType[] = ["Person", "Agent", "Team", "Business"];
 const OWNABLE: EntityType[] = [
   "Task", "System", "Channel", "Product", "Feature", "Decision", "Campaign", "Page", "Document", "Playbook", "Metric",
-  "BrandAsset", "Content", "Goal",
+  "BrandAsset", "Content", "Goal", "Lead", "Deal",
 ];
 const EVIDENCE: EntityType[] = ["Observation", "Document", "Chunk", "Memory", "Event", "Decision"];
 // Another business, as the owner's pages name it.
@@ -191,6 +197,19 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   ...pat("Partner", "PARTNERS_WITH", "Business"),
   ...pat("Client", "CLIENT_OF", "Business"),
   ...pat("Person", "MEMBER_OF", ["Supplier", "Partner", "Client"]),
+  // sales (src/sales/graph.ts). Every node carries src and asOf; every edge too.
+  ...pat(["Lead", "Deal", "Meeting", "Message"], "PART_OF", "Business"),
+  ...pat("Lead", "ENQUIRED_BY", "Person"),
+  ...pat("Lead", "CAME_VIA", "Channel"),
+  ...pat("Deal", "DEAL_OF", "Lead"),
+  ...pat("Meeting", "MEETING_FOR", ["Deal", "Lead"]),
+  ...pat("Meeting", "MEETING_WITH", "Person"),
+  ...pat("Message", "MESSAGE_IN", ["Lead", "Deal", "Meeting"]),
+  ...pat("Message", "SENT_BY", ACTORS),
+  ...pat("Message", "SENT_TO", "Person"),
+  ...pat("Task", "FOLLOWS_UP", ["Lead", "Deal", "Meeting"]),
+  // an approved email or invite that went out: the Action made this Message or Meeting
+  ...pat("Action", "RESULTED_IN", ["Message", "Meeting"]),
 ];
 
 // Patterns only the deterministic mappers write (src/ingest/sources/ops-map): a step of a user flow (Feature, kind funnel_step)
@@ -252,6 +271,10 @@ export const TRACKED_PROPS: Partial<Record<EntityType, string[]>> = {
   Business: ["country", "currency", "locale", "timeZone", "designStyle", "templateKey"],
   Agent: ["enabled", "mode", "autonomy"],
   Rule: ["status"],
+  // sales: the stage a lead or deal is in is bi-temporal ("what moved this week" reads the Versions); so is a meeting's state
+  Lead: ["stage"],
+  Deal: ["stage", "value"],
+  Meeting: ["status", "start"],
 };
 
 // Types the entity search (full-text on name/summary, vector on embedding) should return. Chunks have their own
@@ -259,7 +282,7 @@ export const TRACKED_PROPS: Partial<Record<EntityType, string[]>> = {
 export const SEARCHABLE: EntityType[] = [
   "Business", "Person", "Agent", "Team", "Product", "Feature", "Audience", "Need", "BrandRule", "BrandAsset", "Channel",
   "Content", "Campaign", "Page", "Query", "Metric", "Document", "Decision", "Task", "System", "Event", "Playbook", "Rule",
-  "Recommendation", "Memory", "Finding", "Goal", "Competitor", "Supplier", "Partner", "Client",
+  "Recommendation", "Memory", "Finding", "Goal", "Competitor", "Supplier", "Partner", "Client", "Lead", "Deal", "Meeting",
 ];
 
 // Nodes of a type search can be asked for by name carry this label (upsertNode adds it on create, ensureIndexes backfills

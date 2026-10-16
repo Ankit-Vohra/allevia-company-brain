@@ -14,7 +14,7 @@
 // A roster agent is given toolkits plus a few named extras (shared/roster.ts), not a hard-coded array of names. The Chief
 // of Staff holds the toolkits of every domain it may call across. Pure data: no Node or DOM imports (the web app reads it).
 
-export type ToolDomain = "knowledge" | "analytics" | "marketing" | "content" | "tech" | "ops" | "research" | "brand" | "creative" | "memory" | "answer";
+export type ToolDomain = "knowledge" | "analytics" | "marketing" | "content" | "tech" | "ops" | "research" | "brand" | "creative" | "memory" | "answer" | "sales";
 export type ToolMode = "read" | "create" | "write";
 export type ToolCost = "free" | "model" | "credits" | "paid";
 
@@ -83,6 +83,11 @@ export const TOOL_META: ToolMeta[] = [
   read("connection_tools", "ops", "Lists the actions a connected tool offers"),
   read("connection_read", "ops", "Looks something up in a connected tool"),
   { name: "connection_act", domain: "ops", mode: "write", cost: "free", needsOk: true, summary: "Proposes a change in a connected tool for the owner's OK" },
+  // sales: the business's own leads, deals and meetings in the records (src/sales); anything that goes out to a customer
+  // (an email, an invite) is sent with gmail_send or calendar_book, which wait for the owner's OK
+  read("enquiries_read", "sales", "Finds new enquiries nobody has answered yet, in the records and in the inbox"),
+  read("crm_read", "sales", "Reads the leads, deals and meetings: the pipeline, what moved, what is stuck"),
+  { name: "crm_write", domain: "sales", mode: "write", cost: "free", needsOk: false, summary: "Adds a lead, opens a deal, moves a stage or adds a follow-up in the records" },
   // making things
   { name: "write_copy", domain: "content", mode: "create", cost: "model", needsOk: true, summary: "Writes captions, ad lines or emails in the brand's voice" },
   { name: "make_poster", domain: "creative", mode: "create", cost: "credits", needsOk: true, summary: "Makes a poster or ad with the real logo and exact words" },
@@ -107,6 +112,7 @@ export const TOOLKITS: Toolkit[] = [
   { id: "content-stats", label: "What content worked", domain: "analytics", tools: ["content_performance"] },
   { id: "website", label: "Website check-up and AI visibility", domain: "tech", tools: ["website_checkup", "ai_visibility"] },
   { id: "keywords", label: "Keyword research (optional, paid)", domain: "analytics", tools: ["keyword_ideas"] },
+  { id: "sales", label: "Sales: enquiries, leads and deals", domain: "sales", tools: ["enquiries_read", "crm_read", "crm_write"] },
   { id: "calendar", label: "Calendar: free times and meetings", domain: "ops", tools: ["calendar_free_slots", "calendar_book"] },
   { id: "inbox", label: "Email: drafts, sends and the inbox", domain: "ops", tools: ["gmail_draft", "gmail_send", "gmail_inbox"] },
   { id: "live-analytics", label: "Live website and search numbers", domain: "analytics", tools: ["ga4_report", "gsc_report"] },
