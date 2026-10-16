@@ -18,6 +18,8 @@ import { entryById, entryByToolkit, TOOLKIT_CATALOG, type ToolkitEntry } from ".
 import { asRecord, realFetch, type FetchFn } from "../connectors/google/client.js";
 import { syncCapabilities } from "../capabilities/ladder.js";
 import { upsertNode } from "../graph/upsert.js";
+import { once } from "./once.js";
+import { readerFor, type Reader } from "./firstread.js";
 import type { GoogleApis } from "./google/apis.js";
 import type { GoogleSession } from "./google/product.js";
 import {
@@ -189,6 +191,17 @@ export function composioGoogleApis(execute: (tool: string, args: Record<string, 
   };
 }
 
+// Search Console through Composio: the owner's first verified site, then the search analytics query.
+interface SearchQuery { startDate: string; endDate: string; dimensions: Array<"date" | "page" | "query">; rowLimit?: number }
+async function searchConsoleQuery(execute: (tool: string, args: Record<string, unknown>) => Promise<unknown>, q: SearchQuery) {
+  const sites = arrAt(await execute("GOOGLE_SEARCH_CONSOLE_LIST_SITES", {}), "siteEntry").map(asRecord).filter((s) => typeof s.siteUrl === "string" && s.permissionLevel !== "siteUnverifiedUser");
+  const site = (sites.find((s) => String(s.siteUrl).startsWith("sc-domain:")) ?? sites[0])?.siteUrl;
+  if (typeof site !== "string") throw new ComposioError("No site in Search Console for this account.", 404);
+  const d = await execute("GOOGLE_SEARCH_CONSOLE_SEARCH_ANALYTICS_QUERY", { site_url: site, start_date: q.startDate, end_date: q.endDate, dimensions: q.dimensions, row_limit: q.rowLimit ?? 25 });
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return arrAt(d, "rows").map(asRecord).flatMap((r) => (Array.isArray(r.keys) ? [{ keys: r.keys.map(String), clicks: n(r.clicks), impressions: n(r.impressions), ctr: n(r.ctr), position: n(r.position) }] : []));
+}
+
 // ---------- connectors ----------
 
 export interface ComposioDeps { apiKey: string; client: ComposioClient | null; connectorKey: string }
@@ -198,7 +211,7 @@ export function composioUserId(connectorKey: string, tenant: string): string {
   return `al_${createHmac("sha256", connectorKey).update(`composio-user\u0000${tenant}`).digest("hex").slice(0, 24)}`;
 }
 
-interface Stored { accountId: string; userId: string; at: number }
+interface Stored { accountId: string; userId: string; at: number; headline?: string; readAt?: number }
 
 export const COMPOSIO_OFF_WORDS = (what: string) => `Connecting ${what} isn't switched on yet. Your team is setting up the connection service and will let you know when it's ready.`;
 
@@ -219,8 +232,24 @@ export function infoOf(e: ToolkitEntry): ConnectorInfo {
 
 export class ComposioConnector implements Connector {
   readonly info: ConnectorInfo;
+  /** The daily read (and the first one, right after connecting), for toolkits that have a reader (firstread.ts). */
+  readonly pull?: (ctx: ConnectorCtx) => Promise<{ ok: boolean; message: string }>;
   constructor(readonly entry: ToolkitEntry, private deps: ComposioDeps) {
     this.info = infoOf(entry);
+    const reader = readerFor(entry.toolkit, entry.system);
+    if (reader) this.pull = (ctx) => once(`${ctx.tenant}\u0000${entry.id}`, () => this.readNow(ctx, reader));
+  }
+
+  private async readNow(ctx: ConnectorCtx, reader: Reader): Promise<{ ok: boolean; message: string }> {
+    try {
+      const first = await this.run(ctx, (s) => reader(s.execute, ctx));
+      const r = await this.stored(ctx);
+      if (r) await ctx.vault.put(ctx.tenant, this.info.id, { ...r, readAt: ctx.now(), ...(first.headline ? { headline: first.headline } : {}) } satisfies Stored);
+      return first.headline ? { ok: true, message: first.headline } : { ok: false, message: `${this.info.name} is connected, but there was nothing to read yet.` };
+    } catch (e) {
+      if (e instanceof NotConnectedError || e instanceof NeedsAttentionError) return { ok: false, message: e.words };
+      return { ok: false, message: `${this.info.name} is busy or slow right now. We will try again tomorrow.` };
+    }
   }
 
   availability(): Availability {
@@ -252,7 +281,7 @@ export class ComposioConnector implements Connector {
     const r = await this.stored(ctx);
     if (!r) return { state: "not_connected", message: this.info.blurb };
     if (r.userId !== this.user(ctx)) return { state: "needs_attention", message: `We can't use the saved ${this.info.name} connection any more. Connect it again.` };
-    return { state: "connected", message: `${this.info.name} is connected.`, lastReadAt: new Date(r.at).toISOString() };
+    return { state: "connected", message: r.headline ? `${this.info.name} connected: ${r.headline}.` : `${this.info.name} is connected.`, lastReadAt: new Date(r.readAt ?? r.at).toISOString() };
   }
 
   async connect(ctx: ConnectorCtx): Promise<ConnectStart> {
@@ -279,6 +308,7 @@ export class ComposioConnector implements Connector {
     if (!acct || acct.userId !== this.user(ctx) || acct.toolkit.toLowerCase() !== this.entry.toolkit || acct.status.toUpperCase() !== "ACTIVE") return { result: "problem", reason: "not_active" };
     await ctx.vault.put(ctx.tenant, this.info.id, { accountId: acct.id, userId: acct.userId, at: ctx.now() } satisfies Stored);
     await this.markSystem(ctx, "ok");
+    if (this.pull) void this.pull(ctx).catch(() => undefined); // the first numbers, straight away; the daily read repeats it
     return { result: "connected" };
   }
 
@@ -309,10 +339,10 @@ export class ComposioConnector implements Connector {
       if (!out.ok) throw new ComposioError(out.error ?? "The tool did not work.", 502);
       return out.data;
     };
-    const google = this.entry.group === "google";
     return fn({
       toolkit: this.entry.toolkit, execute, listTools: (q) => client.tools(this.entry.toolkit, q),
-      apis: composioGoogleApis(execute), accessToken: "composio", meta: {}, allowed: () => true, ...(google ? {} : {}),
+      apis: composioGoogleApis(execute), accessToken: "composio", meta: {}, allowed: () => true,
+      ...(this.entry.toolkit === "google_search_console" ? { query: (q: SearchQuery) => searchConsoleQuery(execute, q) } : {}),
     } as ComposioSession & GoogleSession);
   }
 }

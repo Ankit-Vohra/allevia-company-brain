@@ -10,7 +10,7 @@ import type { GraphHandle } from "../graph/client.js";
 import { FileAuditLog, type AuditLog } from "./audit.js";
 import { composioConnectors, ComposioConnector, DYNAMIC_SLUG, dynamicEntry, realComposioClient, type ComposioClient } from "./composio.js";
 import { realGoogleApis, type GoogleApis } from "./google/apis.js";
-import { googleConnSettings } from "./google/oauth.js";
+import { googleAvailability, googleConnSettings } from "./google/oauth.js";
 import { SearchConsoleConnector } from "./google/search-console.js";
 import { googleProductConnectors } from "./google/specs.js";
 import { ConnectionsService } from "./service.js";
@@ -40,14 +40,16 @@ export function buildConnections(cfg: AlleviaConfig, over: WiringOver): Connecti
   const legacy: GoogleDeps = { settings: googleSettings({ ...cfg.google, enabled: true }), store, client, now };
   const composioKey = cfg.connections.composioApiKey ?? "";
   const composio = over.composio === undefined ? (composioKey ? realComposioClient(composioKey) : null) : over.composio;
-  // Google products: through Composio (the main path) or on our own Google app (branded consent). Both give the same connection ids.
-  const via = cfg.connections.googleVia ?? (composioKey || over.composio ? "composio" : "own");
-  const OWN_GOOGLE = new Set(["gmail", "google-calendar", "google-analytics", "search-console", "google-ads"]);
+  // Google products: Composio is the main path. Its Analytics and Ads toolkits cannot run reports (checked against its catalogue),
+  // so when our own Google app is set up those two use it; ALLEVIA_GOOGLE_VIA=own|composio forces every Google product one way.
+  const GOOGLE_FIVE = ["gmail", "google-calendar", "google-analytics", "search-console", "google-ads"];
+  const composioOn = !!(composioKey || over.composio);
+  const forced = cfg.connections.googleVia;
+  const ownAvailable = (id: string) => googleAvailability(settings, "", { ads: id === "google-ads" }).ok;
+  const own = new Set(forced === "own" || (!forced && !composioOn) ? GOOGLE_FIVE : forced === "composio" ? [] : ["google-analytics", "google-ads"].filter(ownAvailable));
   const composioDeps = { apiKey: composioKey || (over.composio ? "test" : ""), client: composio, connectorKey: key };
-  const connectors = [
-    ...(via === "own" ? [new SearchConsoleConnector(legacy, settings), ...googleProductConnectors({ settings, store, client, apis })] : []),
-    ...composioConnectors(composioDeps, (e) => via === "composio" || !OWN_GOOGLE.has(e.id)),
-  ];
+  const ownConnectors = [new SearchConsoleConnector(legacy, settings), ...googleProductConnectors({ settings, store, client, apis })].filter((c) => own.has(c.info.id));
+  const connectors = [...ownConnectors, ...composioConnectors(composioDeps, (e) => !own.has(e.id))];
   return new ConnectionsService({
     connectors, vault: store as never, audit: over.audit ?? new FileAuditLog(cfg.dataDir), connectorKey: key, webBaseUrl: cfg.webBaseUrl,
     openGraph: over.openGraph,

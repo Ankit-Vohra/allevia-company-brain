@@ -17,6 +17,7 @@ import {
   NeedsAttentionError, NotConnectedError,
   type Availability, type CompleteOutcome, type ConnectionHealth, type ConnectionStatus, type Connector, type ConnectorCtx, type ConnectorInfo, type ConnectStart,
 } from "../types.js";
+import { once } from "../once.js";
 import type { GoogleApis } from "./apis.js";
 import { consentUrl, googleAvailability, newPkce, SCOPES, type GoogleConnSettings } from "./oauth.js";
 
@@ -233,7 +234,11 @@ export class GoogleProductConnector implements Connector {
     }
   }
 
-  async pull(ctx: ConnectorCtx): Promise<{ ok: boolean; message: string }> {
+  pull(ctx: ConnectorCtx): Promise<{ ok: boolean; message: string }> {
+    return once(`${ctx.tenant}\u0000${this.info.id}`, () => this.pullNow(ctx));
+  }
+
+  private async pullNow(ctx: ConnectorCtx): Promise<{ ok: boolean; message: string }> {
     const daily = this.spec.daily;
     if (!daily) return { ok: false, message: "Nothing to read for this connection." };
     try {

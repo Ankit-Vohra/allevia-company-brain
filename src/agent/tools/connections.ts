@@ -191,7 +191,7 @@ export const calendarBook = defineTool({
     const tz = a.time_zone ?? undefined;
     return runPropose({
       title: `Meeting: ${a.title}`, why: a.why, kind: "calendar_event", area: "sales", evidence: await evidence(ctx),
-      payload: { title: a.title, body: a.notes ?? "", start: a.start, end: new Date(end).toISOString(), ...(tz ? { timeZone: tz } : {}), ...(guests.length ? { attendees: guests } : {}), target: "Google Calendar" },
+      payload: { title: a.title, body: a.notes ?? "", start: a.start, end: new Date(end).toISOString(), ...(tz ? { timeZone: tz } : {}), ...(guests.length ? { attendees: guests } : {}), target: `Google Calendar: ${a.start.replace("T", " ").slice(0, 16)} for ${minutes} minutes${guests.length ? `, guest ${guests.join(", ")}` : ""}` },
     }, ctx);
   },
 });
@@ -214,7 +214,7 @@ async function proposeEmail(a: { to: string[]; cc?: string[]; subject: string; b
   if (!ok.ok) return ok.result;
   return runPropose({
     title: `${send ? "Send" : "Draft"} email: ${a.subject}`.slice(0, 160), why: a.why, kind: "email_send", area: "sales", evidence: await evidence(ctx),
-    payload: { title: a.subject, subject: a.subject, to, ...(cc.length ? { cc } : {}), body: a.body, send, target: "Gmail" },
+    payload: { title: a.subject, subject: a.subject, to, ...(cc.length ? { cc } : {}), body: a.body, send, target: `${send ? "Email to" : "Draft email to"} ${to.join(", ")}${cc.length ? ` (cc ${cc.join(", ")})` : ""}` },
   }, ctx);
 }
 
@@ -242,7 +242,7 @@ export const gmailSend = defineTool({
     if (a.draft_approval_id) {
       const [row] = await ro<{ status: string | null; kind: string | null; payload: string | null }>(ctx, "MATCH (x:Entity:Approval {id:$id}) RETURN x.status AS status, x.kind AS kind, x.payload AS payload", { id: a.draft_approval_id });
       if (!row || row.kind !== "email_send") throw new InputError("That isn't an email draft card.");
-      if (row.status !== "approved" && row.status !== "edited") throw new InputError(`That draft hasn't been approved yet (it is ${row.status ?? "unknown"}).`);
+      if (row.status !== "approved" && row.status !== "edited" && row.status !== "executed") throw new InputError(`That draft hasn't been approved yet (it is ${row.status ?? "unknown"}).`);
       let p: Record<string, unknown> = {};
       try { p = JSON.parse(row.payload ?? "{}") as Record<string, unknown>; } catch { p = {}; }
       to = addressesOf(p.to); cc = addressesOf(p.cc); subject = typeof p.subject === "string" ? p.subject : subject; body = typeof p.body === "string" ? p.body : body;

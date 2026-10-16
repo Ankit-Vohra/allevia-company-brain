@@ -8,6 +8,7 @@ import {
 } from "../../connectors/google/searchconsole.js";
 import { syncCapabilities } from "../../capabilities/ladder.js";
 import { NeedsAttentionError, NotConnectedError, type Availability, type CompleteOutcome, type ConnectionHealth, type ConnectionStatus, type Connector, type ConnectorCtx, type ConnectorInfo, type ConnectStart } from "../types.js";
+import { once } from "../once.js";
 import { consentUrl, googleAvailability, newPkce, type GoogleConnSettings } from "./oauth.js";
 
 export interface SearchConsoleSession {
@@ -74,9 +75,11 @@ export class SearchConsoleConnector implements Connector {
     return { ok: s.state === "connected", message: s.state === "connected" ? "Google still lets us read Search Console." : s.message };
   }
 
-  async pull(ctx: ConnectorCtx): Promise<{ ok: boolean; message: string }> {
-    const r = await pullSearchConsole(this.deps, await ctx.graph(), ctx.tenant, ctx.businessId ? { businessId: ctx.businessId } : {});
-    return { ok: r.status === "ok", message: r.message };
+  pull(ctx: ConnectorCtx): Promise<{ ok: boolean; message: string }> {
+    return once(`${ctx.tenant}\u0000${CONNECTOR}`, async () => {
+      const r = await pullSearchConsole(this.deps, await ctx.graph(), ctx.tenant, ctx.businessId ? { businessId: ctx.businessId } : {});
+      return { ok: r.status === "ok", message: r.message };
+    });
   }
 
   /** A live session: the chosen website, and a query that refreshes the access once when Google refuses it. */
