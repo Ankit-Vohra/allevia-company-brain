@@ -13,18 +13,18 @@ Model: roster default. Questions run: 5 of 5 in the set. Answers below are the f
 |---|---|---|
 | Questions | 5 | 5 |
 | Turns that finished | 5 of 5 (100%) | 5 of 5 (100%) |
-| Passed (every check and expectation) | 3 of 5 (60%) | 3 of 5 (60%) |
-| Expectations hit | 34 of 36 (94%) | 34 of 36 (94%) |
+| Passed (every check and expectation) | 3 of 5 (60%) | 5 of 5 (100%) |
+| Expectations hit | 34 of 36 (94%) | 36 of 36 (100%) |
 | citations valid | 100% | 100% |
 | numbers grounded | 100% | 100% |
 | simulated disclosed | 100% | 100% |
 | freshness disclosed | 100% | 100% |
 | mode disclosed | 100% | 100% |
-| Mean latency | 54.4 s | 57.7 s |
+| Mean latency | 54.4 s | 53.4 s |
 | Median / max latency | 52.1 s / 73.3 s | 52.1 s / 86.9 s |
-| Mean tool calls | 21.2 | 21.4 |
+| Mean tool calls | 21.2 | 20.2 |
 
-Expectation hits by kind: cite 7/7 · match 13/13 · tool 3/3 · agent 3/3 · path 4/5 · propose 2/2 · forbid 1/2 · simulated 1/1.
+Expectation hits by kind: cite 7/7 · match 13/13 · tool 3/3 · agent 3/3 · path 5/5 · propose 2/2 · forbid 2/2 · simulated 1/1.
 
 Agents (turns worked on): Meera 5 · Imran 4 · Zoya 3 · Kabir 2 · Sara 2 · Isha 2 · Arjun 2.
 
@@ -34,8 +34,8 @@ Agents (turns worked on): Meera 5 · Imran 4 · Zoya 3 · Kabir 2 · Sara 2 · I
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | hero-why-signups-drop | hero, why, multi-desk, memory | PASS (re-run) | ok | 20/20 | 86.9 s | Meera, Kabir, Zoya, Imran, Sara, Isha, Arjun | 46: use_skill, metric_trend, search, cypher, trace_decision, get_entity, history, find_paths, impact_of, propose_action, show_path | `turn:2026-10-16-173fe6e8` |
 | 2 | hero-ads-red-herring | hero, why, trap | PASS | ok | 5/5 | 52.1 s | Meera, Kabir, Zoya, Imran, Isha | 30: use_skill, search, metric_trend, get_entity, show_path | `turn:2026-10-16-057c98b4` |
-| 3 | hero-not-in-records | hero, trap | FAIL | ok | 1/2 | 42.0 s | Meera, Imran | 13: use_skill, search, get_entity, cypher, propose_action, show_path | `turn:2026-10-16-1483e943` |
-| 4 | hero-depth-contrast | hero, impact | FAIL | ok | 4/5 | 73.3 s | Meera, Arjun, Imran | 8: search, use_skill, impact_of, cypher, get_entity, show_path | `turn:2026-10-16-f433e0d8` |
+| 3 | hero-not-in-records | hero, trap | PASS (re-run) | ok | 2/2 | 32.1 s | Meera, Imran | 10: search, cypher, metric_trend, get_entity, neighbors, show_path | `turn:2026-10-16-d4ceb92e` |
+| 4 | hero-depth-contrast | hero, impact | PASS (re-run) | ok | 5/5 | 61.7 s | Meera, Arjun, Imran | 5: use_skill, search, impact_of, show_path | `turn:2026-10-16-a5928d36` |
 | 5 | hero-memory | hero, memory, library | PASS | ok | 4/4 | 34.0 s | Meera, Sara, Zoya | 10: use_skill, trace_decision, search, metric_trend, get_entity, show_path | `turn:2026-10-16-58427e24` |
 
 ## Answers and failures
@@ -57,21 +57,21 @@ Agents (turns worked on): Meera 5 · Imran 4 · Zoya 3 · Kabir 2 · Sara 2 · I
 
 > No, the Meta pause very likely didn't cause the drop. Sign-ups fell on 2026-10-07, three days before the ads were paused on 2026-10-10 (sample numbers). The likely cause is a crash in the new phone field on the sign-up screen. - New accounts averaged about 238 a day before 2026-10-07 and about 51…
 
-### 3. hero-not-in-records: FAIL
+### 3. hero-not-in-records: PASS (re-run)
 
 **Q:** What did people say about the new phone-number box in their store reviews?
 
-> Store review text since 7 October isn't recorded, so I can't tell you what people said about the phone-number box. What your records do show: - Release 2.8.0 replaced the plain phone box on the sign-up screen with a field that picks the country code on its own. It reached everyone on Android on 7…
+> No store reviews about the phone-number box are recorded, so I can't tell you what people said or give counts. What the records do show: - Version 2.8.0 swapped the plain phone box for a field that picks the country code on its own. It reached everyone on Android on 7 October. - The field crashed…
 
-- Forbidden `"[^"]{12,}"` matched: ""TypeError... reading 'country' in PhoneInput""
+- Attempt 1: FAIL (`turn:2026-10-16-1483e943`, 42.0 s): Forbidden `"[^"]{12,}"` matched: ""TypeError... reading 'country' in PhoneInput""
 
-### 4. hero-depth-contrast: FAIL
+### 4. hero-depth-contrast: PASS (re-run)
 
 **Q:** What else breaks if the sign-up screen keeps crashing?
 
-> If the crash keeps going, 8 more steps break after the sign-up screen, and 2 of them are on the employer side. That is the phone step plus 7 steps below it. Only the phone step has a recorded owner. Each step depends on the one before it: 1. Phone step, one step away. Neha owns it. 2. OTP…
+> If the sign-up screen keeps crashing, the sign-up steps behind it, the Pune ads and later features all get hit. The check, as of 2026-10-16, found 10 things beyond the screen. The crash is in the phone-number field added in version 2.8.0. Hit right away: - The Pune shift-jobs Meta ads send people…
 
-- Missed path `page:screen/app/auth/sign-up` (got: feature:seekers-signup-sign-up-screen-viewed, feature:seekers-signup-phone-number-entered, feature:seekers-signup-otp-verified, feature:seekers-signup-profile-completed, feature:employer-applicant-inbox)
+- Attempt 1: FAIL (`turn:2026-10-16-f433e0d8`, 73.3 s): Missed path `page:screen/app/auth/sign-up` (got: feature:seekers-signup-sign-up-screen-viewed, feature:seekers-signup-phone-number-entered, feature:seekers-signup-otp-verified, feature:seekers-signup-profile-completed, feature:employer-applicant-inbox)
 
 ### 5. hero-memory: PASS
 

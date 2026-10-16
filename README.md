@@ -125,7 +125,7 @@ On Aamdani the same question honestly ends in "cause not shown": the records hol
 review and a login-screen timeout, but no record links a release to a crash or a crash to the sign-up step, so the answer says so and says what to connect.
 `evals/hero.yaml` (Shiftly) and `evals/hero-aamdani.yaml` assert all of this: the cause named, the path nodes present, valid citations and grounded numbers, the honest
 "not in the records", and the two cards drafted. **Live pass rate, 16 October 2026** (real agents on the Claude subscription, no recordings; Shiftly reseeded before each attempt):
-the hero question passed **5 of 5 on Shiftly** (69 to 102 s) and **5 of 5 on Aamdani** (60 to 85 s); the reports are in [`docs/evals/`](docs/evals). The demo steps are the
+the hero question passed **5 of 5 on Shiftly** (69 to 102 s) and **5 of 5 on Aamdani** (60 to 85 s), and each of the other items in the two sets passed on a live run (the ad red herring, "not in the records", depth 1 against 4, memory; Aamdani's no-invented-release and depth items, the latter 3 of 3 after the steps were given a plain summary); the reports are in [`docs/evals/`](docs/evals). The demo steps are the
 opening of [`docs/demo-script.md`](docs/demo-script.md).
 
 ## How FalkorDB is central
