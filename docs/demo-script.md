@@ -5,9 +5,11 @@ Five scenarios, each started by hand in front of the viewer and judged by what h
 fallback when something outside the product fails (the network, the subscription's limits), and it is **labelled on
 screen as a replay** every time it is used.
 
-Status (15 October 2026): the demo video is **not recorded yet**; the founder holds it until the product is ready.
-Scenario 3 (a poster with the owner's logo) depends on the creative tools another builder is finishing; until they land
-it is skipped, not faked.
+Status (16 October 2026): the demo video is **not recorded yet**; the founder holds it until the product is ready. What each
+scenario did when run live, and what is still open, is in [`live-scenarios.md`](live-scenarios.md). The creative tools have landed,
+so scenario 3 runs (on Shiftly with a made-up logo: it asks what the poster is for, then makes it; the team's own design review
+said 3.7 of 5, so show it as "works", not as "polished"). With no Claude login, the four hero-set answers replay from
+`seed-demo --recorded` (labelled "Replay" on screen).
 
 ## The hero: "Why did sign-ups drop this week, and what should we do?"
 
@@ -15,7 +17,7 @@ One question, about two minutes, and every part of the product shows up in it: t
 approval cards and learning. Run it live on the synthetic business `demo_growth` (public; this is what the repo ships) or on Aamdani (private,
 real records, where the honest answer is "the records do not show the cause"). It runs on the Claude subscription, nothing pre-played.
 
-**Set up (once, 30 seconds).** `npm run cli -- seed-demo` builds Shiftly, a synthetic shift-jobs app, as the graph `allevia_demo_growth` and registers it
+**Set up (once, 30 seconds).** `npm run cli -- seed-demo` (add `--recorded` for the replay copy) builds Shiftly, a synthetic shift-jobs app, as the graph `allevia_demo_growth` and registers it
 (no model, no network). Open it in the web app. Its story, written into the records the way ingestion writes them: the 2.8.0 release (7 Oct) put a new
 phone-number box on the sign-up screen, it crashes, and new accounts fell from about 250 a day to about 50 that day. Around it: Google sign-ups unchanged, an ad
 campaign paused three days *after* the fall began (a red herring), a hotfix waiting in the App Store's review queue, a decision from last week and the thread
@@ -78,9 +80,11 @@ does not have ("Payroll gateway"): the answer is "I don't have that in your reco
 
 ### 3. A poster with the owner's logo
 
-**Do:** ask the team for a poster for this week's offer. **Watch:** the brand kit from onboarding (logo, colours) is
-used, the draft comes back as an approval card. **Point at:** the asset's lineage in the graph (`DERIVED_FROM`, who
-produced it). **Status:** blocked until the creative tools land on `dev`; skip it rather than show a mock.
+**Do:** file the business's logo in its brand library (Studio, brand files), then ask "Poster for Insta with my logo". **Watch:**
+it asks what the poster is for before it makes anything; give the purpose and the line; Rohan reviews the design, Nisha checks
+every word, the draft comes back as an approval card with the logo whole. **Point at:** the asset's lineage in the graph
+(`DERIVED_FROM`, who produced it) and the honest design score. **Costs:** no credits unless paid artwork is switched on
+(`ALLEVIA_STUDIO_ENGINE=recorded` keeps it off).
 
 ### 4. A bad photo turned into good content
 
