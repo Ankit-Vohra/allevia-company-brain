@@ -208,6 +208,8 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   ...pat("Message", "SENT_BY", ACTORS),
   ...pat("Message", "SENT_TO", "Person"),
   ...pat("Task", "FOLLOWS_UP", ["Lead", "Deal", "Meeting"]),
+  // an approved email or invite that went out: the Action made this Message or Meeting
+  ...pat("Action", "RESULTED_IN", ["Message", "Meeting"]),
 ];
 
 // Patterns only the deterministic mappers write (src/ingest/sources/ops-map): a step of a user flow (Feature, kind funnel_step)

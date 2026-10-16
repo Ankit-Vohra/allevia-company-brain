@@ -34,7 +34,7 @@ type Session = GoogleSession & Partial<ComposioSession> & Partial<SearchConsoleS
 
 const connectLink = (id: string): string => `/connections?connect=${id}`;
 
-function refusal(id: string, name: string, words: string, kind: "not_connected" | "needs_attention" | "off" | "not_allowed" | "slow_down"): ToolResult {
+export function refusal(id: string, name: string, words: string, kind: "not_connected" | "needs_attention" | "off" | "not_allowed" | "slow_down"): ToolResult {
   const link = `[Connect ${name}](${connectLink(id)})`;
   const say = kind === "not_connected" || kind === "needs_attention"
     ? `Tell the owner plainly that ${name} ${kind === "needs_attention" ? "stopped working and needs to be connected again" : "isn't connected yet"}, and give them this link: ${link}. Answer what you can from the records and do not make up anything ${name} would have told you.`
@@ -48,7 +48,7 @@ function refusal(id: string, name: string, words: string, kind: "not_connected" 
 }
 
 /** Runs `fn` on a connection; a missing or stopped connection becomes a plain refusal result instead of an error. */
-async function onConnection<T>(ctx: ToolContext, tool: string, id: string, op: string, fn: (s: Session) => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; result: ToolResult }> {
+export async function onConnection<T>(ctx: ToolContext, tool: string, id: string, op: string, fn: (s: Session) => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; result: ToolResult }> {
   refuseIfReadOnly(ctx, tool);
   refuseIfStopped(ctx, tool);
   const name = entryById(id)?.name ?? id;
@@ -153,7 +153,10 @@ export const calendarFreeSlots = defineTool({
     const r = await onConnection(ctx, "calendar_free_slots", "google-calendar", "find free times", (s) => s.apis.freeBusy(s.accessToken, { timeMin: new Date(timeMin).toISOString(), timeMax: new Date(timeMax).toISOString(), timeZone: tz }));
     if (!r.ok) return r.result;
     const busy = r.value.map((b) => ({ start: Date.parse(b.start), end: Date.parse(b.end) })).filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end));
-    const slots = freeSlots({ fromDate, days, minutes, workStart: a.work_start ?? "09:00", workEnd: a.work_end ?? "18:00", tz, busy, notBefore: ctx.now + 3_600_000, weekends: a.weekends === true, max: 12 });
+    // at most four free times a day, so twelve reach across several days (three times on three days is what a customer is offered)
+    const every = freeSlots({ fromDate, days, minutes, workStart: a.work_start ?? "09:00", workEnd: a.work_end ?? "18:00", tz, busy, notBefore: ctx.now + 3_600_000, weekends: a.weekends === true, max: 400 });
+    const perDay = new Map<string, number>();
+    const slots = every.filter((x) => { const d = isoIn(x.start, tz).slice(0, 10); const n = perDay.get(d) ?? 0; perDay.set(d, n + 1); return n < 4; }).slice(0, 12);
     return {
       data: { timeZone: tz, minutes, slots: slots.map((x) => ({ start: isoIn(x.start, tz), end: isoIn(x.end, tz), label: `${labelIn(x.start, tz)} to ${labelIn(x.end, tz).slice(-5)}` })), busyBlocks: busy.length },
       nodes: [], edges: [], sources: [live(ctx, "google-calendar", "Google Calendar")],

@@ -131,7 +131,7 @@ export const AGENTS: AgentDef[] = ([
     id: "sales-lead", name: "Neel", title: "Sales Lead", department: "sales", model: "sonnet",
     persona: "Answers every new enquiry fast, offers real times from the calendar, books the call once you say OK, and follows up so no lead goes quiet.",
     handles: ["new enquiries", "leads", "reply to a customer", "book a call", "meetings", "follow up", "stalled deals", "pipeline"],
-    toolkits: ["lookup", "sql", "proposals", "history"], extras: ["recall", "neighbors"],
+    toolkits: ["lookup", "sql", "proposals", "history", "sales", "calendar", "inbox", "connections"], extras: ["recall", "neighbors"],
     sprite: { skin: "#B5764A", hair: "#1A1210", shirt: "#2F7D4F", accent: "#F6E27F" },
   },
   {

@@ -13,6 +13,7 @@ import { writeBatch } from "../graph/batch.js";
 import { SEARCHABLE, type EntityType, type RelType } from "../graph/schema.js";
 import type { EdgeInput, NodeInput, ObservationInput, Prim } from "../graph/validate.js";
 import { fakeEmbed } from "./embed.js";
+import { seedSalesDemo } from "../sales/demo.js";
 
 export const GROWTH_TENANT = "demo_growth";
 export const GROWTH_BUSINESS = "business:shiftly";
@@ -40,7 +41,7 @@ const weekday = (day: string): number => new Date(`${day}T00:00:00Z`).getUTCDay(
 interface N { type: EntityType; id: string; name: string; summary?: string; props?: Record<string, Prim>; src?: string; asOf?: string; simulated?: boolean }
 interface E { from: string; type: RelType; to: string; since?: string; props?: Record<string, Prim>; src?: string; conf?: number }
 
-export async function seedGrowth(g: GraphHandle, opts: { embed?: (text: string) => number[] } = {}): Promise<{ nodes: number; edges: number; observations: number }> {
+export async function seedGrowth(g: GraphHandle, opts: { embed?: (text: string) => number[] } = {}): Promise<{ nodes: number; edges: number; observations: number; sales: { leads: number; deals: number; meetings: number; messages: number } }> {
   await ensureIndexes(g);
   const embed = opts.embed ?? fakeEmbed;
   const nodes: NodeInput[] = [];
@@ -245,5 +246,7 @@ export async function seedGrowth(g: GraphHandle, opts: { embed?: (text: string) 
 
   const stats = await writeBatch(g, { nodes, edges, observations }, GROWTH_NOW);
   if (stats.errors.length) throw new Error(`seedGrowth: ${stats.errors.length} write errors: ${stats.errors.map((e) => `${e.kind} ${e.error}`).join(" | ")}`);
-  return { nodes: nodes.length, edges: edges.length, observations: observations.length };
+  // the Sales department's leads, a stalled deal and an enquiry nobody answered (src/sales/demo.ts)
+  const sales = await seedSalesDemo(g, GROWTH_NOW, GROWTH_TENANT);
+  return { nodes: nodes.length, edges: edges.length, observations: observations.length, sales };
 }

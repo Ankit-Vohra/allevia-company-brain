@@ -35,6 +35,7 @@ import { RateLimitedError, type ConnectionsPort } from "../connections/service.j
 import { NeedsAttentionError, NotAllowedError, NotConfiguredError, NotConnectedError } from "../connections/types.js";
 import type { GoogleSession } from "../connections/google/product.js";
 import { GoogleApiError } from "../connectors/google/client.js";
+import { recordSalesOutcome } from "../sales/after.js";
 
 export type GhRunner = (args: string[]) => Promise<string>;
 export interface HttpResponse { ok: boolean; status: number; text(): Promise<string> }
@@ -282,6 +283,9 @@ const EMAIL = /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/;
 export const addressesOf = (v: unknown): string[] => (Array.isArray(v) ? v : typeof v === "string" ? v.split(/[,;]/) : []).map((x) => String(x).trim()).filter(Boolean);
 export const validAddresses = (xs: string[]): boolean => xs.length > 0 && xs.length <= 5 && xs.every((x) => EMAIL.test(x) && x.length <= 254);
 
+// The sample connections of a demo business reach nobody, so an approved email or invite really runs through them even when real actions are off.
+const sampleOnly = (deps: ExecutorDeps): boolean => (deps.connections as { simulated?: boolean } | undefined)?.simulated === true;
+
 async function portFor(deps: ExecutorDeps): Promise<ConnectionsPort> {
   return deps.connections ?? (await import("../connections/production.js")).productionConnections().port(deps.tenant);
 }
@@ -308,7 +312,7 @@ async function calendarEvent(input: ExecInput, deps: ExecutorDeps): Promise<Outc
     return { status: "failed", produced: [], result: "Nothing was added: the card has no valid start and end time." };
   }
   if (attendees.length && !validAddresses(attendees)) return { status: "failed", produced: [], result: "Nothing was added: a guest's email address isn't valid." };
-  if (deps.dryRun) {
+  if (deps.dryRun && !sampleOnly(deps)) {
     return { status: "dry_run", produced: [], result: `Dry run: would add "${clip(p.title, 120)}" on ${start}${attendees.length ? ` and invite ${attendees.join(", ")}` : ""}. Nothing was added; ALLEVIA_ACTIONS_LIVE=1 adds it.` };
   }
   try {
@@ -333,7 +337,7 @@ async function emailSend(input: ExecInput, deps: ExecutorDeps): Promise<Outcome>
   if (p.send === false) {
     return { status: "done", produced: [], result: "Approved. This wording is saved as ready; nothing was sent. Ask your team to send it when you want it to go." };
   }
-  if (deps.dryRun) {
+  if (deps.dryRun && !sampleOnly(deps)) {
     return { status: "dry_run", produced: [], result: `Dry run: would send "${clip(subject, 120)}" to ${to.join(", ")}. Nothing was sent; ALLEVIA_ACTIONS_LIVE=1 sends it.` };
   }
   try {
@@ -399,6 +403,15 @@ export async function executeApproval(g: GraphHandle, input: ExecInput, deps: Ex
     }
   } catch (e) {
     out = { status: "failed", result: clip(oneLine(e instanceof Error ? e.message : String(e)), 500), produced: [] };
+  }
+  // An email that went out or a meeting that was booked is written into the Sales records (a dry run sent nothing, so writes nothing).
+  if (out.status === "done" && (input.kind === "email_send" || input.kind === "calendar_event")) {
+    try {
+      const sales = await recordSalesOutcome(g, { approvalId: input.approvalId, kind: input.kind, payload: input.payload, ...(input.agent ? { agent: input.agent } : {}), now: input.now, tenant: deps.tenant }, out.url);
+      out = { ...out, produced: [...out.produced, ...sales.produced] };
+    } catch (e) {
+      out = { ...out, result: `${out.result} (It was done, but the sales records could not be updated: ${clip(oneLine(e instanceof Error ? e.message : String(e)), 160)}.)` };
+    }
   }
   await upsertNode(g, {
     type: "Action", id, name: clip(`${input.kind}: ${input.payload.title}`, 160),

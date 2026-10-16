@@ -20,6 +20,7 @@
 // text when the agent decides the request matches. Skills are data for the agent that loads them, never citations: nothing
 // in a skill is evidence (the tool returns it as `guidance`, which the citation and number checks never see).
 import { parse as parseYaml } from "yaml";
+import { toolMeta } from "../../../shared/toolkits.js";
 import { ownerJargon } from "../style.js";
 
 export type SkillSource = "code" | "business";
@@ -183,8 +184,10 @@ export function lintSkill(s: Skill, env: LintEnv, folder: string): string[] {
   if (s.output === "creates" && !s.makes) fail('output "creates" needs makes: what it creates, in plain words');
   if (s.output === "reads" && s.makes) fail('output "reads" must not have makes');
   if (s.output === "creates" && !s.needsOk) fail("a skill that creates something must have needs_ok: true (nothing the team makes goes out without the owner's OK)");
-  if (s.needsOk && !s.tools.includes("propose_action")) fail("needs_ok: true means the owner approves what it makes, so tools must include propose_action");
-  if (!s.needsOk && s.tools.includes("propose_action")) fail("it lists propose_action but says needs_ok: false");
+  // what proposes for the owner's OK: propose_action itself, or a tool tagged as waiting for the OK (gmail_send, calendar_book ...)
+  const proposes = s.tools.filter((t) => t === "propose_action" || toolMeta(t)?.needsOk === true);
+  if (s.needsOk && !proposes.length) fail("needs_ok: true means the owner approves what it makes, so tools must include propose_action (or a tool that waits for the OK, like gmail_send)");
+  if (!s.needsOk && proposes.length) fail(`it lists ${proposes.join(", ")} but says needs_ok: false`);
 
   const { method, style, done, mistakes } = s.sections;
   if (numbered(method) < 3) fail(`the Method needs at least 3 numbered steps (it has ${numbered(method)})`);

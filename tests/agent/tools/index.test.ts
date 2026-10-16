@@ -16,6 +16,8 @@ const SPEC_TOOLS = [
   // the business's connected tools
   "calendar_free_slots", "calendar_book", "gmail_draft", "gmail_send", "gmail_inbox", "ga4_report", "gsc_report", "ads_report",
   "connections_available", "connection_tools", "connection_read", "connection_act",
+  // the Sales desk: enquiries waiting, the pipeline, leads and deals in the records
+  "enquiries_read", "crm_read", "crm_write",
 ];
 
 // The first {...} after "Example:" in a description.
@@ -72,7 +74,7 @@ describe("tool registry", () => {
 
   it("only remember, propose_action, the tools that make things, the public-data lookups, keyword ideas and the proposals through connections (a booking, an email, a change) write", () => {
     expect(ALL_TOOLS.filter((t) => t.writes).map((t) => t.name).sort()).toEqual([
-      "ad_library", "calendar_book", "competitor_watch", "connection_act", "generate_image", "gmail_draft", "gmail_send", "google_listing", "instagram_public", "keyword_ideas", "make_poster", "make_reel_script_and_clip", "propose_action", "remember", "write_copy",
+      "ad_library", "calendar_book", "competitor_watch", "connection_act", "crm_write", "generate_image", "gmail_draft", "gmail_send", "google_listing", "instagram_public", "keyword_ideas", "make_poster", "make_reel_script_and_clip", "propose_action", "remember", "write_copy",
     ]);
   });
 });

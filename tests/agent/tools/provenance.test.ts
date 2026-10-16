@@ -15,7 +15,7 @@ const CALLS: Array<[string, Record<string, unknown>]> = [
   ["important", {}], ["topics", {}], ["metric_trend", { metric: "followers", subject: "channel:instagram" }], ["metric_trend", { metric: "signups" }],
   ["content_performance", {}], ["seo_report", {}], ["ad_report", {}], ["playbook", { topic: "hooks" }], ["history", { id: "task:fix-ig-token" }],
   ["recall", { ids: ["decision:007-pause-daily-stories"] }], ["cypher", { query: "MATCH (t:Task)<-[r:OWNS]-(o) RETURN t, r, o" }],
-  ["get_brand_asset", {}], ["website_checkup", { all: true }], ["ai_visibility", {}], ["show_path", { ids: ["decision:007-pause-daily-stories", "channel:instagram", "system:ig-connector"] }],
+  ["get_brand_asset", {}], ["crm_read", { view: "pipeline" }], ["website_checkup", { all: true }], ["ai_visibility", {}], ["show_path", { ids: ["decision:007-pause-daily-stories", "channel:instagram", "system:ig-connector"] }],
 ];
 
 describe("provenance (integration)", () => {

@@ -238,6 +238,7 @@ export interface MeetingInput {
   end: number;
   status: MeetingStatus;
   where?: string;
+  link?: string;
   calendarEventId?: string;
   attendeeEmail?: string;
 }
@@ -250,7 +251,7 @@ export async function recordMeeting(g: GraphHandle, m: MeetingInput, s: Src): Pr
   const asOf = asOfOf(s.now);
   await upsertNode(g, {
     type: "Meeting", id, name: clip(m.title, 120),
-    props: { status: m.status, start: m.start, end: m.end, ...(m.where ? { where: m.where } : {}), ...(m.calendarEventId ? { calendarEventId: m.calendarEventId } : {}) },
+    props: { status: m.status, start: m.start, end: m.end, ...(m.where ? { where: m.where } : {}), ...(m.link ? { link: m.link } : {}), ...(m.calendarEventId ? { calendarEventId: m.calendarEventId } : {}) },
     src: s.src, asOf,
   }, s.now);
   await link(g, id, "MEETING_FOR", m.dealId ?? m.leadId, s);
