@@ -81,6 +81,11 @@ describe("the production writer", () => {
     expect(vision.calls[0]!.system).toContain(skill!.name);
   });
 
+  it("keeps Hindi hashtags whole (vowel signs are part of the word)", async () => {
+    const text = standupTextDrafter(h.g, TENANT.businessId, new FakeVision({ "content-strategist": { text: "दशहरा की शुभकामनाएं।", hashtags: ["नौकरी", "#दशहरा"] } }));
+    expect((await text({ agent: "content-strategist", kind: "post", brief: "Purpose: x.", facts: [], question: "x" })).hashtags).toEqual(["#नौकरी", "#दशहरा"]);
+  });
+
   it("says plainly when the writer cannot run", async () => {
     const text = standupTextDrafter(h.g, TENANT.businessId, new FakeVision({}));
     expect(await text({ agent: "content-strategist", kind: "post", brief: "Purpose: x.", facts: [], question: "x" })).toMatchObject({ ok: false, why: "the writer could not run just now" });

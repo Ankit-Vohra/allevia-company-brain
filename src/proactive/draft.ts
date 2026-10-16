@@ -190,13 +190,13 @@ async function writeCard(g: GraphHandle, p: Picked, kind: Exclude<OpportunityKin
   const page = p.facts.find((f) => f.startsWith("Address: "))?.slice(9);
   let payload: Record<string, string | string[] | boolean> = {
     title: p.title, body: bodyOf(kind, t, p),
-    target: kind === "website_fix" ? page ?? "Your website" : TARGET[kind],
-    ...(kind === "website_fix" ? {} : { format: kind === "post" ? "post" : kind === "reply" ? "reply" : kind === "follow_up" ? "message" : "offer", channelId: kind === "post" ? "channel:instagram" : "" }),
+    target: kind === "website_fix" ? page ?? "Your website" : kind === "post" && p.channel ? `${p.channel.name} post` : TARGET[kind],
+    ...(kind === "website_fix" ? {} : { format: kind === "post" ? "post" : kind === "reply" ? "reply" : kind === "follow_up" ? "message" : "offer", channelId: kind === "post" ? p.channel?.id ?? "channel:instagram" : "" }),
     standup: true,
   };
   if (actionKind === "content_draft") {
     const applied = await applyLearnedRules(g, { title: String(payload.title), body: String(payload.body) }, {
-      agentId: agentNodeId(p.agent), ...(kind === "post" ? { channelId: "channel:instagram" } : {}), businessId: ctx.businessId,
+      agentId: agentNodeId(p.agent), ...(kind === "post" ? { channelId: p.channel?.id ?? "channel:instagram" } : {}), businessId: ctx.businessId,
     });
     payload = { ...payload, title: applied.title, body: applied.body, ...(applied.applied.length ? { rulesApplied: applied.applied.map((r) => r.id) } : {}) };
   }

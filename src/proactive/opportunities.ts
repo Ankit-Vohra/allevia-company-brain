@@ -34,6 +34,7 @@ export interface Opportunity {
   goals: string[];             // goal ids it moves
   score: number;               // 0..1
   occasion?: { name: string; date: string; approx?: boolean };
+  channel?: { id: string; name: string };   // where a post goes, when it is not Instagram
 }
 
 const AGENT: Record<OpportunityKind, string> = {
@@ -54,6 +55,13 @@ const mk = (o: Omit<Opportunity, "agent" | "skill" | "goals"> & { goals?: string
 
 // Checks whose fix is a piece of writing (the team can draft the words, not just say what is wrong).
 const WORDY = /title|description|meta|h1|heading|alt|open-graph|og-|thin|content|cta/i;
+
+// The channel a posting-gap idea is about ("No Facebook post in 10 days" -> Facebook, channel:facebook).
+function channelOf(f: { detector: string | null; key: string; title: string }): { id: string; name: string } | undefined {
+  const name = /^No (.+?) post in /i.exec(f.title)?.[1];
+  const id = /^content\.posting_gap:(channel:[^:]+)$/.exec(f.key)?.[1];
+  return f.detector === "content.posting_gap" && name && id ? { id, name } : undefined;
+}
 
 // "No Facebook post in 10 days" -> "A Facebook post"; a post that did well -> "A post in the style of what worked best".
 function findingPostTitle(f: { detector: string | null; title: string }): string {
@@ -175,6 +183,7 @@ export function opportunitiesFrom(s: Signals): Opportunity[] {
       reason: clip(oneLine(f.why || f.title).split(/(?<=\.)\s/)[0] ?? f.title, 200),
       brief: `Purpose: act on what we noticed: ${clip(oneLine(f.why || f.title), 300)} Draft the actual ${kind === "post" ? "post" : kind === "follow_up" ? "message" : kind === "offer" ? "offer wording" : "text"}, ready to use.`,
       facts: [clip(oneLine(f.why), 400)].filter(Boolean), evidence: [f.id, ...f.evidence.slice(0, 5)], score: Math.min(0.75, f.score * 0.85),
+      ...(channelOf(f) ? { channel: channelOf(f)! } : {}),
     }));
   }
 

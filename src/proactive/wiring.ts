@@ -71,7 +71,7 @@ export function standupTextDrafter(g: GraphHandle, businessId: string, vision: V
     const cleaned = cleanVoice(text);
     const bad = groundClaims([{ role: job.kind, text: cleaned.text }], { request: `${job.question}\n${job.brief}\n${job.facts.join("\n")}`, facts });
     const hashtags = (Array.isArray(raw?.hashtags) ? raw!.hashtags : []).filter((h): h is string => typeof h === "string")
-      .map((h) => `#${h.replace(/^#+/, "").replace(/[^\p{L}\p{N}_]/gu, "")}`).filter((h) => h.length > 2).slice(0, 4);
+      .map((h) => `#${h.replace(/^#+/, "").replace(/[^\p{L}\p{M}\p{N}_]/gu, "")}`).filter((h) => h.length > 2).slice(0, 4);
     return { ok: true, text: cleaned.text, hashtags: job.kind === "post" ? hashtags : [], warnings: bad.slice(0, 3).map((b) => `"${b.claim}" is not in our record`) };
   };
 }

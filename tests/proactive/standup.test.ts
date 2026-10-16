@@ -163,6 +163,8 @@ describe("no spam", () => {
     const finding = { id: "recommendation:x", key: "ads.ctr_drop:c", title: "Ad CTR fell", why: "CTR fell.", area: "ads", by: "growth-marketer", score: 0.9, detector: "ads.ctr_drop", cardId: null, cardKind: null, evidence: [] };
     expect(opportunitiesFrom({ ...base, findings: [{ ...finding, simulated: true }] })).toEqual([]);
     expect(opportunitiesFrom({ ...base, findings: [{ ...finding, simulated: null }] })).toHaveLength(1);
+    const gap = { ...finding, simulated: null, area: "content", detector: "content.posting_gap", key: "content.posting_gap:channel:facebook", title: "No Facebook post in 10 days" };
+    expect(opportunitiesFrom({ ...base, findings: [gap] })[0]).toMatchObject({ kind: "post", title: "A Facebook post (none in a while)", channel: { id: "channel:facebook", name: "Facebook" } });
   });
 
   it("stays quiet below the bar", () => {

@@ -107,7 +107,7 @@ export function factsCaption(ctx: StudioContext, a: PhotoAssessment): string {
 
 const tags = (v: unknown): string[] => (Array.isArray(v) ? v : [])
   .filter((h): h is string => typeof h === "string")
-  .map((h) => `#${h.replace(/^#+/, "").replace(/[^\p{L}\p{N}_]/gu, "")}`).filter((h) => h.length > 2).slice(0, 4);
+  .map((h) => `#${h.replace(/^#+/, "").replace(/[^\p{L}\p{M}\p{N}_]/gu, "")}`).filter((h) => h.length > 2).slice(0, 4);
 
 export async function writeCaption(
   ctx: StudioContext, a: PhotoAssessment, note: string, photo: Buffer | null, deps: { vision: VisionRunner | null; model: string },
