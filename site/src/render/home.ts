@@ -272,7 +272,7 @@ export function okPair(): string {
         <span class="dc__av" aria-hidden="true">a</span>
         <div class="dc__body">
           <p class="dc__who">Allevia <span class="dc__bot">APP</span></p>
-          <p><b>Draft email to Meghna</b> · an email from your address</p>
+          <p><b>Draft email to Meghna</b></p>
           <p class="dc__q">Could we talk for 30 minutes? Free (IST): Mon 19 Oct 11:00, Tue 20 Oct 09:30, Wed 21 Oct 11:30.</p>
           <p class="dc__btns"><span class="dc__b dc__b--ok">Approve</span><span class="dc__b">Change</span><span class="dc__b dc__b--no">No thanks</span></p>
         </div>

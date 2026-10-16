@@ -760,19 +760,19 @@
      "t": "Meera splits the question.",
      "size": 16,
      "worst": 14.95,
-     "mean": 13.49
+     "mean": 13.51
     },
     {
      "t": "Four colleagues read the brain.",
      "size": 16,
      "worst": 5.71,
-     "mean": 5.28
+     "mean": 5.29
     },
     {
      "t": "The answer comes back with its path.",
      "size": 16,
      "worst": 5.71,
-     "mean": 5.2
+     "mean": 5.22
     }
    ]
   },
@@ -830,19 +830,19 @@
      "t": "Meera splits the question.",
      "size": 16,
      "worst": 5.71,
-     "mean": 5.34
+     "mean": 5.35
     },
     {
      "t": "Four colleagues read the brain.",
      "size": 16,
      "worst": 14.95,
-     "mean": 13.31
+     "mean": 13.34
     },
     {
      "t": "The answer comes back with its path.",
      "size": 16,
      "worst": 5.71,
-     "mean": 5.2
+     "mean": 5.22
     }
    ]
   },
