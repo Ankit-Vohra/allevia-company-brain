@@ -7,6 +7,7 @@
 //
 //   npx tsx scripts/maint/db-compat.ts --url env:ALLEVIA_FALKORDB_CLOUD_URL --graph allevia_demo_seed [--writes] [--json out.json]
 //
+// The timeout checks run only on a graph of at most 400 nodes, and the write one only with --writes (see HEAVY).
 // Reads only, unless --writes: then it also writes into that graph (schema, a node, an edge, an observation, a closed
 // edge, remember, propose_action), so --writes is refused for anything but allevia_demo_seed or an allevia_test_* graph.
 // Re-import the demo afterwards (db:import … --replace) to put the copy back as it was. Projections the algorithms build
@@ -191,9 +192,13 @@ if (writes) {
 }
 
 // ---------- timeouts ----------
-// About 0.6 s on 6.0.2 locally with the demo graph (6 M paths; about 20x that on the free cloud tier): long enough to see a cut-off, short enough if there is none.
+// About 0.6 s on 6.0.2 locally with the demo graph (6 M paths; about 12x that on the free cloud tier): long enough to see
+// a cut-off, short enough if there is none. ONLY on a graph that small: the paths grow about 25x a hop with the graph, and
+// on the 3,800-node aamdani graph the same write (which nothing can cut off on 4.22, and FalkorDB cannot kill) is hours.
 const HEAVY = "MATCH (a:Entity)-[*1..4]-(b:Entity) RETURN count(*) AS c";
-await check("timeout", "per-query TIMEOUT on a heavy read (300 ms)", async () => {
+const small = ((await g.roQuery<{ c: number }>("MATCH (n) RETURN count(n) AS c"))[0]?.c ?? 0) <= 400;
+if (!small) rows.push({ area: "timeout", what: "timeout checks", status: "note", detail: "skipped: the graph is too big for the heavy query to be safe" });
+if (small) await check("timeout", "per-query TIMEOUT on a heavy read (300 ms)", async () => {
   const t0 = performance.now();
   try {
     const r = await g.roQuery<{ c: number }>(HEAVY, {}, { timeoutMs: 300 });
@@ -204,7 +209,7 @@ await check("timeout", "per-query TIMEOUT on a heavy read (300 ms)", async () =>
     throw e;
   }
 });
-await check("timeout", "TIMEOUT on a write (300 ms; 6.0.2 ignores it)", async () => {
+if (small && writes) await check("timeout", "TIMEOUT on a write (300 ms; 6.0.2 ignores it)", async () => {
   const t0 = performance.now();
   try {
     await g.query("MATCH (a:Entity)-[*1..4]-(b:Entity) WITH count(*) AS c WHERE c < 0 CREATE (:Entity:Task {id:'never-created'})", {}, { timeoutMs: 300 });
