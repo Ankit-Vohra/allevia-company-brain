@@ -478,8 +478,9 @@ export function arrayArgKey(shape: Record<string, unknown>): string | undefined 
 // and then looked something up, then stopped); failing that, the run's final text is sent once.
 const MIN_ANSWER_CHARS = 80;
 const NOTE_STATUS_CHARS = 160;
-// "I've written the answer above", "Everything is in the answer above", "nothing to add": a line that sends the owner elsewhere.
-const POINTS_BACK = /\b(?:answer|above|already|nothing (?:more )?to add|as (?:written|said))\b/i;
+// "I've written the answer above", "Everything is in the answer above", "nothing to add", "... not linked in the records, so there is no
+// path to show" (the show_path note asks the Chief to say so, and some runs say only that): a line that sends the owner elsewhere.
+const POINTS_BACK = /\b(?:answer|above|already|nothing (?:more )?to add|as (?:written|said)|no path|not linked in the records)\b/i;
 
 export class AnswerStream {
   private kept = "";            // answer text before a write tool call: settled
@@ -533,8 +534,8 @@ export class AnswerStream {
     // Found in the efficiency benchmark (17 Oct, "What breaks if the Instagram token expires?" on a real business): the Chief
     // wrote the answer, looked something else up (so the answer became a note), and then wrote only "I've written the answer
     // above ...". A short line that points back at an answer is not the answer: the last note long enough to be one is.
-    if (streamed && streamed.length < MIN_ANSWER_CHARS && POINTS_BACK.test(streamed)) {
-      const earlier = [...this.notes].reverse().find((n) => n.length >= MIN_ANSWER_CHARS);
+    if (streamed && streamed.length < MIN_ANSWER_CHARS * 2 && POINTS_BACK.test(streamed)) {
+      const earlier = [...this.notes].reverse().find((n) => n.length >= MIN_ANSWER_CHARS && n.length > streamed.length);
       if (earlier) {
         this.out({ type: "text", agent: this.who, delta: earlier, reset: true });
         return earlier;
