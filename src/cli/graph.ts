@@ -6,6 +6,12 @@ import { listGraphs, openGraph, graphName } from "../graph/client.js";
 import { businessId } from "../graph/tenants.js";
 import { findBusinessId } from "../actions/shared.js";
 import { formatQuality, graphQuality } from "../ingest/quality.js";
+import { tidyGraph } from "../ingest/tidy.js";
+import { embedPassages } from "../ingest/embed.js";
+import { AgentSdkRunner } from "../ingest/llm.js";
+import { makeAsk } from "../ingest/sources/website/ask.js";
+import { loadConfig } from "../config.js";
+import { tenantCacheDir } from "../util/cache.js";
 import type { Command } from "./_command.js";
 
 async function ownerOf(tenant: string): Promise<{ g: Awaited<ReturnType<typeof openGraph>>; id: string } | string> {
@@ -30,6 +36,30 @@ export const commands: Command[] = [
       const r = await graphQuality(o.g, o.id);
       console.log(args.includes("--json") ? JSON.stringify(r, null, 1) : formatQuality(r));
       return 0;
+    },
+  },
+  {
+    name: "graph:tidy",
+    usage: "graph:tidy <tenant> [--dry-run] [--no-model]",
+    summary: "Merge near-duplicates, retype other businesses, retire first names (undo one with db:unmerge)",
+    async run(args) {
+      const tenant = args.find((a) => !a.startsWith("--"));
+      if (!tenant) { console.error("Usage: npm run cli -- graph:tidy <tenant> [--dry-run] [--no-model]"); return 2; }
+      const o = await ownerOf(tenant);
+      if (typeof o === "string") { console.error(o); return 1; }
+      const [biz] = await o.g.roQuery<{ name: string | null; domain: string | null }>("MATCH (b:Entity {id:$id}) RETURN b.name AS name, b.domain AS domain", { id: o.id });
+      const cfg = loadConfig();
+      const ask = args.includes("--no-model") ? undefined
+        : makeAsk(new AgentSdkRunner({ concurrency: 1 }), { model: cfg.extractModel, cacheDir: tenantCacheDir(cfg.dataDir, "onboard", tenant) });
+      const r = await tidyGraph(o.g, {
+        owner: { id: o.id, name: biz?.name ?? tenant, ...(biz?.domain ? { domain: biz.domain } : {}) },
+        ...(ask ? { ask } : {}), embed: embedPassages, dryRun: args.includes("--dry-run"), log: (l) => console.error(l),
+      });
+      console.log(`${args.includes("--dry-run") ? "Would do" : "Done"}:`);
+      for (const x of r.examples) console.log(`  - ${x}`);
+      if (r.unclear.length) console.log(`  Left as they are (unclear): ${r.unclear.join(", ")}`);
+      if (r.skipped.length) for (const s of r.skipped) console.log(`  Left alone: ${s.ids.join(", ")} (${s.why})`);
+      return r.errors.length ? 1 : 0;
     },
   },
 ];

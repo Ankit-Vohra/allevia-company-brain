@@ -23,7 +23,7 @@
 // The edge is derivedBy 'librarian' (basis 'credential') and closed when it is no longer derived.
 import type { GraphHandle } from "../graph/client.js";
 import { MAX_PAGE } from "../graph/client.js";
-import { EDGE_META_PROPS, typeOfLabels, type EntityType, type RelType } from "../graph/schema.js";
+import { EDGE_META_PROPS, isAllowed, typeOfLabels, type EntityType, type RelType } from "../graph/schema.js";
 import { closeEdge, upsertEdge, type Prim } from "../graph/upsert.js";
 import { noteGraphWrite } from "../graph/projection.js";
 import { namesAgree, normName } from "./resolve-names.js";
@@ -50,7 +50,8 @@ export interface MergeNode {
   notSameAs?: string[];    // ids the owner said it is not (unmerge)
 }
 
-export interface MergeGroup { type: EntityType; canonical: string; members: Array<{ id: string; key: string }> }
+// `basis` says why, when it is not a shared name (onboarding's tidy pass: "same channel", "model: same thing").
+export interface MergeGroup { type: EntityType; canonical: string; members: Array<{ id: string; key: string; basis?: string }> }
 export interface CredentialLink { connector: string; credential: string; key: string }
 export interface MergePlan { groups: MergeGroup[]; links: CredentialLink[]; skipped: Array<{ ids: string[]; why: string }> }
 
@@ -203,6 +204,7 @@ export interface MergeReport {
   groups: number;
   merged: number;           // duplicates pointing at a canonical node
   edgesMoved: number;
+  edgesNotMoved?: number;   // closed on the duplicate, not re-asserted: the canonical node's type cannot hold them (a retype)
   credentialLinks: number;
   linksClosed: number;
   skipped: MergePlan["skipped"];
@@ -214,17 +216,22 @@ const prim = (v: unknown): v is Prim =>
   v === null || typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v)) ||
   (Array.isArray(v) && (v.every((x) => typeof x === "string") || v.every((x) => typeof x === "number")));
 
-interface EdgeRow { dir: "out" | "in"; type: RelType; other: string; p: Record<string, unknown> }
+interface EdgeRow { dir: "out" | "in"; type: RelType; other: string; xl: string[]; p: Record<string, unknown> }
 
-// Moves `dup`'s current edges onto `canonical` and closes them on `dup`. Returns how many it moved.
-async function moveEdges(g: GraphHandle, dup: string, canonical: string, group: ReadonlySet<string>, now: number): Promise<number> {
+// Moves `dup`'s current edges onto `canonical` and closes them on `dup`. Returns how many it moved, and how many it
+// closed without moving because the canonical node's type cannot hold them (a Business retyped as a Supplier keeps
+// SOURCED_FROM and MENTIONS, not OWNS): those stay in the duplicate's history and reopen on unmerge.
+async function moveEdges(g: GraphHandle, dup: string, canonical: string, group: ReadonlySet<string>, now: number): Promise<{ moved: number; notMoved: number }> {
   const rows = await g.roQuery<EdgeRow>(
     `MATCH (d:Entity {id:$dup})-[r]->(x:Entity) WHERE r.until IS NULL AND NOT type(r) IN $history AND NOT (type(r) = 'KNOWS_ABOUT' AND r.derivedBy = 'librarian')
-     RETURN 'out' AS dir, type(r) AS type, x.id AS other, properties(r) AS p
+     RETURN 'out' AS dir, type(r) AS type, x.id AS other, labels(x) AS xl, properties(r) AS p
      UNION ALL
      MATCH (x:Entity)-[r]->(d:Entity {id:$dup}) WHERE r.until IS NULL AND NOT type(r) IN $history AND NOT (type(r) = 'KNOWS_ABOUT' AND r.derivedBy = 'librarian')
-     RETURN 'in' AS dir, type(r) AS type, x.id AS other, properties(r) AS p`,
+     RETURN 'in' AS dir, type(r) AS type, x.id AS other, labels(x) AS xl, properties(r) AS p`,
     { dup, history: [...HISTORY_RELS] });
+  const [cl] = await g.roQuery<{ l: string[] }>("MATCH (c:Entity {id:$c}) RETURN labels(c) AS l", { c: canonical });
+  const ctype = typeOfLabels(cl?.l ?? []);
+  let notMoved = 0;
   // What the canonical node already states is left as it is (re-asserting it would stamp mergedFrom on its own edge).
   const has = new Set((await g.roQuery<{ k: string }>(
     `MATCH (c:Entity {id:$c})-[r]->(x:Entity) WHERE r.until IS NULL RETURN 'out|' + type(r) + '|' + x.id AS k
@@ -233,7 +240,10 @@ async function moveEdges(g: GraphHandle, dup: string, canonical: string, group: 
   let moved = 0;
   for (const r of rows.sort((a, b) => `${a.dir}${a.type}${a.other}`.localeCompare(`${b.dir}${b.type}${b.other}`))) {
     const [from, to] = r.dir === "out" ? [dup, r.other] : [r.other, dup];
-    if (!group.has(r.other) && !has.has(`${r.dir}|${r.type}|${r.other}`)) {
+    const xtype = typeOfLabels(r.xl);
+    const fits = !!ctype && !!xtype && (r.dir === "out" ? isAllowed(ctype, r.type, xtype) : isAllowed(xtype, r.type, ctype));
+    if (!fits && !group.has(r.other)) notMoved++;
+    if (fits && !group.has(r.other) && !has.has(`${r.dir}|${r.type}|${r.other}`)) {
       const props: Record<string, Prim> = {};
       for (const [k, v] of Object.entries(r.p)) if (!EDGE_META.has(k) && prim(v)) props[k] = v;
       props.mergedFrom = dup;
@@ -248,11 +258,12 @@ async function moveEdges(g: GraphHandle, dup: string, canonical: string, group: 
     }
     await closeEdge(g, from, r.type, to, now, MERGED_REASON(canonical));
   }
-  return moved;
+  return { moved, notMoved };
 }
 
-export async function applyMergePlan(g: GraphHandle, plan: MergePlan, now: number = Date.now()): Promise<MergeReport> {
-  const report: MergeReport = { groups: plan.groups.length, merged: 0, edgesMoved: 0, credentialLinks: 0, linksClosed: 0, skipped: plan.skipped, errors: [] };
+// `by` is who derived the merges (the SAME_AS edge's derivedBy): the librarian, or onboarding's tidy pass.
+export async function applyMergePlan(g: GraphHandle, plan: MergePlan, now: number = Date.now(), opts: { by?: string; credentials?: boolean } = {}): Promise<MergeReport> {
+  const report: MergeReport = { groups: plan.groups.length, merged: 0, edgesMoved: 0, edgesNotMoved: 0, credentialLinks: 0, linksClosed: 0, skipped: plan.skipped, errors: [] };
   for (const grp of plan.groups) {
     const ids = new Set([grp.canonical, ...grp.members.map((m) => m.id)]);
     for (const m of grp.members) {
@@ -274,10 +285,12 @@ export async function applyMergePlan(g: GraphHandle, plan: MergePlan, now: numbe
         const added = [...new Set([...strs(row.added), ...fresh])];
         await upsertEdge(g, {
           from: m.id, type: "SAME_AS", to: grp.canonical,
-          props: { derivedBy: "librarian", basis: m.key ? `same name: ${m.key}` : "same name", ...(added.length ? { aliasesAdded: added } : {}) },
+          props: { derivedBy: opts.by ?? "librarian", basis: m.basis ?? (m.key ? `same name: ${m.key}` : "same name"), ...(added.length ? { aliasesAdded: added } : {}) },
         }, now);
         await g.query("MATCH (d:Entity {id:$d}) SET d.mergedInto = $c", { d: m.id, c: grp.canonical });
-        report.edgesMoved += await moveEdges(g, m.id, grp.canonical, ids, now);
+        const mv = await moveEdges(g, m.id, grp.canonical, ids, now);
+        report.edgesMoved += mv.moved;
+        report.edgesNotMoved! += mv.notMoved;
         report.merged++;
       } catch (e) {
         report.errors.push(`${m.id} -> ${grp.canonical}: ${e instanceof Error ? e.message : String(e)}`);
@@ -285,7 +298,12 @@ export async function applyMergePlan(g: GraphHandle, plan: MergePlan, now: numbe
     }
   }
 
-  // credential links: write the planned ones, close the ones derived earlier and no longer planned
+  // credential links: write the planned ones, close the ones derived earlier and no longer planned (the librarian's
+  // whole-graph plan only: a partial plan, such as onboarding's tidy pass, passes credentials: false)
+  if (opts.credentials === false) {
+    await noteGraphWrite(g.name);
+    return report;
+  }
   const want = new Set(plan.links.map((l) => `${l.connector}|${l.credential}`));
   for (const l of plan.links) {
     try {
@@ -331,9 +349,12 @@ export async function unmerge(g: GraphHandle, dup: string, now: number = Date.no
   const added = Array.isArray(s.added) ? s.added.filter((x): x is string => typeof x === "string") : [];
   await g.query(
     `MATCH (c:Entity {id:$c}), (d:Entity {id:$d})
-     SET c.aliases = [a IN coalesce(c.aliases, []) WHERE NOT a IN $added], d.mergedInto = null,
+     SET c.aliases = [a IN coalesce(c.aliases, []) WHERE NOT a IN $added], d.mergedInto = null, d.retypedTo = null,
          d.notSameAs = [x IN coalesce(d.notSameAs, []) WHERE x <> $c] + [$c]`,
     { c, d: dup, added });
+  // A retype (src/ingest/tidy.ts) made the canonical node for this duplicate alone: with its edges closed above, it
+  // now points back at the node it came from, so a lookup of its id finds the original.
+  await g.query("MATCH (c:Entity {id:$c}) WHERE c.retypedFrom = $d SET c.mergedInto = $d", { c, d: dup });
   await noteGraphWrite(g.name);
   return c;
 }
