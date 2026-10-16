@@ -97,6 +97,22 @@ describe("scoreTurn", () => {
     expect(by.simulated).toMatchObject({ ok: false });
   });
 
+  it("checks the path drawn under the answer and the cards the turn drafted", () => {
+    const base = turn();
+    const events = [
+      ...base.events,
+      { type: "path" as const, nodes: [{ id: "feature:step", label: "Feature", name: "Step" }, { id: "page:screen/app/auth/sign-up", label: "Page", name: "Screen" }], edges: [] },
+      { type: "proposal" as const, agent: "chief-of-staff", recommendationId: "recommendation:x", approvalId: "approval:x", title: "Fix it", kind: "github_issue" as const },
+    ];
+    const ok = scoreTurn(item({ mustPath: ["feature:*", "page:screen/app/auth/sign-up"], mustPropose: ["github_issue"] }), { ...base, events });
+    expect(ok.expectations.map((e) => [e.kind, e.ok])).toEqual([["path", true], ["path", true], ["propose", true]]);
+    const bad = scoreTurn(item({ mustPath: ["event:release-*"], mustPropose: ["content_draft"] }), { ...base, events });
+    expect(bad.expectations.map((e) => [e.kind, e.ok])).toEqual([["path", false], ["propose", false]]);
+    expect(bad.expectations[0]!.got).toBe("feature:step, page:screen/app/auth/sign-up");
+    expect(bad.expectations[1]!.got).toBe("github_issue");
+    expect(scoreTurn(item({ mustPath: ["feature:*"] }), base).expectations[0]!.got).toBe("no path drawn");
+  });
+
   it("matches answer text without the citation ids, so an id can't satisfy a regex", () => {
     const s = scoreTurn(item({ mustMatch: ["stories_never_reviewed"] }), turn());
     expect(s.expectations[0]!.ok).toBe(false);
