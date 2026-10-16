@@ -3,7 +3,7 @@
 // them; what they lack (canonical, JSON-LD, viewport, mixed content, Open Graph) are local Rules with source
 // "allevia". Each (page, check) becomes Page -FAILS {evidence, severity}-> Rule or Page -PASSES-> Rule, and the site
 // gets a score: the severity-weighted share of checks passed, 0-100.
-import type { EdgeInput, NodeInput } from "../../../graph/upsert.js";
+import type { EdgeInput, NodeInput, ObservationInput } from "../../../graph/upsert.js";
 import { entityId } from "../../../util/ids.js";
 import type { GraphWrite } from "../../types.js";
 import { PACKS, loadAuditIssues, playbookId, ruleId } from "../playbook-data.js";
@@ -185,7 +185,9 @@ export function seoRulesWrite(): GraphWrite {
 
 export const auditDocId = (host: string, day: string) => entityId("Document", `website seo audit ${host} ${day}`);
 
-// FAILS/PASSES edges, the audit Document, and the site score as an Observation on the website channel.
+// FAILS/PASSES edges, the audit Document, and the site score as an Observation on the website channel. Each page's own score is
+// an Observation too (`seo_page_score`, MEASURES the Page, one per day), so a page's score has a history; onboarding also keeps the
+// latest as the Page's `seoScore` property, which is what a card reads without a traversal.
 export function seoWrite(report: SeoReport, ctx: { host: string; asOf: string; day: string; pages: PageData[] }): GraphWrite {
   const doc = auditDocId(ctx.host, ctx.day);
   const fails = report.results.filter((r) => !r.pass).length;
@@ -202,7 +204,14 @@ export function seoWrite(report: SeoReport, ctx: { host: string; asOf: string; d
   edges.push({ from: doc, type: "LINKS_TO_PAGE", to: entityId("Page", ctx.pages[0]?.finalUrl ?? `https://${ctx.host}/`), src: doc, asOf: ctx.asOf });
   return {
     nodes, edges: edges.filter((e) => ctx.pages.length > 0 || e.type !== "LINKS_TO_PAGE"),
-    observations: [{ subject: channelId("website"), metric: "seo_site_score", value: report.score, unit: "/100", asOf: ctx.day, src: doc,
-      evidence: `${report.results.length - fails} of ${report.results.length} checks passed across ${ctx.pages.length} pages` }],
+    observations: [
+      { subject: channelId("website"), metric: "seo_site_score", value: report.score, unit: "/100", asOf: ctx.day, src: doc,
+        evidence: `${report.results.length - fails} of ${report.results.length} checks passed across ${ctx.pages.length} pages` },
+      ...ctx.pages.map((p): ObservationInput => {
+        const checks = report.results.filter((r) => r.page === p.finalUrl);
+        return { subject: pageIds.get(p.finalUrl)!, metric: "seo_page_score", value: report.pageScores[p.finalUrl] ?? 100, unit: "/100", asOf: ctx.day, src: doc,
+          evidence: `${checks.filter((r) => r.pass).length} of ${checks.length} checks passed on this page` };
+      }),
+    ],
   };
 }
