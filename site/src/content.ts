@@ -17,7 +17,7 @@ export const FAQ: FaqItem[] = [
   },
   {
     q: "Is my data mixed with other businesses'?",
-    a: "No. Each business has its own separate database, and nothing learned from one is used for another. Your connected tools are sealed to your business and you can disconnect them any time.",
+    a: "No. Each business has its own separate database, and nothing learned from one is used for another.",
   },
   {
     q: "What if it does not work for me?",

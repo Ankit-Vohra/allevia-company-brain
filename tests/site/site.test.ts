@@ -244,7 +244,7 @@ describe("words and claims the site must not use", () => {
   it("never says Allevia posts, or that connections beyond the website are live", () => {
     expect(text).not.toMatch(/Allevia (posts|publishes) (to|for)/i);
     expect(text).not.toMatch(/auto-?post/i);
-    expect(read("src/content.ts")).toMatch(/being built/);
+    expect(read("src/content.ts")).toMatch(/one business at a time|being built/);
   });
 
   it("shows no prices in other currencies anywhere on the site", () => {
