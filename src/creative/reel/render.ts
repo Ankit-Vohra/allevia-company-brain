@@ -40,7 +40,7 @@ export function realReelVideo(bin = process.env.ALLEVIA_FFMPEG || "ffmpeg"): Ree
 }
 
 // What each scene is drawn from, once resolved: a still (bytes) and, optionally, a clip the engine made from it.
-export interface ResolvedScene { still: Buffer; clip?: Buffer; generated: boolean }
+export interface ResolvedScene { still: Buffer; clip?: Buffer; generated: boolean; focus?: { x: number; y: number } } // focus: push in to this point (0..1)
 
 const pick = (b: BrandForCompose, which: "heading" | "body", bold: boolean): LoadedFont => {
   const p = b[which];
@@ -56,13 +56,19 @@ export async function fitVertical(img: Buffer): Promise<Buffer> {
   return sharp(fill).composite([{ input: fg.data, left: Math.round((REEL_W - fg.info.width) / 2), top: Math.round((REEL_H - fg.info.height) / 2) }]).png().toBuffer();
 }
 
+// A photo filling the whole 9:16 frame, cropped around what sharp's attention finder keeps (a reel is full-bleed; a letterbox
+// over a blur reads as a slideshow).
+export async function fillVertical(img: Buffer): Promise<Buffer> {
+  return sharp(img).rotate().resize(REEL_W, REEL_H, { fit: "cover", position: sharp.strategy.attention }).png().toBuffer();
+}
+
 export async function brandCard(b: BrandForCompose): Promise<Buffer> {
   const p = b.palette;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${REEL_W}" height="${REEL_H}"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${p.dark}"/><stop offset="1" stop-color="${p.accent}"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#g)"/></svg>`;
   return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
-interface Overlay { png: Buffer; texts: PosterManifest["texts"] }
+export interface Overlay { png: Buffer; texts: PosterManifest["texts"]; timed?: Array<{ png: Buffer; from: number; to: number }> } // timed: words revealed group by group
 
 // The words of one scene: a block on a soft shade in the lower part of the safe band, and on the first scene the hook in a
 // box near the top (the founder's "boxes" style: readable muted on any picture).
@@ -131,9 +137,14 @@ export async function endCard(b: BrandForCompose, line?: string): Promise<{ png:
   return { png, texts, logo };
 }
 
-// The slow push for one scene (zoompan counts output frames, so the travel spans the whole scene).
-export function zoompan(motion: Motion, seconds: number): string {
+// The slow push for one scene (zoompan counts output frames, so the travel spans the whole scene). With a focus point the
+// camera pushes in on it (a real app screen: towards the part the line is about), eased, to 1.45x.
+export function zoompan(motion: Motion, seconds: number, focus?: { x: number; y: number }): string {
   const frames = Math.max(1, Math.round(seconds * REEL_FPS)), t = 0.08, s = `${REEL_W}x${REEL_H}`;
+  if (focus) {
+    const p = `(1-cos(PI*min(1,on/${frames})))/2`;
+    return `zoompan=z='1+0.45*${p}':x='max(0,min(iw-iw/zoom,${focus.x.toFixed(3)}*iw-iw/zoom/2))':y='max(0,min(ih-ih/zoom,${focus.y.toFixed(3)}*ih-ih/zoom/2))':d=1:s=${s}:fps=${REEL_FPS}`;
+  }
   switch (motion) {
     case "in": return `zoompan=z='1+${t}*on/${frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${s}:fps=${REEL_FPS}`;
     case "out": return `zoompan=z='${1 + t}-${t}*on/${frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${s}:fps=${REEL_FPS}`;
@@ -143,7 +154,7 @@ export function zoompan(motion: Motion, seconds: number): string {
   }
 }
 
-export interface AssembleInput { plan: ReelPlan; scenes: ResolvedScene[]; overlays: Overlay[]; end: Buffer }
+export interface AssembleInput { plan: ReelPlan; scenes: ResolvedScene[]; overlays: Overlay[]; end: Buffer; music?: Buffer }
 
 // One ffmpeg pass: every scene (still with its push, or the engine's clip cut to length) under its words, then the end card.
 export async function assemble(video: ReelVideo, a: AssembleInput): Promise<Buffer> {
@@ -167,12 +178,26 @@ export async function assemble(video: ReelVideo, a: AssembleInput): Promise<Buff
         const still = join(dir, `still-${i}.png`);
         writeFileSync(still, r.still);
         args.push("-loop", "1", "-framerate", String(REEL_FPS), "-t", String(s.seconds), "-i", still);
-        base = `[${input}:v]${zoompan(s.motion ?? "in", s.seconds)},trim=duration=${s.seconds},setpts=PTS-STARTPTS`;
+        base = `[${input}:v]${zoompan(s.motion ?? "in", s.seconds, r.focus)},trim=duration=${s.seconds},setpts=PTS-STARTPTS`;
       }
       input++;
-      args.push("-loop", "1", "-framerate", String(REEL_FPS), "-t", String(s.seconds), "-i", ov);
-      filters.push(`${base}[b${i}]`, `[b${i}][${input}:v]overlay=0:0:shortest=1,format=yuv420p,setsar=1[s${i}]`);
-      input++;
+      const timed = a.overlays[i]!.timed;
+      if (timed?.length) {
+        // the words revealed group by group: each group's picture shown only between its times
+        filters.push(`${base},format=yuva420p[b${i}_0]`);
+        timed.forEach((t, k) => {
+          const f = join(dir, `over-${i}-${k}.png`);
+          writeFileSync(f, t.png);
+          args.push("-loop", "1", "-framerate", String(REEL_FPS), "-t", String(s.seconds), "-i", f);
+          filters.push(`[b${i}_${k}][${input}:v]overlay=0:0:enable='between(t,${t.from.toFixed(2)},${t.to.toFixed(2)})'[b${i}_${k + 1}]`);
+          input++;
+        });
+        filters.push(`[b${i}_${timed.length}]format=yuv420p,setsar=1[s${i}]`);
+      } else {
+        args.push("-loop", "1", "-framerate", String(REEL_FPS), "-t", String(s.seconds), "-i", ov);
+        filters.push(`${base}[b${i}]`, `[b${i}][${input}:v]overlay=0:0:shortest=1,format=yuv420p,setsar=1[s${i}]`);
+        input++;
+      }
       labels.push(`[s${i}]`);
     });
     const end = join(dir, "end.png");
@@ -182,7 +207,18 @@ export async function assemble(video: ReelVideo, a: AssembleInput): Promise<Buff
     labels.push("[e]");
     filters.push(`${labels.join("")}concat=n=${labels.length}:v=1:a=0[out]`);
     const out = join(dir, "reel.mp4");
-    args.push("-filter_complex", filters.join(";"), "-map", "[out]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p", "-r", String(REEL_FPS), "-movflags", "+faststart", out);
+    const total = a.plan.scenes.reduce((n, s) => n + s.seconds, 0) + REEL_LIMITS.endCardSeconds;
+    let audio: string[] = [];
+    if (a.music) {
+      // the music bed: trimmed to the reel, faded in and out, at a social level (-16 LUFS)
+      const m = join(dir, "music.audio");
+      writeFileSync(m, a.music);
+      args.push("-i", m);
+      filters.push(`[${input}:a]atrim=0:${total.toFixed(2)},asetpts=PTS-STARTPTS,afade=t=in:d=0.4,afade=t=out:st=${Math.max(0, total - 1.2).toFixed(2)}:d=1.2,loudnorm=I=-16:TP=-1.5:LRA=11[aout]`);
+      input++;
+      audio = ["-map", "[aout]", "-c:a", "aac", "-b:a", "160k", "-shortest"];
+    }
+    args.push("-filter_complex", filters.join(";"), "-map", "[out]", ...audio, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", String(REEL_FPS), "-movflags", "+faststart", out);
     await video.run(args);
     return readFileSync(out);
   } finally {
@@ -213,7 +249,11 @@ export async function checkReel(video: ReelVideo, mp4: Buffer, a: { plan: ReelPl
     fonts: { heading: "", body: "" },
   });
   for (const [i, s] of a.plan.scenes.entries()) {
-    frames.push({ label: `S${i + 1}`, image: await frameAt(video, mp4, t + s.seconds * 0.6), manifest: base(a.overlays[i]!.texts, "wordmark", true) });
+    // a revealed line is whole by 70% of its scene, and the hook is gone by 2.6 s: look when every word that should be there is
+    const timed = !!a.overlays[i]!.timed?.length;
+    const at = timed ? s.seconds * 0.9 : s.seconds * 0.6;
+    const texts = a.overlays[i]!.texts.filter((x) => !(timed && x.role === "hook" && at > 2.6));
+    frames.push({ label: `S${i + 1}`, image: await frameAt(video, mp4, t + at), manifest: base(texts, "wordmark", true) });
     t += s.seconds;
   }
   frames.push({ label: "END", image: await frameAt(video, mp4, t + REEL_LIMITS.endCardSeconds * 0.5), manifest: base(a.endTexts, a.endLogo, false) });

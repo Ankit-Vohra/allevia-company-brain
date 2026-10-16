@@ -28,7 +28,7 @@ export interface RenderBox {
   contrast?: number;          // measured: text colour against the 10th-percentile pixel behind it (WCAG ratio)
 }
 
-export interface RenderDoc { html: string; width: number; height: number }
+export interface RenderDoc { html: string; width: number; height: number; transparent?: boolean }  // transparent: an overlay (no page background)
 export interface RenderResult { png: Buffer; boxes: RenderBox[]; width: number; height: number }
 
 export interface HtmlRenderer {
@@ -144,7 +144,7 @@ export function chromiumRenderer(o: ChromiumRendererOpts = {}): HtmlRenderer {
           await page.evaluate("document.fonts.ready.then(() => true)");
           await page.evaluate("Promise.all([...document.images].map((i) => i.decode().catch(() => null)))");
           const boxes = (await page.evaluate(MEASURE)) as RenderBox[];
-          const png = await page.screenshot({ type: "png", clip: { x: 0, y: 0, width: doc.width, height: doc.height }, animations: "disabled" });
+          const png = await page.screenshot({ type: "png", clip: { x: 0, y: 0, width: doc.width, height: doc.height }, animations: "disabled", omitBackground: !!doc.transparent });
           await page.addStyleTag({ content: BARE_CSS });
           const bare = await page.screenshot({ type: "png", clip: { x: 0, y: 0, width: doc.width, height: doc.height }, animations: "disabled" });
           for (const box of boxes) if (box.isText) box.contrast = await measuredContrast(bare, box, box.color, { width: doc.width, height: doc.height });

@@ -5,7 +5,8 @@
 // by code, so they are never garbled); the hook words are on screen from the first frame; the frame is 9:16; and the plan is
 // priced and stopped at a card before any credit is spent.
 export type SceneVisual =
-  | { kind: "asset"; assetId: string }          // a picture the owner sent or approved: free
+  | { kind: "asset"; assetId: string }          // a picture the owner sent or approved, or a photo from the brand library: free
+  | { kind: "screen"; assetId: string }         // a real app screen from the brand library, in a phone, the camera pushing in on its focus: free
   | { kind: "generate"; prompt: string }        // a new still from the image engine: priced, quoted first
   | { kind: "card" };                           // a plain card in the brand's colours: free
 
@@ -28,6 +29,7 @@ export interface ReelPlan {
   caption: string;
   endCard: { logo: boolean; line?: string };
   source: "writer" | "skill";   // who wrote it: Tara's writer, or a per-company reel skill
+  music?: string;               // a short instrumental bed to generate (priced, agreed); the reel is silent without it
 }
 
 export const REEL_LIMITS = { minScenes: 2, maxScenes: 6, minSeconds: 1.5, maxSeconds: 6, maxTotal: 30, endCardSeconds: 2, maxOnScreenWords: 12, maxHookWords: 6 } as const;
@@ -50,7 +52,8 @@ export function normaliseReelPlan(raw: unknown, source: ReelPlan["source"]): Ree
     const onScreen = str(s.onScreen, 120);
     if (words(onScreen) > REEL_LIMITS.maxOnScreenWords) throw new ReelPlanRejected(`scene ${i + 1} has too many words on screen (${words(onScreen)}); keep it to ${REEL_LIMITS.maxOnScreenWords}`);
     const v = (s.visual && typeof s.visual === "object" ? s.visual : { kind: "card" }) as Record<string, unknown>;
-    const visual: SceneVisual = v.kind === "asset" && typeof v.assetId === "string" && /^asset:/.test(v.assetId) ? { kind: "asset", assetId: v.assetId }
+    const visual: SceneVisual = v.kind === "asset" && typeof v.assetId === "string" && /^(asset|brand-asset):[\w.-]+$/.test(v.assetId) ? { kind: "asset", assetId: v.assetId }
+      : v.kind === "screen" && typeof v.assetId === "string" && /^brand-asset:[\w.-]+$/.test(v.assetId) ? { kind: "screen", assetId: v.assetId }
       : v.kind === "generate" && typeof v.prompt === "string" && v.prompt.trim() ? { kind: "generate", prompt: str(v.prompt, 500) } : { kind: "card" };
     const motion = (["in", "out", "up", "down", "still"] as const).find((m) => m === s.motion) ?? (["in", "up", "out", "down"] as const)[i % 4];
     const seconds = Math.max(REEL_LIMITS.minSeconds, Math.min(REEL_LIMITS.maxSeconds, Number(s.seconds) || 3));
@@ -67,6 +70,7 @@ export function normaliseReelPlan(raw: unknown, source: ReelPlan["source"]): Ree
   return {
     title: str(o.title, 80) || "Reel", hook, scenes, caption: str(o.caption, 1500),
     endCard: { logo: end.logo !== false, ...(str(end.line, 80) ? { line: str(end.line, 80) } : {}) }, source,
+    ...(str(o.music, 200) ? { music: str(o.music, 200) } : {}),
   };
 }
 

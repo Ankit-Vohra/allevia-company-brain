@@ -8,7 +8,10 @@
 //   - every job is written to a log (model, credits, job id, prompt) for docs/higgsfield-spend.md;
 //   - results are downloaded over https only.
 import { execFile } from "node:child_process";
-import type { CreativeEngine, EngineStatus, GeneratedImage, ImageRequest } from "../../src/creative/ports.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { ClipRequest, CreativeEngine, EngineStatus, GeneratedClip, GeneratedImage, GeneratedMusic, ImageRequest, MusicRequest } from "../../src/creative/ports.js";
 import { EngineUnavailable } from "../../src/creative/ports.js";
 
 interface Cli { code: number | null; stdout: string; stderr: string; missing: boolean }
@@ -63,5 +66,53 @@ export class HiggsfieldTextEngine implements CreativeEngine {
     const res = await fetch(g.result_url, { signal: AbortSignal.timeout(90_000) });
     if (!res.ok) throw new EngineUnavailable("error", "the finished picture couldn't be downloaded");
     return { image: Buffer.from(await res.arrayBuffer()), engine: "higgsfield", model: this.model, prompt: req.prompt, jobId: id, credits: cost, recorded: false };
+  }
+
+  // One quoted, capped job of any model; returns the finished file.
+  private async job(model: string, params: string[], prompt: string, aspect: string): Promise<{ bytes: Buffer; id: string; cost: number }> {
+    const q = await run(["--json", "generate", "cost", model, ...params], 120_000);
+    const cost = Number((json(q.stdout) as { credits?: unknown } | undefined)?.credits);
+    if (q.code !== 0 || !Number.isFinite(cost)) throw new EngineUnavailable("error", `I couldn't get a price for the ${model} job, so I didn't start it`);
+    if (this.spent + cost > this.o.cap) throw new EngineUnavailable("cap", `that would go over this run's limit of ${this.o.cap} credits`);
+    this.spent += cost;
+    const c = await run(["--json", "generate", "create", model, ...params], 180_000);
+    const id = (JSON.stringify(json(c.stdout) ?? c.stdout).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i) ?? [])[0];
+    if (!id) { this.spent -= cost; throw new EngineUnavailable("error", `the ${model} job didn't start (nothing was charged)`); }
+    this.log.push({ at: new Date().toISOString(), model, credits: cost, jobId: id, prompt, aspect });
+    await run(["generate", "wait", id, "--timeout", "8m", "--quiet"], 500_000);
+    const g = json((await run(["--json", "generate", "get", id], 30_000)).stdout) as { status?: string; result_url?: string } | undefined;
+    if (g?.status !== "completed" || !g.result_url?.startsWith("https://")) throw new EngineUnavailable("error", `the ${model} job didn't finish (${g?.status ?? "no answer"})`);
+    const res = await fetch(g.result_url, { signal: AbortSignal.timeout(180_000) });
+    if (!res.ok) throw new EngineUnavailable("error", "the finished file couldn't be downloaded");
+    return { bytes: Buffer.from(await res.arrayBuffer()), id, cost };
+  }
+
+  private clipParams(req: Pick<ClipRequest, "seconds" | "aspect">, prompt: string, image: string): string[] {
+    return ["--prompt", prompt.replace(/^-+/, ""), "--start-image", image, "--aspect_ratio", req.aspect === "9:16" ? "9:16" : "3:4", "--duration", String(Math.max(4, Math.min(8, Math.round(req.seconds)))), "--resolution", "720p", "--generate_audio", "false"];
+  }
+
+  async quoteClip(): Promise<number | null> { return 5; } // seedance_2_0_mini, 5 s at 720p, no sound: quoted again with the real picture before the job
+
+  async animate(req: ClipRequest): Promise<GeneratedClip> {
+    const dir = mkdtempSync(join(tmpdir(), "allevia-clip-"));
+    try {
+      const f = join(dir, "start.jpg");
+      writeFileSync(f, req.image);
+      const r = await this.job("seedance_2_0_mini", this.clipParams(req, req.prompt, f), req.prompt, req.aspect);
+      return { video: r.bytes, engine: "higgsfield", model: "seedance_2_0_mini", jobId: r.id, credits: r.cost, mime: "video/mp4", seconds: req.seconds };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  async quoteMusic(req: MusicRequest): Promise<number | null> {
+    const q = await run(["--json", "generate", "cost", "sonilo_music", "--prompt", req.prompt.replace(/^-+/, ""), "--duration", String(Math.round(req.seconds))], 60_000);
+    const n = Number((json(q.stdout) as { credits?: unknown } | undefined)?.credits);
+    return q.code === 0 && Number.isFinite(n) ? n : null;
+  }
+
+  async music(req: MusicRequest): Promise<GeneratedMusic> {
+    const r = await this.job("sonilo_music", ["--prompt", req.prompt.replace(/^-+/, ""), "--duration", String(Math.round(req.seconds))], req.prompt, "audio");
+    return { audio: r.bytes, model: "sonilo_music", jobId: r.id, credits: r.cost };
   }
 }

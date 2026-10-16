@@ -38,7 +38,7 @@ try {
     tenant: a.tenant, businessId: businessId(a.tenant), agentId: "content-strategist", turnId: `proof-${t0}`, now: t0,
     format: "insta_portrait", occasion: "general", count: 2, artwork: "generate", ...spec,
     content: spec.content!, question: spec.question,
-  } as PosterRequest, { store, vision, engine, maxCreditsPerRequest: cap || 0, spent: { credits: 0 }, fonts: { fetchMissing: false }, log: (l) => { log.push(l); console.log(l); } });
+  } as PosterRequest, { store, vision, engine, maxCreditsPerRequest: cap || 0, spent: { credits: 0 }, fonts: { fetchMissing: true }, log: (l) => { log.push(l); console.log(l); } });
   const files: string[] = [];
   for (const o of r.saved.options) {
     const f = await loadAssetFile(g, store, a.tenant, o.assetId);

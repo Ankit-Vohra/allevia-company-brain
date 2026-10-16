@@ -51,7 +51,13 @@ export interface CreativeEngine {
   generate(req: ImageRequest): Promise<GeneratedImage>;
   quoteClip?(req: Pick<ClipRequest, "seconds" | "aspect">): Promise<number | null>;
   animate?(req: ClipRequest): Promise<GeneratedClip>;
+  // A short instrumental bed for a reel (no voice, no lyrics), priced first like everything else.
+  quoteMusic?(req: MusicRequest): Promise<number | null>;
+  music?(req: MusicRequest): Promise<GeneratedMusic>;
 }
+
+export interface MusicRequest { prompt: string; seconds: number }
+export interface GeneratedMusic { audio: Buffer; model: string; jobId?: string; credits?: number }
 
 export interface CreativeDeps {
   store: AssetStore;
