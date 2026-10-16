@@ -15,6 +15,7 @@
     "resolveJsonModule": true,
     "types": ["vite/client"],
     "paths": { "@shared/*": ["../shared/*"] },
+    "allowImportingTsExtensions": true,
     "noEmit": true
   },
   "include": ["src", "../shared"]

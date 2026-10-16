@@ -5,6 +5,37 @@
  * Colour and type come from the product's own tokens; the site adds only layout and display sizes below. */
 @import "../../../web/src/styles/tokens.css";
 
+/* v4 (2026-10-16): the website's own ground. Warm paper and earth tones around the product, whose screens stay white
+ * so they read as the real app. Newsreader stays the one display face (the product's own), IBM Plex Sans the quiet text
+ * face. The gold is the brand's mark and the app's OK button: a fill with ink on it, never text on paper. */
+:root {
+  --color-paper: #f4eee3;
+  --color-paper-2: #ece4d5;
+  --color-card: #ffffff;
+  --color-rule: #ddd3c2;
+  --color-rule-2: #e8e0d1;
+  --color-muted: #675b4e;
+  --color-ink: #1f1a14;
+  --color-ink-2: #463d33;
+  --color-band: #e2e3cf;
+  --color-band-ink: #1f1a14;
+  --color-band-muted: #4f5236;
+  --color-band-rule: #c8caae;
+  --color-accent: #d1a43a;
+  --color-accent-soft: #f4e7c4;
+  --color-accent-ink: #6f520f;
+  --color-focus: #3f4a2a;
+  --color-sage: #e2e3cf;
+  --color-olive: #4f5433;
+  --color-olive-2: #6e7447;
+  --color-clay: #9a5232;
+  --color-slate: #44585c;
+  --color-sand: #e7dbc6;
+  --shadow-whisper: 0 1px 2px rgb(60 44 24 / 0.06);
+  --shadow-lift: 0 2px 4px rgb(60 44 24 / 0.05), 0 18px 40px -16px rgb(60 44 24 / 0.22);
+  --shadow-frame: 0 1px 0 rgb(255 255 255 / 0.6) inset, 0 2px 6px rgb(60 44 24 / 0.06), 0 24px 60px -24px rgb(60 44 24 / 0.28);
+}
+
 :root {
   --site-max: 75rem;
   --gutter: clamp(1rem, 0.5rem + 2.5vw, 2.5rem);

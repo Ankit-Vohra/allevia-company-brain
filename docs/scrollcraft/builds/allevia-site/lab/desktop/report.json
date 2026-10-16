@@ -1,0 +1,4100 @@
+{
+  "doc": {
+    "height": 19317,
+    "vh": 900,
+    "acts": [
+      "scrub",
+      "flow",
+      "scrub",
+      "flow",
+      "pin",
+      "pan",
+      "flow",
+      "flow",
+      "pin",
+      "flow",
+      "pin"
+    ],
+    "world": null
+  },
+  "report": [
+    {
+      "i": 0,
+      "y": 0,
+      "pct": 0,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "We set it up.You steer. A team of twelve",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "We set it up.You steer. A team of twelve AI st",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 0,
+          "dur": 14,
+          "vis": 0.914
+        },
+        {
+          "painted": false,
+          "t": 0,
+          "dur": 0,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        77,
+        2737,
+        6691,
+        8671,
+        14246,
+        17491
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 1,
+      "y": 97,
+      "pct": 1,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "We set it up.You steer. A team of twelve",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "We set it up.You steer. A team of twelve AI st",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 1.05,
+          "dur": 14,
+          "vis": 1
+        },
+        {
+          "painted": true,
+          "t": 0.05,
+          "dur": 9.82,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        0,
+        2640,
+        6594,
+        8574,
+        14149,
+        17394
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 2,
+      "y": 287,
+      "pct": 2,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "We set it up.You steer. A team of twelve",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "We set it up.You steer. A team of twelve AI st",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 2.81,
+          "dur": 14,
+          "vis": 1
+        },
+        {
+          "painted": true,
+          "t": 0.05,
+          "dur": 9.82,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        0,
+        2450,
+        6404,
+        8384,
+        13959,
+        17204
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 3,
+      "y": 477,
+      "pct": 3,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "We set it up.You steer. A team of twelve",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "We set it up.You steer. A team of twelve AI st",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 4.22,
+          "dur": 14,
+          "vis": 1
+        },
+        {
+          "painted": true,
+          "t": 0.05,
+          "dur": 9.82,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        0,
+        2260,
+        6214,
+        8194,
+        13769,
+        17014
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 4,
+      "y": 667,
+      "pct": 4,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "One question, “What should we post this ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "One question, “What should we post this week?”",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 5.38,
+          "dur": 14,
+          "vis": 1
+        },
+        {
+          "painted": true,
+          "t": 0.05,
+          "dur": 9.82,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        0,
+        2070,
+        6024,
+        8004,
+        13579,
+        16824
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 5,
+      "y": 857,
+      "pct": 5,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "One question, “What should we post this ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "One question, “What should we post this week?”",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 6.36,
+          "dur": 14,
+          "vis": 1
+        },
+        {
+          "painted": true,
+          "t": 0.05,
+          "dur": 9.82,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        0,
+        1880,
+        5834,
+        7814,
+        13389,
+        16634
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 6,
+      "y": 1047,
+      "pct": 6,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "One question, “What should we post this ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "One question, “What should we post this week?”",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 7.29,
+          "dur": 14,
+          "vis": 1
+        },
+        {
+          "painted": true,
+          "t": 0.05,
+          "dur": 9.82,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        0,
+        1690,
+        5644,
+        7624,
+        13199,
+        16444
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 7,
+      "y": 1100,
+      "pct": 6,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 7.55,
+          "dur": 14,
+          "vis": 0.963
+        },
+        {
+          "painted": true,
+          "t": 0.05,
+          "dur": 9.82,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -33,
+        1637,
+        5591,
+        7571,
+        13146,
+        16391
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 8,
+      "y": 1157,
+      "pct": 6,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 7.83,
+          "dur": 14,
+          "vis": 0.9
+        },
+        {
+          "painted": true,
+          "t": 0.05,
+          "dur": 9.82,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -90,
+        1580,
+        5534,
+        7514,
+        13089,
+        16334
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 9,
+      "y": 1292,
+      "pct": 7,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 8.53,
+          "dur": 14,
+          "vis": 0.75
+        },
+        {
+          "painted": true,
+          "t": 0.05,
+          "dur": 9.82,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -225,
+        1445,
+        5399,
+        7379,
+        12954,
+        16199
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 10,
+      "y": 1421,
+      "pct": 8,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 9.29,
+          "dur": 14,
+          "vis": 0.607
+        },
+        {
+          "painted": true,
+          "t": 0.05,
+          "dur": 9.82,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -354,
+        1316,
+        5270,
+        7250,
+        12825,
+        16070
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 11,
+      "y": 1427,
+      "pct": 8,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 9.34,
+          "dur": 14,
+          "vis": 0.6
+        },
+        {
+          "painted": true,
+          "t": 0.05,
+          "dur": 9.82,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -360,
+        1310,
+        5264,
+        7244,
+        12819,
+        16064
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 12,
+      "y": 1742,
+      "pct": 9,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 11.68,
+          "dur": 14,
+          "vis": 0.25
+        },
+        {
+          "painted": true,
+          "t": 0,
+          "dur": 9.82,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "flow",
+      "stages": [
+        -675,
+        995,
+        4949,
+        6929,
+        12504,
+        15749
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 13,
+      "y": 2062,
+      "pct": 11,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Follow one question all the way to your ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "Follow one question all the way to your OK.",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 0.92,
+          "dur": 9.82,
+          "vis": 0.25
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "flow",
+      "stages": [
+        -995,
+        675,
+        4629,
+        6609,
+        12184,
+        15429
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 14,
+      "y": 2377,
+      "pct": 13,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Follow one question all the way to your ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "Follow one question all the way to your OK.",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 1.99,
+          "dur": 9.82,
+          "vis": 0.6
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -1310,
+        360,
+        4314,
+        6294,
+        11869,
+        15114
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 15,
+      "y": 2383,
+      "pct": 13,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Follow one question all the way to your ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "Follow one question all the way to your OK.",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 2.02,
+          "dur": 9.82,
+          "vis": 0.606
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -1316,
+        354,
+        4308,
+        6288,
+        11863,
+        15108
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 16,
+      "y": 2512,
+      "pct": 14,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Follow one question all the way to your ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "Follow one question all the way to your OK.",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 2.4,
+          "dur": 9.82,
+          "vis": 0.75
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -1445,
+        225,
+        4179,
+        6159,
+        11734,
+        14979
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 17,
+      "y": 2647,
+      "pct": 14,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Follow one question all the way to your ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "Follow one question all the way to your OK.",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 2.75,
+          "dur": 9.82,
+          "vis": 0.9
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -1580,
+        90,
+        4044,
+        6024,
+        11599,
+        14844
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 18,
+      "y": 2704,
+      "pct": 15,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Follow one question all the way to your ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "Follow one question all the way to your OK.",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 2.89,
+          "dur": 9.82,
+          "vis": 0.963
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -1637,
+        33,
+        3987,
+        5967,
+        11542,
+        14787
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 19,
+      "y": 2781,
+      "pct": 15,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Follow one question all the way to your ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "Follow one question all the way to your OK.",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 3.07,
+          "dur": 9.82,
+          "vis": 1
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -1714,
+        0,
+        3910,
+        5890,
+        11465,
+        14710
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 20,
+      "y": 3195,
+      "pct": 17,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Follow one question all the way to your ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "You, in your own wordsWhy did we pause d",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "Meera, Chief of StaffSplits the work: th",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "Follow one question all the way to your OK.",
+          "o": 1
+        },
+        {
+          "t": "You, in your own wordsWhy did we pause daily s",
+          "o": 1
+        },
+        {
+          "t": "Meera, Chief of StaffSplits the work: the hist",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 3.91,
+          "dur": 9.82,
+          "vis": 1
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -2128,
+        0,
+        3496,
+        5476,
+        11051,
+        14296
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 21,
+      "y": 3610,
+      "pct": 20,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Follow one question all the way to your ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "You, in your own wordsWhy did we pause d",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "Meera, Chief of StaffSplits the work: th",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "Sara and KabirSara finds the decision an",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "Follow one question all the way to your OK.",
+          "o": 1
+        },
+        {
+          "t": "You, in your own wordsWhy did we pause daily s",
+          "o": 1
+        },
+        {
+          "t": "Meera, Chief of StaffSplits the work: the hist",
+          "o": 1
+        },
+        {
+          "t": "Sara and KabirSara finds the decision and why ",
+          "o": 1
+        },
+        {
+          "t": "Tara, then Dev, Nisha and IshaTara drafts thre",
+          "o": 0.24
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 4.59,
+          "dur": 9.82,
+          "vis": 1
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -2543,
+        0,
+        3081,
+        5061,
+        10636,
+        13881
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 22,
+      "y": 4025,
+      "pct": 22,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Follow one question all the way to your ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "You, in your own wordsWhy did we pause d",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "Meera, Chief of StaffSplits the work: th",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "Sara and KabirSara finds the decision an",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "Tara, then Dev, Nisha and IshaTara draft",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "Follow one question all the way to your OK.",
+          "o": 1
+        },
+        {
+          "t": "You, in your own wordsWhy did we pause daily s",
+          "o": 1
+        },
+        {
+          "t": "Meera, Chief of StaffSplits the work: the hist",
+          "o": 1
+        },
+        {
+          "t": "Sara and KabirSara finds the decision and why ",
+          "o": 1
+        },
+        {
+          "t": "Tara, then Dev, Nisha and IshaTara drafts thre",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 5.21,
+          "dur": 9.82,
+          "vis": 1
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -2958,
+        0,
+        2666,
+        4646,
+        10221,
+        13466
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 23,
+      "y": 4440,
+      "pct": 24,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Follow one question all the way to your ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "You, in your own wordsWhy did we pause d",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "Meera, Chief of StaffSplits the work: th",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "Sara and KabirSara finds the decision an",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "Tara, then Dev, Nisha and IshaTara draft",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "The answerArrives with a source on every",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "Waiting for your OK“Draft 3 reels.” One ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "Follow one question all the way to your OK.",
+          "o": 1
+        },
+        {
+          "t": "You, in your own wordsWhy did we pause daily s",
+          "o": 1
+        },
+        {
+          "t": "Meera, Chief of StaffSplits the work: the hist",
+          "o": 1
+        },
+        {
+          "t": "Sara and KabirSara finds the decision and why ",
+          "o": 1
+        },
+        {
+          "t": "Tara, then Dev, Nisha and IshaTara drafts thre",
+          "o": 1
+        },
+        {
+          "t": "The answerArrives with a source on every claim",
+          "o": 1
+        },
+        {
+          "t": "Waiting for your OK“Draft 3 reels.” One card, ",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 5.88,
+          "dur": 9.82,
+          "vis": 1
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "none"
+      ],
+      "act": "scrub",
+      "stages": [
+        -3373,
+        0,
+        2251,
+        4231,
+        9806,
+        13051
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 24,
+      "y": 4854,
+      "pct": 26,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Follow one question all the way to your ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "You, in your own wordsWhy did we pause d",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "Meera, Chief of StaffSplits the work: th",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "Sara and KabirSara finds the decision an",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "Tara, then Dev, Nisha and IshaTara draft",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "The answerArrives with a source on every",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        },
+        {
+          "t": "Waiting for your OK“Draft 3 reels.” One ",
+          "dir": "dark-on-light",
+          "worst": 15.08,
+          "mean": 15.08
+        }
+      ],
+      "cues": [
+        {
+          "t": "Follow one question all the way to your OK.",
+          "o": 1
+        },
+        {
+          "t": "You, in your own wordsWhy did we pause daily s",
+          "o": 1
+        },
+        {
+          "t": "Meera, Chief of StaffSplits the work: the hist",
+          "o": 1
+        },
+        {
+          "t": "Sara and KabirSara finds the decision and why ",
+          "o": 1
+        },
+        {
+          "t": "Tara, then Dev, Nisha and IshaTara drafts thre",
+          "o": 1
+        },
+        {
+          "t": "The answerArrives with a source on every claim",
+          "o": 1
+        },
+        {
+          "t": "Waiting for your OK“Draft 3 reels.” One card, ",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 6.73,
+          "dur": 9.82,
+          "vis": 1
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 100%)"
+      ],
+      "act": "scrub",
+      "stages": [
+        -3787,
+        0,
+        1837,
+        3817,
+        9392,
+        12637
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 25,
+      "y": 4933,
+      "pct": 27,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 6.91,
+          "dur": 9.82,
+          "vis": 0.96
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 100%)"
+      ],
+      "act": "scrub",
+      "stages": [
+        -3866,
+        -36,
+        1758,
+        3738,
+        9313,
+        12558
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 26,
+      "y": 4987,
+      "pct": 27,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 7.04,
+          "dur": 9.82,
+          "vis": 0.9
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 100%)"
+      ],
+      "act": "scrub",
+      "stages": [
+        -3920,
+        -90,
+        1704,
+        3684,
+        9259,
+        12504
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 27,
+      "y": 5122,
+      "pct": 28,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 7.41,
+          "dur": 9.83,
+          "vis": 0.75
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 100%)"
+      ],
+      "act": "scrub",
+      "stages": [
+        -4055,
+        -225,
+        1569,
+        3549,
+        9124,
+        12369
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 28,
+      "y": 5257,
+      "pct": 29,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 7.83,
+          "dur": 9.87,
+          "vis": 0.6
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 100%)"
+      ],
+      "act": "scrub",
+      "stages": [
+        -4190,
+        -360,
+        1434,
+        3414,
+        8989,
+        12234
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 29,
+      "y": 5278,
+      "pct": 29,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 7.9,
+          "dur": 9.87,
+          "vis": 0.577
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 100%)"
+      ],
+      "act": "scrub",
+      "stages": [
+        -4211,
+        -381,
+        1413,
+        3393,
+        8968,
+        12213
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 30,
+      "y": 5622,
+      "pct": 31,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.11,
+          "dur": 9.87,
+          "vis": 0.195
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 58.93%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -4555,
+        -725,
+        1069,
+        3049,
+        8624,
+        11869
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 31,
+      "y": 5966,
+      "pct": 32,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0.04%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -4899,
+        -1069,
+        725,
+        2705,
+        8280,
+        11525
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 32,
+      "y": 6310,
+      "pct": 34,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -5243,
+        -1413,
+        381,
+        2361,
+        7936,
+        11181
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 33,
+      "y": 6655,
+      "pct": 36,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -5588,
+        -1758,
+        36,
+        2016,
+        7591,
+        10836
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 34,
+      "y": 6712,
+      "pct": 36,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -5645,
+        -1815,
+        0,
+        1959,
+        7534,
+        10779
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 35,
+      "y": 6920,
+      "pct": 38,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -5853,
+        -2023,
+        0,
+        1751,
+        7326,
+        10571
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 36,
+      "y": 7127,
+      "pct": 39,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -6060,
+        -2230,
+        0,
+        1544,
+        7119,
+        10364
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 37,
+      "y": 7334,
+      "pct": 40,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -6267,
+        -2437,
+        0,
+        1337,
+        6912,
+        10157
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 38,
+      "y": 7542,
+      "pct": 41,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -6475,
+        -2645,
+        0,
+        1129,
+        6704,
+        9949
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 39,
+      "y": 7749,
+      "pct": 42,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        0
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -6682,
+        -2852,
+        0,
+        922,
+        6497,
+        9742
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 40,
+      "y": 8717,
+      "pct": 47,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -30
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pan",
+      "stages": [
+        -7650,
+        -3820,
+        -946,
+        0,
+        5529,
+        8774
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 41,
+      "y": 9167,
+      "pct": 50,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -323
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pan",
+      "stages": [
+        -8100,
+        -4270,
+        -1396,
+        0,
+        5079,
+        8324
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 42,
+      "y": 9616,
+      "pct": 52,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -615
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pan",
+      "stages": [
+        -8549,
+        -4719,
+        -1845,
+        0,
+        4630,
+        7875
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 43,
+      "y": 10065,
+      "pct": 55,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -907
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pan",
+      "stages": [
+        -8998,
+        -5168,
+        -2294,
+        0,
+        4181,
+        7426
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 44,
+      "y": 10514,
+      "pct": 57,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1199
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pan",
+      "stages": [
+        -9447,
+        -5617,
+        -2743,
+        0,
+        3732,
+        6977
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 45,
+      "y": 10964,
+      "pct": 60,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1492
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pan",
+      "stages": [
+        -9897,
+        -6067,
+        -3193,
+        0,
+        3282,
+        6527
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 46,
+      "y": 11050,
+      "pct": 60,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pan",
+      "stages": [
+        -9983,
+        -6153,
+        -3279,
+        -39,
+        3196,
+        6441
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 47,
+      "y": 11429,
+      "pct": 62,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pan",
+      "stages": [
+        -10362,
+        -6532,
+        -3658,
+        -418,
+        2817,
+        6062
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 48,
+      "y": 11807,
+      "pct": 64,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -10740,
+        -6910,
+        -4036,
+        -796,
+        2439,
+        5684
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 49,
+      "y": 12126,
+      "pct": 66,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -11059,
+        -7229,
+        -4355,
+        -1115,
+        2120,
+        5365
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 50,
+      "y": 12186,
+      "pct": 66,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -11119,
+        -7289,
+        -4415,
+        -1175,
+        2060,
+        5305
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 51,
+      "y": 12542,
+      "pct": 68,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -11475,
+        -7645,
+        -4771,
+        -1531,
+        1704,
+        4949
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 52,
+      "y": 12565,
+      "pct": 68,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -11498,
+        -7668,
+        -4794,
+        -1554,
+        1681,
+        4926
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 53,
+      "y": 12943,
+      "pct": 70,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -11876,
+        -8046,
+        -5172,
+        -1932,
+        1303,
+        4548
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 54,
+      "y": 12957,
+      "pct": 70,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -11890,
+        -8060,
+        -5186,
+        -1946,
+        1289,
+        4534
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 55,
+      "y": 13372,
+      "pct": 73,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -12305,
+        -8475,
+        -5601,
+        -2361,
+        874,
+        4119
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 56,
+      "y": 13787,
+      "pct": 75,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "And your growth plan moves.",
+          "dir": "dark-on-light",
+          "worst": 13.76,
+          "mean": 13.76
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sampl",
+          "dir": "own-fill",
+          "worst": 17.27,
+          "mean": 17.27
+        }
+      ],
+      "cues": [
+        {
+          "t": "And your growth plan moves.",
+          "o": 1
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sample numb",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -12720,
+        -8890,
+        -6016,
+        -2776,
+        459,
+        3704
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 57,
+      "y": 14203,
+      "pct": 77,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "And your growth plan moves.",
+          "dir": "dark-on-light",
+          "worst": 13.76,
+          "mean": 13.76
+        },
+        {
+          "t": "Three goals, not a dashboard. Each shows",
+          "dir": "dark-on-light",
+          "worst": 8.47,
+          "mean": 8.47
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sampl",
+          "dir": "own-fill",
+          "worst": 17.27,
+          "mean": 17.27
+        }
+      ],
+      "cues": [
+        {
+          "t": "And your growth plan moves.",
+          "o": 1
+        },
+        {
+          "t": "Three goals, not a dashboard. Each shows where",
+          "o": 1
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sample numb",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -13136,
+        -9306,
+        -6432,
+        -3192,
+        43,
+        3288
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 58,
+      "y": 14262,
+      "pct": 77,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "And your growth plan moves.",
+          "dir": "dark-on-light",
+          "worst": 13.76,
+          "mean": 13.76
+        },
+        {
+          "t": "Three goals, not a dashboard. Each shows",
+          "dir": "dark-on-light",
+          "worst": 8.47,
+          "mean": 8.47
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sampl",
+          "dir": "own-fill",
+          "worst": 17.27,
+          "mean": 17.27
+        }
+      ],
+      "cues": [
+        {
+          "t": "And your growth plan moves.",
+          "o": 1
+        },
+        {
+          "t": "Three goals, not a dashboard. Each shows where",
+          "o": 1
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sample numb",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -13195,
+        -9365,
+        -6491,
+        -3251,
+        0,
+        3229
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 59,
+      "y": 14418,
+      "pct": 78,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "And your growth plan moves.",
+          "dir": "dark-on-light",
+          "worst": 13.76,
+          "mean": 13.76
+        },
+        {
+          "t": "Three goals, not a dashboard. Each shows",
+          "dir": "dark-on-light",
+          "worst": 8.47,
+          "mean": 8.47
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sampl",
+          "dir": "own-fill",
+          "worst": 17.27,
+          "mean": 17.27
+        }
+      ],
+      "cues": [
+        {
+          "t": "And your growth plan moves.",
+          "o": 1
+        },
+        {
+          "t": "Three goals, not a dashboard. Each shows where",
+          "o": 1
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sample numb",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -13351,
+        -9521,
+        -6647,
+        -3407,
+        0,
+        3073
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 60,
+      "y": 14573,
+      "pct": 79,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "And your growth plan moves.",
+          "dir": "dark-on-light",
+          "worst": 13.76,
+          "mean": 13.76
+        },
+        {
+          "t": "Three goals, not a dashboard. Each shows",
+          "dir": "dark-on-light",
+          "worst": 8.47,
+          "mean": 8.47
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sampl",
+          "dir": "own-fill",
+          "worst": 17.27,
+          "mean": 17.27
+        }
+      ],
+      "cues": [
+        {
+          "t": "And your growth plan moves.",
+          "o": 1
+        },
+        {
+          "t": "Three goals, not a dashboard. Each shows where",
+          "o": 1
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sample numb",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -13506,
+        -9676,
+        -6802,
+        -3562,
+        0,
+        2918
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 61,
+      "y": 14729,
+      "pct": 80,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "And your growth plan moves.",
+          "dir": "dark-on-light",
+          "worst": 13.76,
+          "mean": 13.76
+        },
+        {
+          "t": "Three goals, not a dashboard. Each shows",
+          "dir": "dark-on-light",
+          "worst": 8.47,
+          "mean": 8.47
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sampl",
+          "dir": "own-fill",
+          "worst": 17.27,
+          "mean": 17.27
+        }
+      ],
+      "cues": [
+        {
+          "t": "And your growth plan moves.",
+          "o": 1
+        },
+        {
+          "t": "Three goals, not a dashboard. Each shows where",
+          "o": 1
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sample numb",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -13662,
+        -9832,
+        -6958,
+        -3718,
+        0,
+        2762
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 62,
+      "y": 14885,
+      "pct": 81,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "And your growth plan moves.",
+          "dir": "dark-on-light",
+          "worst": 13.76,
+          "mean": 13.76
+        },
+        {
+          "t": "Three goals, not a dashboard. Each shows",
+          "dir": "dark-on-light",
+          "worst": 8.47,
+          "mean": 8.47
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sampl",
+          "dir": "own-fill",
+          "worst": 17.27,
+          "mean": 17.27
+        }
+      ],
+      "cues": [
+        {
+          "t": "And your growth plan moves.",
+          "o": 1
+        },
+        {
+          "t": "Three goals, not a dashboard. Each shows where",
+          "o": 1
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sample numb",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -13818,
+        -9988,
+        -7114,
+        -3874,
+        0,
+        2606
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 63,
+      "y": 15040,
+      "pct": 82,
+      "settled": true,
+      "contrast": [],
+      "cues": [
+        {
+          "t": "And your growth plan moves.",
+          "o": 0.74
+        },
+        {
+          "t": "Three goals, not a dashboard. Each shows where",
+          "o": 0.74
+        },
+        {
+          "t": "Your growth plan · Month 1, week 4 sample numb",
+          "o": 0.74
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -13973,
+        -10143,
+        -7269,
+        -4029,
+        0,
+        2451
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 64,
+      "y": 15105,
+      "pct": 82,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -14038,
+        -10208,
+        -7334,
+        -4094,
+        -49,
+        2386
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 65,
+      "y": 15572,
+      "pct": 85,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -14505,
+        -10675,
+        -7801,
+        -4561,
+        -516,
+        1919
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 66,
+      "y": 16040,
+      "pct": 87,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -14973,
+        -11143,
+        -8269,
+        -5029,
+        -984,
+        1451
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 67,
+      "y": 16507,
+      "pct": 90,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -15440,
+        -11610,
+        -8736,
+        -5496,
+        -1451,
+        984
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 68,
+      "y": 16975,
+      "pct": 92,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Start with a free Brain Snapshot. Send u",
+          "dir": "dark-on-light",
+          "worst": 12.61,
+          "mean": 12.61
+        }
+      ],
+      "cues": [
+        {
+          "t": "Start with a free Brain Snapshot. Send us your",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -15908,
+        -12078,
+        -9204,
+        -5964,
+        -1919,
+        516
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 69,
+      "y": 17443,
+      "pct": 95,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Start with a free Brain Snapshot. Send u",
+          "dir": "dark-on-light",
+          "worst": 12.61,
+          "mean": 12.61
+        }
+      ],
+      "cues": [
+        {
+          "t": "Start with a free Brain Snapshot. Send us your",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -16376,
+        -12546,
+        -9672,
+        -6432,
+        -2387,
+        48
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 70,
+      "y": 17497,
+      "pct": 95,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Start with a free Brain Snapshot. Send u",
+          "dir": "dark-on-light",
+          "worst": 12.61,
+          "mean": 12.61
+        }
+      ],
+      "cues": [
+        {
+          "t": "Start with a free Brain Snapshot. Send us your",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -16430,
+        -12600,
+        -9726,
+        -6486,
+        -2441,
+        0
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 71,
+      "y": 17549,
+      "pct": 95,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Start with a free Brain Snapshot. Send u",
+          "dir": "dark-on-light",
+          "worst": 12.61,
+          "mean": 12.61
+        }
+      ],
+      "cues": [
+        {
+          "t": "Start with a free Brain Snapshot. Send us your",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -16482,
+        -12652,
+        -9778,
+        -6538,
+        -2493,
+        0
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 72,
+      "y": 17600,
+      "pct": 96,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Start with a free Brain Snapshot. Send u",
+          "dir": "dark-on-light",
+          "worst": 12.61,
+          "mean": 12.61
+        }
+      ],
+      "cues": [
+        {
+          "t": "Start with a free Brain Snapshot. Send us your",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -16533,
+        -12703,
+        -9829,
+        -6589,
+        -2544,
+        0
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 73,
+      "y": 17652,
+      "pct": 96,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Start with a free Brain Snapshot. Send u",
+          "dir": "dark-on-light",
+          "worst": 12.61,
+          "mean": 12.61
+        }
+      ],
+      "cues": [
+        {
+          "t": "Start with a free Brain Snapshot. Send us your",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -16585,
+        -12755,
+        -9881,
+        -6641,
+        -2596,
+        0
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 74,
+      "y": 17704,
+      "pct": 96,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Start with a free Brain Snapshot. Send u",
+          "dir": "dark-on-light",
+          "worst": 12.61,
+          "mean": 12.61
+        }
+      ],
+      "cues": [
+        {
+          "t": "Start with a free Brain Snapshot. Send us your",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -16637,
+        -12807,
+        -9933,
+        -6693,
+        -2648,
+        0
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 75,
+      "y": 17756,
+      "pct": 96,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Start with a free Brain Snapshot. Send u",
+          "dir": "dark-on-light",
+          "worst": 12.61,
+          "mean": 12.61
+        }
+      ],
+      "cues": [
+        {
+          "t": "Start with a free Brain Snapshot. Send us your",
+          "o": 1
+        }
+      ],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -16689,
+        -12859,
+        -9985,
+        -6745,
+        -2700,
+        0
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    },
+    {
+      "i": 76,
+      "y": 18417,
+      "pct": 100,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [
+        {
+          "painted": true,
+          "t": 13.98,
+          "dur": 14,
+          "vis": 0
+        },
+        {
+          "painted": true,
+          "t": 9.85,
+          "dur": 9.87,
+          "vis": 0
+        }
+      ],
+      "rails": [
+        -1523
+      ],
+      "wipes": [
+        "inset(0px 0px 0px 0%)"
+      ],
+      "act": "-",
+      "stages": [
+        -17350,
+        -13520,
+        -10646,
+        -7406,
+        -3361,
+        -656
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#f4eee3"
+    }
+  ],
+  "consoleErrors": [],
+  "failed": []
+}

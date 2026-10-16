@@ -3,214 +3,221 @@
   <head>
     <!-- @head -->
   </head>
-  <body>
+  <body class="story-page">
     <a class="skip" href="#main">Skip to content</a>
     <!-- @render masthead -->
 
-    <main id="main">
-      <!-- Hero: we set it up, you steer -->
-      <section class="hero" aria-labelledby="hero-h">
-        <div class="wrap hero__in">
-          <h1 id="hero-h" class="hero__h">We set it up. You steer.</h1>
-          <div class="hero__text">
-            <p class="hero__pitch">Allevia is a team of __STAFF_WORD__ AI staff for your business. Paste your website and we set them up for you. They do the marketing groundwork (the posts, the numbers, the fixes), and you say OK or No.</p>
-            <p class="hero__box">After a short setup, your part is about a minute a day: read Today's note and tap OK on what is waiting. Nothing goes out without you.</p>
-            <div class="hero__cta">
+    <!-- The home page is a scroll story (docs/scrollcraft/builds/allevia-site/BRIEF.md). On a wide screen with motion
+         welcome, src/story.ts mounts the vendored scrollcraft engine on the data-sc-* marks below; on a phone, with
+         reduced motion or without JavaScript it is an ordinary page, every line visible, the footage as short loops. -->
+    <main id="main" class="story">
+
+      <!-- 1. Your team, working: the office mid-request under the reader's hand (scrub, layered) -->
+      <section class="act act--hero" id="team" data-sc-act="scrub" data-sc-span="2.1" data-sc-dwell="0.32" data-stop-at="0" aria-labelledby="hero-h">
+        <div class="act-stage hero4" data-sc-stage>
+          <div class="hero4__copy" data-sc-cue="0 0.48 0 0.08">
+            <h1 id="hero-h" class="hero4__h">We set it up.<br><span>You steer.</span></h1>
+            <p class="hero4__p">A team of __STAFF_WORD__ AI staff for your business, set up from your website. They do the marketing groundwork; you tap OK.</p>
+            <!-- @render paste-field -->
+            <div class="hero4__cta">
               <a class="btn btn-gold btn-lg" href="__CONTACT_URL__">Get a free Brain Snapshot</a>
-              <a class="link" href="/how-it-works/">See how it works</a>
+              <a class="link" href="/product/">Take the product tour</a>
             </div>
           </div>
-          <figure class="hero__art" data-hero-art>
-            <img
-              src="/img/art-hero-1600.webp"
-              srcset="/img/art-hero-900.webp 900w, /img/art-hero-1600.webp 1600w"
-              sizes="(min-width: 64rem) 56vw, 100vw"
-              width="1600" height="1063"
-              alt="Drawing: a studio owner drinks tea and checks her phone while a tiny pixel-art team works at small desks on a sheet of ledger paper beside her."
-              fetchpriority="high" decoding="async" />
-            <video class="hero__video" muted loop playsinline preload="none" aria-hidden="true" tabindex="-1"
-              data-mp4="/img/art-hero.mp4"></video>
-            <button class="hero__pause" type="button" hidden data-hero-pause aria-pressed="false">Pause the drawing</button>
+          <div class="hero4__scene">
+          <div class="hero4__ground" aria-hidden="true" data-sc-parallax="-1.1"></div>
+          <figure class="frame frame--office" data-sc-parallax="-0.4">
+            <div class="frame__media">
+            <picture>
+              <source media="(max-width: 860px)" srcset="/media/office-phone-poster.webp" width="520" height="814">
+              <img class="sc-stage__poster" src="/media/office-poster.webp" width="1440" height="828" fetchpriority="high" decoding="async"
+                alt="The office in the app at eleven in the morning, mid-question: twelve people at desks in coloured zones, a speech bubble over each person working, dogs carrying papers, and the line 'Meera is reading your question' under the floor." />
+            </picture>
+            <video data-sc-scrub data-sc-src="/media/office.mp4" data-flat-mp4="/media/office-phone.mp4" muted playsinline preload="none" aria-hidden="true" tabindex="-1"></video>
+            </div>
+            <button class="loop__pause" type="button" hidden data-flat-pause aria-pressed="false">Pause the office</button>
+            <figcaption class="frame__cap">The real app, mid-question. <span class="tag">sample numbers</span></figcaption>
+          </figure>
+          <figure class="frame frame--note" data-sc-parallax="0.7" aria-hidden="true">
+            <img src="/media/todays-note.webp" width="760" height="345" loading="lazy" decoding="async" alt="" />
+          </figure>
+          </div>
+          <p class="hero4__later" data-sc-cue="0.52 1 0.1 0.04">One question, "What should we post this week?" Meera splits it, desks light up, the dogs carry the papers, and the answer is ready in about half a minute.</p>
+        </div>
+      </section>
+
+      <!-- 2. Paste your website: the only setup on your side (flow) -->
+      <section class="act act--setup band-sand" id="setup" data-sc-act="flow" data-stop-at="1" aria-labelledby="setup-h">
+        <div class="wrap setup">
+          <div class="setup__text" data-sc-in data-sc-stagger="70">
+            <h2 id="setup-h" class="story-h">Your part of the setup: paste your&nbsp;website.</h2>
+            <p class="story-p">Your team reads it, learns what you sell and who you serve, and proposes three goals in plain words. You tap OK, or change a number. That is the whole setup on your side.</p>
+            <ol class="ticks3">
+              <li><strong>A few minutes</strong> to read a normal website, step by step, while you watch.</li>
+              <li><strong>Three goals</strong>, each with where you are now and where we will get you.</li>
+              <li><strong>People check it</strong>: our team in India looks over the setup and finishes the connections with you.</li>
+            </ol>
+          </div>
+          <figure class="frame frame--setup" data-loop>
+            <div class="frame__media">
+            <picture>
+              <source media="(max-width: 860px)" srcset="/media/paste-phone-poster.webp" width="480" height="800">
+              <img class="loop__poster" src="/media/paste-poster.webp" width="760" height="746" loading="lazy" decoding="async"
+                alt="The setup screen reading avsatelier.in: seven steps (website, your look, Google, your business, methods, filing, your team) and a picture of what the team has learned so far, growing as it reads." />
+            </picture>
+            <video class="loop__video" muted loop playsinline preload="none" aria-hidden="true" tabindex="-1" data-mp4="/media/paste.mp4" data-mp4-phone="/media/paste-phone.mp4"></video>
+            </div>
+            <button class="loop__pause" type="button" hidden data-loop-pause aria-pressed="false">Pause the setup</button>
+            <figcaption class="frame__cap">Setting up an architecture studio from its website. <span class="tag">demo mode</span></figcaption>
           </figure>
         </div>
       </section>
 
-      <!-- Why: most owners have tried AI -->
-      <section class="section gap" id="why" aria-labelledby="gap-h">
-        <div class="wrap">
-          <div class="gap__head">
-            <blockquote class="pull">
-              <p>You've tried ChatGPT. Allevia is what happens when someone sets it up properly for your business and keeps it&nbsp;running.</p>
-            </blockquote>
-            <div class="gap__why">
-              <h2 id="gap-h">Most owners have tried AI. Few have it doing a&nbsp;job.</h2>
-              <p>In the US, 76% of engaged small-business owners use AI, but 14% have it fully built into how they run the business (<a href="https://www.goldmansachs.com/community-impact/10000-small-businesses-voices/insights/ai-presents-a-major-opportunity-for-small-businesses" rel="noopener">Goldman Sachs 10,000 Small Businesses survey, 2026</a>). In the UAE, 72% of firms say they use AI and 12% pay for an AI tool (<a href="https://tbreak.com/72-of-uae-businesses-use-ai-the-next-challenge-is-making-it-useful/" rel="noopener">Pemo transaction data</a>). The missing piece is setup and upkeep, so that is what we do.</p>
+      <!-- 3. One request, all the way to your OK (the peak: scrub, the largest span) -->
+      <section class="act act--ask" id="ask" data-sc-act="scrub" data-sc-span="3.4" data-sc-dwell="0.4" data-stop-at="2" aria-labelledby="ask-h">
+        <div class="act-stage ask4" data-sc-stage>
+          <div class="ask4__text">
+            <h2 id="ask-h" class="story-h" data-sc-cue="0 1 0 0.03">Follow one question all the way to your&nbsp;OK.</h2>
+            <!-- @render one-request -->
+          </div>
+          <figure class="frame frame--ask">
+            <div class="frame__media">
+            <img class="sc-stage__poster" src="/media/ask-end.webp" width="760" height="844" loading="lazy" decoding="async"
+              alt="The Ask screen with the finished answer to 'Why did we pause daily stories, and what should we post instead?': two reasons with a source tag on each claim, three reel briefs, and 'Sources checked, 7 people'." />
+            <video data-sc-scrub data-sc-src="/media/ask.mp4" muted playsinline preload="none" aria-hidden="true" tabindex="-1"></video>
+            </div>
+            <figcaption class="frame__cap">The answer arriving in the app. Sample business. <span class="tag">sample numbers</span></figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- 4. You tap OK (reveal: the card becomes "Draft saved. Nothing was posted.") -->
+      <section class="act act--ok" id="ok" data-sc-act="flow" data-stop-at="3" aria-labelledby="ok-h">
+        <div class="wrap ok4">
+          <div class="ok4__text" data-sc-in data-sc-stagger="70">
+            <h2 id="ok-h" class="story-h">You tap OK. Nothing is&nbsp;posted.</h2>
+            <p class="story-p">The card says what it is, who made it and what saying OK will do. Saying OK saves the draft for you. If you edit it first, your team keeps the edit as a rule for next time.</p>
+          </div>
+          <div class="ok4__cards">
+            <figure class="frame frame--card">
+              <img src="/media/ok-before.webp" width="720" height="512" loading="lazy" decoding="async"
+                alt="A card waiting for your OK: 'Draft 3 reels: two salary reveals and a day with the screening call', by Tara, content strategist, 'If you say OK, the draft is saved for you. Nothing is posted.', with Approve, Edit and Reject." />
+              <figcaption class="frame__cap">Before. <span class="tag">sample numbers</span></figcaption>
+            </figure>
+            <figure class="frame frame--card frame--after" data-sc-reveal="right" data-sc-reveal-at="0.25 0.6">
+              <img src="/media/ok-after.webp" width="720" height="512" loading="lazy" decoding="async"
+                alt="After tapping Approve: a green line reads 'Approved: Draft 3 reels. Draft saved. Nothing was posted.', and the next card, a fix for the website, moves up." />
+              <figcaption class="frame__cap">After one tap.</figcaption>
+            </figure>
+          </div>
+          <h3 class="ok4__sub">Limits you can count</h3>
+          <!-- @render control-numbers -->
+        </div>
+      </section>
+
+      <!-- 5. The whole system, at a waterline (pin: the camera sinks from what you see to what keeps it safe) -->
+      <section class="act act--water" id="safe" data-sc-act="pin" data-sc-span="2.2" aria-labelledby="water-h">
+        <div class="act-stage water" data-sc-stage>
+          <div class="water__sink">
+            <div class="water__above">
+              <h2 id="water-h" class="story-h">What you see is an office and a note.</h2>
+              <div class="water__screens">
+                <img src="/media/office-still.webp" width="1200" height="512" loading="lazy" decoding="async" alt="The office floor in the app, quiet, with the team at their desks." />
+                <img src="/media/todays-note.webp" width="760" height="345" loading="lazy" decoding="async" alt="Today's note from Meera: reels are carrying Instagram, signups rose 18% to 312, and three things are waiting for your OK." />
+              </div>
+            </div>
+            <div class="water__line" aria-hidden="true"><span>What keeps it safe</span></div>
+            <div class="water__below">
+              <!-- @render waterline -->
             </div>
           </div>
         </div>
       </section>
 
-      <!-- Three steps -->
-      <section class="section" id="how" aria-labelledby="how-h">
-        <div class="wrap">
-          <h2 id="how-h" class="section__h">Three steps. Most of them are&nbsp;ours.</h2>
-          <!-- @render steps-short -->
-          <p class="more"><a class="link link--strong" href="/how-it-works/">How it works, step by step</a></p>
+      <!-- 6. Things the team made (pan) -->
+      <section class="act act--made" id="made" data-sc-act="pan" data-sc-span="3.6" data-stop-at="4" aria-labelledby="made-h">
+        <div class="act-stage made" data-sc-stage>
+          <!-- @render work-rail -->
         </div>
       </section>
 
-      <!-- The living office -->
-      <section class="section office" id="office" aria-labelledby="office-h">
+      <!-- 7. By business type, with a place and an outcome (flow) -->
+      <section class="act act--cases band-sage" id="cases" data-sc-act="flow" aria-labelledby="cases-h">
         <div class="wrap">
-          <div class="split">
-            <div class="split__text">
-              <h2 id="office-h" class="section__h">A real office, and you can watch it&nbsp;work.</h2>
-              <p class="lede">Your team sits in one open-plan office: __STAFF_WORD__ people, each team on its own rug, with the cafeteria and the game room in the same room. A desk lights up while its person works, so you can see who is doing what, and why.</p>
-              <p class="body">Three office dogs, Fluffy, JJ and Zoe, carry documents from desk to desk and get a treat for each delivery. Two cats nap. It is there so the work is never a black box.</p>
+          <h2 id="cases-h" class="story-h" data-sc-in>For a business like yours.</h2>
+          <!-- @render use-cases -->
+        </div>
+      </section>
+
+      <!-- 8. Ask in the app or on Discord; your accounts and what is built in (flow) -->
+      <section class="act act--doors" id="doors" data-sc-act="flow" aria-labelledby="doors-h">
+        <div class="wrap">
+          <div class="doors">
+            <div class="doors__text" data-sc-in data-sc-stagger="70">
+              <h2 id="doors-h" class="story-h">Two doors to the same&nbsp;team.</h2>
+              <p class="story-p">Ask in the app, or in your own private area on Discord. A question asked on Discord is the same conversation in the app, and a card you approve in one is approved in both.</p>
             </div>
-            <!-- @render office-loop -->
-          </div>
-          <figure class="shot shot--office">
-            <img src="/img/tour-office-working-1600.webp" srcset="/img/tour-office-working-800.webp 800w, /img/tour-office-working-1600.webp 1600w" sizes="(min-width: 75rem) 72rem, 100vw" width="1600" height="1000" loading="lazy" decoding="async"
-              alt="Allevia's office in the app: an open floor with the team at their desks, a speech bubble over each person who is working on a question, and a growth-plan card with three goals on the right." />
-            <figcaption>The office in the app, mid-question. <span class="tag">sample numbers</span></figcaption>
-          </figure>
-        </div>
-      </section>
-
-      <!-- The plain-words growth plan -->
-      <section class="section plan" id="growth-plan" aria-labelledby="plan-h">
-        <div class="wrap split split--rev">
-          <figure class="shot shot--card">
-            <img src="/img/tour-plan-card-700.webp" srcset="/img/tour-plan-card-420.webp 420w, /img/tour-plan-card-700.webp 700w" sizes="(min-width: 64rem) 26rem, 100vw" width="700" height="1360" loading="lazy" decoding="async"
-              alt="The growth-plan card: 'Month 1, week 4', and three goals, each with a bar, where you are now, the goal and who looks after it: weekly signups going well, Instagram reach going well, search clicks needs a push." />
-            <figcaption>The growth plan on the home screen. <span class="tag">sample numbers</span></figcaption>
-          </figure>
-          <div class="split__text">
-            <h2 id="plan-h" class="section__h">Your growth plan, in plain&nbsp;words.</h2>
-            <p class="lede">Three goals, not a dashboard. Each one says where you are now and where we'll get you: "Get to 360 signups a week."</p>
-            <ul class="ticks">
-              <li>We propose the plan from your website. You tap <strong>OK</strong>, or change a number. That is the whole setup on your side.</li>
-              <li>Each month your team checks its own progress, adjusts what it works on and writes one short note.</li>
-              <li>A goal reads <strong>Going well</strong>, <strong>Needs a push</strong> or <strong>Behind</strong>, with one line on why.</li>
-              <li>Until your own numbers arrive, a goal says "We'll know after your first full week" rather than guessing.</li>
+            <ul class="channels" aria-label="Your private area on Discord">
+              <li><span class="channels__name">#your-team</span> Ask anything. Each question opens its own thread.</li>
+              <li><span class="channels__name">#studio</span> Drop photos. Two options come back, each waiting for your OK.</li>
+              <li><span class="channels__name">#approvals</span> Cards with Approve and Reject buttons.</li>
+              <li><span class="channels__name">#todays-note</span> The daily note.</li>
+              <li><span class="channels__name">#support</span> People only. A person from our team answers.</li>
             </ul>
-            <p class="more"><a class="link link--strong" href="/product/#plan">See the plan screens</a></p>
+          </div>
+          <!-- @render connections -->
+        </div>
+      </section>
+
+      <!-- 9. Your growth plan moves (pin; the bars move from where the sample business started to now) -->
+      <section class="act act--plan" id="plan" data-sc-act="pin" data-sc-span="1.9" data-stop-at="5" aria-labelledby="plan-h">
+        <div class="act-stage plan4" data-sc-stage>
+          <div class="plan4__text">
+            <h2 id="plan-h" class="story-h" data-sc-cue="0 1 0 0.03">And your growth plan&nbsp;moves.</h2>
+            <p class="story-p" data-sc-cue="0 1 0 0.03">Three goals, not a dashboard. Each shows where you started, where you are and who looks after it. Each month your team checks its own progress and writes one short note.</p>
+          </div>
+          <div class="plan4__card" data-sc-cue="0 1 0 0.03">
+            <p class="plan4__label">Your growth plan · Month 1, week 4 <span class="tag">sample numbers</span></p>
+            <!-- @render plan-bars -->
           </div>
         </div>
       </section>
 
-      <!-- Nothing goes out without your OK -->
-      <section class="section band path" id="approve" aria-labelledby="approve-h">
-        <div class="wrap split">
-          <div class="split__text">
-            <h2 id="approve-h" class="section__h">Nothing goes out without your&nbsp;OK.</h2>
-            <p class="lede">When your team wants to do something that costs money, speaks in public or moves a goal, it puts a card in front of you and waits.</p>
-            <ul class="ticks ticks--band">
-              <li>Each card says what it is, who made it and what saying OK will do.</li>
-              <li>Edit a draft and your team keeps your change as a rule for next time. You can read every rule it has learned.</li>
-              <li>Today, an approved post is saved as a ready draft for you to publish. Nothing posts by itself. Posting straight to Instagram and Google comes later, after those companies approve us, and each post will still wait for your tap.</li>
-            </ul>
+      <!-- 10. What we do not do, the price, three questions (flow, compressed) -->
+      <section class="act act--plain" id="plain" data-sc-act="flow" aria-labelledby="donot-h">
+        <div class="wrap plain">
+          <div class="plain__donot">
+            <h2 id="donot-h" class="story-h story-h--sm">What Allevia does not do.</h2>
+            <!-- @render we-do-not -->
           </div>
-          <figure class="shot shot--card shot--wide">
-            <img src="/img/tour-approve-1200.webp" srcset="/img/tour-approve-700.webp 700w, /img/tour-approve-1200.webp 1200w" sizes="(min-width: 64rem) 34rem, 100vw" width="1200" height="1040" loading="lazy" decoding="async"
-              alt="An approval card titled 'Draft 3 reels: two salary reveals and a day with the screening call', made by Tara the content strategist, with the line 'If you say OK, the draft is saved for you. Nothing is posted.' and the buttons Approve, Edit and Reject." />
-            <figcaption>A card waiting for the owner's OK. <span class="tag">sample numbers</span></figcaption>
-          </figure>
-        </div>
-      </section>
-
-      <!-- Discord -->
-      <section class="section discord" id="discord" aria-labelledby="discord-h">
-        <div class="wrap">
-          <h2 id="discord-h" class="section__h">Prefer chat? Your team is in Discord&nbsp;too.</h2>
-          <p class="lede">Ask in your own words, the way you would message a person. It is the same team and the same answers as in the app.</p>
-          <ul class="cards3">
-            <li><h3>Ask</h3><p>Write your question in your team's channel. Each question gets its own thread, so one conversation never gets lost in another.</p></li>
-            <li><h3>Watch</h3><p>While the team works, one message updates as each person starts and finishes a step. Then the answer arrives with its sources.</p></li>
-            <li><h3>Approve</h3><p>Waiting cards appear with Approve and Reject buttons, and each business has its own private area that only its owner and Allevia's staff can see.</p></li>
-          </ul>
-          <p class="fine">Photos you drop in the Studio channel get the same care as in the app. <a href="/security/#discord">How Discord is set up and what it stores.</a></p>
-        </div>
-      </section>
-
-      <!-- Every answer shows how we know -->
-      <section class="section" id="how-we-know" aria-labelledby="know-h">
-        <div class="wrap">
-          <div class="path__head">
-            <h2 id="know-h" class="section__h">Every answer shows how we&nbsp;know.</h2>
-            <p class="lede">Your team keeps one private memory of your business: your pages, products, people, numbers and decisions. Every answer cites it, and you can open the path the team followed to get there.</p>
-          </div>
-          <figure class="shot shot--ask">
-            <img src="/img/tour-path-1600.webp" srcset="/img/tour-path-800.webp 800w, /img/tour-path-1600.webp 1600w" sizes="(min-width: 75rem) 72rem, 100vw" width="1600" height="1000" loading="lazy" decoding="async"
-              alt="An answer to 'Why we paused daily stories', with each claim tagged to a source, beside a map of connected points where the seven steps behind the answer are lit in gold." />
-            <figcaption>An answer with its sources, and "How we know" on the right. <span class="tag">sample numbers</span></figcaption>
-          </figure>
-          <p class="more"><a class="link link--strong" href="/product/">Take the product tour</a></p>
-        </div>
-      </section>
-
-      <!-- One place to ask -->
-      <section class="section inbox" id="one-inbox" aria-labelledby="inbox-h">
-        <div class="wrap">
-          <h2 id="inbox-h" class="section__h">One place to ask, instead of five&nbsp;tabs.</h2>
-          <figure class="inbox__art">
-            <img src="/img/art-before-after-1600.webp" srcset="/img/art-before-after-900.webp 900w, /img/art-before-after-1600.webp 1600w" sizes="(min-width: 75rem) 72rem, 100vw" width="1600" height="905" loading="lazy" decoding="async"
-              alt="Drawing in two panels. Left: an architecture studio owner juggles a camera, a ringing phone, browser windows and a pile of review cards. Right: the same owner reads one page with a cup of tea while a tiny pixel team files the work." />
-          </figure>
-          <p class="lede">The chat assistant, the design app, the scheduler and the image tool become one place to ask. You say it in plain words, the right person on your team picks it up, and nobody writes prompts.</p>
-        </div>
-      </section>
-
-      <!-- See it -->
-      <section class="section try" id="try" aria-labelledby="try-h">
-        <div class="wrap">
-          <h2 id="try-h" class="section__h">See it before you&nbsp;buy.</h2>
-          <p class="lede">The product tour shows the real screens. If the live demo is up, you can click around a read-only copy of the app, with nothing saved or sent.</p>
-          <div class="hero__cta">
-            <a class="btn btn-gold btn-lg" href="/product/">Take the product tour</a>
-            <!-- @render demo-button -->
-            <a class="link" href="/demo/">About the demo</a>
-          </div>
-        </div>
-      </section>
-
-      <!-- Pricing teaser -->
-      <section class="section prices" id="pricing" aria-labelledby="prices-h">
-        <div class="wrap prices__in">
-          <div class="prices__head">
-            <h2 id="prices-h" class="section__h">What it costs</h2>
-            <p>Prices exclude VAT and GST.</p>
+          <div class="plain__price" id="pricing">
+            <h2 class="story-h story-h--sm">What it costs.</h2>
+            <p class="fine">Prices exclude VAT and GST.</p>
             <!-- @render currency-home -->
-          </div>
-          <div class="prices__body">
             <!-- @render pricing-teaser -->
             <a class="link link--strong" href="/pricing/">Every plan, credit and guarantee</a>
           </div>
-        </div>
-      </section>
-
-      <!-- Questions -->
-      <section class="section questions" id="questions" aria-labelledby="q-h">
-        <div class="wrap questions__in">
-          <h2 id="q-h" class="section__h">Questions owners ask us</h2>
-          <div>
+          <div class="plain__faq">
+            <h2 class="story-h story-h--sm">Questions owners ask.</h2>
             <!-- @render faq -->
             <p class="more"><a class="link link--strong" href="/faq/">All the questions</a></p>
           </div>
         </div>
       </section>
 
-      <!-- Close -->
-      <section class="section close" aria-labelledby="close-h">
-        <div class="wrap close__in">
-          <h2 id="close-h">Start with a free Brain Snapshot.</h2>
-          <p>Send us your website. We read it and your public profiles, and send back what we learned about your business and five ranked fixes, before you pay anything.</p>
-          <a class="btn btn-gold btn-lg" href="__CONTACT_URL__">Get a free Brain Snapshot</a>
+      <!-- 11. Arrival: the courier sits, the one action (pin, short; the last act holds) -->
+      <section class="act act--close" id="begin" data-sc-act="pin" data-sc-span="1.3" aria-labelledby="close-h">
+        <div class="act-stage close4" data-sc-stage>
+          <div class="close4__in" data-sc-cue="0 1 0 0">
+            <h2 id="close-h" class="close4__h">Start with a free Brain&nbsp;Snapshot.</h2>
+            <p class="close4__p">Send us <strong data-your-site>your website</strong>. We read it and your public profiles, and send back what we learned about your business and five ranked fixes, before you pay anything.</p>
+            <a class="btn btn-gold btn-lg" href="__CONTACT_URL__">Get a free Brain Snapshot</a>
+          </div>
         </div>
       </section>
     </main>
 
+    <!-- @render route -->
     <!-- @render footer -->
   </body>
 </html>

@@ -1,8 +1,11 @@
+/// <reference lib="dom" />
+// (The dog painter in web/src/office/pets.ts is typed against the canvas, and the root tsconfig has no DOM types.)
 // The office's pixel staff as static SVG, built from the same 16×20 templates and roster palettes as the web app's canvas
 // sprites (web/src/office/sprites.ts). Those templates are private to the canvas code, so they are mirrored here; keep the
 // two in step when a look changes. Output is crisp at any size and needs no script.
 import { AGENTS, type AgentDef } from "../../../shared/roster.ts";
 import { darken, lighten, mix } from "../../../web/src/lib/color.ts";
+import { drawDog, drawTreat, DOG_W, DOG_H, type PetId, type PetPose } from "../../../web/src/office/pets.ts";
 
 const W = 16;
 
@@ -111,4 +114,44 @@ export function spriteSvg(agentId: string, opts: { size: number; portrait?: bool
   const h = Math.round((opts.size * rows) / W);
   const a11y = opts.label ? `role="img" aria-label="${opts.label}"` : `aria-hidden="true"`;
   return `<svg class="sprite" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${rows}" width="${opts.size}" height="${h}" shape-rendering="crispEdges" ${a11y}>${rects.join("")}</svg>`;
+}
+
+// ---------- the office dogs ----------
+// Drawn by the web app's own painter (web/src/office/pets.ts) into a recording "canvas" that keeps the rectangles, so the
+// dog on the website is the same dog as in the office, pixel for pixel.
+
+interface Rect { x: number; y: number; w: number; h: number; fill: string }
+function paint(draw: (c: CanvasRenderingContext2D) => void): Rect[] {
+  const rects: Rect[] = [];
+  const ctx = {
+    fillStyle: "#000" as string,
+    fillRect(x: number, y: number, w: number, h: number) { rects.push({ x, y, w, h, fill: String(this.fillStyle) }); },
+  };
+  draw(ctx as unknown as CanvasRenderingContext2D);
+  return rects;
+}
+const rectsSvg = (rects: Rect[]) => rects.map((r) => `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="${r.fill}"/>`).join("");
+
+/**
+ * One office dog as an inline SVG holding three frames (two walking strides carrying a page, and sitting), stacked so
+ * CSS shows one at a time. The grid is the app's 22×14 dog box plus 3 rows of headroom for the page in her mouth.
+ */
+export function dogSvg(id: PetId, opts: { size: number; label?: string }): string {
+  const frame = (pose: PetPose, f: number, cls: string, page: boolean) => {
+    const dog = paint((c) => drawDog(c, id, pose, f, 0, 3, "right"));
+    const sheet = page
+      ? `<rect x="18" y="0" width="5" height="6" fill="#FFFFFF"/><rect x="18" y="0" width="5" height="1" fill="#D9D2C3"/><rect x="19" y="2" width="3" height="1" fill="#B9AE9B"/><rect x="19" y="4" width="3" height="1" fill="#B9AE9B"/>`
+      : "";
+    return `<g class="dog__f dog__f--${cls}">${rectsSvg(dog)}${sheet}</g>`;
+  };
+  const w = DOG_W + 1;
+  const h = DOG_H + 3;
+  const a11y = opts.label ? `role="img" aria-label="${opts.label}"` : `aria-hidden="true"`;
+  return `<svg class="dog" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${opts.size}" height="${Math.round((opts.size * h) / w)}" shape-rendering="crispEdges" ${a11y}>${frame("carry", 0, "a", true)}${frame("carry", 1, "b", true)}${frame("sit", 0, "sit", false)}</svg>`;
+}
+
+/** The biscuit a dog gets for each delivery (the app's 5×3 treat). */
+export function treatSvg(size = 15): string {
+  const r = paint((c) => drawTreat(c, 0, 0));
+  return `<svg class="treat" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5 3" width="${size}" height="${Math.round((size * 3) / 5)}" shape-rendering="crispEdges" aria-hidden="true">${rectsSvg(r)}</svg>`;
 }

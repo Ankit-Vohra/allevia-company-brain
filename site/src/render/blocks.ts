@@ -9,6 +9,7 @@ import { spriteSvg } from "./sprites.ts";
 import { footer, masthead } from "./chrome.ts";
 import { LEGAL_BLOCKS } from "./legal.ts";
 import { PAGE_BLOCKS } from "./pages-copy.ts";
+import { STORY_BLOCKS } from "./story.ts";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const P = PLAN_BY_ID;
@@ -277,5 +278,6 @@ export const BLOCKS: Record<string, (current: string) => string> = {
   rhythm,
   "hire-basis": hireBasis,
   ...PAGE_BLOCKS,
+  ...STORY_BLOCKS,
   ...LEGAL_BLOCKS,
 };

@@ -128,7 +128,7 @@ export function head(page: PageDef): string {
     `<link rel="apple-touch-icon" href="/apple-touch-icon.png" />`,
     `<link rel="manifest" href="/site.webmanifest" />`,
     home
-      ? `<link rel="preload" as="image" href="/img/art-hero-1600.webp" imagesrcset="/img/art-hero-900.webp 900w, /img/art-hero-1600.webp 1600w" imagesizes="(min-width: 64rem) 56vw, 100vw" fetchpriority="high" />`
+      ? `<link rel="preload" as="image" href="/media/office-poster.webp" media="(min-width: 861px)" fetchpriority="high" /><link rel="preload" as="image" href="/media/office-phone-poster.webp" media="(max-width: 860px)" fetchpriority="high" />`
       : "",
     ld,
     `<script type="module" src="/src/main.ts"></script>`,
