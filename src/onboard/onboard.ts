@@ -45,6 +45,7 @@ import { tidyGraph } from "../ingest/tidy.js";
 import { rankAndCommunities } from "../ingest/librarian.js";
 import { redact } from "../ingest/privacy.js";
 import { recordOnboardRun, recordPrivacyScan, type RunStamp } from "./record.js";
+import { closeVanishedPages, crawlWasComplete } from "./vanished.js";
 
 export interface OnboardInput {
   name: string;
@@ -318,6 +319,18 @@ export async function onboard(typed: OnboardInput, emit: (e: OnboardEvent) => vo
     errors.push(m);
     send({ type: "error", message: m });
     return result;
+  }
+  // A page an earlier crawl found and this complete one no longer finds has left the website: its PART_OF edge is closed with the
+  // reason (never deleted), and it comes back if a later crawl finds it. Only after a crawl that saw the whole site (G26).
+  const seen = crawl;
+  if (seen && !viaPublicData && crawlWasComplete(seen, pages, deps.crawlOptions?.maxPages ?? 40)) {
+    try {
+      const gone = await retrying(() => closeVanishedPages(g, pages, seen.origin, now()));
+      stats.edgesClosed += gone.length;
+      if (gone.length) log(`[onboard] ${gone.length} page(s) the site no longer has: ${gone.slice(0, 5).join(", ")}${gone.length > 5 ? "..." : ""}`);
+    } catch (e) {
+      log(`[onboard] pages the site no longer has were not checked: ${msg(e)}`);
+    }
   }
   const home = pages.find((p) => p.status >= 200 && p.status < 300 && !p.error);
   const homeDoc = home ? pageDocId(home.finalUrl) : undefined;

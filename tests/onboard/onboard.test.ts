@@ -183,6 +183,17 @@ describe("onboard (fixture site, fake LLM, test graph)", () => {
     expect(r.facts.address).toBe(true);
   });
 
+  it("each page's SEO score is a reading that MEASURES the Page as well as a property on it (G26)", async () => {
+    const rows = await q<{ id: string; prop: number; v: number; day: string; src: string }>(
+      `MATCH (o:Observation {metric:'seo_page_score'})-[m:MEASURES]->(p:Page), (o)-[s:SOURCED_FROM]->(d:Document {kind:'report'})
+       WHERE m.until IS NULL AND s.until IS NULL RETURN p.id AS id, p.seoScore AS prop, o.value AS v, o.asOf AS day, d.id AS src ORDER BY id`);
+    expect(rows).toHaveLength(first.pages);
+    expect(rows.every((r) => r.v === r.prop && r.day === "2026-10-15" && /^document:website-seo-audit-/.test(r.src))).toBe(true);
+    // the contact page has no viewport (a failing check), so it scores lower than a page that passes everything
+    const contact = rows.find((r) => r.id.endsWith("/contact"))!;
+    expect(contact.v).toBeLessThan(Math.max(...rows.map((r) => r.v)));
+  });
+
   it("the run is a node with edges (G17): an onboard Event AFFECTS the business and is SOURCED_FROM the form, with the model, ontology and timing", async () => {
     const rows = await q<{ id: string; pages: number; seo: number | null; model: string; onto: number; ms: number; soft: number; biz: string; form: string; formKind: string }>(
       `MATCH (e:Event {kind:'onboard'})-[a:AFFECTS]->(b:Business)
