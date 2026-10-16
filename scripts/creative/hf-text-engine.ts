@@ -29,7 +29,8 @@ export class HiggsfieldTextEngine implements CreativeEngine {
   readonly name = "higgsfield";
   spent = 0;
   readonly log: SpendLine[] = [];
-  constructor(private o: { cap: number; model?: string; resolution?: string; quality?: string }) {}
+  // replay: finished jobs to use again instead of paying twice (a run that crashed after the jobs were made), by model, in order
+  constructor(private o: { cap: number; model?: string; resolution?: string; quality?: string; replay?: Record<string, string[]> }) {}
   private get model(): string { return this.o.model ?? "nano_banana_2_1"; }
   private params(req: ImageRequest): string[] { return [this.model, "--prompt", req.prompt.replace(/^-+/, ""), "--aspect_ratio", req.aspect, "--resolution", this.o.resolution ?? "1k", ...(this.o.quality ? ["--quality", this.o.quality] : [])]; }
 
@@ -70,6 +71,17 @@ export class HiggsfieldTextEngine implements CreativeEngine {
 
   // One quoted, capped job of any model; returns the finished file.
   private async job(model: string, params: string[], prompt: string, aspect: string): Promise<{ bytes: Buffer; id: string; cost: number }> {
+    const again = this.o.replay?.[model]?.shift();
+    if (again) {
+      const g = json((await run(["--json", "generate", "get", again], 30_000)).stdout) as { status?: string; result_url?: string } | undefined;
+      if (g?.status === "completed" && g.result_url?.startsWith("https://")) {
+        const res = await fetch(g.result_url, { signal: AbortSignal.timeout(180_000) });
+        if (res.ok) {
+          this.log.push({ at: new Date().toISOString(), model, credits: 0, jobId: again, prompt: `(replayed) ${prompt}`, aspect });
+          return { bytes: Buffer.from(await res.arrayBuffer()), id: again, cost: 0 };
+        }
+      }
+    }
     const q = await run(["--json", "generate", "cost", model, ...params], 120_000);
     const cost = Number((json(q.stdout) as { credits?: unknown } | undefined)?.credits);
     if (q.code !== 0 || !Number.isFinite(cost)) throw new EngineUnavailable("error", `I couldn't get a price for the ${model} job, so I didn't start it`);

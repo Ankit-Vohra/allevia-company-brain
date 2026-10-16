@@ -204,6 +204,7 @@ export async function assemble(video: ReelVideo, a: AssembleInput): Promise<Buff
     writeFileSync(end, a.end);
     args.push("-loop", "1", "-framerate", String(REEL_FPS), "-t", String(REEL_LIMITS.endCardSeconds), "-i", end);
     filters.push(`[${input}:v]scale=${REEL_W}:${REEL_H},fps=${REEL_FPS},format=yuv420p,setsar=1[e]`);
+    input++;
     labels.push("[e]");
     filters.push(`${labels.join("")}concat=n=${labels.length}:v=1:a=0[out]`);
     const out = join(dir, "reel.mp4");

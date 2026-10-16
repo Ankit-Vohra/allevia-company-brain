@@ -20,8 +20,14 @@ export interface ReelWords { timed: TimedOverlay[]; texts: PlacedText[] }
 export function wordGroups(text: string, size = 3): string[] {
   const w = text.trim().split(/\s+/).filter(Boolean);
   if (w.length <= size) return w.length ? [w.join(" ")] : [];
+  // a group ends at punctuation ("Light first:" / "the bed faces" / "the window"), else after `size` words
   const out: string[] = [];
-  for (let i = 0; i < w.length; i += size) out.push(w.slice(i, i + size).join(" "));
+  let cur: string[] = [];
+  for (const word of w) {
+    cur.push(word);
+    if (cur.length >= size || /[,:;.!?—–]$/.test(word)) { out.push(cur.join(" ")); cur = []; }
+  }
+  if (cur.length) out.push(cur.join(" "));
   const last = out[out.length - 1]!;
   if (out.length > 1 && last.split(" ").length === 1) { out.pop(); out[out.length - 1] += ` ${last}`; }
   return out;
