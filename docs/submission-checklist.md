@@ -59,11 +59,18 @@ recorded live (a db:export file in `src/demo/recorded/`, held to the seed by a t
 scripts/seed-demo.ts demo_seed --register` failed in the image** (a second fixture was not copied in): fixed in the
 Dockerfile and `.dockerignore`. (3) A recorded question typed without the hyphen ("signups") did not match "sign-ups": matching
 now ignores case, spacing, punctuation and hyphens. (4) The export script could not run its hygiene test from a worktree
-(no `node_modules`): fixed. (5) The README's setup now says what each command needs and what to do about npm's notice.
+(no `node_modules`): fixed. (5) The README's setup now says what each command needs and what to do about npm's notice. (6) **A restarted FalkorDB
+container did not come back**: after `seed-demo` (plain or `--recorded`), `docker restart` (or a reboot, the compose file says
+`restart: unless-stopped`) left FalkorDB 6.0.2 exiting at start with "Diverged applying GRAPH.EFFECT ... label 'Entity' ... does not
+exist here", and the volume had to be thrown away. Cause: two places registered a label with `CREATE (n:Entity) DELETE n` in one
+query, which 6.0.2 writes no effects for ("produced no effects payload"), so the append-only file lacked the label that the next
+index effect names. Both now use two statements (create, then delete); checked by seeding, seeding the recorded copy, stopping and
+starting the container, and reading the data back; guarded by `tests/graph/aof-restart.test.ts`. This is very likely the cause of
+the "corrupt AOF base" in issue 29 on local 6.0.2.
 **Not verifiable on the build machine:** `docker compose` itself (its Compose plugin is missing there); the image and the
 containers were run with the compose file's exact environment instead, and the compose file is unchanged since it was last run
-by hand. **If FalkorDB crashes** (6.0.2 has crashed under repeated writes; issue 29) and will not restart from its append-only
-file, `docker compose down -v` and seed again: the demo data is rebuilt in seconds.
+by hand. **If FalkorDB still crashes** (6.0.2 segfaulted once under repeated drops and re-seeds on the build machine; issue 29) and
+will not restart from its append-only file, `docker compose down -v` and seed again: the demo data is rebuilt in seconds.
 
 ## 2. Make the repository public (fresh history only)
 
