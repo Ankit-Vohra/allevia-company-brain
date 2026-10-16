@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { ToolContext } from "../tool.js";
 import { REL_TYPES, type RelType } from "../../graph/schema.js";
 import { shortestPaths } from "../../graph/algorithms.js";
+import { typeFromId } from "../../util/ids.js";
 import {
   ALGO_BUDGET, Collector, EDGE, InputError, MEMORY_RELS, PATH_RELS, TOOL_ALGO_TIMEOUT_MS, clamp, defineTool, edgeText,
   getNodes, parseAsOf, requireNode, ro, type EdgeRow,
@@ -48,8 +49,19 @@ export const findPaths = defineTool({
 
 // ---------- show_path ----------
 
+// A card the team just proposed (a Recommendation, its Approval, an Action) is what we suggest, not part of why: the
+// explanation path is drawn through the business's own records, so these are left out when two or more other ids remain.
+const PROPOSED = new Set(["Recommendation", "Approval", "Action"]);
+// Allevia's own staff (agent:allevia-*) are not part of the business either: they know about everything, so a path through one explains nothing.
+// The relationships our own cards and staff add between records they cite or know about.
+const PAPERWORK_RELS: RelType[] = ["PROPOSES", "EVIDENCED_BY", "PRODUCED", "KNOWS_ABOUT"];
+const isOurs = (id: string): boolean => PROPOSED.has(typeFromId(id) ?? "") || id.startsWith("agent:allevia-");
+
 async function runShowPath(args: { ids: string[] }, ctx: ToolContext) {
-  const list = args.ids.map((s) => s.trim()).filter(Boolean).filter((id, i, a) => i === 0 || a[i - 1] !== id);
+  const given = args.ids.map((s) => s.trim()).filter(Boolean).filter((id, i, a) => i === 0 || a[i - 1] !== id);
+  const records = given.filter((id) => !isOurs(id));
+  const left = records.length >= 2 && records.length < given.length ? given.filter((id) => !records.includes(id)) : [];
+  const list = left.length ? records : given;
   if (!list.length) throw new InputError("Pass the ordered ids of your explanation, e.g. [\"decision:x\", \"observation:y\"].");
   const found = await getNodes(ctx, list);
   const missing = list.filter((id) => !found.has(id));
@@ -82,7 +94,14 @@ async function runShowPath(args: { ids: string[] }, ctx: ToolContext) {
       unchecked.push({ from: a, to: b });
       continue;
     }
-    const [p] = await shortestPaths(ctx.graph, a, b, { maxPaths: 1, maxLen: 4, relTypes: PATH_RELS, timeoutMs: left });
+    let [p] = await shortestPaths(ctx.graph, a, b, { maxPaths: 1, maxLen: 4, relTypes: PATH_RELS, timeoutMs: left });
+    // A card drafted this very turn, or one of our own staff, can be the shortest way between two records (a recommendation
+    // EVIDENCED_BY both, an agent that KNOWS_ABOUT both). That is a route through our own paperwork, not an explanation: look
+    // again over the business's own relationships.
+    if (p && p.nodes.some((n) => isOurs(n.id) && !list.includes(n.id))) {
+      const own = PATH_RELS.filter((r) => !PAPERWORK_RELS.includes(r));
+      [p] = await shortestPaths(ctx.graph, a, b, { maxPaths: 1, maxLen: 4, relTypes: own, timeoutMs: Math.max(100, deadline - Date.now()) });
+    }
     if (p) {
       for (const n of p.nodes.slice(1)) col.ref(n);
       for (const pe of p.edges) col.edgeRef(pe);
@@ -93,6 +112,7 @@ async function runShowPath(args: { ids: string[] }, ctx: ToolContext) {
     }
   }
   const problems = [
+    ...(left.length ? [`Left out of the path: ${left.join(", ")} (a proposed card is what we suggest, not part of why).`] : []),
     ...(missing.length ? [`Unknown ids: ${missing.join(", ")}.`] : []),
     ...(unconnected.length ? [`Not connected within 4 hops: ${unconnected.map((u) => `${u.from} -> ${u.to}`).join("; ")}.`] : []),
     ...(unchecked.length ? [`Not checked in time: ${unchecked.map((u) => `${u.from} -> ${u.to}`).join("; ")}.`] : []),

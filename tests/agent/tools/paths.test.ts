@@ -31,6 +31,16 @@ describe("find_paths, show_path (integration)", () => {
     expect(then.data.paths[0].nodes).toEqual(["person:founder", "task:fix-ig-token", "task:schedule-reels", "system:ig-connector"]);
   });
 
+  it("show_path: a proposed card or one of our own staff is left out of the explanation, and never becomes the way between two records", async () => {
+    // the recommendation is EVIDENCED_BY both the reel and the rule, and the librarian KNOWS_ABOUT things: neither is why
+    const r = await call(showPath, { ids: ["content:reel-salary-reveal", "recommendation:double-down-on-salary-reels", "rule:hook-curiosity-gap", "agent:allevia-librarian"] }, makeCtx(g));
+    expect(r.data.ordered).toEqual(["content:reel-salary-reveal", "rule:hook-curiosity-gap"]);
+    expect(r.note).toMatch(/Left out of the path: recommendation:double-down-on-salary-reels, agent:allevia-librarian/);
+    // two records that only the card connects (the reel and the hook rule's playbook sibling) are not routed through it
+    const via = await call(showPath, { ids: ["content:reel-salary-reveal", "rule:hook-listicle"] }, makeCtx(g));
+    expect(via.data.links[0]?.steps.join(" ")).not.toMatch(/recommendation:|agent:allevia-/);
+  });
+
   it("find_paths: unknown endpoint is an error with suggestions", async () => {
     const r = await call(findPaths, { from: "person:founder", to: "system:instagram" }, makeCtx(g));
     expect(r.data.error).toMatch(/I don.t have "system:instagram" in your records/);

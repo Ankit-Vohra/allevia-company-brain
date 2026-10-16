@@ -98,6 +98,7 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   ...pat("Capability", "DEPENDS_ON", ["Channel", "System"]),
   ...pat("Task", "DEPENDS_ON", ["Task", "System", "Decision"]),
   ...pat(["Product", "Feature"], "DEPENDS_ON", ["System", "Feature"]),
+
   ...pat("Campaign", "DEPENDS_ON", ["Channel", "Page", "Content"]),
   ...pat(["Task", "System", "Event", "Decision"], "BLOCKS", "Task"),
   ...pat("Task", "BLOCKS", "Decision"),
@@ -192,7 +193,13 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   ...pat("Person", "MEMBER_OF", ["Supplier", "Partner", "Client"]),
 ];
 
-const ALLOWED = new Set(ALLOWED_PATTERNS.map(([f, r, t]) => `${f}|${r}|${t}`));
+// Patterns only the deterministic mappers write (src/ingest/sources/ops-map): a step of a user flow (Feature, kind funnel_step)
+// happens on a screen (Page, kind app_screen) in the app (Channel), so a broken screen breaks the step and every step after it.
+// Kept out of ALLOWED_PATTERNS on purpose: that list is what the extraction model is shown, and changing it would change every
+// tenant's extraction cache key and re-run every document through the model.
+export const MAPPER_PATTERNS: Pattern[] = [...pat("Feature", "DEPENDS_ON", ["Page", "Channel"])];
+
+const ALLOWED = new Set([...ALLOWED_PATTERNS, ...MAPPER_PATTERNS].map(([f, r, t]) => `${f}|${r}|${t}`));
 
 export function isAllowed(from: EntityType, rel: RelType, to: EntityType): boolean {
   return [from, "*"].some((f) => [to, "*"].some((t) => ALLOWED.has(`${f}|${rel}|${t}`)));

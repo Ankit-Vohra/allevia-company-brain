@@ -102,7 +102,7 @@ calls.
 
 | | |
 |---|---|
-| Code | `src/graph/algorithms.ts:65`, called from `src/agent/tools/paths.ts:21` (`find_paths`) and `src/agent/tools/paths.ts:85` (`show_path`, the path drawn under every answer) |
+| Code | `src/graph/algorithms.ts:65`, called from `src/agent/tools/paths.ts:21` (`find_paths`) and `src/agent/tools/paths.ts:95` (`show_path`, the path drawn under every answer) |
 | Answers | Up to 3 shortest current paths between two nodes, any direction, at most 6 hops (`show_path`: 4). |
 | Parameters | `$from`, `$to`, `$maxLen`, `$pathCount`, `$rels` (all semantic relationship types; memory plumbing such as `TOUCHED`/`CITED` is left out), `$maxCost`. |
 | Why a graph | "How is Priya connected to the Instagram connector?" has no join to write: the answer is a path of unknown length through unknown types. |
@@ -320,7 +320,68 @@ WHERE ALL(r IN relationships(p) WHERE r.until IS NULL)
 RETURN [n IN nodes(p) | n.id] AS lineage ORDER BY length(p) DESC, origin.id LIMIT 1
 ```
 
-## 13. What is not used, and why
+## 13. The hero use case: "Why did sign-ups drop this week, and what should we do?"
+
+| | |
+|---|---|
+| Code | `src/agent/tools/metrics.ts:131` (every step's level in one query), `src/agent/tools/metrics.ts:42` (`levelShift`, the day a level stepped), `src/agent/tools/paths.ts:58` (`show_path`, the ids it keeps), `src/agent/memory.ts:352` (what earlier answers' cards did), and the queries of sections 3, 4 and 11 |
+| Answers | Which step of the sign-up flow fell and on which day; which screen it happens on; which crash is on that screen and which release brought it; what else breaks one step away against four; what we decided and where the cards from last time stand. |
+| Why a graph | The cause is a path of unknown length through different kinds of things (a number, a flow step, a screen, a crash, a release, a person). A table would need a join written for this one question; the walk is the same for the next. |
+
+The model, written by the ingest mappers (`src/ingest/sources/ops-map/app-health.ts`, `users.ts`) from the tracker's own fields, each edge with
+its source, its date and how sure the source is: a flow step is a `Feature` (`kind: funnel_step`) that `DEPENDS_ON` the step
+before it and on the `Page` (`kind: app_screen`) it happens on; a crash is an `Event` that `AFFECTS` that screen (`how: crashed_on`); a
+release `AFFECTS` the crash (`how: introduced`, `conf` 0.9, only when the tracker names the release that first carried it);
+the screen is `OWNS`ed by a person. Nothing is guessed: a crash with no route in its `where` gets no screen, and one with no first
+release gets no release (Aamdani's records are like that, and the answer says so).
+
+**What fell, and when.** Step by step, with no subject, one query ranks every step's latest reading on the server; the series
+of each is read through the `Observation` indexes (section 10). The date the level stepped is a one-change-point fit in code
+(`levelShift`: the single split of the series that leaves the least spread inside its two halves, reported only when the two
+levels differ by 25% or more and each side has 3 readings), returned as `shift: {at, before, after, pctChange}` so the desk copies
+numbers instead of computing them:
+
+```cypher
+MATCH (o:Observation)-[r:MEASURES]->(s:Entity) WHERE o.metricKey = $m AND ID(r) >= 0
+WITH s, o, coalesce(o.windowEnd, o.asOf) AS at WHERE ($from IS NULL OR at >= $from) AND ($to IS NULL OR at <= $to)
+WITH s, o, at ORDER BY at DESC, o.id DESC
+WITH s, head(collect(o.value)) AS last ORDER BY last DESC, s.id
+WITH collect(s.id) AS ids RETURN size(ids) AS subjects, ids[0..$k] AS top
+```
+
+**The chain, as one pattern.** What `find_paths` (`algo.SPpaths`, section 4) walks between a flow step and a release, written out for the
+twin (`demo_growth`: Shiftly, synthetic). Do not alias a column with the name of a pattern variable (`RETURN scr.id AS scr`): FalkorDB 4.22
+answers with a type error.
+
+```cypher
+MATCH (step:Entity {id:$step})-[d:DEPENDS_ON]->(scr:Page)<-[c:AFFECTS]-(crash:Event)<-[i:AFFECTS]-(rls:Event)
+WHERE d.until IS NULL AND c.until IS NULL AND i.until IS NULL AND c.how = 'crashed_on' AND i.how = 'introduced'
+RETURN scr.id AS screenId, crash.id AS crashId, rls.id AS releaseId, rls.releasedAt AS releasedAt, i.conf AS conf
+ORDER BY crash.firstSeen, crash.id LIMIT 5
+```
+
+Checked on `demo_growth`: `feature:seekers-signup-phone-number-entered` → `page:screen/app/auth/sign-up` ← `event:sentry-issue-shiftly-41` ← `event:release-shiftly-2-8-0`
+(2026-10-07, conf 0.9), the screen owned by Farhan. The answer's path is drawn by `show_path` over exactly these ids; it leaves out the cards
+the team just proposed and Allevia's own staff, which are not part of why.
+
+**What else breaks: depth 1 against depth 4** is `impact_of` (section 3) on the broken screen: one step away the next step and the ad campaign that sends
+people in; four steps away the later steps, the job-alert texts, the employer applicant inbox and the first-hire promise.
+
+**Last time.** Recall (section 11) now also reads what each earlier answer's cards did:
+
+```cypher
+UNWIND $ids AS tid MATCH (t:Entity {id:tid}) WITH t MATCH (t)-[rt:TOUCHED]->(a:Approval) WHERE ID(rt) >= 0 AND a.status IS NOT NULL
+OPTIONAL MATCH (a)-[r1:RESULTED_IN]->(ac:Action) WHERE ID(r1) >= 0
+OPTIONAL MATCH (ac)-[r2:RESULTED_IN]->(k:Task) WHERE ID(r2) >= 0
+WITH t, a, head(collect(k.id)) AS task, head(collect(k.status)) AS taskStatus
+RETURN t.id AS turn, a.id AS id, a.kind AS kind, a.title AS title, a.status AS status, a.decidedAt AS decidedAt, task, taskStatus
+ORDER BY turn, id LIMIT 24
+```
+
+so a repeat of the question a day later says "the fix task you approved is open, the message is saved with your edit" instead of asking for the same cards.
+`algo.pageRank` (section 5) ranks what is most connected on the Brain page; it is not part of this turn.
+
+## 14. What is not used, and why
 
 - No `GRAPH.COPY` for projections (it rebuilds vector and full-text indexes); no `algo.betweenness` on the tenant
   graph for `impact_of` (betweenness of a 60-node subgraph is computed in memory).

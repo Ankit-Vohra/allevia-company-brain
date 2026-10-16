@@ -12,8 +12,8 @@ export const CHECK_LABEL: Record<CheckName, string> = {
   citationsValid: "citations", numbersGrounded: "numbers", simulatedDisclosed: "simulated", freshnessDisclosed: "freshness", modeDisclosed: "mode",
 };
 
-export type ExpectationKind = "cite" | "match" | "tool" | "agent" | "forbid" | "simulated";
-export const EXPECTATION_KINDS: ExpectationKind[] = ["cite", "match", "tool", "agent", "forbid", "simulated"];
+export type ExpectationKind = "cite" | "match" | "tool" | "agent" | "path" | "propose" | "forbid" | "simulated";
+export const EXPECTATION_KINDS: ExpectationKind[] = ["cite", "match", "tool", "agent", "path", "propose", "forbid", "simulated"];
 
 export interface ExpectationResult { kind: ExpectationKind; want: string; ok: boolean; got?: string }
 
@@ -113,6 +113,17 @@ export function scoreTurn(item: EvalItem, t: TurnObservation): ItemScore {
   for (const want of x.mustUseAgents) {
     const ok = alternatives(want).some((a) => t.agents.includes(a));
     out.push({ kind: "agent", want, ok, ...(ok ? {} : { got: t.agents.join(", ") || "no agents" }) });
+  }
+  // the path drawn under the answer (the last `path` event), and the cards the turn drafted
+  const pathNodes = [...t.events].reverse().find((e): e is Extract<AgentEvent, { type: "path" }> => e.type === "path")?.nodes.map((n) => n.id) ?? [];
+  for (const want of x.mustPath) {
+    const ok = pathNodes.some((id) => citeMatcher(want)(id, labels));
+    out.push({ kind: "path", want, ok, ...(ok ? {} : { got: pathNodes.join(", ") || "no path drawn" }) });
+  }
+  const proposed = unique(t.events.filter((e): e is Extract<AgentEvent, { type: "proposal" }> => e.type === "proposal").map((e) => e.kind as string));
+  for (const want of x.mustPropose) {
+    const ok = alternatives(want).some((a) => proposed.includes(a));
+    out.push({ kind: "propose", want, ok, ...(ok ? {} : { got: proposed.join(", ") || "no cards" }) });
   }
   for (const want of x.forbid) {
     const m = compilePattern(want).exec(text);

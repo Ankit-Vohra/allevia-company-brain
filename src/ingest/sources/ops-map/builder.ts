@@ -167,11 +167,33 @@ export class Builder {
     return id;
   }
 
-  edge(from: string, type: RelType, to: string): void {
+  // `how` and `conf` say what kind of link it is and how sure the source is (a release that introduced an issue is read from
+  // the tracker; a link by timing alone gets a low conf), kept on the edge beside its source and date.
+  edge(from: string, type: RelType, to: string, o: { props?: Record<string, Prim>; conf?: number } = {}): void {
     const f = typeFromId(from), t = typeFromId(to);
     if (!f || !t || !isAllowed(f, type, t)) throw new Error(`ops mapper bug: ${from} -[${type}]-> ${to} is not an allowed pattern`);
     const k = `${from}|${type}|${to}`;
-    if (!this.edges.has(k)) this.edges.set(k, { from, type, to, src: this.src, asOf: this.ctx.asOf });
+    if (!this.edges.has(k)) {
+      this.edges.set(k, { from, type, to, src: this.src, asOf: this.ctx.asOf, ...(o.props ? { props: o.props } : {}), ...(o.conf !== undefined ? { conf: o.conf } : {}) });
+    }
+  }
+
+  /** One step of a user flow: a Feature that depends on the step before it (and on the screen it happens on, when known). */
+  funnelStep(audience: "seekers" | "employers", key: string, name: string, order: number, prev?: string): string {
+    const id = this.node("Feature", entityId("Feature", `${audience} signup ${key}`), `${audience === "seekers" ? "Seekers" : "Employers"}: ${name}`,
+      { kind: "funnel_step", audience, step: key, order });
+    this.edge(id, "DEPENDS_ON", prev ?? this.channel("app"));
+    // a plain sentence, so a search for "the sign-up flow" finds the steps (their names alone are only the step's label)
+    const n = this.nodes.get(id)!;
+    if (!n.summary) n.summary = `Step ${order} of the ${audience === "seekers" ? "job seeker" : "employer"} sign-up flow: ${name}.`;
+    return id;
+  }
+
+  /** A screen of the app, named by its route ("app/auth/login"), part of the app channel. */
+  screen(route: string): string {
+    const id = this.node("Page", `page:screen/${route.toLowerCase()}`, `Screen ${route}`, { kind: "app_screen", route });
+    this.edge(id, "PART_OF", this.channel("app"));
+    return id;
   }
 
   obs(subject: string, metric: string, value: unknown, o: Win & { unit?: string; asOf?: string } = {}): void {

@@ -11,6 +11,7 @@ needs_ok: false
 ## Method
 
 1. Find the right thing to test. A token or a login fails together with the system that uses it, so `search` for that system first (the Instagram connector, not "the token"), and confirm it with `get_entity`.
+2b. For a broken screen, release or crash, run `impact_of` twice on the thing that is broken: depth 1 and depth 4. Depth 1 is what a simple lookup shows (the next step, the campaign sending people in); depth 4 is the knock-on the owner would not think of (later steps, the alerts and employer features that need them). Report the two lists side by side, with the link that pulls each far item in, and say how many more things depth 4 finds.
 2. Run `impact_of` on it, depth 3. It returns what depends on it and what it affects, by number of steps away, with the connection that links each. Step 1 things break at once; step 2 and 3 things break by knock-on.
 3. Put the effects in the order a customer meets them: what customers see (the booking form, the shop, the Instagram feed on the site) first, then what the team sees (a report, a sync), then what nobody notices for weeks.
 4. For each, give the owner (`get_entity` on the affected thing) and, if the record has a date (an expiry), when it hits. Use `neighbors` to check a doubtful link.

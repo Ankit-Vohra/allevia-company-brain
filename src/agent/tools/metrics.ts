@@ -31,14 +31,49 @@ export function weekStart(date: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+// When did the level change? The single split of the series that leaves the least spread inside its two halves (the
+// classic one-change-point fit, no model), reported only when the two levels differ by at least SHIFT_MIN_PCT of the
+// earlier one and each side has MIN_SIDE readings. A series with no clear step says nothing. Readings that cover a
+// period longer than their date are not daily readings and are left out of the fit by the caller.
+const SHIFT_MIN_PCT = 25;
+const MIN_SIDE = 3;
+export interface Shift { at: string; before: number; after: number; pctChange: number | null; beforePoints: number; afterPoints: number }
+
+export function levelShift(points: Point[]): Shift | undefined {
+  const n = points.length;
+  if (n < MIN_SIDE * 2) return undefined;
+  const v = points.map((p) => p.value);
+  const sse = (a: number, b: number): number => {
+    const m = v.slice(a, b).reduce((x, y) => x + y, 0) / (b - a);
+    return v.slice(a, b).reduce((x, y) => x + (y - m) ** 2, 0);
+  };
+  let best = -1;
+  let bestCost = Infinity;
+  for (let k = MIN_SIDE; k <= n - MIN_SIDE; k++) {
+    const c = sse(0, k) + sse(k, n);
+    if (c < bestCost) { bestCost = c; best = k; }
+  }
+  if (best < 0) return undefined;
+  const mean = (a: number, b: number) => v.slice(a, b).reduce((x, y) => x + y, 0) / (b - a);
+  const before = mean(0, best);
+  const after = mean(best, n);
+  if (before === 0 || Math.abs(after - before) / Math.abs(before) * 100 < SHIFT_MIN_PCT) return undefined;
+  return {
+    at: points[best]!.date, before: round(before, 2), after: round(after, 2),
+    pctChange: round(((after - before) / Math.abs(before)) * 100, 1), beforePoints: best, afterPoints: n - best,
+  };
+}
+
 export function stats(points: Point[]) {
   const values = points.map((p) => p.value);
   const first = values[0]!;
   const last = values.at(-1)!;
+  const shift = points.some((p) => p.window) ? undefined : levelShift(points);
   return {
     points: points.length, from: points[0]!.date, to: points.at(-1)!.date, first, last,
     min: Math.min(...values), max: Math.max(...values), delta: round(last - first),
     pctChange: first !== 0 ? round(((last - first) / Math.abs(first)) * 100, 1) : null,
+    ...(shift ? { shift } : {}),
   };
 }
 
@@ -169,7 +204,7 @@ async function runTrend(args: { metric: string; subject?: string; from?: string;
 export const metricTrend = defineTool({
   name: "metric_trend",
   description:
-    "A number over time from Observations: the series plus first/last/min/max/delta/pctChange, for one subject (or a per-subject summary if none given). groupBy day|week sums flows, keeps the latest snapshot, averages rates. Unknown metric names list what exists. Example: {\"metric\":\"signups\",\"subject\":\"business:aamdani\",\"from\":\"2026-10-01\",\"groupBy\":\"week\"}",
+    "A number over time from Observations: the series plus first/last/min/max/delta/pctChange and, when the level stepped, shift (the date, the average before and after), for one subject (or a summary per subject if none given). groupBy day|week sums flows, keeps snapshots, averages rates. Example: {\"metric\":\"signups\",\"subject\":\"business:aamdani\",\"from\":\"2026-10-01\",\"groupBy\":\"week\"}",
   input: {
     metric: z.string().min(1).describe("Metric name, e.g. signups, followers, views, clicks"),
     subject: z.string().optional().describe("Id of what is measured"),

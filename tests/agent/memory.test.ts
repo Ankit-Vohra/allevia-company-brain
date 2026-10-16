@@ -232,6 +232,25 @@ describe("memory (integration)", () => {
     expect(brief.nodes?.find((n) => n.id === "turn:a1")).toMatchObject({ label: "Turn" });
   });
 
+  it("recallBrief says where an earlier answer's cards stand, and the task an approved one made", async () => {
+    await writeBatch(g, {
+      nodes: [
+        { type: "Approval", id: "approval:card-1", name: "github_issue: Ship the fix", props: { status: "executed", kind: "github_issue", title: "Ship the fix", decidedAt: NOW + 5_000 } },
+        { type: "Approval", id: "approval:card-2", name: "content_draft: Tell users", props: { status: "pending", kind: "content_draft", title: "Tell users" } },
+        { type: "Action", id: "action:card-1", name: "Added a task" },
+        { type: "Task", id: "task:ship-the-fix", name: "Ship the fix", props: { status: "open" } },
+      ],
+      edges: [
+        { from: "turn:a1", type: "TOUCHED", to: "approval:card-1" }, { from: "turn:a1", type: "TOUCHED", to: "approval:card-2" },
+        { from: "approval:card-1", type: "RESULTED_IN", to: "action:card-1" }, { from: "action:card-1", type: "RESULTED_IN", to: "task:ship-the-fix" },
+      ],
+    }, NOW);
+    const brief = await recallBrief(g, { question: "How are signups doing?", seedIds: ["metric:signups"] });
+    expect(brief.text).toMatch(/its task \[\[approval:card-1\]\] "Ship the fix": approved and done on [\d-]+; it made task \[\[task:ship-the-fix\]\] \(open\)/);
+    expect(brief.text).toMatch(/its message draft \[\[approval:card-2\]\] "Tell users": still waiting for the owner's OK/);
+    expect(brief.ids).toEqual(expect.arrayContaining(["approval:card-1", "approval:card-2", "task:ship-the-fix"]));
+  });
+
   it("recallBrief includes this thread's earlier turns when continuing a session, and only preferences when nothing is known", async () => {
     const turn = (await g.roQuery<{ s: string }>("MATCH (:Turn {id:'turn:a1'})-[:IN_SESSION]->(s:Session) RETURN s.id AS s"))[0]!;
     const brief = await recallBrief(g, { question: "and?", seedIds: [], sessionId: turn.s });

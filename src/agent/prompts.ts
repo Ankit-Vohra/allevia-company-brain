@@ -23,6 +23,7 @@ export const CONTENT_DESK = "content-strategist";
 export const findingMaxChars = (agentId?: string): number => (agentId === CONTENT_DESK ? CONTENT_FINDING_MAX_CHARS : FINDING_MAX_CHARS);
 export const MAX_DESKS = 3;          // desks for an ordinary question
 export const MAX_DESKS_BROAD = 5;    // desks for a broad review of the whole business
+export const MAX_DESKS_DIAGNOSE = 5; // desks for "why did this number drop / what broke": where it moved, what broke, what shipped, what else it hits, what we decided before
 
 // The demo tenants' zone; a tenant's own IANA zone comes in through opts.timeZone (TurnDeps.timeZone).
 export const DEFAULT_TIME_ZONE = "Asia/Kolkata";
@@ -248,7 +249,8 @@ export function planSystemPrompt(opts: PromptOpts & { disabled?: readonly string
     `How to plan (the fewest desks wins: every extra desk makes the owner wait):
 - Default to ONE step. If a quick lookup answers it (a fact, an entity, a decision, what we already know), plan only "${CHIEF}".
 - The owner's own plan ("what do I do this week", "what should I focus on today") is yours: plan only "${CHIEF}", with the task "Plan the owner's week with the what-do-i-do-this-week skill: at most three moves, each with a time estimate".
-- Add a second desk only when the question clearly needs another department's work. At most ${MAX_DESKS} desks for any ordinary question; up to ${MAX_DESKS_BROAD} only for a broad review of the whole business (a weekly brief, "how is the business doing overall").
+- Add a second desk only when the question clearly needs another department's work. At most ${MAX_DESKS} desks for any ordinary question; up to ${MAX_DESKS_BROAD} only for a broad review of the whole business (a weekly brief, "how is the business doing overall") or a diagnosis.
+- A DIAGNOSIS ("why did sign-ups / sales / traffic drop", "what broke", "what went wrong") is the one question that earns up to ${MAX_DESKS_DIAGNOSE} desks, each with a different question about the same drop, so they run side by side: the desk that owns the number (data-analyst: which step or source moved, and on which day), the on-call engineer (oncall-engineer: what crashed or errored on the screens and systems behind that step, since when, who owns it), the release manager (qa-release: what shipped or is stuck in a store's review around that day), the tech lead after the on-call engineer (tech-lead: what else the broken thing takes down, one step away against four steps away), and the librarian (librarian: what we decided or learned about this before). Leave out a desk only when the business has nothing for it (no app, no releases). Never plan growth-marketer to propose ad changes before a cause is found.
 - Never add a desk to double-check another: reviews are automatic. List the most important desk first.
 - When a desk needs another desk's finding, list that desk's id in its "after" (e.g. growth-marketer with after ["data-analyst"]); saying so in the task alone is not enough. Steps without "after" run in parallel, so only add "after" when the work truly needs the other finding.
 - A request to MAKE something now (a poster, an ad, a flyer, a story, a picture, a reel, a caption) goes to "${CHIEF}" alone: only the Chief holds the tools that make things, with the brand's logo and fonts. Plan content-strategist as well only when the owner also wants a week of posts or a content plan.
@@ -357,11 +359,25 @@ export function sourcesBlock(sources: readonly CapabilityModeInfo[], intro: stri
 // already made were listed as things left to do).
 const CONTENT_ANSWER_RULE = `The content desk's finding holds copy for the owner to post. Put the captions and the script in your answer word for word (each caption in a quote block, in the language it will be posted in), in the order given. Don't rewrite them into ideas or summaries, and don't shorten them. The five-item limit doesn't apply to a week of posts. Reviews of the earlier draft that the revised text already addresses are done: they are not to-dos for the owner. Keep every "[suggested: …]" spot exactly as written and tell the owner in one line that those are suggestions from their business profile, which they can accept by replying "fill it in" or change in their own words. Tell the owner only what else is still open: each "[you tell us: …]" spot and any note the revised text did not address. If you propose a content draft with propose_action, payload.body is that same text, whole; a proposal without it saves nothing.`;
 
+// A diagnosis ("why did X drop, what should we do"): the answer is the chain from the number to its cause, the cause's
+// reach, what was decided before, what the records do not say, and two cards waiting for the owner's OK.
+export const DIAGNOSIS_ANSWER_RULE = `This is a diagnosis. Build the answer from what the desks found:
+- Lead with the cause in one or two sentences, and how sure you are: say "proven" only where a record links the steps (a release recorded as introducing a crash; a crash recorded on that screen), "likely" where the dates fit but no record links them, and "not shown" where nothing does.
+- Then the chain in plain words with dates, cause to effect: what fell and by how much, on which day; at which step of the flow; the screen behind that step; the crash on it and how many people; the release that brought it; who owns it. Use the numbers and dates the findings give.
+- What else it hits: what the on-call or tech findings say is hurt one step away, against what is hurt up to four steps away (name the later ones the owner would not think of).
+- What we decided or learned last time about this, and where it stands now (from the librarian and "what we already know").
+- If you mention an ad campaign or anything marked simulated, say "sample numbers" right next to it, and if a figure is a total over a period say the period.
+- If what we already know shows cards from an earlier answer to this question, say where they stand (approved, edited, waiting, and the task it made) and what has changed since; do not draft the same cards again, and propose only what is new.
+- Say straight what is not in the records (no release date, no step-by-step data, no owner) instead of filling the gap. Do not blame a cause the dates rule out, and say in a few words why a tempting one (a paused ad, a search update) is not it.
+- Call show_path with the ordered ids the chain walks through, cause at the end: the funnel step or reading that fell, the screen, the crash, the release, then the person who owns it. Use the thing itself for each link (the release, not its release notes; the crash, not the report it came from), only ids the findings cite, and only things that exist in the business (never a card, recommendation or approval id).
+- When a cause is shown or likely, also call propose_action twice, in the same round as show_path: (1) kind github_issue, the fix task, with title, the numbers and dates as the body, and the crash, screen and release ids as evidence; (2) kind content_draft, a short message to the people affected (at most two sentences, plain, what to do meanwhile, no apology essay), with the message word for word in payload.body. Always draft it; if the owner's standing preferences say not to tell users until a fix is on its way, write it for that moment and put when to send it in the title. Say in one line that both wait for the owner's OK. When no cause is shown, propose nothing and say what to look at first.`;
+
 export function synthesisPrompt(o: {
   question: string; recall: string; findings: FindingView[]; failed: string[]; chiefTask?: string; canLookUp?: boolean;
   sources?: readonly CapabilityModeInfo[]; // the capabilities (not live) the desks' data drew on
   guidance?: readonly InstructionNote[];   // the owner's standing instructions the desks worked under
   language?: string;                       // the LANGUAGE note: the answer's language and script
+  diagnosis?: boolean;                     // the question asks why a number fell or what broke (DIAGNOSIS_ANSWER_RULE)
 }): string {
   const parts = [quoteQ(o.question), ...(o.language ? [o.language] : []), recallBlock(o.recall)];
   if (o.chiefTask) parts.push(`Your own note from planning: ${o.chiefTask}`);
@@ -376,6 +392,7 @@ export function synthesisPrompt(o: {
   const sources = sourcesBlock(o.sources ?? [], 'Where this data comes from (it is not live: when you use it, say so next to it, e.g. "from your public profile" or "benchmark"):');
   if (sources) parts.push(sources);
   if (o.findings.some((f) => f.agent === CONTENT_DESK && !f.rejected)) parts.push(CONTENT_ANSWER_RULE);
+  if (o.diagnosis && o.findings.length) parts.push(DIAGNOSIS_ANSWER_RULE);
   parts.push(ANSWER_RULES);
   if (o.language) parts.push(o.language); // last, where it weighs most: the records may be in another language
   return parts.join("\n\n");

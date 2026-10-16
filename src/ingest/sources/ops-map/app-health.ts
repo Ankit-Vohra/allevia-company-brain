@@ -8,6 +8,9 @@
 import { entityId } from "../../../util/ids.js";
 import { appWindow, arr, isDate, lastDays, numOf, obj, snake, str, type Builder, type Json, type Mapper } from "./builder.js";
 
+// "<global>(app/auth/login)" -> "app/auth/login": the screen route a tracker puts in an issue's `where`.
+export const screenRoute = (where: unknown): string | undefined => /\((app\/[\w\-./[\]]+)\)/.exec(typeof where === "string" ? where : "")?.[1];
+
 const day = (v: unknown): string | undefined => {
   const d = typeof v === "string" ? v.slice(0, 10) : undefined;
   return isDate(d) ? d : undefined;
@@ -46,9 +49,18 @@ const posthogFunnels: Mapper = (b, c) => {
   const name = str(f.name);
   if (!name) return;
   const subject = name === "seeker_signup" ? b.audience("seekers") : name === "employer_post" ? b.audience("employers") : app;
+  // Each step is also a node (Feature, kind funnel_step) that depends on the step before it, so the steps can be walked and
+  // a break at one is a break at every later one; its count is a reading on the step itself.
+  const audience = name === "seeker_signup" ? "seekers" : name === "employer_post" ? "employers" : undefined;
+  let prev: string | undefined;
   for (const s of arr(f.steps)) {
     const ev = snake(str(s.event) ?? "");
-    if (ev) b.obs(subject, `${snake(name)}_funnel_${ev}`, s.users, { ...w, unit: "users" });
+    if (!ev) continue;
+    b.obs(subject, `${snake(name)}_funnel_${ev}`, s.users, { ...w, unit: "users" });
+    if (audience) {
+      prev = b.funnelStep(audience, ev, ev.replace(/_/g, " "), numOf(s.step) ?? 0, prev);
+      b.obs(prev, "funnel_users", s.users, { ...w, unit: "users" });
+    }
   }
 };
 
@@ -65,6 +77,16 @@ function sentryIssue(b: Builder, app: string, x: Json, flag: "isNew" | "unresolv
     where: b.text(x.where, 80), firstSeen: day(x.firstSeen), lastSeen: day(x.lastSeen), [flag]: true,
   });
   b.edge(id, "AFFECTS", app);
+  // The screen it happened on (a route in `where`), and the release that first carried it when the tracker says so.
+  const route = screenRoute(x.where);
+  if (route) b.edge(id, "AFFECTS", b.screen(route), { props: { how: "crashed_on" } });
+  const first = obj(x.firstRelease);
+  const version = b.text(str(x.firstRelease) ?? first.version, 80);
+  if (version) {
+    const rel = b.node("Event", entityId("Event", `release ${version}`), `Release ${version}`, { kind: "release", release: version, platform: "app", releasedAt: day(first.dateReleased ?? first.dateCreated) });
+    b.edge(rel, "AFFECTS", app);
+    b.edge(rel, "AFFECTS", id, { props: { how: "introduced" }, conf: 0.9 });
+  }
   b.obs(id, "sentry_issue_events", x.eventsInPeriod, { ...w, unit: "count" });
   b.obs(id, "sentry_issue_users", x.users, { ...w, unit: "count" });
 }
@@ -92,7 +114,7 @@ const sentryIssues: Mapper = (b, { data: d }) => {
   for (const r of arr(d.latestRelease)) {
     const release = b.text(r.release, 80);
     if (!release) continue;
-    const id = b.node("Event", entityId("Event", `release ${release}`), `Release ${release}`, { kind: "release", release, project: b.text(r.project, 60), platform: "app" });
+    const id = b.node("Event", entityId("Event", `release ${release}`), `Release ${release}`, { kind: "release", release, project: b.text(r.project, 60), platform: "app", releasedAt: day(r.dateReleased ?? r.dateCreated) });
     b.edge(id, "AFFECTS", app);
   }
 };

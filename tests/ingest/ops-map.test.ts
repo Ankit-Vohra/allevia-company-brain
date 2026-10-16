@@ -203,10 +203,22 @@ describe("mapSnapshot: users and sign-ups", () => {
       { stage: "OTP verified", count: 61 }, { stage: "accounts created", count: 89 },
     ];
     const out = mapSnapshot(snap({ "signup_funnel.json": env("signup_funnel", { range: RANGE, seekers: { stages } }) }), ctx);
-    const got = Object.fromEntries(out.write.observations.map((o) => [o.metric, o.value]));
+    const got = Object.fromEntries(out.write.observations.filter((o) => o.subject === "audience:seekers").map((o) => [o.metric, o.value]));
     expect(got).toEqual({
       signup_funnel_activated: 13, signup_funnel_profile_photo_added: 17, signup_funnel_otp_verified: 61, signup_funnel_accounts_created: 89,
     });
+    // each step is a node too, depending on the step before it (the first on the app), with its count as a reading on it
+    const steps = out.write.nodes.filter((n) => n.props?.kind === "funnel_step").map((n) => n.id);
+    expect(steps).toHaveLength(4);
+    const dep = (from: string) => out.write.edges.find((e) => e.type === "DEPENDS_ON" && e.from === from)?.to;
+    expect(dep("feature:seekers-signup-activated")).toBe("channel:app"); // an unknown stage is in the list: as listed
+    const known = mapSnapshot(snap({ "signup_funnel.json": env("signup_funnel", { range: RANGE, seekers: { stages: [
+      { stage: "first application", count: 13 }, { stage: "accounts created", count: 89 }, { stage: "OTP verified", count: 61 }] } }) }), ctx);
+    const kdep = (from: string) => known.write.edges.find((e) => e.type === "DEPENDS_ON" && e.from === from)?.to;
+    expect(kdep("feature:seekers-signup-activated")).toBe("feature:seekers-signup-otp-verified");
+    expect(kdep("feature:seekers-signup-otp-verified")).toBe("feature:seekers-signup-accounts-created");
+    expect(kdep("feature:seekers-signup-accounts-created")).toBe("channel:app");
+    expect(out.write.observations.find((o) => o.subject === "feature:seekers-signup-otp-verified")?.value).toBe(61);
     expect(funnelStep(" Setup Completed ")).toBe("setup_completed");
     expect(funnelStep("first live job")).toBe("activated");
   });
@@ -361,6 +373,19 @@ describe("mapSnapshot: on-call and release signals (Sentry, Play, the App Store)
     expect(observations.filter((o) => o.metric === "crash_free_sessions_daily_pct")).toHaveLength(se.stability.series.length);
     expect(node("event:release-app-1-2-3-45")).toMatchObject({ type: "Event", props: { kind: "release", release: "app@1.2.3+45", project: "app" } });
     expect(edges).toContainEqual(expect.objectContaining({ from: "event:release-app-1-2-3-45", type: "AFFECTS", to: APP }));
+  });
+
+  it("an issue's screen and first release become nodes and links, with how sure the source is", () => {
+    const item = { id: "APP-SU1", title: "TypeError on sign-up", where: "<global>(app/auth/sign-up)", level: "error", unhandled: true, eventsInPeriod: 40, users: 31, firstSeen: "2026-10-08", lastSeen: "2026-10-14", firstRelease: { version: "app@1.3.0+46", dateReleased: "2026-10-08T05:00:00Z" } };
+    const out = mapSnapshot(snap({ "sentry_issues.json": env("sentry_issues", { period: "14d", stability: {}, newIssues: { count: 1, items: [item] }, topUnresolved: [] }) }), ctx);
+    expect(out.write.nodes).toContainEqual(expect.objectContaining({ id: "page:screen/app/auth/sign-up", type: "Page", props: expect.objectContaining({ kind: "app_screen", route: "app/auth/sign-up" }) }));
+    expect(out.write.edges).toContainEqual(expect.objectContaining({ from: "event:sentry-issue-app-su1", type: "AFFECTS", to: "page:screen/app/auth/sign-up", props: { how: "crashed_on" } }));
+    expect(out.write.edges).toContainEqual(expect.objectContaining({ from: "event:release-app-1-3-0-46", type: "AFFECTS", to: "event:sentry-issue-app-su1", props: { how: "introduced" }, conf: 0.9 }));
+    expect(out.write.nodes.find((n) => n.id === "event:release-app-1-3-0-46")?.props).toMatchObject({ releasedAt: "2026-10-08" });
+    // no route in `where`, no release in the data: no screen, no release (nothing is guessed)
+    const bare = mapSnapshot(snap({ "sentry_issues.json": env("sentry_issues", { period: "14d", stability: {}, newIssues: { count: 1, items: [{ ...item, where: "Object.error(entry)", firstRelease: undefined }] }, topUnresolved: [] }) }), ctx);
+    expect(bare.write.nodes.some((n) => n.props?.kind === "app_screen")).toBe(false);
+    expect(bare.write.nodes.some((n) => n.props?.kind === "release")).toBe(false);
   });
 
   it("Play's bad-behaviour thresholds sit next to the rates they judge", () => {

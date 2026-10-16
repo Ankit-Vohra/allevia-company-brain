@@ -327,6 +327,14 @@ interface TurnRow { id: string; q: string | null; a: string | null; at: number |
 const turnLine = (r: TurnRow): string =>
   `- [[${r.id}]] ${r.at ? istDate(r.at) : "?"}: asked "${clip(oneLine(r.q ?? ""), 140)}"; answered "${clip(oneLine(stripCitations(r.a ?? "")), 220)}"`;
 
+interface CardRow { turn: string; id: string; kind: string | null; title: string | null; status: string | null; decidedAt: number | null; task: string | null; taskStatus: string | null }
+
+const CARD_WORD: Record<string, string> = { github_issue: "task", content_draft: "message draft", pause_ad: "ad pause", discord_post: "Discord post" };
+const STATUS_WORD: Record<string, string> = { pending: "still waiting for the owner's OK", approved: "approved", edited: "approved with the owner's edit", executed: "approved and done", rejected: "rejected", failed: "approved but failed" };
+const cardLine = (c: CardRow): string =>
+  `    its ${CARD_WORD[c.kind ?? ""] ?? "card"} [[${c.id}]] "${clip(oneLine(c.title ?? ""), 100)}": ${STATUS_WORD[c.status ?? ""] ?? c.status ?? "unknown"}${c.decidedAt ? ` on ${istDate(c.decidedAt)}` : ""}` +
+  `${c.task ? `; it made task [[${c.task}]] (${c.taskStatus ?? "open"})` : ""}`;
+
 export async function recallBrief(g: GraphHandle, o: { question: string; seedIds: string[]; sessionId?: string }): Promise<RecallBrief> {
   const seeds = unique(o.seedIds.filter(Boolean)).slice(0, 25);
   const sections: Array<{ title: string; lines: string[] }> = [];
@@ -348,8 +356,23 @@ export async function recallBrief(g: GraphHandle, o: { question: string; seedIds
        WITH DISTINCT t RETURN t.id AS id, t.question AS q, t.answer AS a, t.at AS at ORDER BY t.at DESC, t.id LIMIT 8`, { ids: seeds }))
       .filter((r) => !inThread.has(r.id)).slice(0, 5);
     if (turns.length) {
-      sections.push({ title: "Earlier threads on this:", lines: turns.map(turnLine) });
+      // Where each earlier answer's cards stand: approved (with what it made), edited, rejected or still waiting, so a repeat
+      // of the question reports progress and does not ask for the same thing twice.
+      const cards = await g.roQuery<CardRow>(
+        `UNWIND $ids AS tid MATCH (t:Entity {id:tid}) WITH t MATCH (t)-[rt:TOUCHED]->(a:Approval) WHERE ID(rt) >= 0 AND a.status IS NOT NULL
+         OPTIONAL MATCH (a)-[r1:RESULTED_IN]->(ac:Action) WHERE ID(r1) >= 0
+         OPTIONAL MATCH (ac)-[r2:RESULTED_IN]->(k:Task) WHERE ID(r2) >= 0
+         WITH t, a, head(collect(k.id)) AS task, head(collect(k.status)) AS taskStatus
+         RETURN t.id AS turn, a.id AS id, a.kind AS kind, a.title AS title, a.status AS status, a.decidedAt AS decidedAt, task, taskStatus
+         ORDER BY turn, id LIMIT 24`, { ids: turns.map((r) => r.id) }).catch((): CardRow[] => []);
+      const byTurn = new Map<string, CardRow[]>();
+      for (const c of cards) byTurn.set(c.turn, [...(byTurn.get(c.turn) ?? []), c]);
+      sections.push({
+        title: "Earlier threads on this:",
+        lines: turns.flatMap((r) => [turnLine(r), ...(byTurn.get(r.id) ?? []).map(cardLine)]),
+      });
       for (const r of turns) ref(r.id, "Turn", r.q);
+      for (const c of cards) { ref(c.id, "Approval", c.title); if (c.task) ref(c.task, "Task", c.title); }
     }
 
     const notes = await g.roQuery<{ id: string; name: string; text: string | null; kind: string | null; asOf: string | null }>(

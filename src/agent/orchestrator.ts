@@ -41,7 +41,7 @@ import { clipToItem } from "./style.js";
 import { languageNote } from "./language.js";
 import { humanPass, rewritePrompt, rewriteSystem, REWRITE_SCHEMA } from "./humanize.js";
 import {
-  CHIEF, CONTENT_DESK, FINDING_SCHEMA, findingMaxChars, MAX_DESKS, MAX_DESKS_BROAD, REVIEW_SCHEMA, agentSystemPrompt, directPrompt, planSchema,
+  CHIEF, CONTENT_DESK, FINDING_SCHEMA, findingMaxChars, MAX_DESKS, MAX_DESKS_BROAD, MAX_DESKS_DIAGNOSE, REVIEW_SCHEMA, agentSystemPrompt, directPrompt, planSchema,
   planPrompt, planSystemPrompt, reviewPrompt, revisePrompt, synthesisPrompt, workPrompt, type FindingView, type PromptOpts, type ReviewEvidence,
 } from "./prompts.js";
 import type { CreativeDeps } from "../creative/ports.js";
@@ -176,7 +176,15 @@ const BROAD = new RegExp([
   String.raw`\bhow (?:is|are) (?:the |my |our )?(?:business|company|things) (?:doing|going)\b`,
 ].join("|"), "i");
 export const isBroadQuestion = (question: string): boolean => BROAD.test(question);
-export const deskCap = (question: string): number => (isBroadQuestion(question) ? MAX_DESKS_BROAD : MAX_DESKS);
+// A diagnosis: the owner asks why a number fell or what broke. It earns the same five desks as a broad review, because
+// the answer joins what moved, what broke, what shipped, what else it hits and what was decided before.
+const DIAGNOSIS = new RegExp([
+  String.raw`\bwhy\b[^?.!]{0,60}\b(?:drop(?:ped|ping)?|fell|fall(?:en|ing)?|down|declin\w+|dips?|dipped|slump\w*|lower|fewer|worse|crash\w*|broke(?:n)?|stopp\w+|spik\w+)\b`,
+  String.raw`\bwhat (?:broke|went wrong|changed|happened)\b`, String.raw`\bsomething (?:is |seems |has )?(?:wrong|broken|off)\b`,
+  String.raw`\b(?:drop|fall|dip|decline)\s+in\b`,
+].join("|"), "i");
+export const isDiagnosisQuestion = (question: string): boolean => DIAGNOSIS.test(question);
+export const deskCap = (question: string): number => (isBroadQuestion(question) ? MAX_DESKS_BROAD : isDiagnosisQuestion(question) ? MAX_DESKS_DIAGNOSE : MAX_DESKS);
 
 // Validates the Chief's plan: unknown agents and desks the owner switched off dropped, one step per agent (tasks
 // merged), at most deskCap(question) steps (3, or 5 for a broad review; the first ones listed are kept), `after` limited
@@ -1167,7 +1175,7 @@ class Turn {
         prompt: fast
           ? directPrompt({ question: this.input.question, recall: this.input.recall.text, task: plan.steps[0]!.task, toolRounds: toolRounds("direct"), sources, language: this.languageNote }) + this.namedSkills(chief, plan.steps[0]!.task, tools)
           : synthesisPrompt({
-            question: this.input.question, recall: this.input.recall.text, findings: views, failed: this.failed, canLookUp: !lean, sources, guidance, language: this.languageNote,
+            question: this.input.question, recall: this.input.recall.text, findings: views, failed: this.failed, canLookUp: !lean, sources, guidance, language: this.languageNote, diagnosis: isDiagnosisQuestion(this.input.question),
             ...(plan.chiefTask ? { chiefTask: plan.chiefTask } : {}),
           }),
         ...(held ? { abort: held.abort, onToolResult: this.toolResults(out, held.hold) } : {}),

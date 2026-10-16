@@ -91,7 +91,7 @@ type Scenario = { name: string; question: string; scripts: (s: Stats, caps: bool
 const SCENARIOS: Scenario[] = [
   {
     name: "why (live-like: 3 desks, a dependency, numbers reviewed)",
-    question: "Why did employer signups drop last week?",
+    question: "Which channel brought the most employer signups last week?",
     scripts: (s, c) => ({
       "chief-of-staff:plan": plan(s, [
         { agent: "data-analyst", task: "Find why signups dropped" },
@@ -121,7 +121,7 @@ const SCENARIOS: Scenario[] = [
   },
   {
     name: "over-planned (Chief asks for 5 desks on an ordinary question)",
-    question: "Why did employer signups drop last week?",
+    question: "Which channel brought the most employer signups last week?",
     scripts: (s, c) => ({
       "chief-of-staff:plan": plan(s, [
         { agent: "data-analyst", task: "Find why signups dropped" },

@@ -85,13 +85,25 @@ export function funnelStep(stage: string): string {
   return snake(stage);
 }
 
+const FLOW_ORDER = ["accounts_created", "otp_verified", "setup_completed", "activated"];
+
 const signupFunnel: Mapper = (b, { data: d }) => {
   const w = { ...appWindow(d), unit: "users" };
   for (const key of ["seekers", "employers"] as const) {
     const id = b.audience(key);
-    for (const s of arr(obj(d[key]).stages)) {
+    let prev: string | undefined;
+    let order = 0;
+    // the steps follow the flow's own order: by stage name when every stage is a known one, else as the tool listed them
+    const listed = arr(obj(d[key]).stages);
+    const rank = (s: Record<string, unknown>) => FLOW_ORDER.indexOf(funnelStep(str(s.stage) ?? ""));
+    const stages = listed.every((s) => rank(s) >= 0) ? [...listed].sort((x, y) => rank(x) - rank(y)) : listed;
+    for (const s of stages) {
       const stage = str(s.stage);
-      if (stage) b.obs(id, `signup_funnel_${funnelStep(stage)}`, s.count, w);
+      if (!stage) continue;
+      b.obs(id, `signup_funnel_${funnelStep(stage)}`, s.count, w);
+      // the same count on the step itself (a node that depends on the step before it), so the flow can be walked
+      prev = b.funnelStep(key, funnelStep(stage), stage, ++order, prev);
+      b.obs(prev, "funnel_users", s.count, w);
     }
   }
 };

@@ -4,7 +4,7 @@ import type { AgentEvent } from "../../shared/contracts.js";
 import type { GraphHandle } from "../../src/graph/client.js";
 import { AGENTS, agentById } from "../../shared/roster.js";
 import {
-  MAX_REVIEWERS, MAX_TURNS, PATH_FIRST_NOTE, asksToRemember, notePathFirst, toolRounds, normalisePlan, rememberRefusal, reviewersFor, runTurn, toProposal, toolsFor, arrayArgKey,
+  MAX_REVIEWERS, MAX_TURNS, PATH_FIRST_NOTE, asksToRemember, notePathFirst, toolRounds, normalisePlan, isDiagnosisQuestion, rememberRefusal, reviewersFor, runTurn, toProposal, toolsFor, arrayArgKey,
   type TurnDeps, type TurnInput,
 } from "../../src/agent/orchestrator.js";
 import { directPrompt, synthesisPrompt } from "../../src/agent/prompts.js";
@@ -70,7 +70,7 @@ describe("normalisePlan", () => {
     { agent: "ops-manager", task: "o" }, { agent: "coe-lead", task: "c" },
   ];
   it("drops unknown agents, merges duplicate desks and caps an ordinary question at 3 desks (the first listed)", () => {
-    const p = normalisePlan({ rationale: "r", steps: SEVEN }, "Why did signups drop last week?");
+    const p = normalisePlan({ rationale: "r", steps: SEVEN }, "Which reel did best last week?");
     expect(p.steps.map((s) => s.agent)).toEqual(["data-analyst", "tech-lead", "growth-marketer"]);
     expect(p.steps[0]!.task).toBe("a; b");
   });
@@ -79,9 +79,16 @@ describe("normalisePlan", () => {
       expect(normalisePlan({ rationale: "r", steps: SEVEN }, q).steps.map((s) => s.agent)).toEqual(["data-analyst", "tech-lead", "growth-marketer", "librarian", "ops-manager"]);
     }
     for (const q of ["How's everything going?", "How are we doing overall?"]) expect(normalisePlan({ rationale: "r", steps: SEVEN }, q).steps.length).toBe(5);
-    for (const q of ["Which reel did best?", "Is everything in the sitemap fine?", "Why did signups drop overall in Mumbai?"]) {
+    for (const q of ["Which reel did best?", "Is everything in the sitemap fine?", "Why do we post reels on Tuesdays?"]) {
       expect(normalisePlan({ rationale: "r", steps: SEVEN }, q).steps.length).toBe(3);
     }
+  });
+  it("allows 5 desks for a diagnosis (why a number fell, what broke), which joins what moved, what broke and what shipped", () => {
+    for (const q of ["Why did sign-ups drop this week, and what should we do?", "Why have bookings fallen since Monday?", "What broke on the sign-up page?", "Why is crash-free down?", "Why did traffic dip in Mumbai?"]) {
+      expect(isDiagnosisQuestion(q), q).toBe(true);
+      expect(normalisePlan({ rationale: "r", steps: SEVEN }, q).steps.length, q).toBe(5);
+    }
+    for (const q of ["Which reel did best?", "Why do we post reels on Tuesdays?", "Who owns the publisher?", "Why did we pause daily stories?"]) expect(isDiagnosisQuestion(q), q).toBe(false);
   });
   it("keeps only `after` agents that are planned, orders topologically and breaks cycles", () => {
     const p = normalisePlan({ rationale: "", steps: [

@@ -7,6 +7,7 @@ export const STARTERS: Record<string, string> = {
   "plan-across-desks": "I have a big request. Who on the team should work on it, and in what order?",
   "thin-data-and-disagreements": "Where is our evidence thin, or where do people on the team disagree?",
   "what-do-i-do-this-week": "What should I do this week?",
+  "why-did-a-number-drop": "Why did my sign-ups drop, and what should I do?",
   // Isha, numbers
   "cash-flow-check": "Will we have enough cash for the next 90 days?",
   "goal-progress-plain-words": "How am I doing on my goals?",
