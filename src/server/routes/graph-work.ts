@@ -32,7 +32,7 @@ export interface GraphAtWorkDto {
   errors: string[];
 }
 
-const FOCUS_TYPES = ["System", "Channel", "Product", "Feature"];
+const FOCUS_TYPES = ["System", "Channel", "Product", "Feature", "Page"]; // Page: an app screen can be what breaks (a sign-up screen) as well as a system
 const READ_MS = 10_000;
 
 export async function candidates(g: GraphHandle): Promise<GraphAtWorkDto["candidates"]> {

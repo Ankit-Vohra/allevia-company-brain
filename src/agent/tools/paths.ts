@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { ToolContext } from "../tool.js";
 import { REL_TYPES, type RelType } from "../../graph/schema.js";
 import { shortestPaths } from "../../graph/algorithms.js";
+import { typeFromId } from "../../util/ids.js";
 import {
   ALGO_BUDGET, Collector, EDGE, InputError, MEMORY_RELS, PATH_RELS, TOOL_ALGO_TIMEOUT_MS, clamp, defineTool, edgeText,
   getNodes, parseAsOf, requireNode, ro, type EdgeRow,
@@ -48,8 +49,15 @@ export const findPaths = defineTool({
 
 // ---------- show_path ----------
 
+// A card the team just proposed (a Recommendation, its Approval, an Action) is what we suggest, not part of why: the
+// explanation path is drawn through the business's own records, so these are left out when two or more other ids remain.
+const PROPOSED = new Set(["Recommendation", "Approval", "Action"]);
+
 async function runShowPath(args: { ids: string[] }, ctx: ToolContext) {
-  const list = args.ids.map((s) => s.trim()).filter(Boolean).filter((id, i, a) => i === 0 || a[i - 1] !== id);
+  const given = args.ids.map((s) => s.trim()).filter(Boolean).filter((id, i, a) => i === 0 || a[i - 1] !== id);
+  const records = given.filter((id) => !PROPOSED.has(typeFromId(id) ?? ""));
+  const left = records.length >= 2 && records.length < given.length ? given.filter((id) => !records.includes(id)) : [];
+  const list = left.length ? records : given;
   if (!list.length) throw new InputError("Pass the ordered ids of your explanation, e.g. [\"decision:x\", \"observation:y\"].");
   const found = await getNodes(ctx, list);
   const missing = list.filter((id) => !found.has(id));
@@ -93,6 +101,7 @@ async function runShowPath(args: { ids: string[] }, ctx: ToolContext) {
     }
   }
   const problems = [
+    ...(left.length ? [`Left out of the path: ${left.join(", ")} (a proposed card is what we suggest, not part of why).`] : []),
     ...(missing.length ? [`Unknown ids: ${missing.join(", ")}.`] : []),
     ...(unconnected.length ? [`Not connected within 4 hops: ${unconnected.map((u) => `${u.from} -> ${u.to}`).join("; ")}.`] : []),
     ...(unchecked.length ? [`Not checked in time: ${unchecked.map((u) => `${u.from} -> ${u.to}`).join("; ")}.`] : []),

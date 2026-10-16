@@ -13,6 +13,6 @@ export async function realVectors(g: GraphHandle): Promise<number> {
   const ev = await embedPassages(ents.map((e) => entityText({ name: e.name, type: typeOfLabels(e.labels) ?? "Document", ...(e.summary ? { summary: e.summary } : {}) })));
   const cv = await embedPassages(chunks.map((c) => c.text));
   await g.query("UNWIND $rows AS r MATCH (n:Entity {id: r.id}) SET n.embedding = vecf32(r.v)", { rows: ents.map((e, i) => ({ id: e.id, v: ev[i]! })) });
-  await g.query("UNWIND $rows AS r MATCH (c:Chunk {id: r.id}) SET c.textEmbedding = vecf32(r.v)", { rows: chunks.map((c, i) => ({ id: c.id, v: cv[i]! })) });
+  await g.query("UNWIND $rows AS r MATCH (c:Entity:Chunk {id: r.id}) SET c.textEmbedding = vecf32(r.v)", { rows: chunks.map((c, i) => ({ id: c.id, v: cv[i]! })) });
   return ents.length + chunks.length;
 }
