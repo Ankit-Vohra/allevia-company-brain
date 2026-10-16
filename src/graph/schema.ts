@@ -216,7 +216,26 @@ export const ALLOWED_PATTERNS: Pattern[] = [
 // happens on a screen (Page, kind app_screen) in the app (Channel), so a broken screen breaks the step and every step after it.
 // Kept out of ALLOWED_PATTERNS on purpose: that list is what the extraction model is shown, and changing it would change every
 // tenant's extraction cache key and re-run every document through the model.
-export const MAPPER_PATTERNS: Pattern[] = [...pat("Feature", "DEPENDS_ON", ["Page", "Channel"])];
+//
+// The graph audit (docs/graph-audit.md) added the links the deterministic writers need to make the product's own work
+// traversable, kept here for the same reason:
+//   - a card or a rule is GUIDED_BY the rule it applied, and a card, a rule or a memory is SOURCED_FROM the turn it came out of;
+//   - what a sales message or meeting went through (Channel), where a lead came from (Campaign, Content) and what a lead,
+//     deal, meeting or message is for (Goal);
+//   - a connection (System) PRODUCED the snapshot Documents its facts came from;
+//   - a rival (Competitor) OWNS the channels and ads watched through public data;
+//   - the Discord card an Approval was posted as (Approval PUBLISHED_ON Channel).
+export const MAPPER_PATTERNS: Pattern[] = [
+  ...pat("Feature", "DEPENDS_ON", ["Page", "Channel"]),
+  ...pat(["Approval", "Recommendation"], "GUIDED_BY", ["Rule", "BrandRule", "Memory"]),
+  ...pat(["Recommendation", "Approval", "Memory", "Rule"], "SOURCED_FROM", "Turn"),
+  ...pat(["Message", "Meeting"], "CAME_VIA", "Channel"),
+  ...pat("Lead", "CAME_VIA", ["Campaign", "Content"]),
+  ...pat(["Lead", "Deal", "Meeting", "Message"], "ADVANCES", "Goal"),
+  ...pat("System", "PRODUCED", "Document"),
+  ...pat("Competitor", "OWNS", ["Channel", "Content"]),
+  ...pat("Approval", "PUBLISHED_ON", "Channel"),
+];
 
 const ALLOWED = new Set([...ALLOWED_PATTERNS, ...MAPPER_PATTERNS].map(([f, r, t]) => `${f}|${r}|${t}`));
 
@@ -269,8 +288,14 @@ export const TRACKED_PROPS: Partial<Record<EntityType, string[]>> = {
   Asset: ["status"],
   Capability: ["accessMode", "status"],
   Business: ["country", "currency", "locale", "timeZone", "designStyle", "templateKey"],
-  Agent: ["enabled", "mode", "autonomy"],
-  Rule: ["status"],
+  Agent: ["enabled", "mode", "autonomy", "skillsOff"],
+  Rule: ["status", "confidence"],
+  // the graph audit: a connection's state (ok, expired, not connected), a post's, a message's and an action's progress each
+  // leave a Version, so "connected on 9 Oct, expired on 14 Oct, reconnected 15 Oct" and "scheduled, publishing, published" are reads
+  System: ["status"],
+  Content: ["status"],
+  Message: ["status"],
+  Action: ["status"],
   // sales: the stage a lead or deal is in is bi-temporal ("what moved this week" reads the Versions); so is a meeting's state
   Lead: ["stage"],
   Deal: ["stage", "value"],

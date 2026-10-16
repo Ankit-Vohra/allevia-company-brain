@@ -82,7 +82,7 @@ interface Row { d: string; k: string; c: number }
 
 async function nodeRows(g: GraphHandle, axis: StoryAxis): Promise<{ rows: Row[]; undated: number }> {
   const day = axis === "recorded"
-    ? "toInteger(floor(n.createdAt / 86400000.0))"
+    ? "n.createdAt - n.createdAt % 86400000"
     : "substring(n.asOf, 0, 10)";
   const has = axis === "recorded" ? "n.createdAt IS NOT NULL" : "n.asOf IS NOT NULL AND size(n.asOf) >= 10";
   const rows = await g.roQuery<{ d: number | string; k: string | null; c: number }>(
@@ -90,12 +90,12 @@ async function nodeRows(g: GraphHandle, axis: StoryAxis): Promise<{ rows: Row[];
      WITH ${day} AS d, [x IN labels(n) WHERE x <> 'Entity' AND x <> 'Searchable'][0] AS k
      RETURN d, k, count(*) AS c ORDER BY d, k`, {}, { timeoutMs: 30_000 });
   const [un] = await g.roQuery<{ c: number }>(`MATCH (n:Entity) WHERE NOT (${has}) RETURN count(n) AS c`, {}, { timeoutMs: 30_000 });
-  return { rows: rows.map((r) => ({ d: typeof r.d === "number" ? isoDay(r.d * DAY_MS) : String(r.d), k: r.k ?? "", c: r.c })), undated: un?.c ?? 0 };
+  return { rows: rows.map((r) => ({ d: typeof r.d === "number" ? isoDay(r.d) : String(r.d), k: r.k ?? "", c: r.c })), undated: un?.c ?? 0 };
 }
 
 async function edgeRows(g: GraphHandle, axis: StoryAxis): Promise<{ rows: Row[]; undated: number }> {
   const day = axis === "recorded"
-    ? "toInteger(floor(r.recordedAt / 86400000.0))"
+    ? "r.recordedAt - r.recordedAt % 86400000"
     : "substring(r.asOf, 0, 10)";
   const has = axis === "recorded" ? "r.recordedAt IS NOT NULL" : "r.asOf IS NOT NULL AND size(r.asOf) >= 10";
   const rows = await g.roQuery<{ d: number | string; k: string; c: number }>(
@@ -103,15 +103,15 @@ async function edgeRows(g: GraphHandle, axis: StoryAxis): Promise<{ rows: Row[];
      WITH ${day} AS d, type(r) AS k
      RETURN d, k, count(*) AS c ORDER BY d, k`, {}, { timeoutMs: 30_000 });
   const [un] = await g.roQuery<{ c: number }>(`MATCH ()-[r]->() WHERE ID(r) >= 0 AND NOT (${has}) RETURN count(r) AS c`, {}, { timeoutMs: 30_000 });
-  return { rows: rows.map((r) => ({ d: typeof r.d === "number" ? isoDay(r.d * DAY_MS) : String(r.d), k: r.k, c: r.c })), undated: un?.c ?? 0 };
+  return { rows: rows.map((r) => ({ d: typeof r.d === "number" ? isoDay(r.d) : String(r.d), k: r.k, c: r.c })), undated: un?.c ?? 0 };
 }
 
 async function retiredRows(g: GraphHandle): Promise<Row[]> {
   const rows = await g.roQuery<{ d: number; c: number }>(
     `MATCH ()-[r]->() WHERE ID(r) >= 0 AND r.retiredAt IS NOT NULL
-     WITH toInteger(floor(r.retiredAt / 86400000.0)) AS d
+     WITH r.retiredAt - r.retiredAt % 86400000 AS d
      RETURN d, count(*) AS c ORDER BY d`, {}, { timeoutMs: 30_000 });
-  return rows.map((r) => ({ d: isoDay(r.d * DAY_MS), k: "retired", c: r.c }));
+  return rows.map((r) => ({ d: isoDay(r.d), k: "retired", c: r.c }));
 }
 
 // The biggest day of new nodes is the load (an ingest or a seed); everything recorded on later days came from use.

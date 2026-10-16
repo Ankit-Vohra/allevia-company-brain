@@ -172,7 +172,7 @@ describe("the learning loop, end to end", () => {
     expect(again).toEqual([expect.objectContaining({ id: "rule:learned-say-home-not-villa", created: false, confidence: 0.8 })]);
     const back = await learnFromEdit(g, { approvalId: "approval:t-001-1", original: { title: "Home", body: "" }, edited: { title: "Villa", body: "" }, now });
     expect(back[0]).toMatchObject({ id: "rule:learned-say-villa-not-home", retired: ["rule:learned-say-home-not-villa"] });
-    expect(await count("MATCH (r:Rule {id:'rule:learned-say-home-not-villa'})-[:HAD_VERSION]->(v:Version) WHERE r.status = 'retired' RETURN count(v) AS c")).toBe(1);
+    expect(await count("MATCH (r:Rule {id:'rule:learned-say-home-not-villa'})-[:HAD_VERSION]->(v:Version) WHERE r.status = 'retired' RETURN count(v) AS c")).toBe(2); // one Version for the reinforcement (confidence 0.7 to 0.8), one for the retirement
     expect(await count("MATCH (:Rule {id:'rule:learned-say-villa-not-home'})-[:CONTRADICTS]->(:Rule {id:'rule:learned-say-home-not-villa'}) RETURN count(*) AS c")).toBe(1);
   });
 

@@ -35,6 +35,9 @@ export interface AskInput {
   // A direct chat with one roster agent (src/agent/orchestrator.ts TurnInput.target). A new thread remembers it
   // (Session.agent). Absent or the Chief: the whole team, the Chief routes.
   target?: string;
+  // Answer without writing anything: no session, no Turn, no memory (and, with deps.readOnly, no tool writes). For measuring
+  // an answer on a business's real graph (scripts/bench-efficiency.ts) and for read-only checks; the answer is not kept.
+  ephemeral?: boolean;
 }
 
 export interface AskDeps {
@@ -106,7 +109,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
     if (target && !agentById(target)) throw new Error("That person is not on the team.");
     g ??= await openGraph(input.tenant);
     const continuing = input.sessionId ? !!(await getSession(g, input.sessionId)) : false;
-    if (!continuing) await startSession(g, { channel: input.channel, asker, title: question, id: sessionId, ...(target ? { agent: target } : {}) }, now);
+    if (!continuing && !input.ephemeral) await startSession(g, { channel: input.channel, asker, title: question, id: sessionId, ...(target ? { agent: target } : {}) }, now);
 
     let seeds: string[] = [];
     try { seeds = deps.seedSearch ? await deps.seedSearch(question) : []; } catch { seeds = []; } // recall is best-effort
@@ -182,7 +185,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
   log.push(final);
   const usage = { ...meter.total, toolCalls: log.filter((e) => e.type === "tool_call").length };
 
-  if (g) {
+  if (g && !input.ephemeral) {
     try {
       const saved = await saveTurn(g, {
         turnId, sessionId, question, answer, asker, source: input.channel, at: now, ms, status: failure ? "failed" : "ok", ...(failure ? { error: failure } : {}),
