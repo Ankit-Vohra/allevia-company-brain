@@ -20,4 +20,8 @@ export const INTENTIONAL_SCANS: IntentionalScan[] = [
     shape: /^MATCH \(r:Entity\) WHERE \(r:Rule OR r:BrandRule\) AND \(\$allowed IS NULL OR r\.id IN \$allowed\)/,
     why: "the rules survey (no names given, or filtered to one channel's): tens of Rule and BrandRule nodes, scanned by design",
   },
+  {
+    shape: /^MATCH \(a:Entity:Approval\) WITH a ORDER BY /,
+    why: "the approvals list: every Approval, newest first, capped by $limit; the id lookup after it is per row",
+  },
 ];

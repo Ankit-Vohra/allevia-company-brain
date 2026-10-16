@@ -549,11 +549,14 @@ function toApproval(r: Record<string, unknown>): ApprovalDto {
   };
 }
 
+// FalkorDB 4.22 (the cloud) refuses a node taken out of a list (collect(r)[0]) as a pattern endpoint, so the first
+// recommendation is picked by id and matched again.
 const approvalQuery = (where: string) =>
   `MATCH (a:Entity:Approval) ${where}
    WITH a ORDER BY CASE WHEN coalesce(a.status, 'pending') = 'pending' THEN 0 ELSE 1 END, coalesce(a.createdAt, 0) DESC, a.id LIMIT $limit
-   OPTIONAL MATCH (r:Recommendation)-[pp:PROPOSES]->(a) WHERE ID(pp) >= 0
-   WITH a, collect(r)[0] AS r
+   OPTIONAL MATCH (r0:Recommendation)-[pp:PROPOSES]->(a) WHERE ID(pp) >= 0
+   WITH a, collect(r0.id)[0] AS rid
+   OPTIONAL MATCH (r:Entity:Recommendation {id: rid})
    OPTIONAL MATCH (ag:Agent)-[pr:PRODUCED]->(r) WHERE ID(pr) >= 0
    WITH a, r, collect(ag.id)[0] AS producer
    RETURN ${APPROVAL_FIELDS}, r.id AS rec, coalesce(r.by, a.by) AS by, r.simulated AS recSimulated, producer`;
