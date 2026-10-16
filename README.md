@@ -587,12 +587,12 @@ edges nothing refers to; the suite holds both rules (see Tests).
 
 ## Tests and evals
 
-- **1,493 tests pass** (2 more skipped) in 117 files (vitest), run against a real FalkorDB in throwaway graphs: unit tests,
+- **About 3,000 tests** (the last full run, on 16 October, passed 2,991 in 269 files; 5 more were added after it and pass), vitest, run against a real FalkorDB in throwaway graphs: unit tests,
   integration tests for every tool and algorithm, the API, SSE, the Discord and MCP surfaces, a static scan that
   holds every Cypher string in `src/` to the crash rules, the Entity-label and parallel-edge rules, an `EXPLAIN` of every
   query the suite sends (it fails the run if one looks a node up by id and still scans a label), and a regression that runs every tool, detector and read
   over a graph built of ties, zeros and gaps. Two live-model tests are skipped unless `ALLEVIA_LIVE_LLM=1`.
-  `npm test` (or `ALLEVIA_FALKORDB_URL=redis://127.0.0.1:<port> npx vitest run` against a throwaway server).
+  To run it: `docker run -d -p 127.0.0.1:6391:6379 falkordb/falkordb:6.0.2`, then `npm test` (or point `ALLEVIA_TEST_FALKORDB_URL=redis://127.0.0.1:<port>` at any throwaway FalkorDB; the suite refuses port 6390, where the demo's graphs live, and a full run takes several minutes).
 - **Evals** ([`evals/`](evals), reports in [`docs/evals/`](docs/evals)): 43 questions with expected citations, regexes,
   tools, agents and trap questions, scored automatically. The hero set on Shiftly (`evals/hero.yaml`) passed 5 of 5 on its
   hero question and every item on a live run (report: [`docs/evals/2026-10-16-demo_growth.md`](docs/evals/2026-10-16-demo_growth.md)).
