@@ -390,3 +390,67 @@ so a repeat of the question a day later says "the fix task you approved is open,
   at `asOf`.
 - The crash rules (every `ORDER BY` ends in a unique key; no unguarded division before a sort) are refused client-side
   before a query is sent, and held over all of `src/` by `tests/graph/cypher-sources.test.ts`.
+
+## 15. Sales: where a lead came from, what it is for, and the approval behind a message
+
+| | |
+|---|---|
+| Code | `src/sales/graph.ts:535` (`attributionReport`), `src/sales/graph.ts:116` (`enquiryGoal`), `src/sales/graph.ts:90` (`resolveAttribution`), `src/agent/tools/sales.ts:146` (`crm_read` view `attribution`) |
+| Answers | "Where do my leads come from, and which goal are they for?" and "which approval made this message?" |
+| Why a graph | The answer is a join through three kinds of node that nothing else relates: a lead (`Lead`), what it came through (`Channel`, and the `Campaign` or `Content` its own enquiry named) and what it is for (`Goal`). A table of leads with a `source` column cannot say that a lead came by WhatsApp **and** from one reel, or that the same message is the end of two approvals (a draft, then the send). |
+
+**The links the sales writers leave** (all current edges, each with `src`, `asOf` and `since`):
+
+- `Message -CAME_VIA{direction: in|out}-> Channel`: the channel a message went through. A meeting's is `channel:calendar`.
+- `Lead -CAME_VIA{matchedOn, text}-> Campaign | Content`: only when the enquiry's own source text or UTM campaign names an existing
+  node exactly, by its id, its name or its `utm_campaign`, in any case (`resolveAttribution`). A text that names two nodes, or none, links
+  nothing: attribution is never guessed, and the body of the message is never searched.
+- `Lead | Deal | Meeting | Message -ADVANCES-> Goal`: the business's goal whose metric is enquiries, leads or bookings, found by the first query
+  below; failing that, the goal whose name says so; failing that, no edge. Best effort: a failed link never fails the write.
+
+**Which goal counts enquiries.** The goal tracking a metric whose key or name is about enquiries, leads or bookings, first by the plan's
+priority (the word match is in TypeScript: `\b(enquiry|inquiry|lead|booking)`):
+
+```cypher
+MATCH (gl:Entity:Goal) WHERE NOT coalesce(gl.status, '') IN ['retired', 'superseded']
+OPTIONAL MATCH (gl)-[t:TRACKS]->(m:Metric) WHERE t.until IS NULL
+RETURN gl.id AS id, gl.name AS name, m.name AS metric, coalesce(m.key, gl.metricKey) AS key ORDER BY coalesce(gl.priority, 99), gl.id LIMIT 200
+```
+
+**Leads grouped by what they came through and the goal they advance** (the `attribution` view of `crm_read`). Group in a `WITH`, because the
+goal can be missing, and bind both edges under the `collect`:
+
+```cypher
+MATCH (l:Entity:Lead)-[r:CAME_VIA]->(x:Entity) WHERE ID(r) >= 0 AND r.until IS NULL AND (x:Channel OR x:Campaign OR x:Content)
+OPTIONAL MATCH (l)-[a:ADVANCES]->(gl:Goal) WHERE ID(a) >= 0 AND a.until IS NULL
+WITH x, gl, labels(x) AS kinds, collect(DISTINCT l.id) AS leads
+RETURN x.id AS viaId, x.name AS viaName, kinds, gl.id AS goalId, gl.name AS goalName, leads ORDER BY viaId, goalId
+```
+
+**What advances each goal** (leads, deals, meetings and messages; the kind is the id's prefix, counted in code):
+
+```cypher
+MATCH (n:Entity)-[a:ADVANCES]->(gl:Goal) WHERE a.until IS NULL AND (n:Lead OR n:Deal OR n:Meeting OR n:Message)
+RETURN gl.id AS goalId, gl.name AS goalName, n.id AS nodeId ORDER BY goalId, nodeId
+```
+
+**From an approval to the message or meeting it made** (the demo business, `demo_growth`, follows it for every Sales record that came from a
+card; `src/sales/demo.ts:77`). Two hops of `RESULTED_IN`, with the recommendation that proposed the card at the front:
+
+```cypher
+MATCH (rec:Recommendation)-[p:PROPOSES]->(a:Approval)-[r1:RESULTED_IN]->(x:Action)-[r2:RESULTED_IN]->(m:Entity)
+WHERE p.until IS NULL AND r1.until IS NULL AND r2.until IS NULL AND (m:Message OR m:Meeting)
+RETURN rec.id AS recommendation, a.id AS approval, a.status AS status, x.id AS action, m.id AS made ORDER BY approval, made
+```
+
+**A draft that went out.** `Message.status` is a tracked property, so approving the same words to send finds the earlier draft in the lead's
+thread (`findDraftMessage`, `src/sales/graph.ts:321`) and makes it `sent`, with Gmail's message id as `externalId`; the draft stays one hop
+away as a `Version`. A meeting's `status` and `calendarEventId` work the same way:
+
+```cypher
+MATCH (m:Entity:Message {id:$id})-[h:HAD_VERSION]->(v:Version) WHERE 'status' IN v.changed
+RETURN v.props AS was, v.until AS until ORDER BY v.until, v.id
+```
+
+Plan note: every one of these anchors on an id or scans one label on purpose (the first, the second and the third are surveys of leads,
+goals and their edges, a handful per business); `tests/graph/explain.test.ts` holds the id-anchored ones to an index lookup.
