@@ -14,7 +14,7 @@ export async function saveTextDraft(
   const short = sha256(`${o.title}\n${o.body}`).slice(0, 12);
   const recId = entityId("Recommendation", `made text ${short}`);
   const asOf = isoDate(o.now);
-  const src = `turn:${o.turnId}`;
+  const src = o.turnId.startsWith("turn:") ? o.turnId : `turn:${o.turnId}`;
   const approvalId = await serial(g.name, async () => {
     const [pending] = await g.roQuery<{ id: string }>(
       "MATCH (rec:Entity:Recommendation {id:$rid}) WITH rec MATCH (rec)-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL AND a.status = 'pending' RETURN a.id AS id ORDER BY a.id LIMIT 1", { rid: recId });
