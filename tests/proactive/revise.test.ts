@@ -10,7 +10,10 @@ import { approval as readApproval } from "../../src/server/reads.js";
 import { SEED_NOW } from "../fixtures/seed-graph.js";
 import { testGraph } from "../helpers/graph.js";
 
-const GUILD = "100000000000000001", TEAM = "200000000000000002", NOTE = "200000000000000009", OWNER = "300000000000000004";
+const GUILD = "100000000000000001";
+const TEAM = "200000000000000002";
+const NOTE = "200000000000000009";
+const OWNER = "300000000000000004";
 let g: GraphHandle;
 let cleanup: () => Promise<void>;
 const asked: string[] = [];
@@ -19,7 +22,7 @@ const text: Drafters["text"] = async (job) => { asked.push(job.brief); return { 
 beforeAll(async () => {
   ({ g, cleanup } = await testGraph());
   await upsertNode(g, { type: "Approval", id: "approval:standup-diwali-1", name: "content_draft: A Diwali post", props: {
-    status: "pending", kind: "content_draft", title: "A Diwali post", by: "content-strategist", standup: true, standupKey: "season:diwali-2026", standupKind: "post",
+    status: "pending", kind: "content_draft", title: "A Diwali post", by: "content-strategist", standup: true, standupKey: "season:diwali", standupKind: "post",
     payload: JSON.stringify({ title: "A Diwali post", body: "A long Diwali post that goes on and on.", target: "Instagram post" }) } }, SEED_NOW);
   await upsertNode(g, { type: "Approval", id: "approval:other", name: "github_issue: Fix it", props: { status: "pending", kind: "github_issue", title: "Fix it", payload: "{}" } }, SEED_NOW);
 });
