@@ -3,7 +3,7 @@
 import type { GraphHandle } from "../graph/client.js";
 import { plural } from "../insights/text.js";
 import { entityId } from "../util/ids.js";
-import type { Skipped } from "./choose.js";
+import type { Skipped, Waiting } from "./choose.js";
 import { draftedLine, type DraftedItem } from "./draft.js";
 
 export const standupDocId = (tenant: string, date: string): string => entityId("Document", `standup ${tenant} ${date}`);
@@ -32,7 +32,22 @@ export interface Standup {
   lessons: string[];
   attendees: string[];          // roster ids at the stand-up: Meera and whoever got work
   paidUsed: number;
+  waiting: Waiting[];           // the big problems already waiting for the owner's OK, led with in the note
+  waitingHeading: string;       // "Two big things are waiting for your OK; here's why they matter this week" ("" when none)
+  waitingLines: string[];
   reused?: boolean;
+}
+
+const COUNT = ["No", "One", "Two", "Three"];
+
+/** The lead of Today's note: the big things already waiting, and why each matters this week. */
+export function waitingSection(items: Waiting[]): { heading: string; lines: string[] } {
+  if (!items.length) return { heading: "", lines: [] };
+  const n = items.length;
+  return {
+    heading: `${COUNT[n] ?? n} big ${n === 1 ? "thing is" : "things are"} waiting for your OK; here's why ${n === 1 ? "it matters" : "they matter"} this week`,
+    lines: items.map((w, i) => `${i + 1}. ${w.title.replace(/[.:]$/, "")}: ${w.matters.replace(/\.$/, "")}. [[${w.approvalId}]]`),
+  };
 }
 
 export function noteSection(items: DraftedItem[], lessons: string[]): { heading: string; lines: string[] } {
@@ -60,6 +75,7 @@ export function standupFrom(r: DocRow): Standup {
     quiet: p.quiet === true, by: p.by === "meera" ? "meera" : "rules", items: parse<DraftedItem[]>(p.items, []), heading: String(p.heading ?? ""),
     lines: parse<string[]>(p.lines, []), reviewed: parse<Reviewed>(p.reviewed, {} as Reviewed), considered: num(p.considered),
     skipped: parse<Skipped[]>(p.skipped, []), lessons: parse<string[]>(p.lessons, []), attendees: parse<string[]>(p.attendees, []), paidUsed: num(p.paidUsed),
+    waiting: parse<Waiting[]>(p.waiting, []), waitingHeading: String(p.waitingHeading ?? ""), waitingLines: parse<string[]>(p.waitingLines, []),
   };
 }
 

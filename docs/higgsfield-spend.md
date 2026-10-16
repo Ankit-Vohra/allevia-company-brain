@@ -49,3 +49,5 @@ free re-compose; the review-and-revise loop never generates pictures.
 Daily stand-up trials total: 4 credits (2 used, 2 wasted on a poster that could not be set). Balance now 556.42.
 
 Website redesign v4 (issue #5): 0 credits spent of the 35 allowed. The page is built only from footage recorded from the running app (demo mode) and the real posters, ad and reel in docs/creative-live/v2, so no real gap remained.
+
+Proactive follow-ups (impact first, Hindi posters, Change teaches) total: 0 credits; every path used was free. Balance unchanged.

@@ -106,7 +106,8 @@ async function recentLayouts(g: GraphHandle): Promise<string[]> {
 const chromiumMissing = (e: unknown): boolean => e instanceof Error && /Executable doesn't exist|browserType\.launch|Failed to launch|playwright install/i.test(e.message);
 
 export async function makePoster(g: GraphHandle, req: PosterRequest, deps: CreativeDeps): Promise<PosterResult> {
-  const kit = await loadComposeKit(g, req.businessId, { store: deps.store, tenant: req.tenant, businessId: req.businessId, fetchMissingFonts: deps.fonts?.fetchMissing ?? false, now: req.now });
+  const printed = [req.content.headline, req.content.eyebrow, req.content.subline, req.content.offer, req.content.cta, ...(req.content.details ?? [])].filter((x): x is string => !!x?.trim());
+  const kit = await loadComposeKit(g, req.businessId, { store: deps.store, tenant: req.tenant, businessId: req.businessId, fetchMissingFonts: deps.fonts?.fetchMissing ?? false, now: req.now, cover: printed });
   const notes = [...kit.notes];
   const count = Math.max(1, Math.min(MAX_OPTIONS, Math.round(req.count)));
 

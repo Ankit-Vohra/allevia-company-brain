@@ -4,6 +4,7 @@
 // approves was not approved as it first stood. Only a stand-up card that is still waiting can be changed this way.
 import { getApproval } from "../actions/approvals.js";
 import type { GraphHandle } from "../graph/client.js";
+import { changeNoteRule, learnFromEdit } from "../actions/learning.js";
 import { upsertNode } from "../graph/upsert.js";
 import { clip, oneLine } from "../insights/text.js";
 import type { Drafters, TextKind } from "./draft.js";
@@ -35,5 +36,13 @@ export async function reviseDraft(g: GraphHandle, approvalId: string, instructio
     type: "Approval", id: approvalId, name: row.name,
     props: { payload: JSON.stringify(payload), changeRequests: (row.n ?? 0) + 1, lastChange: ask, changedAt: now },
   }, now);
+  // The note is also a lesson: it becomes a learned rule on the skill that drafted this (the same loop an edit teaches),
+  // so the next draft starts with it. Same text on both sides: the redraft is the model's words, not the owner's edit.
+  try {
+    const draft = { title: row.name ?? "", body: a.payload.body };
+    await learnFromEdit(g, { approvalId, original: draft, edited: draft, ...(a.by ? { agentId: a.by } : {}), now, extraRules: [changeNoteRule(ask)] });
+  } catch {
+    // the redraft stands even when the lesson could not be written
+  }
   return { ok: true, approvalId };
 }

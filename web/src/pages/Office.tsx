@@ -334,6 +334,25 @@ export function OfficePage() {
             <p className="home-label">Waiting for your OK</p>
             {standup.data && (
               <div className="home-standup">
+                {(standup.data.waiting?.length ?? 0) > 0 && (
+                  <>
+                    <p className="home-standup-head">{standup.data.waitingHeading}</p>
+                    <ul className="home-standup-list">
+                      {standup.data.waiting!.map((w) => (
+                        <li key={w.approvalId}>
+                          <Link to={`/approvals#${encodeURIComponent(w.approvalId)}`} className="home-standup-item">
+                            <AgentAvatar id={w.agent} size={22} />
+                            <span className="home-standup-text">
+                              <span className="home-standup-title">{w.title}</span>
+                              <span className="home-standup-why">{w.matters}</span>
+                            </span>
+                            <Icon name="chevron-right" size={14} />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
                 <p className="home-standup-head">{drafted.length ? standup.data.heading : "Nothing new worth your time today."}</p>
                 {drafted.length > 0 && (
                   <ul className="home-standup-list">
@@ -368,7 +387,9 @@ export function OfficePage() {
           </div>
           <div className="home-row">
             <p className="home-label">Next step</p>
-            {drafted[0] ? (
+            {standup.data?.waiting?.[0] ? (
+              <Link to={`/approvals#${encodeURIComponent(standup.data.waiting[0].approvalId)}`} className="home-next">Say OK to the biggest fix first: {lowerFirst(standup.data.waiting[0].title)}<Icon name="chevron-right" size={15} /></Link>
+            ) : drafted[0] ? (
               <Link to={`/approvals#${encodeURIComponent(drafted[0].approvalId!)}`} className="home-next">Say OK or change: {lowerFirst(drafted[0].title)}<Icon name="chevron-right" size={15} /></Link>
             ) : topIdea ? (
               <Link to="/insights" className="home-next">{topIdea.title}<Icon name="chevron-right" size={15} /></Link>

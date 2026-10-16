@@ -286,6 +286,7 @@ export interface LearnInput {
   agentId?: string;        // roster id of the agent whose draft was edited
   channelId?: string;
   now: number;
+  extraRules?: RuleSpec[]; // lessons stated in words (the owner's change note), written the same way as lessons found in an edit
 }
 export interface LearnDeps { llm?: LlmRunner; model?: string; onLearned?: (e: LearnedEvent) => void }
 export interface LearnedRule { id: string; text: string; op: RuleOp; confidence: number; created: boolean; retired: string[] }
@@ -318,6 +319,7 @@ export async function learnFromEdit(g: GraphHandle, input: LearnInput, deps: Lea
       // optional polish: a deterministic learning loop does not depend on it
     }
   }
+  specs.push(...(input.extraRules ?? []));
   if (!specs.length) return [];
   const now = input.now;
   const editor = await ensureAgentNode(g, COPY_EDITOR, now);
@@ -363,6 +365,12 @@ export async function learnFromEdit(g: GraphHandle, input: LearnInput, deps: Lea
     deps.onLearned?.({ type: "learned", ruleId: s.id, text: s.text, fromApprovalId: input.approvalId });
   }
   return out;
+}
+
+// A change note the owner wrote ("shorter, and say Raipur") as a rule to follow, the same kind a word-level edit teaches.
+export function changeNoteRule(note: string): RuleSpec {
+  const t = clip(note.replace(/\s+/g, " ").trim(), 140).replace(/[.!\s]+$/, "");
+  return { id: ruleId(`change note ${t.toLowerCase().slice(0, 60)}`), op: "instruction", text: `The owner asked for: ${t}.`, confidence: 0.5 };
 }
 
 // ---------- the KPI ----------

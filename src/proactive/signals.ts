@@ -28,6 +28,7 @@ export interface WebsiteFail { ruleId: string; name: string; severity: string; f
 export interface FindingSignal {
   id: string; key: string; title: string; why: string; area: string; by: string | null; score: number; detector: string | null;
   cardId: string | null; cardKind: string | null; evidence: string[]; simulated: boolean | null;
+  goals?: string[];            // the goals it moves (ADVANCES), when the rule checks tied it to one
 }
 export interface DecisionSignal { id: string; title: string; kind: string; status: string; standupKind: string | null }
 
@@ -127,9 +128,11 @@ export async function gatherSignals(g: Read, o: SignalOpts): Promise<Signals> {
      OPTIONAL MATCH (r)-[pp:PROPOSES]->(a:Approval) WHERE pp.until IS NULL AND a.status = 'pending'
      OPTIONAL MATCH (r)-[e:EVIDENCED_BY]->(x:Entity) WHERE e.until IS NULL
      WITH r, a, collect(x.id) AS evidence
-     WITH r, collect(a)[0] AS a, evidence
+     OPTIONAL MATCH (r)-[ad:ADVANCES]->(gl:Goal) WHERE ad.until IS NULL
+     WITH r, a, evidence, collect(gl.id) AS goals
+     WITH r, collect(a)[0] AS a, evidence, goals
      RETURN r.id AS id, r.key AS key, r.name AS title, coalesce(r.summary, '') AS why, coalesce(r.area, '') AS area, r.by AS by, coalesce(r.score, 0) AS score,
-            r.detector AS detector, a.id AS cardId, a.kind AS cardKind, evidence, r.simulated AS simulated
+            r.detector AS detector, a.id AS cardId, a.kind AS cardKind, evidence, r.simulated AS simulated, goals
      ORDER BY score DESC, id LIMIT 30`);
 
   return {

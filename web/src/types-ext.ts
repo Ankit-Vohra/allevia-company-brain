@@ -328,4 +328,7 @@ export interface Standup {
   lines: string[];
   lessons: string[];
   attendees: AgentId[];
+  /** The big problems already waiting for the owner's OK, led with: why each matters this week. */
+  waiting?: Array<{ approvalId: string; title: string; agent: AgentId; matters: string }>;
+  waitingHeading?: string;
 }

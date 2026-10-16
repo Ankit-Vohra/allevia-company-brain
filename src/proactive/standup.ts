@@ -18,9 +18,9 @@ import { openGraph, type GraphHandle } from "../graph/client.js";
 import { closeEdge, upsertEdge, upsertNode } from "../graph/upsert.js";
 import type { LlmRunner } from "../ingest/llm.js";
 import { isoDate } from "../util/time.js";
-import { choose, loadHistory, screen } from "./choose.js";
+import { bigWaiting, choose, explainWaiting, loadHistory, screen } from "./choose.js";
 import { draftPick, type DraftedItem, type Drafters } from "./draft.js";
-import { noteSection, readStandup, standupDocId, QUIET_LINE, type Reviewed, type Standup } from "./note.js";
+import { noteSection, readStandup, standupDocId, waitingSection, QUIET_LINE, type Reviewed, type Standup } from "./note.js";
 import { opportunitiesFrom } from "./opportunities.js";
 import { gatherSignals, type Signals } from "./signals.js";
 
@@ -70,6 +70,10 @@ export async function runStandup(tenant: string, opts: StandupOpts): Promise<Sta
   const choice = await choose(screened.kept, { ...(opts.runner ? { runner: opts.runner } : {}), business: signals.business, today: signals.today, ...(opts.max ? { max: opts.max } : {}), log });
   log(`stand-up ${tenant}: ${opps.length} opportunities, ${screened.kept.length} cleared the bar, ${choice.picks.length} picked by ${choice.by === "meera" ? "Meera" : "the rule order"}`);
 
+  // impact first: the big problems that already have a fix waiting lead the note, with why they matter this week
+  const waiting = await explainWaiting(bigWaiting(signals.findings, signals.goals), { ...(opts.runner ? { runner: opts.runner } : {}), business: signals.business, log });
+  const lead = waitingSection(waiting);
+
   const paidPerDay = opts.paidPerDay ?? paidPerDayFromEnv();
   let paidUsed = before?.paidUsed ?? 0;
   const items: DraftedItem[] = [];
@@ -90,6 +94,7 @@ export async function runStandup(tenant: string, opts: StandupOpts): Promise<Sta
   const standup: Standup = {
     id, tenant, date, localDate: signals.today, generatedAt: now, quiet, by: choice.by, items: all, heading, lines, reviewed: reviewedOf(signals),
     considered: opps.length, skipped: screened.skipped.slice(0, 20), lessons: screened.lessons, attendees, paidUsed,
+    waiting, waitingHeading: lead.heading, waitingLines: lead.lines,
   };
 
   const chief = await ensureAgentNode(g, "chief-of-staff", now);
@@ -99,11 +104,12 @@ export async function runStandup(tenant: string, opts: StandupOpts): Promise<Sta
       kind: "standup", tenant, date, localDate: signals.today, generatedAt: now, quiet, by: choice.by, heading, lines: JSON.stringify(lines),
       items: JSON.stringify(all), reviewed: JSON.stringify(standup.reviewed), considered: opps.length, skipped: JSON.stringify(standup.skipped),
       lessons: JSON.stringify(screened.lessons), attendees: JSON.stringify(attendees), paidUsed, since: signals.since,
+      waiting: JSON.stringify(waiting), waitingHeading: lead.heading, waitingLines: JSON.stringify(lead.lines),
     },
     asOf: date,
   }, now);
   await upsertEdge(g, { from: chief, type: "PRODUCED", to: id }, now);
-  const mentions = [...new Set(all.flatMap((i) => [i.approvalId, i.recommendationId].filter((x): x is string => !!x)))];
+  const mentions = [...new Set([...all.flatMap((i) => [i.approvalId, i.recommendationId].filter((x): x is string => !!x)), ...waiting.map((w) => w.approvalId)])];
   for (const a of attendees) mentions.push(await ensureAgentNode(g, a, now));
   const present = await existingIds(g, mentions);
   const had = await g.roQuery<{ id: string }>("MATCH (:Entity:Document {id:$id})-[m:MENTIONS]->(x:Entity) WHERE m.until IS NULL RETURN x.id AS id", { id });
