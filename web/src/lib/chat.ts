@@ -20,6 +20,14 @@ export function chatPath(who: Who, sessionId?: string): string {
   return sessionId ? `${base}/${encodeURIComponent(sessionId)}` : base;
 }
 
+/**
+ * Where Home's ask box sends a question: the whole team's chat, with the question sent at once (/chat/team?ask=...). The Chat
+ * page reads `ask` once, starts the turn and removes it, so a reload does not ask twice. On Discord the same is `/ask`.
+ */
+export function askPath(text: string, who: Who = TEAM): string {
+  return `${chatPath(who)}?ask=${encodeURIComponent(text.trim())}`;
+}
+
 /** The entry an address names: a roster id, or the team. Anything else (a typo, an old link) is the team. */
 export function whoFrom(param: string | undefined): Who {
   if (!param || param === TEAM || param === CHIEF) return TEAM;
