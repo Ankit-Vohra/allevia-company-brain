@@ -20,6 +20,7 @@ import { CONVERSION_SCRIPT, redactCapture, type ConversionCapture } from "../../
 import { CAPTURE_SCRIPT, STYLE_SCRIPT, fromCapture, type Captured, type PageData, type StyleSample } from "./page.js";
 import { isActionPath, isBinaryPath, isListingVariant, keyPagePriority, normalizeUrl, sectionOf, toSiteUrl } from "./urls.js";
 import { Semaphore } from "../../llm.js";
+import { staticCapture } from "./static.js";
 
 export interface CrawlOptions {
   maxPages?: number;          // default 40
@@ -53,6 +54,8 @@ export interface CrawlResult {
   screenshots: { desktop?: string; mobile?: string };
   requests: number;                      // crawler requests (not counting the browser's assets)
   timedOut?: boolean;                    // the crawl used its whole time budget (maxCrawlMs) and stopped taking new pages
+  browserError?: string;                 // the browser would not start (or a page would not render): those pages were read without it
+  readWithoutBrowser?: number;           // how many pages were read from their HTML alone
   startedAt: string;
   finishedAt: string;
 }
@@ -143,6 +146,8 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
 
   // ---------- browser ----------
   let browser: Browser | undefined;
+  let browserError: string | undefined;   // why the browser would not start: every later page is read from its HTML at once
+  let readWithoutBrowser = 0;
   let ctx: BrowserContext | undefined;
   const docs = new Map<string, FetchResult>();
   let heavy = false;
@@ -221,8 +226,37 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
       await route.abort("failed").catch(() => {});
     }
   };
+  // Chromium can crash at start (a busy machine, a first run after a restart): a second try, then the full Chromium
+  // build in place of the headless shell, before giving up.
+  const launchBrowser = async (): Promise<Browser> => {
+    if (o.launch) return o.launch();
+    const tries: Array<() => Promise<Browser>> = [
+      () => chromium.launch({ headless: true }), () => chromium.launch({ headless: true }),
+      () => chromium.launch({ headless: true, channel: "chromium" }),
+    ];
+    let last: unknown;
+    for (const [i, t] of tries.entries()) {
+      try {
+        return await t();
+      } catch (e) {
+        last = e;
+        log(`[crawl] browser start ${i + 1}/${tries.length} failed: ${msg(e).split("\n")[0]}`);
+        if (i < tries.length - 1) await new Promise((r) => setTimeout(r, 1_500));
+      }
+    }
+    throw last;
+  };
   const newContext = async (mobile: boolean): Promise<BrowserContext> => {
-    browser ??= await (o.launch ?? (() => chromium.launch({ headless: true })))();
+    if (browserError) throw new Error(browserError);
+    if (!browser) {
+      try {
+        browser = await launchBrowser();
+      } catch (e) {
+        browserError = `the browser would not start: ${msg(e).split("\n")[0]}`;
+        log(`[crawl] ${browserError}; reading pages from their HTML instead`);
+        throw new Error(browserError);
+      }
+    }
     const c = await browser.newContext({
       userAgent: ua, locale: "en-US", serviceWorkers: "block", acceptDownloads: false, javaScriptEnabled: true,
       ...(mobile ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1366, height: 900 } }),
@@ -426,7 +460,23 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
           if (conv || mobile) page.conversion = { ...(conv ? { desktop: conv } : {}), ...(mobile ? { mobile } : {}) };
         }
       } catch (e) {
-        page = { ...emptyPage(it.url, doc, `render failed: ${msg(e)}`), finalUrl: site };
+        // The browser could not show this page: read what the server sent. Thin for a site built by scripts, but a
+        // site whose words are in its HTML is still read.
+        log(`[crawl] ${site}: render failed (${msg(e).split("\n")[0]}); reading its HTML`);
+        try {
+          // a page that hung the browser stays an error page (its script is the problem); only a browser that never started is worked around
+          if (!browserError) throw e;
+          const dom = fromCapture(staticCapture(doc.body.toString("utf8"), site), origin);
+          const xrt = doc.headers["x-robots-tag"];
+          page = {
+            ...emptyPage(it.url, doc), ...dom, finalUrl: site,
+            ...(xrt ? { robotsMeta: [dom.robotsMeta, xrt].filter(Boolean).join(", ") } : {}),
+          };
+          readWithoutBrowser++;
+        } catch (e2) {
+          page = { ...emptyPage(it.url, doc, `render failed: ${msg(e)}`), finalUrl: site };
+          log(`[crawl] ${site}: reading its HTML failed too: ${msg(e2)}`);
+        }
       }
     }
     pages.push(page);
@@ -506,7 +556,8 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
 
   return {
     startUrl: start, origin, pages, skipped, robots: robotsInfo, sitemapUrls: sitemapCount,
-    linkStatus: Object.fromEntries(statusByUrl), screenshots, requests, ...(timedOut ? { timedOut } : {}), startedAt, finishedAt: new Date().toISOString(),
+    linkStatus: Object.fromEntries(statusByUrl), screenshots, requests, ...(timedOut ? { timedOut } : {}),
+    ...(browserError ? { browserError } : {}), ...(readWithoutBrowser ? { readWithoutBrowser } : {}), startedAt, finishedAt: new Date().toISOString(),
   };
 }
 

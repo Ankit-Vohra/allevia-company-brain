@@ -114,3 +114,31 @@ describe("RestApifyClient", () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+describe("RestApifyClient: a charge cap below the actor's minimum (issue #36)", () => {
+  it("asks again with the minimum Apify names, and keeps its own estimate small", async () => {
+    const f = fakeFetch((c) => {
+      if (c.method === "POST" && c.url.includes("maxTotalChargeUsd=0.054")) {
+        return { status: 400, body: { error: { type: "max-total-charge-usd-below-minimum", message: "Maximum cost per run is less than the allowed minimum of $0.50" } } };
+      }
+      if (c.method === "POST") return { status: 201, body: { data: { id: "r1", status: "SUCCEEDED", defaultDatasetId: "d1", usageTotalUsd: 0.01 } } };
+      return { status: 200, body: [{ title: "Prufrock Coffee" }] };
+    });
+    const client = new RestApifyClient(TOKEN, { fetch: f.fn });
+    const r = await client.run({ actor: "compass/crawler-google-places", input: {}, maxItems: 1, maxUsd: 0.054, timeoutMs: 60_000 });
+    expect(r.items).toEqual([{ title: "Prufrock Coffee" }]);
+    const posts = f.calls.filter((c) => c.method === "POST");
+    expect(posts).toHaveLength(2);
+    expect(posts[1]!.url).toContain("maxTotalChargeUsd=0.5");
+    expect(posts[1]!.url).toContain("maxItems=1");
+  });
+
+  it("says why Apify refused, without the token", async () => {
+    const f = fakeFetch(() => ({ status: 400, body: { error: { type: "invalid-input", message: "Field input.x is required" } } }));
+    const client = new RestApifyClient(TOKEN, { fetch: f.fn });
+    const e = await client.run({ actor: "compass/crawler-google-places", input: {}, maxItems: 1, maxUsd: 0.05, timeoutMs: 60_000 }).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(ApifyError);
+    expect((e as ApifyError).message).toMatch(/HTTP 400: Field input.x is required/);
+    expect((e as ApifyError).message).not.toContain(TOKEN);
+  });
+});

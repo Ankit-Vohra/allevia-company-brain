@@ -36,7 +36,8 @@ export type ApifyFailure = "auth" | "no_credit" | "timeout" | "failed" | "http" 
 export class ApifyError extends Error {
   override name = "ApifyError";
   // started: the run had begun on Apify's side, so it may have been charged (the ledger keeps its estimate)
-  constructor(readonly kind: ApifyFailure, message: string, readonly started = false) { super(message); }
+  // apifyType: Apify's own error type for an HTTP error (for example "max-total-charge-usd-below-minimum")
+  constructor(readonly kind: ApifyFailure, message: string, readonly started = false, readonly apifyType?: string) { super(message); }
 }
 
 type FetchFn = (url: string, init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal }) => Promise<{ status: number; ok: boolean; json(): Promise<unknown> }>;
@@ -72,7 +73,14 @@ export class RestApifyClient implements ApifyClient {
     }
     if (r.status === 401 || r.status === 403) throw new ApifyError("auth", "Apify refused the token (check APIFY_TOKEN)");
     if (r.status === 402) throw new ApifyError("no_credit", "the Apify account is out of credit");
-    if (!r.ok) throw new ApifyError("http", `Apify answered HTTP ${r.status}`);
+    if (!r.ok) {
+      // Apify says what was wrong in its error body (never the token); keep it, so a log can say why
+      const e = await r.json().then((j) => (j as { error?: { type?: unknown; message?: unknown } } | null)?.error, () => undefined);
+      const type = typeof e?.type === "string" ? e.type.slice(0, 80) : undefined;
+      const safe = (s: string) => s.split(this.token).join("[key]").replace(/apify_api_\w+/g, "[key]").slice(0, 200);
+      const text = typeof e?.message === "string" ? `: ${safe(e.message)}` : "";
+      throw new ApifyError("http", `Apify answered HTTP ${r.status}${text}`, false, type);
+    }
     try {
       return await r.json();
     } catch {
@@ -95,7 +103,19 @@ export class RestApifyClient implements ApifyClient {
       maxTotalChargeUsd: String(Math.max(0.01, Math.round(req.maxUsd * 1000) / 1000)),
       timeout: String(secs),
     });
-    const first = RestApifyClient.data(await this.call("POST", `/v2/acts/${encodeURIComponent(req.actor.replace("/", "~"))}/runs?${q}`, req.input, req.signal));
+    const start = () => this.call("POST", `/v2/acts/${encodeURIComponent(req.actor.replace("/", "~"))}/runs?${q}`, req.input, req.signal);
+    let started: unknown;
+    try {
+      started = await start();
+    } catch (e) {
+      // Pay-per-event actors (Google Maps) refuse a charge cap below their minimum ($0.50): the run is still held to
+      // maxItems, and our own ledger keeps the estimate, so ask again with the minimum Apify names.
+      const min = e instanceof ApifyError && e.apifyType === "max-total-charge-usd-below-minimum" ? /minimum of \$(\d+(?:\.\d+)?)/.exec(e.message)?.[1] : undefined;
+      if (!min) throw e;
+      q.set("maxTotalChargeUsd", String(Math.max(Number(min), Number(q.get("maxTotalChargeUsd")))));
+      started = await start();
+    }
+    const first = RestApifyClient.data(started);
     const runId = typeof first.id === "string" ? first.id : "";
     if (!runId) throw new ApifyError("http", "Apify did not start the run");
     try {
