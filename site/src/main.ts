@@ -1,94 +1,24 @@
-// The only script on the site: fonts and styles, the currency toggle, the loops, and the scroll story (story.ts, which
-// loads the vendored scrollcraft engine as its own chunk on the pages that use it). Everything else is plain HTML
-// built at compile time, and the pages read fine with this script switched off (prices then show in US dollars).
+// The only script on the site: fonts and styles, the short loops (the office, the setup), and the contents list on the
+// legal pages. Everything else is plain HTML built at compile time, and the pages read fine with this script switched off.
 import "@fontsource-variable/newsreader/opsz.css";
 import "@fontsource/ibm-plex-sans/latin-400.css";
 import "@fontsource/ibm-plex-sans/latin-500.css";
 import "@fontsource/ibm-plex-sans/latin-600.css";
 import "@fontsource/ibm-plex-mono/latin-400.css";
-import "../vendor/scrollcraft/scrollcraft.css";
 import "./styles/site.css";
-import "./styles/story.css";
-import { CURRENCIES, isCurrency, type Currency } from "../../shared/plans.ts";
-import { formatMoney } from "./money.ts";
-import { mountStory, prepareStory } from "./story.ts";
 
-// ---------- currency ----------
-
-const KEY = "allevia.currency";
-
-function guessCurrency(): Currency {
-  try {
-    const stored = localStorage.getItem(KEY);
-    if (stored && isCurrency(stored)) return stored;
-  } catch { /* storage blocked: fall through */ }
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
-  if (tz === "Europe/London") return "GBP";
-  if (tz === "Asia/Dubai") return "AED";
-  if (tz.startsWith("Australia/")) return "AUD";
-  const lang = navigator.language || "";
-  if (/-GB$/i.test(lang)) return "GBP";
-  if (/-AE$/i.test(lang)) return "AED";
-  if (/-AU$/i.test(lang)) return "AUD";
-  return "USD";
-}
-
-function applyCurrency(c: Currency, remember: boolean) {
-  document.querySelectorAll<HTMLElement>("[data-usd]").forEach((el) => {
-    const v = Number(el.dataset[c.toLowerCase()]);
-    if (Number.isFinite(v)) el.textContent = formatMoney(v, c);
-  });
-  document.querySelectorAll<HTMLInputElement>("input[data-currency-input]").forEach((i) => { i.checked = i.value === c; });
-  document.documentElement.dataset.currency = c;
-  if (remember) {
-    try { localStorage.setItem(KEY, c); } catch { /* not remembered; fine */ }
-  }
-}
-
-document.addEventListener("change", (e) => {
-  const t = e.target;
-  if (t instanceof HTMLInputElement && t.matches("input[data-currency-input]") && isCurrency(t.value)) applyCurrency(t.value, true);
-});
-const initial = guessCurrency();
-if (initial !== CURRENCIES[0]) applyCurrency(initial, false);
-
-// ---------- hero loop ----------
-// The drawing is the page's first paint. The 5-second loop fades in over it only when motion is welcome and the
-// connection isn't on data saver, and it can be paused (it loops for longer than five seconds).
-
-const art = document.querySelector<HTMLElement>("[data-hero-art]");
-const video = art?.querySelector<HTMLVideoElement>("video");
-const pause = art?.querySelector<HTMLButtonElement>("[data-hero-pause]");
 const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+const narrow = window.matchMedia("(max-width: 860px)");
 const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
 
-function startLoop() {
-  if (!art || !video || !pause || reduce.matches || saveData) return;
-  const src = video.dataset.mp4;
-  if (!src) return;
-  const s = document.createElement("source");
-  s.type = "video/mp4";
-  s.src = src;
-  video.append(s);
-  video.addEventListener("playing", () => { art.classList.add("is-playing"); pause.hidden = false; }, { once: true });
-  video.load();
-  video.play().catch(() => { /* autoplay refused: the drawing stays */ });
-  pause.addEventListener("click", () => {
-    const paused = !video.paused;
-    if (paused) video.pause(); else void video.play();
-    pause.setAttribute("aria-pressed", String(paused));
-    pause.textContent = paused ? "Play the drawing" : "Pause the drawing";
-  });
-}
-
-// ---------- the office loop ----------
-// A short loop of the real office. The poster picture is the first paint and the fallback; the loop starts only when it
+// ---------- the loops ----------
+// A short loop of the real app. The poster picture is the first paint and the fallback; the loop starts only when it
 // scrolls into view, motion is welcome and the connection isn't on data saver, and it can be paused.
 function setupLoops() {
   document.querySelectorAll<HTMLElement>("[data-loop]").forEach((fig) => {
     const v = fig.querySelector<HTMLVideoElement>("video");
     const btn = fig.querySelector<HTMLButtonElement>("[data-loop-pause]");
-    const src = v?.dataset.mp4;
+    const src = (narrow.matches && v?.dataset.mp4Phone) || v?.dataset.mp4;
     if (!v || !btn || !src || reduce.matches || saveData) return;
     let started = false;
     const start = () => {
@@ -123,8 +53,5 @@ function setupLoops() {
 // the table of contents on the legal pages starts open on a wide screen and closed on a phone
 document.querySelectorAll<HTMLDetailsElement>("[data-toc]").forEach((d) => { d.open = window.matchMedia("(min-width: 64rem)").matches; });
 
-// the story mounts straight away (module scripts run once the page is parsed); the loops wait for the load event
-void mountStory(prepareStory());
-const boot = () => { startLoop(); setupLoops(); };
-if (document.readyState === "complete") boot();
-else window.addEventListener("load", boot, { once: true });
+if (document.readyState === "complete") setupLoops();
+else window.addEventListener("load", setupLoops, { once: true });

@@ -10,7 +10,7 @@ import { FAQ } from "../../site/src/content.js";
 import { PAGES, pageFile } from "../../site/src/pages.js";
 import { head, jsonLd } from "../../site/src/render/head.js";
 import { dataDeletion, privacy, terms, cookies } from "../../site/src/render/legal.js";
-import { plans, pricingTeaser } from "../../site/src/render/blocks.js";
+import { plans, priceLine, startLine, securityPromises } from "../../site/src/render/blocks.js";
 
 const SITE = new URL("../../site/", import.meta.url).pathname;
 const read = (p: string) => readFileSync(join(SITE, p), "utf8");
@@ -185,26 +185,49 @@ describe("the legal pages say what the platforms check, and what the code does",
     expect(priv).toMatch(/do not delete photos automatically/);
   });
 
-  it("the cookie note matches the code: no cookies, one setting named allevia.currency", () => {
+  it("the cookie note matches the code: no cookies, nothing stored in the browser", () => {
     const siteMain = read("src/main.ts");
-    expect(siteMain).not.toMatch(/document\.cookie/);
-    expect(siteMain).toContain('"allevia.currency"');
-    expect(cookies()).toContain("allevia.currency");
+    expect(siteMain).not.toMatch(/document\.cookie|localStorage|sessionStorage/);
+    expect(cookies()).toContain("stores nothing in your browser".replace("stores nothing in your browser", "does not store any setting"));
     expect(read("index.html") + read("pricing/index.html")).not.toMatch(/googletagmanager|gtag\(|plausible|analytics\.js|facebook\.net|<script[^>]+src="https?:/i);
   });
 });
 
-describe("pricing copy follows shared/plans.ts", () => {
-  it("shows every plan's name and monthly price in the four currencies", () => {
+describe("pricing copy follows shared/plans.ts, in US dollars only", () => {
+  it("shows every plan's name and monthly price, and no other currency", () => {
     const html = plans();
     for (const p of PLANS) {
       expect(html).toContain(p.name);
-      expect(html).toContain(`data-usd="${p.price.monthly.USD}" data-gbp="${p.price.monthly.GBP}" data-aed="${p.price.monthly.AED}" data-aud="${p.price.monthly.AUD}"`);
+      expect(html).toContain(`$${p.price.monthly.USD.toLocaleString("en-US")}`);
     }
+    expect(html).not.toMatch(/data-(gbp|aed|aud)|£|AED|A\$|GBP|INR|₹/);
+    expect(read("pricing/index.html")).not.toMatch(/currency/i);
   });
 
-  it("the teaser shows the growth plan's price", () => {
-    expect(pricingTeaser()).toContain(`data-usd="${PLANS.find((p) => p.id === "growth")!.price.monthly.USD}"`);
+  it("the one-line price on the home page and the start line quote the growth plan and the three-month plan", () => {
+    expect(priceLine()).toContain(`$${PLANS.find((p) => p.id === "growth")!.price.monthly.USD}`);
+    expect(startLine()).toContain("$1,490");
+  });
+
+  it("the security page has four promises, each with an icon", () => {
+    expect((securityPromises().match(/<li class="promise">/g) ?? []).length).toBe(4);
+    expect((securityPromises().match(/<svg/g) ?? []).length).toBe(4);
+  });
+});
+
+describe("the pages stay short", () => {
+  const words = (html: string) => html.replace(/<(script|style|svg)\b[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").split(/\s+/).filter((w) => /\w/.test(w)).length;
+  it("keeps the home page under 150 words of its own text", () => {
+    const main = read("index.html").match(/<main[\s\S]*<\/main>/)![0];
+    expect(words(main)).toBeLessThan(150);
+  });
+  it("keeps the FAQ to six questions of at most two sentences", () => {
+    expect(FAQ.length).toBeLessThanOrEqual(6);
+    for (const f of FAQ) expect((f.a.match(/[.!?](\s|$)/g) ?? []).length, f.q).toBeLessThanOrEqual(2);
+  });
+  it("has no em dash in the copy an owner reads", () => {
+    for (const p of PAGES) if (!/privacy|terms|deletion|cookies/.test(p.path)) expect(read(pageFile(p.path)), p.path).not.toContain("—");
+    expect(JSON.stringify(FAQ)).not.toContain("—");
   });
 });
 
@@ -226,5 +249,9 @@ describe("words and claims the site must not use", () => {
     expect(text).not.toMatch(/Allevia (posts|publishes) (to|for)/i);
     expect(text).not.toMatch(/auto-?post/i);
     expect(read("src/content.ts")).toMatch(/being built/);
+  });
+
+  it("shows no prices in other currencies anywhere on the site", () => {
+    for (const p of PAGES) if (!/privacy|terms|deletion|cookies/.test(p.path)) expect(read(pageFile(p.path)), p.path).not.toMatch(/£|AED|A\$|₹/);
   });
 });

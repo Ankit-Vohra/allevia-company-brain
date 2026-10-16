@@ -14,12 +14,12 @@ npm run build               # type-checks, then writes site/dist/
 npm run check               # build + dead-link check + the list of placeholders still to fill
 ```
 
-`site/dist/` is the whole site: 13 pages (`/`, `/how-it-works/`, `/product/`, `/demo/`, `/pricing/`, `/security/`, `/faq/`,
+`site/dist/` is the whole site: 12 pages (`/`, `/product/`, `/demo/`, `/pricing/`, `/security/`, `/faq/`,
 `/about/`, `/contact/`, `/privacy/`, `/terms/`, `/data-deletion/`, `/cookies/`), `404.html`, `sitemap.xml`, `robots.txt`,
 `site.webmanifest`, the icons, and `assets/` and `img/`. About 4 MB, most of it the two short videos and the pictures. Every
 page works with JavaScript switched off (prices then show in US dollars).
 
-The only script is `assets/main-*.js` (about 5 KB): the currency toggle, the pause button on the loops and the contents list on
+The only script is `assets/main-*.js` (under 2 KB): the pause button on the loops and the contents list on
 the legal pages. There are no cookies, no analytics and nothing is loaded from another company's servers, so the site works under
 this strict policy (checked against every page):
 
