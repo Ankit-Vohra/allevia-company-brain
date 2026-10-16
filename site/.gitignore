@@ -3,3 +3,5 @@ scripts/.site-shots/
 scripts/.footage-live/
 scripts/.footage/
 scripts/_peek.mjs
+scripts/.shots-tmp/
+scripts/.lab/

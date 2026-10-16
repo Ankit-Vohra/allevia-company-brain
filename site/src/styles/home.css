@@ -162,6 +162,13 @@ html.is-flat [data-sc-cue], html.is-flat [data-sc-in], html.is-flat [data-sc-sta
 .is-scroll .scene--plan { grid-template-columns: minmax(0, 24rem) minmax(0, 1fr); gap: clamp(2rem, 5vw, 4.5rem); }
 .is-scroll .scene--made { display: flex; align-items: center; padding: 0; max-width: none; }
 
+/* wide, but not pinned (motion reduced, data saver, or the engine did not load): the same two columns, in the page's own flow */
+@media (min-width: 861px) {
+  html:not(.is-scroll) .scene--brain, html:not(.is-scroll) .scene--ask, html:not(.is-scroll) .scene--plan { grid-template-columns: minmax(0, 23rem) minmax(0, 1fr); gap: clamp(2rem, 5vw, 4.5rem); align-items: start; }
+  html:not(.is-scroll) .scene--brain .panel--brain { justify-self: end; width: 100%; max-width: 46rem; }
+  html:not(.is-scroll) .scene--ask .scene__panels { justify-self: end; width: 100%; max-width: 38rem; }
+}
+
 /* ---------- 1. brain ---------- */
 .scene--brain .panel--brain { margin-top: 0; }
 
