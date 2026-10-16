@@ -3,7 +3,8 @@ import { agentById } from "../../shared/roster.js";
 import type { GraphHandle } from "../graph/client.js";
 import { businessId } from "../graph/tenants.js";
 import { typeFromId } from "../util/ids.js";
-import { upsertNode } from "../graph/upsert.js";
+import { upsertEdge, upsertNode } from "../graph/upsert.js";
+import { isoDate } from "../util/time.js";
 import { agentNodeId } from "../agent/memory.js";
 
 type Read = Pick<GraphHandle, "roQuery">;
@@ -85,4 +86,39 @@ export async function findBusinessId(g: Read, tenant?: string): Promise<string |
     if (hit) return hit.id;
   }
   return rows[0]!.id;
+}
+
+// The goals the card behind a piece of work ADVANCES: a Recommendation's own ADVANCES edges, and, from an Approval, those of the
+// Recommendation that PROPOSES it (Approval <-PROPOSES- Recommendation -ADVANCES-> Goal). Current edges only.
+export async function goalsOf(g: Read, o: { recommendationId?: string; approvalId?: string }): Promise<string[]> {
+  const ids = new Set<string>();
+  if (o.recommendationId) {
+    const rows = await g.roQuery<{ id: string }>(
+      "MATCH (:Entity:Recommendation {id:$id})-[a:ADVANCES]->(gl:Goal) WHERE a.until IS NULL RETURN DISTINCT gl.id AS id ORDER BY id", { id: o.recommendationId });
+    for (const r of rows) ids.add(r.id);
+  }
+  if (o.approvalId) {
+    const rows = await g.roQuery<{ id: string }>(
+      `MATCH (r:Entity:Recommendation)-[p:PROPOSES]->(:Entity:Approval {id:$id}) WHERE p.until IS NULL
+       MATCH (r)-[a:ADVANCES]->(gl:Goal) WHERE a.until IS NULL
+       RETURN DISTINCT gl.id AS id ORDER BY id`, { id: o.approvalId });
+    for (const r of rows) ids.add(r.id);
+  }
+  return [...ids];
+}
+
+// `from` (a Task or a Content the card made) ADVANCES every goal the card behind it advances, with the action or approval that
+// made it as the source and the date it was written. Best effort: a goal edge never stops the action that made the work.
+export async function advanceGoals(g: GraphHandle, o: { from: string; recommendationId?: string; approvalId?: string; src: string; now: number }): Promise<string[]> {
+  try {
+    const goals = await goalsOf(g, o);
+    const done: string[] = [];
+    for (const gl of goals) {
+      await upsertEdge(g, { from: o.from, type: "ADVANCES", to: gl, since: o.now, src: o.src, asOf: isoDate(o.now) }, o.now);
+      done.push(gl);
+    }
+    return done;
+  } catch {
+    return [];
+  }
 }

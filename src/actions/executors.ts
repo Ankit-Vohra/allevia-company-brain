@@ -17,6 +17,11 @@
 // The outside world (gh, HTTP, the drafting model) is injected. Tests must inject gh and HTTP: the defaults refuse to
 // run under vitest, so a test can never open a real issue or post a real message.
 // Exactly once: the Action id is derived from the Approval id, and an Action already on record is returned as it is.
+// Provenance: every edge written here says where it came from (src: the approval for Approval -RESULTED_IN-> Action, the Action for what it
+// affected and made) and when (asOf). Action -AFFECTS-> only names what the card named (a target, a channel, a campaign): with none, no
+// edge is written, never a guess. A task or a draft the card made ADVANCES the goals the card's recommendation advances. A Discord post
+// and a change on a connected tool each leave a Document (the message id, the tool), and an email or an invite keeps the Gmail message id
+// or the Calendar event id on the Action.
 import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
@@ -31,7 +36,7 @@ import { entityId, slugify } from "../util/ids.js";
 import { isoDate } from "../util/time.js";
 import { clip, oneLine } from "../insights/text.js";
 import { activeRules, applyRules, DETERMINISTIC_OPS, markRulesApplied, type ActiveRule } from "./learning.js";
-import { ensureAgentNode, existingIds, findBusinessId, type Payload } from "./shared.js";
+import { advanceGoals, ensureAgentNode, existingIds, findBusinessId, type Payload } from "./shared.js";
 import { getActionTarget } from "./target.js";
 import { RateLimitedError, type ConnectionsPort } from "../connections/service.js";
 import { NeedsAttentionError, NotAllowedError, NotConfiguredError, NotConnectedError } from "../connections/types.js";
@@ -69,10 +74,14 @@ export interface ExecInput {
 export type ActionStatus = "done" | "failed" | "skipped" | "dry_run";
 export interface ActionView {
   id: string; kind: ActionKind; status: ActionStatus; result: string; at: number; url?: string; simulated?: boolean;
-  affects: string[]; produced: string[]; rulesApplied?: string[];
+  affects: string[]; produced: string[]; rulesApplied?: string[]; messageId?: string; eventId?: string;
 }
 
-interface Outcome { status: ActionStatus; result: string; url?: string; simulated?: boolean; produced: string[]; affects?: string[]; rulesApplied?: string[] }
+interface Outcome {
+  status: ActionStatus; result: string; url?: string; simulated?: boolean; produced: string[]; affects?: string[]; rulesApplied?: string[];
+  /** The Gmail message an approved email became, and the Calendar event an approved invite became (kept on the Action; Sales reads them). */
+  messageId?: string; eventId?: string; threadId?: string;
+}
 
 export const ISSUE_LABEL = "allevia-action";
 const inTests = () => !!process.env.VITEST;
@@ -106,13 +115,6 @@ export function usesFoundersAccounts(tenant: string): boolean {
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 const agentName = (rosterId: string | undefined) => (rosterId ? agentById(rosterId)?.name ?? rosterId : "Allevia");
 
-async function firstEvidence(g: GraphHandle, recId: string | undefined): Promise<string | undefined> {
-  if (!recId) return undefined;
-  const [r] = await g.roQuery<{ id: string }>(
-    "MATCH (:Entity:Recommendation {id:$id})-[e:EVIDENCED_BY]->(x:Entity) WHERE e.until IS NULL RETURN x.id AS id ORDER BY e.since, id LIMIT 1", { id: recId });
-  return r?.id;
-}
-
 // ---------- github_issue ----------
 
 // The default target: the approved fix becomes an open Task in the business's own graph (the app lists it; Discord already
@@ -125,6 +127,7 @@ async function appTask(g: GraphHandle, input: ExecInput, reason?: string): Promi
     summary: clip(oneLine(p.body), 300),
     props: { kind: "fix", status: "open", origin: "allevia", approval: input.approvalId, body: clip(p.body, 4000), ...(input.agent ? { by: input.agent } : {}) },
   }, input.now);
+  await advanceGoals(g, { from: taskId, ...(input.recommendationId ? { recommendationId: input.recommendationId } : {}), approvalId: input.approvalId, src: actionIdFor(input.approvalId), now: input.now });
   return {
     status: "done", produced: [taskId],
     result: `Added to your tasks: “${clip(p.title, 160)}”. ${reason ? `${reason} ` : ""}Nothing was sent to GitHub or anywhere outside Allevia.`,
@@ -163,6 +166,7 @@ async function githubIssue(g: GraphHandle, input: ExecInput, deps: ExecutorDeps)
   const num = /\/issues\/(\d+)/.exec(url)![1]!;
   const taskId = entityId("Task", `issue ${repo} ${num}`);
   await upsertNode(g, { type: "Task", id: taskId, name: clip(p.title, 160), props: { kind: "issue", status: "open", ref: url, repo, number: Number(num) } }, input.now);
+  await advanceGoals(g, { from: taskId, ...(input.recommendationId ? { recommendationId: input.recommendationId } : {}), approvalId: input.approvalId, src: actionIdFor(input.approvalId), now: input.now });
   return { status: "done", result: url, url, produced: [taskId] };
 }
 
@@ -220,11 +224,7 @@ async function contentDraft(g: GraphHandle, input: ExecInput, deps: ExecutorDeps
   // plus the hook formula it was briefed on.
   const used = [...new Set([...preApplied, ...first.applied.map((r) => r.id), ...first.instructions.map((r) => r.id), ...(str(p.hookRuleId) ? [str(p.hookRuleId)!] : [])])];
   const rulesApplied = await markRulesApplied(g, contentId, used, input.now);
-  if (input.recommendationId) {
-    const goals = await g.roQuery<{ id: string }>(
-      "MATCH (:Entity:Recommendation {id:$id})-[a:ADVANCES]->(gl:Goal) WHERE a.until IS NULL RETURN gl.id AS id", { id: input.recommendationId });
-    for (const gl of goals) await upsertEdge(g, { from: contentId, type: "ADVANCES", to: gl.id }, input.now);
-  }
+  await advanceGoals(g, { from: contentId, ...(input.recommendationId ? { recommendationId: input.recommendationId } : {}), approvalId: input.approvalId, src: actionIdFor(input.approvalId), now: input.now });
   const learned = rulesApplied.filter((id) => rules.some((r) => r.id === id && r.kind === "learned") || preApplied.includes(id));
   return {
     status: "done", produced: [contentId], rulesApplied, affects: channelId ? [channelId] : undefined,
@@ -250,9 +250,25 @@ async function pauseAd(g: GraphHandle, input: ExecInput): Promise<Outcome> {
   };
 }
 
+// ---------- what an action that changed something outside the graph leaves inside it ----------
+
+// A Discord post and a change on a connected tool made no node of their own, so the Action pointed at nothing. Each leaves a
+// Document (kind says which) that the agent which made the words PRODUCED, with the approval as its source.
+async function resultDocument(g: GraphHandle, input: ExecInput, o: { kind: string; name: string; summary: string; props: Record<string, string | number | boolean>; by: string }): Promise<string> {
+  const id = entityId("Document", `${o.kind.replace(/_/g, " ")} ${input.approvalId.replace(/^approval:/, "")}`);
+  const asOf = isoDate(input.now);
+  await upsertNode(g, {
+    type: "Document", id, name: clip(o.name, 160), summary: clip(oneLine(o.summary), 300),
+    props: { kind: o.kind, approval: input.approvalId, ...o.props }, src: input.approvalId, asOf,
+  }, input.now);
+  const agent = await ensureAgentNode(g, o.by, input.now);
+  await upsertEdge(g, { from: agent, type: "PRODUCED", to: id, since: input.now, src: input.approvalId, asOf }, input.now);
+  return id;
+}
+
 // ---------- discord_post ----------
 
-async function discordPost(input: ExecInput, deps: ExecutorDeps): Promise<Outcome> {
+async function discordPost(g: GraphHandle, input: ExecInput, deps: ExecutorDeps): Promise<Outcome> {
   const discord = deps.config?.discord ?? (usesFoundersAccounts(deps.tenant) ? loadConfig().discord : {});
   // The channel is the connector's own. A card (or its edit) cannot name another channel for the bot to post in.
   const channel = discord.channelId;
@@ -272,13 +288,20 @@ async function discordPost(input: ExecInput, deps: ExecutorDeps): Promise<Outcom
   });
   if (!res.ok) return { status: "failed", result: `Discord returned ${res.status}: ${clip(oneLine(await res.text().catch(() => "")), 200)}`, produced: [] };
   let url: string | undefined;
+  let messageId: string | undefined;
   try {
     const m = JSON.parse(await res.text()) as { id?: string; guild_id?: string };
+    if (typeof m.id === "string" && m.id) messageId = m.id;
     if (m.id && discord.guildId) url = `https://discord.com/channels/${discord.guildId}/${channel}/${m.id}`;
   } catch {
     // the post went out; the link is a nicety
   }
-  return { status: "done", result: url ?? "Posted to Discord.", ...(url ? { url } : {}), produced: [] };
+  // the post is a node: Document{kind:'discord_post'} with the channel and the message, made by the Chief (Allevia's own voice in Discord)
+  const doc = await resultDocument(g, input, {
+    kind: "discord_post", name: `Discord post: ${input.payload.title}`, summary: input.payload.body, by: "chief-of-staff",
+    props: { channelId: channel, ...(messageId ? { messageId } : {}), ...(url ? { url } : {}) },
+  }).catch(() => undefined);
+  return { status: "done", result: url ?? "Posted to Discord.", ...(url ? { url } : {}), produced: doc ? [doc] : [] };
 }
 
 // ---------- calendar_event and email_send (through the owner's Google connections) ----------
@@ -326,7 +349,7 @@ async function calendarEvent(input: ExecInput, deps: ExecutorDeps): Promise<Outc
         summary: clip(p.title, 200), ...(p.body ? { description: clip(p.body, 4000) } : {}), start, end, ...(str(p.timeZone) ? { timeZone: str(p.timeZone)! } : {}), ...(attendees.length ? { attendees } : {}),
       });
     }, { ...(input.agent ? { actor: input.agent } : {}) });
-    return { status: "done", produced: [], result: made.link ?? `Added "${clip(p.title, 120)}" to your calendar.`, ...(made.link ? { url: made.link } : {}) };
+    return { status: "done", produced: [], eventId: made.id, result: made.link ?? `Added "${clip(p.title, 120)}" to your calendar.`, ...(made.link ? { url: made.link } : {}) };
   } catch (e) {
     return refusal(e, "add the meeting");
   }
@@ -345,16 +368,16 @@ async function emailSend(input: ExecInput, deps: ExecutorDeps): Promise<Outcome>
     return { status: "dry_run", produced: [], result: `Dry run: would send "${clip(subject, 120)}" to ${to.join(", ")}. Nothing was sent; ALLEVIA_ACTIONS_LIVE=1 sends it.` };
   }
   try {
-    const sent = await (await portFor(deps)).run<GoogleSession, { id: string }>("gmail", "send email", (s) =>
+    const sent = await (await portFor(deps)).run<GoogleSession, { id: string; threadId?: string }>("gmail", "send email", (s) =>
       s.apis.sendEmail(s.accessToken, { to, ...(cc.length ? { cc } : {}), subject: clip(subject, 300), body: p.body, ...(str(p.threadId) ? { threadId: str(p.threadId)! } : {}) }), { ...(input.agent ? { actor: input.agent } : {}) });
-    return { status: "done", produced: [], result: `Sent "${clip(subject, 120)}" to ${to.join(", ")} (message ${sent.id}).` };
+    return { status: "done", produced: [], messageId: sent.id, ...(sent.threadId ? { threadId: sent.threadId } : {}), result: `Sent "${clip(subject, 120)}" to ${to.join(", ")} (message ${sent.id}).` };
   } catch (e) {
     return refusal(e, "send the email");
   }
 }
 
 // connection_action: any change on a connected tool (post, send a campaign, add a CRM note, pause a keyword ...) the owner approved.
-async function connectionAction(input: ExecInput, deps: ExecutorDeps): Promise<Outcome> {
+async function connectionAction(g: GraphHandle, input: ExecInput, deps: ExecutorDeps): Promise<Outcome> {
   const p = input.payload;
   const connection = str(p.connection), tool = str(p.tool);
   const args = p.args && typeof p.args === "object" && !Array.isArray(p.args) ? (p.args as Record<string, unknown>) : {};
@@ -364,7 +387,12 @@ async function connectionAction(input: ExecInput, deps: ExecutorDeps): Promise<O
   }
   try {
     const out = await (await portFor(deps)).run<{ execute(t: string, a: Record<string, unknown>): Promise<unknown> }, unknown>(connection, tool, (s) => s.execute(tool, args), { ...(input.agent ? { actor: input.agent } : {}) });
-    return { status: "done", produced: [], result: `Done in ${str(p.target) ?? connection}: "${clip(p.title, 120)}".${out && typeof out === "object" ? "" : ""}` };
+    // the change is a node: Document{kind:'connection_action'} with the connection and the action, made by the agent that proposed it
+    const doc = await resultDocument(g, input, {
+      kind: "connection_action", name: `${clip(p.title, 140)} (${str(p.target) ?? connection})`, summary: p.body, by: input.agent ?? "chief-of-staff",
+      props: { connection, tool },
+    }).catch(() => undefined);
+    return { status: "done", produced: doc ? [doc] : [], result: `Done in ${str(p.target) ?? connection}: "${clip(p.title, 120)}".${out && typeof out === "object" ? "" : ""}` };
   } catch (e) {
     return refusal(e, "do that");
   }
@@ -386,6 +414,7 @@ async function readAction(g: GraphHandle, id: string): Promise<ActionView | null
     ...(typeof p.url === "string" ? { url: p.url } : {}), ...(p.simulated === true ? { simulated: true } : {}),
     affects: a.affects, produced: a.produced,
     ...(Array.isArray(p.rulesApplied) ? { rulesApplied: p.rulesApplied as string[] } : {}),
+    ...(typeof p.messageId === "string" ? { messageId: p.messageId } : {}), ...(typeof p.eventId === "string" ? { eventId: p.eventId } : {}),
   };
 }
 
@@ -399,10 +428,10 @@ export async function executeApproval(g: GraphHandle, input: ExecInput, deps: Ex
       case "github_issue": out = await githubIssue(g, input, deps); break;
       case "content_draft": out = await contentDraft(g, input, deps); break;
       case "pause_ad": out = await pauseAd(g, input); break;
-      case "discord_post": out = await discordPost(input, deps); break;
+      case "discord_post": out = await discordPost(g, input, deps); break;
       case "calendar_event": out = await calendarEvent(input, deps); break;
       case "email_send": out = await emailSend(input, deps); break;
-      case "connection_action": out = await connectionAction(input, deps); break;
+      case "connection_action": out = await connectionAction(g, input, deps); break;
       case "publish_post": out = await publishPostAction(g, { approvalId: input.approvalId, payload: input.payload, ...(input.agent ? { agent: input.agent } : {}), now: input.now }, deps); break;
       default: out = { status: "failed", result: `No executor for ${String(input.kind)}.`, produced: [] };
     }
@@ -412,29 +441,31 @@ export async function executeApproval(g: GraphHandle, input: ExecInput, deps: Ex
   // An email that went out or a meeting that was booked is written into the Sales records (a dry run sent nothing, so writes nothing).
   if (out.status === "done" && (input.kind === "email_send" || input.kind === "calendar_event")) {
     try {
-      const sales = await recordSalesOutcome(g, { approvalId: input.approvalId, kind: input.kind, payload: input.payload, ...(input.agent ? { agent: input.agent } : {}), now: input.now, tenant: deps.tenant }, out.url);
+      // the Gmail message and the Calendar event this made go along, for the sales records to keep (src/sales/after.ts)
+      const sent = { approvalId: input.approvalId, kind: input.kind, payload: input.payload, ...(input.agent ? { agent: input.agent } : {}), now: input.now, tenant: deps.tenant,
+        ...(out.messageId ? { messageId: out.messageId } : {}), ...(out.threadId ? { threadId: out.threadId } : {}), ...(out.eventId ? { eventId: out.eventId } : {}) };
+      const sales = await recordSalesOutcome(g, sent, out.url);
       out = { ...out, produced: [...out.produced, ...sales.produced] };
     } catch (e) {
       out = { ...out, result: `${out.result} (It was done, but the sales records could not be updated: ${clip(oneLine(e instanceof Error ? e.message : String(e)), 160)}.)` };
     }
   }
+  const asOf = isoDate(input.now);
   await upsertNode(g, {
     type: "Action", id, name: clip(`${input.kind}: ${input.payload.title}`, 160),
     props: {
       kind: input.kind, status: out.status, result: out.result, at: input.now, approval: input.approvalId,
       ...(out.url ? { url: out.url } : {}), ...(out.rulesApplied?.length ? { rulesApplied: out.rulesApplied } : {}),
+      ...(out.messageId ? { messageId: out.messageId } : {}), ...(out.threadId ? { threadId: out.threadId } : {}), ...(out.eventId ? { eventId: out.eventId } : {}),
       ...(input.agent ? { by: input.agent } : {}),
     },
+    src: input.approvalId, asOf,
     ...(out.simulated ? { simulated: true } : {}),
   }, input.now);
-  await upsertEdge(g, { from: input.approvalId, type: "RESULTED_IN", to: id }, input.now);
+  await upsertEdge(g, { from: input.approvalId, type: "RESULTED_IN", to: id, since: input.now, src: input.approvalId, asOf }, input.now);
+  // what it affected is only what the card named; with no target there is no edge (it used to fall back to the first piece of evidence, a guess)
   const target = out.affects ?? [str(input.payload.targetId), str(input.payload.channelId), str(input.payload.campaignId)].filter((x): x is string => !!x);
-  const affects = [...(await existingIds(g, target))];
-  if (!affects.length) {
-    const ev = await firstEvidence(g, input.recommendationId);
-    if (ev) affects.push(ev);
-  }
-  for (const t of affects) await upsertEdge(g, { from: id, type: "AFFECTS", to: t }, input.now);
-  for (const x of out.produced) await upsertEdge(g, { from: id, type: "RESULTED_IN", to: x }, input.now);
+  for (const t of await existingIds(g, target)) await upsertEdge(g, { from: id, type: "AFFECTS", to: t, since: input.now, src: id, asOf }, input.now);
+  for (const x of out.produced) await upsertEdge(g, { from: id, type: "RESULTED_IN", to: x, since: input.now, src: id, asOf }, input.now);
   return (await readAction(g, id))!;
 }
