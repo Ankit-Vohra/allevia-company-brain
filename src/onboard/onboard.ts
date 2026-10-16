@@ -127,7 +127,8 @@ export function startUrl(raw: string, allowHosts: string[] = []): string {
 // Why a crawl found nothing to read, in the owner's words (never HTTP): shown after "We could not read <site>:".
 export function whyUnreadable(c: Pick<CrawlResult, "pages" | "robots">): string {
   if (c.robots.disallowAll) return "its robots.txt asks robots not to read it. If you own the site, allow AlleviaBot and try again.";
-  const bad = c.pages.find((p) => p.status < 200 || p.status >= 300);
+  // a broken link on a site that otherwise answered is not why we could read nothing: blame a status only when no page answered
+  const bad = c.pages.some((p) => p.status >= 200 && p.status < 300) ? undefined : c.pages.find((p) => p.status < 200 || p.status >= 300);
   if (bad?.status === 429) return "the site asked us to slow down. Try again in a few minutes.";
   if (bad && [401, 403, 406, 451].includes(bad.status)) return "the site would not let us in (it blocks automated visitors, or needs a login).";
   if (bad && [404, 410].includes(bad.status)) return "there is no page at that address.";
