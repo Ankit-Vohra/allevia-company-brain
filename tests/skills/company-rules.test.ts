@@ -42,6 +42,57 @@ describe("rules in a business's skills", () => {
     expect(most.find((s) => s.id.endsWith("-brand-voice"))!.text).toContain("Rule 0: word word");
   });
 
+  it("when rules must be cut, the owner's own are cut last: they stay whole while the extracted ones are cut at 170", () => {
+    const long = (tag: string) => `${tag} ${"word ".repeat(56)}end ${tag}.`.slice(0, 296).replace(/\s*$/, ` end ${tag}.`);
+    const dos = ["told", ...Array.from({ length: 11 }, (_, i) => `ex${i}`)].map(long);
+    const donts = Array.from({ length: 12 }, (_, i) => `Never ex${i} ${long(`d${i}`)}`.slice(0, 296)).map((x, i) => `${x.slice(0, 280)} end d${i}.`);
+    const voice = companySkills(facts({ dos, donts, told: { dos: 1, donts: 0, visual: 0 } })).find((s) => s.id.endsWith("-brand-voice"))!;
+    expect(voice.text).toContain("end told.");           // the owner's rule, whole
+    expect(voice.text).not.toContain("end ex3.");        // an extracted one, cut
+    expect(voice.text).toContain("word word");
+  });
+
+  it("a rule that is a whole sentence carries no label, and a don't stays a don't when its label said so", async () => {
+    const { g, cleanup } = await testGraph();
+    cleanups.push(cleanup);
+    await ensureIndexes(g);
+    const s = await writeBatch(g, {
+      nodes: [
+        { type: "Business", id: "business:shop", name: "Shop" },
+        { type: "BrandRule", id: "brand-rule:never-label", name: "Never use X for seekers", props: { kind: "voice", text: "Do not label a job seeker as X." } },
+        { type: "BrandRule", id: "brand-rule:dignity", name: "Dignity always", props: { kind: "voice", text: "Nobody is shown helpless or pitied in any picture." } },
+        { type: "BrandRule", id: "brand-rule:short", name: "Emoji", props: { kind: "voice", text: "At most two." } },
+      ],
+    }, NOW);
+    expect(s.errors).toEqual([]);
+    const f = await companyFacts(g, "shop", NOW);
+    expect(f.donts).toContain("Do not label a job seeker as X.");     // the label said "Never", so it is a don't, shown without it
+    expect(f.dos).not.toContain("Do not label a job seeker as X.");
+    expect(f.dos).toContain("Nobody is shown helpless or pitied in any picture.");
+    expect(f.dos).toContain("Emoji: At most two.");                    // too short to stand alone: its label stays
+  }, 60_000);
+
+  it("what the owner told the team comes first, and a long list of extracted rules does not push it out", async () => {
+    const { g, cleanup } = await testGraph();
+    cleanups.push(cleanup);
+    await ensureIndexes(g);
+    const extracted = Array.from({ length: 80 }, (_, i) => ({
+      type: "BrandRule" as const, id: `brand-rule:a${String(i).padStart(2, "0")}`, name: `Extracted ${i}`, props: { kind: "voice", text: `Extracted rule number ${i}.` },
+    }));
+    const s = await writeBatch(g, {
+      nodes: [
+        { type: "Business", id: "business:shop", name: "Shop" }, ...extracted,
+        { type: "BrandRule", id: "brand-rule:owner-z", name: "Told", props: { kind: "voice", text: "Told by the owner, sorts last by id.", origin: "owner" } },
+        { type: "BrandRule", id: "brand-rule:owner-old", name: "Retired", props: { kind: "voice", text: "Replaced rule.", origin: "owner", status: "superseded" } },
+      ],
+    }, NOW);
+    expect(s.errors).toEqual([]);
+    const f = await companyFacts(g, "shop", NOW);
+    expect(f.dos[0]).toBe("Told by the owner, sorts last by id.");
+    expect(f.dos.length).toBeGreaterThan(60);                  // more than the old limit of 60 rules
+    expect(f.dos.join()).not.toMatch(/Replaced rule/);          // a retired rule stays out
+  }, 60_000);
+
   it("a rule named with its own first words shows its text once", async () => {
     const { g, cleanup } = await testGraph();
     cleanups.push(cleanup);
