@@ -2,6 +2,7 @@
 //   POST /api/:t/studio/intake    multipart {photo, note?}; the run streams back as AgentEvents (SSE): asset, assessment,
 //                                 asset (variant A), asset (variant B), review, proposal, final
 //   GET  /api/:t/assets/:id       the asset's file (?w= for a smaller copy), only when the Asset is in this tenant's graph
+//   GET  /api/:t/assets/:id/lineage  how it was made: parents, jobs and cost, rules, Nisha's check, the card and the post
 //   GET  /api/:t/studio/latest    the last run's events and where its card stands (for the page after a reload)
 //   POST /api/:t/studio/approve   {approvalId, variantId?, caption?}: the owner picks a variant; writes the draft post
 //   POST /api/:t/studio/revise    {approvalId, instruction | retryOf}: a change in the owner's words (free light and colour, or the AI editor)
@@ -22,6 +23,7 @@ import { assetUrl } from "../studio/intake.js";
 import { CHECKS_NA, latestStudioRun, runStudio, type StudioDeps } from "../studio/pipeline.js";
 import { generateVariant } from "../studio/generate.js";
 import { makePremiumAd } from "../studio/premium.js";
+import { assetLineage } from "../studio/lineage.js";
 import type { ClipPort } from "../studio/clip.js";
 import { reviseVariant } from "../studio/revise.js";
 import { routeRequest } from "../studio/request.js";
@@ -150,7 +152,7 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
           const status = (text: string) => send({ type: "agent_status", agent: TARA, text });
           if (req.kind === "chat") {
             send({ type: "agent_done", agent: TARA, ms: 0, ok: true });
-            return say("Tell me what you would like changed, for example \"make it warmer\", \"make it festive\", \"a different background\", or \"make this into an ad saying ...\".");
+            return say("Tell me what you would like changed, for example \"make it warmer\", \"make it festive\", \"a different background\", \"make this a premium UGC ad\", or \"make this into an ad saying ...\".");
           }
           if (req.kind === "clip") {
             send({ type: "agent_done", agent: TARA, ms: 0, ok: true });
@@ -198,6 +200,15 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
       busy = false;
       throw e;
     }
+  });
+
+  // How a Studio picture or clip was made, read from the graph (studio/lineage.ts): the photo it came from, each step, the Higgsfield
+  // jobs and what they cost, the rules, Nisha's check, the card and the post.
+  app.get("/api/:t/assets/:id/lineage", async (c) => {
+    const { g } = await h.tenantOf(c);
+    const lineage = await assetLineage(g, c.req.param("id"));
+    if (!lineage.root) h.fail(404, "No such asset.");
+    return c.json(lineage);
   });
 
   app.get("/api/:t/assets/:id", async (c) => {

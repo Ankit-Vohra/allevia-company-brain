@@ -277,7 +277,7 @@ export class StudioDiscord {
     if (!row?.approval) return void await thread.send("Drop a photo here and your team will make post options from it.");
     const approvalId = row.approval;
     const req = routeRequest(words);
-    if (req.kind === "chat") return void await thread.send("Tell me what you would like changed, for example \"make it warmer\", \"make it festive\", \"a different background\", or \"make this into an ad saying ...\".");
+    if (req.kind === "chat") return void await thread.send("Tell me what you would like changed, for example \"make it warmer\", \"make it festive\", \"a different background\", \"make this a premium UGC ad\", or \"make this into an ad saying ...\".");
     if (req.kind === "clip") return void await this.d.gate.run(() => this.clip(thread, approvalId));
     if (req.kind === "premium") return void await this.d.gate.run(() => this.premium(thread, approvalId, { words: req.words, ...(req.headline ? { headline: req.headline } : {}), ...(req.sub ? { sub: req.sub } : {}) }));
     if (req.kind === "generate" || req.kind === "ad" || req.kind === "retry") {
