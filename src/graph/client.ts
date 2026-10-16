@@ -29,10 +29,17 @@
 // A query whose text has either shape is refused with UnsafeQuery before it is sent (safety.ts; the evidence is in
 // docs/notes/falkordb-nan-crash.md). `unchecked` skips the check, for crash experiments on a throwaway server only:
 // tests/graph/cypher-sources.test.ts fails if anything in src/ uses it.
+//
+// Restarts (issue #28): while FalkorDB is down or LOADING its data back, queries and connecting are sent again with a
+// growing pause for up to ALLEVIA_DB_WAKE_WAIT_MS (20 s), then fail with DatabaseWakingUp, whose message is the plain
+// sentence an owner sees. A write is never sent twice: one whose socket broke after it was sent fails at once (waking.ts).
+// Before connecting, a bare PING checks the server is ready, so a client is never left half-connected to a loading server.
+import { Socket } from "node:net";
 import { FalkorDB, type Graph } from "falkordb";
 import { loadConfig } from "../config.js";
 import { assertSafeQuery } from "./safety.js";
 import { assertTenantSlug } from "./slug.js";
+import { untilAwake, type WakeOpts } from "./waking.js";
 
 export const DEFAULT_READ_TIMEOUT_MS = 15_000;
 // Rows per page for reads that page: well under RESULTSET_SIZE (10,000), so a page is never truncated.
@@ -107,22 +114,27 @@ export function setQueryObserver(fn: QueryObserver | undefined): void {
   observer = fn;
 }
 
+// How a handle waits out a database restart (tests pass a fake clock and a short wait).
+export type WakeSettings = Omit<WakeOpts, "write">;
+
 export class GraphHandle {
   readonly name: string;
   readonly #g: Graph;
   readonly #db: FalkorDB | undefined;
+  readonly #wake: WakeSettings;
 
-  constructor(name: string, g: Graph, db?: FalkorDB) {
+  constructor(name: string, g: Graph, db?: FalkorDB, wake: WakeSettings = {}) {
     this.name = name;
     this.#g = g;
     this.#db = db;
+    this.#wake = wake;
   }
 
   async query<T = Record<string, unknown>>(cypher: string, params?: Record<string, unknown>, opts?: QueryOpts): Promise<T[]> {
     if (!opts?.unchecked) assertSafeQuery(cypher);
     observer?.(cypher, this.name);
     const opt = withTimeout(toOptions(params), opts?.timeoutMs);
-    const r = await admitted(WRITE_QUEUE_WAIT_MS, () => this.#g.query<T>(cypher, opt));
+    const r = await untilAwake(() => admitted(WRITE_QUEUE_WAIT_MS, () => this.#g.query<T>(cypher, opt)), { ...this.#wake, write: true });
     return r.data ?? [];
   }
 
@@ -132,7 +144,7 @@ export class GraphHandle {
     const timeoutMs = opts?.timeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
     const o = toOptions(params);
     try {
-      const r = await admitted(timeoutMs, (left) => this.#g.roQuery<T>(cypher, withTimeout(o, left)));
+      const r = await untilAwake(() => admitted(timeoutMs, (left) => this.#g.roQuery<T>(cypher, withTimeout(o, left))), this.#wake);
       return r.data ?? [];
     } catch (e) {
       if (BUSY.test(String((e as Error).message))) throw new Error(`Query timed out: the server stayed busy for ${timeoutMs} ms`);
@@ -215,13 +227,57 @@ export function readBudget(timeoutMs: number = DEFAULT_READ_TIMEOUT_MS): () => n
 const pool = new Map<string, Promise<FalkorDB>>();
 let defaultUrl: string | undefined; // read the config (and its env file) once per process
 
+const resp = (...parts: string[]): string => `*${parts.length}\r\n${parts.map((p) => `$${Buffer.byteLength(p)}\r\n${p}\r\n`).join("")}`;
+
+// One bare PING (after AUTH when the URL carries a password), outside the client: resolves when the server answers, and
+// rejects with the server's own LOADING error, or the connection error, while it is restarting. Other URL schemes (TLS)
+// are not checked here.
+export function pingServer(url: string, timeoutMs = 3_000): Promise<void> {
+  let u: URL;
+  try {
+    u = new URL(url.replace(/^falkor/, "redis"));
+  } catch {
+    return Promise.resolve();
+  }
+  if (u.protocol !== "redis:") return Promise.resolve();
+  const password = u.password ? decodeURIComponent(u.password) : "";
+  const user = u.username ? decodeURIComponent(u.username) : "";
+  return new Promise<void>((resolve, reject) => {
+    const s = new Socket();
+    let buf = "";
+    const done = (e?: Error) => { s.destroy(); if (e) reject(e); else resolve(); };
+    s.setTimeout(timeoutMs, () => done(Object.assign(new Error("Connection timeout"), { code: "ETIMEDOUT" })));
+    s.once("error", (e) => done(e));
+    s.on("data", (d) => {
+      buf += d.toString("utf8");
+      const lines = buf.split("\r\n").filter(Boolean);
+      const loading = lines.find((l) => /^-LOADING/i.test(l));
+      if (loading) return done(new Error(loading.slice(1)));
+      if (lines.length >= (password ? 2 : 1)) done(); // PONG (or NOAUTH / WRONGPASS: the server is up; the real client reports a bad password)
+    });
+    s.connect(Number(u.port || 6379), u.hostname.replace(/^\[|\]$/g, "") || "127.0.0.1", () => {
+      s.write((password ? resp("AUTH", ...(user ? [user] : []), password) : "") + resp("PING"));
+    });
+  });
+}
+
+let lastLogged = { text: "", at: 0 };
+// While the database restarts the client reports every reconnect attempt: each different line at most once a minute.
+function logDbError(err: Error): void {
+  const text = err.message || String((err as { code?: string }).code ?? err.name);
+  const now = Date.now();
+  if (text === lastLogged.text && now - lastLogged.at < 60_000) return;
+  lastLogged = { text, at: now };
+  console.error(`[falkordb] ${text}`);
+}
+
 export async function connect(url?: string): Promise<FalkorDB> {
   const u = url ?? (defaultUrl ??= loadConfig().falkordbUrl);
   let p = pool.get(u);
   if (!p) {
-    p = FalkorDB.connect({ url: u }).then((db) => {
+    p = pingServer(u).then(() => FalkorDB.connect({ url: u })).then((db) => {
       // Without a listener an 'error' event would crash the process; the client reconnects on its own.
-      db.on("error", (err: Error) => console.error(`[falkordb] ${err.message}`));
+      db.on("error", logDbError);
       return db;
     });
     pool.set(u, p);
@@ -232,7 +288,7 @@ export async function connect(url?: string): Promise<FalkorDB> {
 
 export async function openGraphByName(name: string): Promise<GraphHandle> {
   if (!GRAPH_NAME.test(name)) throw new Error(`bad graph name ${JSON.stringify(name)}`);
-  const db = await connect();
+  const db = await untilAwake(() => connect());
   return new GraphHandle(name, db.selectGraph(name), db);
 }
 
@@ -242,7 +298,7 @@ export async function openGraph(tenant: string): Promise<GraphHandle> {
 
 // Real graphs only. Projections (see projection.ts) are named `<graph>__…`, and no real graph contains "__".
 export async function listGraphs(): Promise<string[]> {
-  return (await (await connect()).list()).filter((n) => !n.includes("__"));
+  return (await untilAwake(async () => (await connect()).list())).filter((n) => !n.includes("__"));
 }
 
 // Called (and awaited) with a graph's name after GraphHandle.drop(); projection.ts uses it to forget its cache and

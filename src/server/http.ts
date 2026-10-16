@@ -26,7 +26,7 @@ export async function readBody<T>(c: Context, schema: z.ZodType<T>): Promise<T> 
   return r.data;
 }
 
-export interface TenantRef { slug: string; name: string; businessId: string }
+export interface TenantRef { slug: string; name: string; businessId: string; demo?: boolean }
 
 export interface RouteCtx {
   tenantOf: (c: Context) => Promise<{ reg: TenantRef; g: GraphHandle }>;

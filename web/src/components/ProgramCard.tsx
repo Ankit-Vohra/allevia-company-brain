@@ -10,6 +10,7 @@ import { monthWeek } from "../lib/plainwords";
 import { AgentAvatar } from "./bits";
 import { CapabilityLadder } from "./Capabilities";
 import { ConnectSearchConsole } from "./ConnectSearchConsole";
+import { CheckWebsite } from "./CheckWebsite";
 import { FirstPassCurve } from "./FirstPassCurve";
 import { NumbersUpload } from "./NumbersUpload";
 import { Reveal } from "./Reveal";
@@ -119,6 +120,7 @@ export function ProgramCard({ program, caps, loading, error, tenantId, onNumbers
             <CapabilityLadder caps={ladder} />
           </div>
           {tenantId && <ConnectSearchConsole tenantId={tenantId} onChanged={() => onNumbersAdded?.()} />}
+          {tenantId && <CheckWebsite tenantId={tenantId} />}
         </div>
       </Reveal>
     </section>

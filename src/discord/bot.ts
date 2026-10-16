@@ -18,12 +18,18 @@ import { agentById } from "../../shared/roster.js";
 import type { AskInput, AskResult } from "../agent/ask.js";
 import { LANGUAGE_REPLY, parseLanguageSetting, setLanguagePreference } from "../agent/language.js";
 import type { GraphHandle } from "../graph/client.js";
+import { isDbUnavailable, WAKING_UP_MESSAGE } from "../graph/waking.js";
+import { fixDestinationWords, getActionTarget, validRepo, type ActionTarget } from "../actions/target.js";
+import { usesFoundersAccounts } from "../actions/executors.js";
 import { applyDirective, getDirective, parseDirective, previewDirective } from "../settings/directives.js";
 import { quickReplies } from "../../shared/quick-replies.js";
 import { DecisionError, decideAndNotify, type ActionOpts, type OnDecision } from "../server/approvals.js";
 import { approvals as listApprovals, latestBrief, sessionDetail } from "../server/reads.js";
 import type { ApprovalDto } from "../server/types.js";
-import type { AttachmentRef } from "./attachments.js";
+import type { AttachmentRef, FetchFn } from "./attachments.js";
+import { isNumbersButton, NumbersOnDiscord, pickSpreadsheet } from "./numbers-bot.js";
+import type { CheckupJobs, CheckupOutcome } from "../checkup/jobs.js";
+import { latestCheckup, tenantSite, topFiveText } from "../checkup/tenant.js";
 import { studioButtonId } from "./studio-bot.js";
 import { pathViewUrl, renderAnswer, renderCitations, splitMessage, threadName } from "./format.js";
 import { findThreadSession, linkSessionThread, openThreadSession, recentUnlinkedSessions } from "./sessions.js";
@@ -104,6 +110,11 @@ export interface BotDeps {
   // Things the team made this turn (a poster, a picture, a clip) come back in the thread as files with Approve and Change
   // buttons, the way Studio options do. `file` reads one made Asset's file from this business's own storage.
   deliverables?: { file(assetId: string): Promise<{ name: string; data: Buffer } | null> };
+  // Hub only: a spreadsheet dropped in #your-team adds the owner's numbers to this business (its own Business node; the hub
+  // chose this bot from the channel). Absent: spreadsheets are left alone.
+  numbers?: { businessId: string; fetch?: FetchFn };
+  // /checkup: the background check-ups (src/checkup/jobs.ts). Absent: the command says it isn't switched on.
+  checkup?: Pick<CheckupJobs, "start">;
   log?: (line: string) => void;
 }
 
@@ -115,12 +126,15 @@ const BUTTON_PREFIX = "allevia";
 const MAX_CARDS = 10;
 const NOT_HERE = "Allevia only works on its demo server.";
 const ALL_OK: TurnChecks = { citationsValid: true, invalidCitations: [], numbersGrounded: true, ungroundedNumbers: [], simulatedDisclosed: true, freshnessDisclosed: true };
+// What each card is, in the owner's words (docs/owner-words.md; the web app's Approvals page says the same).
 const KIND_LABEL: Record<ApprovalDto["kind"], string> = {
-  github_issue: "GitHub issue", content_draft: "content draft", pause_ad: "pause an ad", discord_post: "Discord post",
+  github_issue: "a fix for your website", content_draft: "a draft post", pause_ad: "pausing an ad", discord_post: "a message to your team chat",
 };
 
 const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+// The plain sentence for a failure: "waking up" while the database restarts, else the handler's own words.
+const sorry = (e: unknown, fallback: string): string => (isDbUnavailable(e) ? WAKING_UP_MESSAGE : fallback);
 const quote = (s: string): string => s.split("\n").map((l) => `> ${l}`).join("\n");
 
 export const buttonId = (decision: "approve" | "reject", approvalId: string): string => `${BUTTON_PREFIX}:${decision}:${approvalId}`;
@@ -140,13 +154,17 @@ export function isSkillRule(text: string): boolean {
   return p.patches.length > 0 && p.unparsed.length === 0 && p.patches.every((x) => x.kind === "skill.rule" || x.kind === "skill.add");
 }
 
-export function approvalCard(a: ApprovalDto, opts: { buttons?: boolean } = {}): { content: string; buttons: ButtonSpec[] } {
+// `target`: where this business's approved fixes go (actions/target.ts), said on a fix card in plain words. A repo name in
+// the payload is never shown as what the card is about: the target line says where the fix goes.
+export function approvalCard(a: ApprovalDto, opts: { buttons?: boolean; target?: ActionTarget } = {}): { content: string; buttons: ButtonSpec[] } {
   const who = agentById(a.by)?.name ?? a.by;
+  const about = a.payload.target && !(a.kind === "github_issue" && validRepo(a.payload.target)) ? a.payload.target : undefined;
   const lines = [
-    `**${clip(a.title, 200)}** · ${KIND_LABEL[a.kind] ?? a.kind}${a.simulated ? " (simulated)" : ""}`,
+    `**${clip(a.title, 200)}** · ${KIND_LABEL[a.kind] ?? a.kind}${a.simulated ? " (sample numbers)" : ""}`,
     `Proposed by ${who} · ${a.createdAt.slice(0, 10)}`,
     ...(a.payload.body.trim() ? [quote(clip(a.payload.body.trim(), 900))] : []),
-    ...(a.payload.target ? [`Target: ${clip(a.payload.target, 200)}`] : []),
+    ...(about ? [`About: ${clip(about, 200)}`] : []),
+    ...(a.kind === "github_issue" && opts.buttons !== false ? [fixDestinationWords(opts.target)] : []),
     `\`${a.id}\``,
   ];
   const ids = [buttonId("approve", a.id), buttonId("reject", a.id)];
@@ -167,16 +185,43 @@ export class AlleviaBot {
   private queues = new Map<string, Promise<void>>();
   private sessions = new Map<string, string>();
 
-  constructor(private d: BotDeps) {}
+  private numbers: NumbersOnDiscord | undefined;
+
+  constructor(private d: BotDeps) {
+    if (d.numbers) {
+      this.numbers = new NumbersOnDiscord({
+        graph: d.graph, businessId: d.numbers.businessId, now: () => this.now(), log: (l) => this.log(l), ...(d.numbers.fetch ? { fetch: d.numbers.fetch } : {}),
+      });
+    }
+  }
 
   private now(): number { return this.d.now?.() ?? Date.now(); }
   private log(line: string): void { (this.d.log ?? ((l: string) => console.error(l)))(`[discord] ${line}`); }
 
   // ----- messages -----
 
+  // While the database is restarting (issue #28) every handler answers in plain words instead of failing silently.
   async onMessage(m: MessagePort): Promise<void> {
+    try {
+      await this.handleMessage(m);
+    } catch (e) {
+      if (!isDbUnavailable(e)) throw e;
+      this.log(`message ${m.id}: the database is restarting (${message(e)})`);
+      await m.reply(WAKING_UP_MESSAGE).catch(() => undefined);
+    }
+  }
+
+  private async handleMessage(m: MessagePort): Promise<void> {
     if (m.authorIsBot || m.system || m.guildId !== this.d.guildId) return;
     const question = m.content.trim();
+    // a spreadsheet of the owner's numbers (hub #your-team): the upload's preview, their changes, then OK (numbers-bot.ts)
+    const here = m.channelId === this.d.channelId || m.threadParentId === this.d.channelId;
+    if (this.numbers && here && m.authorIsOwner) {
+      const sheet = pickSpreadsheet(m.files);
+      if (sheet) return this.numbers.onFile(m, sheet);
+      const t = m.threadParentId && question ? m.thread() : null;
+      if (t && await this.numbers.onReply(question, t)) return;
+    }
     if (!question) return;
     const asker = m.authorIsOwner ? FOUNDER : MEMBER;
     // "always answer in English": the business's language setting, said in plain words (only the owner changes it)
@@ -187,7 +232,7 @@ export class AlleviaBot {
         await m.reply(LANGUAGE_REPLY(pref));
       } catch (e) {
         this.log(`language setting failed: ${message(e)}`);
-        await m.reply("I couldn't save that setting. Try again in a moment.");
+        await m.reply(sorry(e, "I couldn't save that setting. Try again in a moment."));
       }
       return;
     }
@@ -239,7 +284,7 @@ export class AlleviaBot {
       await b.update({ content: clip(`Done. Your team will work this way from the next request:\n${lines.join("\n")}${done.errors.length ? "\nSome of it did not save; try again in the web app." : ""}`, 1900), buttons: [] });
     } catch (e) {
       this.log(`rule ${decision} on ${id} failed: ${message(e)}`);
-      return b.reply("I couldn't save that. Try again, or use Your team in the web app.", { ephemeral: true });
+      return b.reply(sorry(e, "I couldn't save that. Try again, or use Your team in the web app."), { ephemeral: true });
     }
   }
 
@@ -257,12 +302,23 @@ export class AlleviaBot {
   // ----- slash commands -----
 
   async onCommand(c: CommandPort): Promise<void> {
+    try {
+      await this.handleCommand(c);
+    } catch (e) {
+      if (!isDbUnavailable(e)) throw e;
+      this.log(`/${c.command}: the database is restarting (${message(e)})`);
+      await c.respond(WAKING_UP_MESSAGE, { ephemeral: true }).catch(() => undefined);
+    }
+  }
+
+  private async handleCommand(c: CommandPort): Promise<void> {
     if (c.guildId !== this.d.guildId) return c.respond(NOT_HERE, { ephemeral: true });
     switch (c.command) {
       case "ask": return this.askCommand(c);
       case "brief": return this.briefCommand(c);
       case "approvals": return this.approvalsCommand(c);
       case "continue": return this.continueCommand(c);
+      case "checkup": return this.checkupCommand(c);
       default: return c.respond("I don't know that command.", { ephemeral: true });
     }
   }
@@ -286,6 +342,38 @@ export class AlleviaBot {
     return this.turn(thread, question, asker, async () => sessionId);
   }
 
+  // /checkup: the free website check-up of this business's own site (`checkup --tenant`, in the background); the top five
+  // fixes are posted in a thread when it is done, a few minutes later.
+  private async checkupCommand(c: CommandPort): Promise<void> {
+    if (!this.d.checkup) return c.respond("The website check-up isn't switched on here yet.", { ephemeral: true });
+    if (!c.isOwner) return c.respond("Only the owner can start a website check-up.", { ephemeral: true });
+    if (c.channelId !== this.d.channelId && c.threadParentId !== this.d.channelId) return c.respond(`Use /checkup in <#${this.d.channelId}>.`, { ephemeral: true });
+    await c.defer();
+    const site = await tenantSite(this.d.graph, this.d.tenant);
+    if (!site?.url) return c.respond("We don't have your website address yet, so there is nothing to check.");
+    const host = site.url.replace(/^https?:\/\//, "");
+    const thread = c.thread() ?? await c.createThread(`Website check-up: ${clip(host, 60)}`);
+    const { started } = this.d.checkup.start(this.d.tenant, "owner", (o) => {
+      void this.postCheckup(thread, o).catch((e) => this.log(`posting the check-up failed: ${message(e)}`));
+    });
+    await c.respond(started
+      ? `Checking ${host} now. It takes about 3 minutes; I'll post the top five fixes in <#${thread.id}> when it's done.`
+      : `A check-up of ${host} is already running. I'll post the top five fixes in <#${thread.id}> when it's done.`);
+  }
+
+  private async postCheckup(thread: ThreadPort, o: CheckupOutcome): Promise<void> {
+    if (!o.ok) {
+      await thread.send(o.error ?? "The check-up couldn't finish this time. Try /checkup again later.");
+      return;
+    }
+    const last = await latestCheckup(this.d.graph);
+    if (!last) {
+      await thread.send("The check-up finished but I couldn't read its results. Ask me \"what should I fix on my website?\" in a minute.");
+      return;
+    }
+    for (const p of splitMessage(topFiveText(last))) await thread.send(p);
+  }
+
   private async briefCommand(c: CommandPort): Promise<void> {
     await c.defer();
     const b = await latestBrief(this.d.graph);
@@ -301,7 +389,8 @@ export class AlleviaBot {
     if (!pending.length) return c.respond("Nothing is waiting for your approval.");
     const shown = pending.slice(0, MAX_CARDS);
     await c.respond(`${pending.length} pending approval${pending.length === 1 ? "" : "s"}${pending.length > shown.length ? ` (the newest ${shown.length} below)` : ""}. Only the server owner can approve or reject.`);
-    for (const a of shown) await c.followUp(approvalCard(a));
+    const target = await this.fixTarget();
+    for (const a of shown) await c.followUp(approvalCard(a, target ? { target } : {}));
   }
 
   // One conversation, two doors: a thread started in the web app can be carried on here. /continue offers the newest few
@@ -341,7 +430,7 @@ export class AlleviaBot {
       await b.update({ content: `Carrying on in <#${thread.id}>.`, buttons: [] });
     } catch (e) {
       this.log(`continue ${sessionId} failed: ${message(e)}`);
-      return b.reply("I couldn't open that conversation here. Try again, or carry on in the web app.", { ephemeral: true });
+      return b.reply(sorry(e, "I couldn't open that conversation here. Try again, or carry on in the web app."), { ephemeral: true });
     }
   }
 
@@ -357,6 +446,21 @@ export class AlleviaBot {
   // ----- buttons -----
 
   async onButton(b: ButtonPort): Promise<void> {
+    try {
+      await this.handleButton(b);
+    } catch (e) {
+      if (!isDbUnavailable(e)) throw e;
+      this.log(`button ${b.customId}: the database is restarting (${message(e)})`);
+      await b.reply(WAKING_UP_MESSAGE, { ephemeral: true }).catch(() => undefined);
+    }
+  }
+
+  private async handleButton(b: ButtonPort): Promise<void> {
+    if (isNumbersButton(b.customId)) {
+      if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
+      if (!b.isOwner || !this.numbers) return b.reply("Only the owner can add numbers here.", { ephemeral: true });
+      return this.numbers.onButton(b);
+    }
     const cont = CONTINUE.exec(b.customId);
     if (cont) {
       if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
@@ -384,7 +488,16 @@ export class AlleviaBot {
       if (e instanceof DecisionError && e.status === 409) return b.reply(`This one was already decided: ${e.message}`, { ephemeral: true });
       if (e instanceof DecisionError && e.status === 404) return b.reply("That approval no longer exists.", { ephemeral: true });
       this.log(`decision on ${id} failed: ${message(e)}`);
-      return b.reply("I couldn't record that decision. Try again, or decide it in the web app.", { ephemeral: true });
+      return b.reply(sorry(e, "I couldn't record that decision. Try again, or decide it in the web app."), { ephemeral: true });
+    }
+  }
+
+  // Where this business's approved fixes go, for the wording on its cards (the same rule the web app's setting shows).
+  private async fixTarget(): Promise<ActionTarget | undefined> {
+    try {
+      return await getActionTarget(this.d.graph, this.d.tenant, { founders: usesFoundersAccounts(this.d.tenant) });
+    } catch {
+      return undefined; // the card then says the fix becomes a to-do, which is the default
     }
   }
 
@@ -447,7 +560,7 @@ export class AlleviaBot {
       try {
         result = await this.d.ask({ tenant: this.d.tenant, question, sessionId, asker, channel: "discord" }, emit);
       } catch (e) {
-        lastError = message(e);
+        lastError = isDbUnavailable(e) ? WAKING_UP_MESSAGE : message(e);
       }
       await editor.flush();
       await this.nameMissing(result?.citations ?? [], names);

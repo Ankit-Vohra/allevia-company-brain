@@ -300,6 +300,13 @@ outside the repo. Local embeddings are optional too ($0, no network after the fi
 scripts/spikes/embeddings.ts` fetches `Xenova/multilingual-e5-small` (about 130 MB) into `models/`. Without it, search
 is full-text only.
 
+### Keeping it running
+
+`scripts/ops/run-server.sh` and `scripts/ops/run-bot.sh` start the server or the Discord bot and start it again whenever
+it exits, logging to `~/allevia-logs/server.log` and `bot.log` (extra arguments go to `serve` or `discord`). A FalkorDB
+restart does not stop either: queries wait for the database to come back (up to `ALLEVIA_DB_WAKE_WAIT_MS`, 20 s), and
+meanwhile owners are told "Your team's memory is waking up, try again in a minute."
+
 ### FalkorDB settings and schema
 
 `docker-compose.yml` starts FalkorDB with the limits the code is written for, as module load arguments (`FALKORDB_ARGS`:
@@ -341,6 +348,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 | `showcase <tenant> [<turnId>]` | Mark a stored turn for public replay, or list the showcase turns |
 | `db:check` / `db:migrate [tenant…]` | Ping FalkorDB and compare its settings with `docker-compose.yml`; bring tenant graphs up to the current schema |
 | `privacy-scan <tenant>` | Scan every string in a tenant's graph for secrets and personal data (must report 0) |
+| `checkup [<url>] --tenant <slug> [--weekly on\|off]` | The free website check-up: top five fixes by likely enquiries; with `--tenant` the site and kind come from onboarding and the run is stored. The web button, `/checkup` and the weekly schedule run it in the background |
 
 ## Tests and evals
 

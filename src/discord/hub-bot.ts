@@ -15,6 +15,7 @@
 //   #support is humans only: nothing in it is ever given to an agent; each message is copied to the staff-only
 //   #support-inbox with the business name and a link.
 import type { AlleviaBot, ButtonPort, CommandPort, MessagePort } from "./bot.js";
+import { isDbUnavailable, WAKING_UP_MESSAGE } from "../graph/waking.js";
 import { attributeJoin } from "./hub-join.js";
 import { isStudioButton, type StudioDiscord } from "./studio-bot.js";
 import type { AreaRecord, ChannelKind, HubPort, HubStore } from "./hub-types.js";
@@ -100,8 +101,19 @@ export class HubBot {
 
   // ----- messages -----
 
+  // While the database is restarting (issue #28) the business can't be looked up: say so in plain words, never fail silently.
   async onMessage(m: MessagePort): Promise<void> {
     if (m.authorIsBot || m.system || !m.guildId || m.guildId !== this.d.guildId) return;
+    try {
+      await this.handleMessage(m);
+    } catch (e) {
+      if (!isDbUnavailable(e)) throw e;
+      this.log(`message ${m.id}: the database is restarting (${message(e)})`);
+      await m.reply(WAKING_UP_MESSAGE).catch(() => undefined);
+    }
+  }
+
+  private async handleMessage(m: MessagePort): Promise<void> {
     const r = await this.resolve(m.guildId, m.channelId, m.threadParentId);
     if (!r) return;
     if (r.kind === "support") return this.mirrorSupport(m, r);
@@ -150,6 +162,16 @@ export class HubBot {
   // ----- slash commands -----
 
   async onCommand(c: CommandPort): Promise<void> {
+    try {
+      await this.handleCommand(c);
+    } catch (e) {
+      if (!isDbUnavailable(e)) throw e;
+      this.log(`/${c.command}: the database is restarting (${message(e)})`);
+      await c.respond(WAKING_UP_MESSAGE, { ephemeral: true }).catch(() => undefined);
+    }
+  }
+
+  private async handleCommand(c: CommandPort): Promise<void> {
     const r = await this.resolve(c.guildId, c.channelId, c.threadParentId);
     if (!r) return c.respond("I only work inside your team's own channels on the Allevia server.", { ephemeral: true });
     if (r.kind === "support") return c.respond(`That is a place for people. Ask your team in <#${r.area.channels["your-team"]}>.`, { ephemeral: true });
@@ -160,6 +182,16 @@ export class HubBot {
   // ----- buttons -----
 
   async onButton(b: ButtonPort): Promise<void> {
+    try {
+      await this.handleButton(b);
+    } catch (e) {
+      if (!isDbUnavailable(e)) throw e;
+      this.log(`button ${b.customId}: the database is restarting (${message(e)})`);
+      await b.reply(WAKING_UP_MESSAGE, { ephemeral: true }).catch(() => undefined);
+    }
+  }
+
+  private async handleButton(b: ButtonPort): Promise<void> {
     if (!b.channelId) return b.reply("I can't tell which team space this is. Decide it in the web app.", { ephemeral: true });
     const r = await this.resolve(b.guildId, b.channelId, b.threadParentId);
     if (!r || r.kind === "support") return b.reply("This button does not belong to a team space I know.", { ephemeral: true });

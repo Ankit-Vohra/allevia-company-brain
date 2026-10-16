@@ -1,0 +1,63 @@
+// "Check my website": the owner starts the free check-up from the web app and sees the top five when it is done.
+//   GET  /api/:t/checkup            where it stands (idle, waiting, running, done, failed), the weekly setting, the website,
+//                                   and the latest top five in owner words
+//   POST /api/:t/checkup            start one now, in the background (`checkup --tenant`, src/checkup/jobs.ts); a run that is
+//                                   already going is not started twice. Refused in public mode.
+//   PUT  /api/:t/checkup/schedule   { weekly: boolean }: the weekly check-up for this business. Refused in public mode.
+// The business is the one in the path, as everywhere: its own graph, its own stored website.
+import type { Hono } from "hono";
+import { z } from "zod";
+import type { CheckupJobs } from "../../checkup/jobs.js";
+import { latestCheckup, setCheckupWeekly, tenantSite, weeklyOn, type LatestCheckup } from "../../checkup/tenant.js";
+import { HttpError, readBody, type RouteCtx } from "../http.js";
+
+export interface CheckupStatusDto {
+  status: "idle" | "waiting" | "running" | "done" | "failed";
+  message: string;
+  website: string | null;
+  weekly: boolean;
+  startedAt?: string;
+  last: LatestCheckup | null;
+}
+
+const Schedule = z.object({ weekly: z.boolean() });
+const RUNNING = "Checking your website now. It takes about 3 minutes; the top five fixes show here when it's done.";
+
+export function registerCheckupRoutes(app: Hono, ctx: RouteCtx, o: { jobs: () => CheckupJobs }): void {
+  async function status(c: import("hono").Context): Promise<CheckupStatusDto> {
+    const { reg, g } = await ctx.tenantOf(c);
+    const site = await tenantSite(g, reg.slug, reg.businessId);
+    const job = o.jobs().state(reg.slug);
+    const last = await latestCheckup(g);
+    const st: CheckupStatusDto["status"] = job?.status ?? (last ? "done" : "idle");
+    const message = st === "waiting" || st === "running" ? RUNNING
+      : st === "failed" ? job?.error ?? "The check-up couldn't finish this time."
+      : last ? `Last checked on ${last.checkedOn}.`
+      : site?.url ? "Your website hasn't been checked yet. It's free and takes about 3 minutes."
+      : "We don't have your website address yet.";
+    return {
+      status: st, message, website: site?.url ?? null, weekly: site ? weeklyOn(site, !!reg.demo) : false,
+      ...(job?.startedAt ? { startedAt: new Date(job.startedAt).toISOString() } : {}), last,
+    };
+  }
+
+  app.get("/api/:t/checkup", async (c) => c.json(await status(c)));
+
+  app.post("/api/:t/checkup", async (c) => {
+    const { reg, g } = await ctx.tenantOf(c);
+    ctx.refuseInPublicMode();
+    const site = await tenantSite(g, reg.slug, reg.businessId);
+    if (!site?.url) throw new HttpError(400, "We don't have your website address yet, so there is nothing to check.");
+    const { started } = o.jobs().start(reg.slug, "owner");
+    if (started) ctx.log(`[checkup] ${reg.slug}: started from the web app`);
+    return c.json(await status(c), started ? 202 : 200);
+  });
+
+  app.put("/api/:t/checkup/schedule", async (c) => {
+    const { reg, g } = await ctx.tenantOf(c);
+    ctx.refuseInPublicMode();
+    const body = await readBody(c, Schedule);
+    await setCheckupWeekly(g, reg.slug, body.weekly, ctx.now(), reg.businessId);
+    return c.json(await status(c));
+  });
+}

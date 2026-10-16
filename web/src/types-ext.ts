@@ -254,6 +254,22 @@ export interface NumbersPreview {
   plan: NumbersPlan;
   feedsGoals?: Array<{ id: string; name: string }>;
 }
+/** GET /api/:t/checkup: the free website check-up (src/server/routes/checkup.ts CheckupStatusDto). Change both together. */
+export interface CheckupStatus {
+  status: "idle" | "waiting" | "running" | "done" | "failed";
+  message: string;
+  website: string | null;
+  weekly: boolean;
+  startedAt?: string;
+  last: {
+    checkedOn: string;
+    asOf: string;
+    site: string;
+    verdict: string;
+    top: Array<{ title: string; what: string; why: string; effort: string }>;
+  } | null;
+}
+
 /** GET /api/:t/connectors/search-console: the connection in plain words (src/connectors/google/searchconsole.ts ConnectorStatus). */
 export interface ConnectorStatus {
   state: "not_configured" | "not_connected" | "choose_property" | "connected" | "needs_reconnect";

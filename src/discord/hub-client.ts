@@ -26,7 +26,7 @@ export async function startHubClient(bot: HubBot, s: HubClientSettings, log: (li
   }
   if (!inGuild) throw new Error(`The bot is not in the hub server yet. The server owner can add it with: ${hubInviteUrl(s.appId)}`);
   await registerCommands(rest, { token: s.token, appId: s.appId, guildId: s.guildId, channelId: "" }, HUB_SLASH_COMMANDS)
-    .then(() => say("Slash commands /ask, /brief, /approvals, /continue registered on the hub."), (e) => say(`Could not register slash commands: ${err(e)}`));
+    .then(() => say("Slash commands /ask, /brief, /approvals, /checkup, /continue registered on the hub."), (e) => say(`Could not register slash commands: ${err(e)}`));
 
   const login = async (messageContent: boolean): Promise<Client> => {
     const client = new Client({

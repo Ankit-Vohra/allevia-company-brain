@@ -20,6 +20,7 @@ export const commands: Command[] = [
         console.error(`--port must be a TCP port, got "${values.port}"`);
         return 2;
       }
+      (await import("../util/crash-guard.js")).installCrashGuard(); // a database restart is waited out, never a crash (issue #28)
       const { startServer, untilStopped } = await import("../server/main.js");
       const { close } = await startServer({
         ...(port ? { port } : {}), ...(values.host ? { host: values.host } : {}), ...(values.model ? { model: values.model } : {}),

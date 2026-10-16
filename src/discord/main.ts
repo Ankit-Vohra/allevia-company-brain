@@ -5,6 +5,7 @@ import { loadConfig, type AlleviaConfig } from "../config.js";
 import { ask } from "../agent/ask.js";
 import type { GraphHandle } from "../graph/client.js";
 import { AlleviaBot } from "./bot.js";
+import { checkupJobs } from "../checkup/jobs.js";
 import type { StartedBot } from "./client.js";
 
 const ENV_NAMES = {
@@ -51,6 +52,7 @@ export async function startDiscordBot(o: { tenant: string; model?: string; log?:
     ask: (input, emit) => ask(input, { ...deps, ...(timeZone ? { timeZone } : {}) }, emit),
     ...(onDecision ? { onDecision } : {}),
     ...(actions ? { actions } : {}),
+    checkup: checkupJobs(), // /checkup: the business's own site, in the background
     log,
   });
   const { startClient } = await import("./client.js");

@@ -3,6 +3,9 @@
 // running turns across them all, and every minute posts new approval cards and the day's note into the customer's own
 // channels. Provisioning retries run here too (the same claim keeps two processes from doing one business twice).
 import { loadConfig } from "../config.js";
+import { checkupJobs } from "../checkup/jobs.js";
+import { getActionTarget } from "../actions/target.js";
+import { usesFoundersAccounts } from "../actions/executors.js";
 import { businessId } from "../graph/tenants.js";
 import { ask } from "../agent/ask.js";
 import type { GraphHandle } from "../graph/client.js";
@@ -18,13 +21,14 @@ import { tenantTimeZone } from "./main.js";
 
 export interface StartedHub { stop: () => Promise<void> }
 
-export const tenantSource = (g: GraphHandle): TenantSource => ({
+export const tenantSource = (g: GraphHandle, slug?: string): TenantSource => ({
   pendingApprovals: async () => (await readApprovals(g)).filter((a) => a.status === "pending"),
   approval: (id) => readApproval(g, id),
   latestBrief: async () => {
     const b = await latestBrief(g);
     return b ? { id: b.id, title: b.title, ...(b.asOf ? { asOf: b.asOf } : {}), text: b.text } : null;
   },
+  ...(slug ? { actionTarget: () => getActionTarget(g, slug, { founders: usesFoundersAccounts(slug) }) } : {}),
 });
 
 export async function startHubBot(o: { model?: string; log?: (line: string) => void; syncEveryMs?: number }): Promise<StartedHub> {
@@ -61,6 +65,9 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
         ...(onDecision ? { onDecision } : {}), ...(actions ? { actions } : {}), log,
         // what the team makes comes back here as files with Approve and Change, read from this business's own storage
         deliverables: { file: (assetId) => loadAssetFile(graph, studioDeps.store, area.slug, assetId) },
+        // a spreadsheet dropped in #your-team adds this business's own numbers (the business comes from the channel only)
+        numbers: { businessId: businessId(area.slug) },
+        checkup: checkupJobs(), // /checkup: this business's own site, in the background
       });
     },
     studioFor: async (area) => new StudioDiscord({
@@ -94,11 +101,14 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
       for (const a of await service.deps.store.listAreas()) {
         if (a.status !== "ready") continue;
         try {
-          await syncArea(a.slug, service.deps, tenantSource(await tenantGraph(a.slug)));
+          await syncArea(a.slug, service.deps, tenantSource(await tenantGraph(a.slug), a.slug));
         } catch (e) {
           log(`[hub] ${a.slug}: could not post cards or the note: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
+    } catch (e) {
+      // the list of businesses itself could not be read (the database restarting, issue #28): try again next minute
+      log(`[hub] could not read the list of businesses: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       syncing = false;
     }

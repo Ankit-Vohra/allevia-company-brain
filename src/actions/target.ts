@@ -31,6 +31,12 @@ export const validRepo = (raw: string): boolean => {
 const same = (a: string, b: string): boolean => normalizeRepo(a).toLowerCase() === normalizeRepo(b).toLowerCase();
 
 export const APP_TARGET_LABEL = "Tasks inside the app and on Discord";
+
+// What an approved fix does, in the owner's words, for a card that waits for their OK (Discord, issue #8).
+export function fixDestinationWords(t: ActionTarget | undefined): string {
+  if (t?.kind === "github") return `If you say OK, it goes to ${t.repo} on GitHub as a to-do. Nothing on your site changes yet.`;
+  return "If you say OK, it becomes a to-do in your tasks. Nothing on your site changes yet.";
+}
 const OWN_REPO_REASON = "That repo is Allevia's own, so the fix went to your tasks instead.";
 
 interface Stored { t: string | null; r: string | null; op: boolean | null }
