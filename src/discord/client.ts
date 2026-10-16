@@ -11,7 +11,7 @@ import {
   type ButtonInteraction, type ChatInputCommandInteraction, type GuildMember, type Interaction, type Message, type MessageCreateOptions,
   type MessageEditOptions, type SendableChannels, type ThreadChannel, type APIInteractionGuildMember,
 } from "discord.js";
-import type { AlleviaBot, ButtonPort, ButtonSpec, CommandPort, MessagePort, Outgoing, PostedPort, ThreadPort } from "./bot.js";
+import type { AlleviaBot, ButtonPort, ButtonSpec, CommandPort, LinkSpec, MessagePort, Outgoing, PostedPort, ThreadPort } from "./bot.js";
 
 export interface DiscordSettings { token: string; appId: string; guildId: string; channelId: string }
 
@@ -28,6 +28,8 @@ export const SLASH_COMMANDS = [
   new SlashCommandBuilder().setName("brief").setDescription("Today's note: the latest summary"),
   new SlashCommandBuilder().setName("approvals").setDescription("Proposals waiting for the owner's approval"),
   new SlashCommandBuilder().setName("checkup").setDescription("Check my website: the top five fixes, posted here in a few minutes"),
+  new SlashCommandBuilder().setName("connect").setDescription("Connect your tools (Gmail, Calendar, Analytics, Instagram, your shop ...): a link only you can use")
+    .addStringOption((o) => o.setName("account").setDescription("Which tool, e.g. Instagram (leave empty to see them all)").setRequired(false).setMaxLength(60)),
 ].map((c) => c.toJSON());
 
 // The hub adds /continue: carry a conversation from the web app on here.
@@ -45,16 +47,24 @@ export function redactor(token: string | undefined): (s: string) => string {
 const STYLE: Record<ButtonSpec["style"], ButtonStyle> = { success: ButtonStyle.Success, danger: ButtonStyle.Danger, secondary: ButtonStyle.Secondary };
 const NO_PINGS = { parse: [] as never[] };
 
-function components(buttons: ButtonSpec[] | undefined) {
-  if (!buttons?.length) return [];
-  return [new ActionRowBuilder<ButtonBuilder>().addComponents(
-    buttons.slice(0, 5).map((b) => new ButtonBuilder().setCustomId(b.customId).setLabel(b.label).setStyle(STYLE[b.style]))).toJSON()];
+function components(buttons: ButtonSpec[] | undefined, links: LinkSpec[] | undefined = undefined) {
+  const rows = [];
+  if (buttons?.length) {
+    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
+      buttons.slice(0, 5).map((b) => new ButtonBuilder().setCustomId(b.customId).setLabel(b.label).setStyle(STYLE[b.style]))).toJSON());
+  }
+  // link buttons (a one-time connect address): five to a row, at most four rows
+  for (let i = 0; i < Math.min(links?.length ?? 0, 20); i += 5) {
+    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
+      links!.slice(i, i + 5).map((l) => new ButtonBuilder().setLabel(l.label).setStyle(ButtonStyle.Link).setURL(l.url))).toJSON());
+  }
+  return rows;
 }
 
 function payload(m: Outgoing): MessageCreateOptions & MessageEditOptions {
   if (typeof m === "string") return { content: m, allowedMentions: NO_PINGS };
   return {
-    content: m.content, components: components(m.buttons), allowedMentions: NO_PINGS,
+    content: m.content, components: components(m.buttons, m.links), allowedMentions: NO_PINGS,
     ...(m.files?.length ? { files: m.files.map((f) => new AttachmentBuilder(f.data, { name: f.name })) } : {}),
   };
 }
@@ -106,6 +116,7 @@ export function commandPort(i: ChatInputCommandInteraction, channelId: string): 
   return {
     command: i.commandName,
     ...(i.options.getString("question") ? { question: i.options.getString("question")! } : {}),
+    ...(i.options.getString("account") ? { account: i.options.getString("account")! } : {}),
     guildId: i.guildId,
     channelId: i.channelId,
     threadParentId: inThread ? (ch as ThreadChannel).parentId : null,

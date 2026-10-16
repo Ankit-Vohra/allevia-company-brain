@@ -142,6 +142,10 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
       };
     }
 
+    // What this business has connected, told to the desks that can use it (best-effort: a slow or missing answer is just no note).
+    let connectionsNote = "";
+    if (!outcome && deps.connections) try { connectionsNote = await Promise.race([deps.connections.note(), new Promise<string>((r) => setTimeout(() => r(""), 2500))]); } catch { connectionsNote = ""; }
+
     // The business's own language setting (best-effort): absent, the answer follows the question's language.
     let language: string | undefined;
     if (!outcome) try { language = await loadLanguagePreference(g); } catch { language = undefined; }
@@ -155,7 +159,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
         ...(deps.timeZone ? { timeZone: deps.timeZone } : {}), ...(deps.signal ? { signal: deps.signal } : {}),
         ...(capabilities ? { capabilities } : {}), ...(team ? { team } : {}), ...(language ? { language } : {}), ...(skills ? { skills } : {}),
         ...(deps.creative ? { creative: deps.creative } : {}), ...(deps.publicData ? { publicData: deps.publicData } : {}),
-        ...(deps.connections ? { connections: deps.connections } : {}),
+        ...(deps.connections ? { connections: deps.connections } : {}), ...(connectionsNote ? { connectionsNote } : {}),
       },
       out);
     if (deps.signal?.aborted) failure = STOPPED_MESSAGE;

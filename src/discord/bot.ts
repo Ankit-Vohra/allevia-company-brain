@@ -39,7 +39,8 @@ import { ThrottledEditor, WorkLogState } from "./worklog.js";
 
 export interface ButtonSpec { customId: string; label: string; style: "success" | "danger" | "secondary" }
 export interface OutFile { name: string; data: Buffer }
-export type Outgoing = string | { content: string; buttons?: ButtonSpec[]; files?: OutFile[] };
+export interface LinkSpec { label: string; url: string }
+export type Outgoing = string | { content: string; buttons?: ButtonSpec[]; links?: LinkSpec[]; files?: OutFile[] };
 
 export interface PostedPort { id: string; edit(m: Outgoing): Promise<void> }
 export interface ThreadPort { id: string; send(m: Outgoing): Promise<PostedPort> }
@@ -65,6 +66,7 @@ export interface MessagePort {
 export interface CommandPort {
   command: string;
   question?: string;
+  account?: string;                              // /connect: which tool
   guildId: string | null;
   channelId: string;
   threadParentId: string | null;
@@ -94,6 +96,12 @@ export interface ButtonPort {
   update(m: Outgoing): Promise<void>;           // edit the card the button is on
 }
 
+export interface ConnectLinks {
+  list(): Promise<Array<{ id: string; name: string; blurb: string; state: "not_connected" | "connected" | "needs_attention"; available: boolean; recommended: boolean }>>;
+  /** A one-time address (10 minutes) that starts the connection; null when it can't be made. */
+  link(id: string): string | null;
+}
+
 export interface BotDeps {
   tenant: string;
   guildId: string;
@@ -115,6 +123,8 @@ export interface BotDeps {
   numbers?: { businessId: string; fetch?: FetchFn };
   // /checkup: the background check-ups (src/checkup/jobs.ts). Absent: the command says it isn't switched on.
   checkup?: Pick<CheckupJobs, "start">;
+  // /connect: this business's connections, as the owner reads them (src/connections). Absent: the command says it isn't switched on.
+  connections?: ConnectLinks;
   // "Change" on a draft from today's stand-up: the owner's words go to the person who drafted it, who redrafts it
   // (src/proactive/revise.ts). Returns the card as it now stands, or why it could not be changed. Absent: Change says to
   // edit it in the web app.
@@ -370,6 +380,7 @@ export class AlleviaBot {
       case "approvals": return this.approvalsCommand(c);
       case "continue": return this.continueCommand(c);
       case "checkup": return this.checkupCommand(c);
+      case "connect": return this.connectCommand(c);
       default: return c.respond("I don't know that command.", { ephemeral: true });
     }
   }
@@ -391,6 +402,35 @@ export class AlleviaBot {
     await c.respond(`Answering in <#${thread.id}>.`);
     await thread.send(`**Question:** ${clip(question, 1900)}`);
     return this.turn(thread, question, asker, async () => sessionId);
+  }
+
+  // /connect: the tools this business can connect, as one-time links only the owner sees. With a name, just that tool.
+  private async connectCommand(c: CommandPort): Promise<void> {
+    if (!this.d.connections) return c.respond("Connecting your tools isn't switched on here yet.", { ephemeral: true });
+    if (!c.isOwner) return c.respond("Only the owner can connect the business's tools.", { ephemeral: true });
+    const all = (await this.d.connections.list()).filter((x) => x.available);
+    const want = (c.account ?? "").trim().toLowerCase();
+    const note = "This link is just for you and works once, for 10 minutes. Nothing is posted, sent, spent or booked without your OK.";
+    if (want) {
+      const hit = all.find((x) => x.id === want || x.name.toLowerCase() === want) ?? all.find((x) => x.name.toLowerCase().includes(want) || x.id.includes(want));
+      if (!hit) return c.respond(`I don't have a tool called "${clip(want, 40)}". Use /connect with nothing after it to see the list.`, { ephemeral: true });
+      if (hit.state === "connected") return c.respond(`${hit.name} is already connected. To disconnect it, open Connections in the web app.`, { ephemeral: true });
+      const url = this.d.connections.link(hit.id);
+      if (!url) return c.respond("I couldn't make a link just now. Open Connections in the web app instead.", { ephemeral: true });
+      return c.respond({ content: `Connect ${hit.name} so your team can: ${hit.blurb}\n${note}`, links: [{ label: `Connect ${hit.name}`, url }] }, { ephemeral: true });
+    }
+    const on = all.filter((x) => x.state === "connected");
+    const attention = all.filter((x) => x.state === "needs_attention");
+    const next = [...attention, ...all.filter((x) => x.state === "not_connected" && x.recommended)].slice(0, 10);
+    const lines = [
+      "**Your connections**",
+      on.length ? `Connected: ${on.map((x) => x.name).join(", ")}.` : "Nothing is connected yet.",
+      ...(attention.length ? [`Needs you to connect it again: ${attention.map((x) => x.name).join(", ")}.`] : []),
+      ...(next.length ? ["", "Tap one to connect it:", ...next.map((x) => `• **${x.name}**: ${clip(x.blurb, 110)}`), "", note] : []),
+      "To pick a different tool, use `/connect account: <name>`. To disconnect one, open Connections in the web app.",
+    ];
+    const links = next.flatMap((x) => { const url = this.d.connections!.link(x.id); return url ? [{ label: clip(`Connect ${x.name}`, 78), url }] : []; });
+    return c.respond({ content: lines.join("\n"), ...(links.length ? { links } : {}) }, { ephemeral: true });
   }
 
   // /checkup: the free website check-up of this business's own site (`checkup --tenant`, in the background); the top five

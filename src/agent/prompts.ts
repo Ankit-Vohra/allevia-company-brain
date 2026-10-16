@@ -43,7 +43,7 @@ export function localStamp(ms: number, timeZone: string = DEFAULT_TIME_ZONE): st
   return `${p("day")} ${p("month")} ${p("year")}, ${p("hour")}:${p("minute")} ${zone}`;
 }
 
-export interface PromptOpts { now: number; tenant: string; timeZone?: string; language?: string }  // language: the LANGUAGE note (language.ts)
+export interface PromptOpts { now: number; tenant: string; timeZone?: string; language?: string; connectionsNote?: string }  // language: the LANGUAGE note (language.ts)
 
 export const HOUSE_RULES = `House rules (every Allevia agent):
 - Answer only from this turn's tool results, the findings handed to you, and the "what we already know" brief. If it isn't there, say "not recorded". Never guess.
@@ -117,6 +117,8 @@ export function agentSystemPrompt(
     HOUSE_RULES,
     OWNER_WORDS_RULE,
     opts.language ?? "",
+    // the business's connected tools, told once at the start of a turn to the desks that can use them
+    opts.connectionsNote && tools.some((t) => t.name === "connections_available") ? `Connected tools:\n${opts.connectionsNote}` : "",
     tools.some((t) => t.name === "make_poster" || t.name === "write_copy") ? CREATING_RULES : "",
     tools.some((t) => t.name === "research") ? RESEARCH_RULES : "",
     instructionsBlock(opts.instructions ?? []),

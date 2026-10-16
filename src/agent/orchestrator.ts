@@ -112,6 +112,7 @@ export interface TurnDeps {
   skills?: SkillCatalog;                    // the skills agents can open (use_skill): the shipped packs plus this business's own; none = no skills
   creative?: CreativeDeps;                  // what the creating tools may use; absent: creating is not set up (the tools say so)
   publicData?: PublicDataPort;              // public-data lookups (Apify, budgeted); absent or off: the tools say so
+  connectionsNote?: string;                 // what is connected for this business, told to the desks that hold the connection tools (ConnectionsPort.note)
   connections?: ConnectionsPort;            // this business's connections; absent: the tools that need one say none is connected
 }
 
@@ -648,7 +649,7 @@ class Turn {
   private get answerer(): string { return this.targetAgent?.id ?? CHIEF; }
 
   private get promptOpts(): PromptOpts {
-    return { now: this.deps.now, tenant: this.input.tenant, ...(this.deps.timeZone ? { timeZone: this.deps.timeZone } : {}), language: this.languageNote };
+    return { now: this.deps.now, tenant: this.input.tenant, ...(this.deps.timeZone ? { timeZone: this.deps.timeZone } : {}), language: this.languageNote, ...(this.deps.connectionsNote ? { connectionsNote: this.deps.connectionsNote } : {}) };
   }
 
   // The answer's language, decided from the question (and the business's own setting), told to every agent.
