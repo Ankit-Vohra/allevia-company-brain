@@ -52,10 +52,12 @@ export const findPaths = defineTool({
 // A card the team just proposed (a Recommendation, its Approval, an Action) is what we suggest, not part of why: the
 // explanation path is drawn through the business's own records, so these are left out when two or more other ids remain.
 const PROPOSED = new Set(["Recommendation", "Approval", "Action"]);
+// Allevia's own staff (agent:allevia-*) are not part of the business either: they know about everything, so a path through one explains nothing.
+const isOurs = (id: string): boolean => PROPOSED.has(typeFromId(id) ?? "") || id.startsWith("agent:allevia-");
 
 async function runShowPath(args: { ids: string[] }, ctx: ToolContext) {
   const given = args.ids.map((s) => s.trim()).filter(Boolean).filter((id, i, a) => i === 0 || a[i - 1] !== id);
-  const records = given.filter((id) => !PROPOSED.has(typeFromId(id) ?? ""));
+  const records = given.filter((id) => !isOurs(id));
   const left = records.length >= 2 && records.length < given.length ? given.filter((id) => !records.includes(id)) : [];
   const list = left.length ? records : given;
   if (!list.length) throw new InputError("Pass the ordered ids of your explanation, e.g. [\"decision:x\", \"observation:y\"].");
