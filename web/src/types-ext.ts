@@ -283,6 +283,40 @@ export interface ConnectorStatus {
   capabilityMode?: string;
 }
 
+/** One connection as the Connections page shows it (src/connections/types.ts ConnectionView). */
+export interface ConnectionRow {
+  id: string;
+  name: string;
+  logo?: string;
+  group: "google" | "meta" | "commerce" | "customers" | "team";
+  blurb: string;
+  reads: string[];
+  acts: string[];
+  access: "read" | "read_act";
+  state: "not_connected" | "connected" | "needs_attention";
+  message: string;
+  available: boolean;
+  unavailableWords?: string;
+  soon?: boolean;
+  lastReadAt?: string;
+  choose?: { label: string; options: string[] };
+  selected?: string;
+  extras?: string[];
+}
+
+/** GET /api/:t/connections (src/server/routes/connections.ts). */
+export interface ConnectionsPage {
+  ready: boolean;
+  message?: string;
+  fit?: string | null;
+  recommended: ConnectionRow[];
+  more: ConnectionRow[];
+  groups: Array<{ id: ConnectionRow["group"]; label: string; items: ConnectionRow[] }>;
+  starters: Array<{ id: string; label: string; ask: string; needsOk: boolean; department: string; agents: string[] }>;
+  setup?: Array<{ setting: string; words: string }>;
+  never?: string;
+}
+
 export interface NumbersGoalOutcome {
   id: string;
   name: string;

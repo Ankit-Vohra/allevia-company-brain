@@ -122,6 +122,10 @@ export class NotAllowedError extends Error {
 export interface ConnectionView {
   id: string;
   name: string;
+  /** The tool's logo (Composio's logo address for its toolkit); the page falls back to a letter when it can't load. */
+  logo?: string;
+  /** Whether it can run in the daily read and what it can do: "Read only" or "Read and act" (acting always waits for the owner's OK). */
+  access: "read" | "read_act";
   group: ConnectionGroup;
   blurb: string;
   reads: string[];

@@ -9,6 +9,7 @@
 //   disconnect / revokeAll / rotateKeys   forgetting one connection, all of a business's connections, or sealing everything with a new key
 // A business only ever reaches its own records: the tenant is fixed when the port is made and no call takes one as an argument.
 import { randomBytes } from "node:crypto";
+import { entryById } from "../../shared/connection-map.js";
 import { signState, verifyState } from "../connectors/google/crypto.js";
 import type { SealedVault } from "../connectors/google/store.js";
 import type { GraphHandle } from "../graph/client.js";
@@ -127,7 +128,11 @@ export class ConnectionsService {
   async view(tenant: string, id: string): Promise<ConnectionView> {
     const { c, ctx } = await this.ctxFor(tenant, id);
     const a = c.availability();
-    const base = { id: c.info.id, name: c.info.name, group: c.info.group, blurb: c.info.blurb, reads: c.info.reads, acts: c.info.acts };
+    const slug = entryById(c.info.id)?.toolkit ?? (c.info.id.startsWith("app-") ? c.info.id.slice(4) : undefined);
+    const base = {
+      id: c.info.id, name: c.info.name, group: c.info.group, blurb: c.info.blurb, reads: c.info.reads, acts: c.info.acts,
+      access: c.info.acts.length ? "read_act" as const : "read" as const, ...(slug ? { logo: `https://logos.composio.dev/api/${slug}` } : {}),
+    };
     if (!a.ok) {
       return {
         ...base, state: "not_connected", message: a.message, available: false, unavailableWords: a.message, ...(a.soon ? { soon: true } : {}),

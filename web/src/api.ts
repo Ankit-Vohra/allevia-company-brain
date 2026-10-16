@@ -5,6 +5,7 @@ import type { AgentEvent, AgentId, OnboardEvent } from "@shared/contracts";
 import { ApiError, errorFrom, postSse, postSseForm } from "./lib/sse";
 import { consumeLinkInAddressBar } from "./lib/link";
 
+import { mockConnections } from "./mock/connections";
 const CONNECT_LIVE_ONLY = "Connecting Search Console needs the live server.";
 const CHECKUP_LIVE_ONLY = "The website check-up needs the live server.";
 const NUMBERS_LIVE_ONLY = "Adding your numbers needs the live server: your file is read and kept there.";
@@ -22,6 +23,7 @@ export interface StudioLatest {
 }
 import type { AgentMode, CapabilityState, DirectivePreview, DiscordHome, LearnedRuleDto, ProgramScorecard } from "@shared/contracts";
 import type {
+  ConnectionRow, ConnectionsPage,
   AgentDetail, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, GoalSetup, GraphData, LearningFeed, LiveTurn, NodeDetail,
   CheckupStatus, ConnectorStatus, NumbersImportResult, NumbersPlan, NumbersPreview, OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Standup, Tenant, TurnEventsPage, Usage,
 } from "./types-ext";
@@ -338,6 +340,39 @@ export const api = {
     form.append("file", file, file.name);
     form.append("plan", JSON.stringify(plan));
     return getJson(`/api/${enc(t)}/numbers/import`, { method: "POST", body: form });
+  },
+
+  // ---- Connections: every tool a business connects (live server only) ----
+
+  /** GET /api/:t/connections: grouped, recommended first (ordered for this kind of business), with the everyday jobs that unlocks. */
+  async connections(t: string): Promise<ConnectionsPage> {
+    if (mode === "mock") return mockConnections();
+    return getJson(`/api/${enc(t)}/connections`);
+  },
+  async searchConnections(t: string, q: string): Promise<Array<{ id: string; name: string; description: string }>> {
+    if (mode === "mock") return [];
+    return (await getJson<{ results: Array<{ id: string; name: string; description: string }> }>(`/api/${enc(t)}/connections/search?q=${encodeURIComponent(q)}`)).results;
+  },
+  /** POST .../connect: where the owner says yes. `returnTo: "popup"` lands on a "you can close this tab" page. */
+  async connectConnection(t: string, id: string, o: { inbox?: boolean; returnTo?: "connections" | "onboard" | "popup" } = {}): Promise<{ url: string }> {
+    if (mode === "mock") throw new ApiError("Connecting your tools needs the live server.", 501);
+    return sendJson(`/api/${enc(t)}/connections/${encodeURIComponent(id)}/connect`, "POST", o);
+  },
+  async selectConnection(t: string, id: string, value: string): Promise<ConnectionRow> {
+    if (mode === "mock") throw new ApiError("Connecting your tools needs the live server.", 501);
+    return sendJson(`/api/${enc(t)}/connections/${encodeURIComponent(id)}/select`, "POST", { value });
+  },
+  async disconnectConnection(t: string, id: string): Promise<ConnectionRow> {
+    if (mode === "mock") throw new ApiError("Connecting your tools needs the live server.", 501);
+    return sendJson(`/api/${enc(t)}/connections/${encodeURIComponent(id)}/disconnect`, "POST", {});
+  },
+  async pullConnection(t: string, id: string): Promise<{ ok: boolean; message: string; view: ConnectionRow }> {
+    if (mode === "mock") throw new ApiError("Connecting your tools needs the live server.", 501);
+    return sendJson(`/api/${enc(t)}/connections/${encodeURIComponent(id)}/pull`, "POST", {});
+  },
+  async connectionsAudit(t: string): Promise<Array<{ at: string; connection: string; did: string; worked: boolean; by: string | null }>> {
+    if (mode === "mock") return [];
+    return getJson(`/api/${enc(t)}/connections/audit`);
   },
 
   // ---- Connect Search Console (live server only) ----

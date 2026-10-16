@@ -22,10 +22,10 @@ import { businessProps } from "../reads.js";
 
 export interface ConnectionsWiring { service: ConnectionsService; webBaseUrl: string }
 
-const Connect = z.object({ inbox: z.boolean().optional(), returnTo: z.enum(["connections", "onboard"]).optional() });
+const Connect = z.object({ inbox: z.boolean().optional(), returnTo: z.enum(["connections", "onboard", "popup"]).optional() });
 const Select = z.object({ value: z.string().trim().min(1).max(300) });
 
-const RETURN_PATH: Record<string, string> = { connections: "/connections", onboard: "/onboard" };
+const RETURN_PATH: Record<string, string> = { connections: "/connections", onboard: "/onboard", popup: "/connected" };
 
 const page = (title: string, body: string): string =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#222}h1{font-size:1.25rem}</style></head><body><h1>${title}</h1><p>${body}</p></body></html>`;

@@ -10,6 +10,7 @@ import { AgentAvatar } from "../components/bits";
 import { DiscordJoin } from "../components/DiscordCard";
 import { Icon } from "../components/Icon";
 import { Reveal } from "../components/Reveal";
+import { ConnectionsPanel } from "../components/ConnectionsPanel";
 import { SuggestedRow } from "../components/SuggestedGoal";
 import { currencySymbol, fmtMs, fmtNum, guessRegion } from "../lib/format";
 import { hueFor } from "../lib/labels";
@@ -31,6 +32,7 @@ const STEPS = [
   { short: "Methods", now: "Choosing methods that suit your business" },
   { short: "Filing", now: "Filing it all, so every answer can name its source" },
   { short: "Your team", now: "Briefing your team" },
+  { short: "Your tools", now: "Connecting your tools" },
 ];
 
 /** Which step each stage the server can report belongs to (the newer stages fold into the nearest step). */
@@ -102,6 +104,8 @@ export default function OnboardPage() {
   const countryTouched = useRef(!!params.get("country"));
   const [run, setRun] = useState<RunState | null>(null);
   const [goals, setGoals] = useState<GoalSetup[]>([]);
+  const [toolsDone, setToolsDone] = useState(false); // the "Connect your tools" step: connected, or skipped
+  const [toolsConnected, setToolsConnected] = useState(0);
   const abort = useRef<AbortController | null>(null);
   const narrow = useMedia("(max-width: 700px)");
 
@@ -182,7 +186,8 @@ export default function OnboardPage() {
     return c;
   }, [run?.nodes]);
   const centerId = run?.nodes.find((n) => n.label === "Business")?.id;
-  const step = run?.done ? STEPS.length : Math.max(0, run?.step ?? 0);
+  const inTools = !!run?.done && !toolsDone;
+  const step = run?.done ? (inTools ? STEPS.length - 1 : STEPS.length) : Math.max(0, run?.step ?? 0);
 
   return (
     <div className="onboard-page">
@@ -227,7 +232,7 @@ export default function OnboardPage() {
         </form>
       ) : null}
 
-      {run && !run.error && !run.done && (
+      {run && !run.error && (!run.done || inTools) && (
         <section className="ob-progress" aria-label="Setting up" aria-live="polite">
           <ol className="ob-steps">
             {STEPS.map((s, i) => {
@@ -245,7 +250,7 @@ export default function OnboardPage() {
             <p className="ob-now-title">{STEPS[step]!.now}</p>
             <p className="ob-now-sub">Step {step + 1} of {STEPS.length} · {hostOf(url)}</p>
           </div>
-          <button type="button" className="btn btn-quiet btn-sm ob-stop" onClick={() => { abort.current?.abort(); setRun(null); }}>Stop</button>
+          {!run.done && <button type="button" className="btn btn-quiet btn-sm ob-stop" onClick={() => { abort.current?.abort(); setRun(null); }}>Stop</button>}
         </section>
       )}
 
@@ -255,7 +260,18 @@ export default function OnboardPage() {
           <ul>{run.notes.map((n) => <li key={n}>{n}</li>)}</ul>
         </div>
       ) : null}
-      {run?.done && (
+      {inTools && doneTenant && (
+        <section className="ob-tools" aria-labelledby="ob-tools-h">
+          <h2 id="ob-tools-h" className="ob-goals-title">Connect your tools</h2>
+          <p className="ob-goals-lede">Optional, and each one is a tap. The ones that fit your business are first. Your team reads what you connect straight away, so day one has real numbers. You can skip this and do it later from Your tools.</p>
+          <ConnectionsPanel tenantId={doneTenant} variant="onboard" onChanged={setToolsConnected} />
+          <div className="ob-cta">
+            <button type="button" className="btn btn-gold" onClick={() => setToolsDone(true)}>{toolsConnected > 0 ? "Continue" : "Skip for now"}</button>
+          </div>
+        </section>
+      )}
+
+      {run?.done && toolsDone && (
         <Ready
           host={hostOf(url)}
           counts={run.done.counts}

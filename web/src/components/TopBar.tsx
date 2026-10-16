@@ -16,6 +16,7 @@ const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
 /** Screens under "More": the growth plan and the plan and credits page (the Studio and Your team have their own entries). */
 const MORE_SCREENS: { to: string; label: string; blurb: string; icon: IconName }[] = [
   { to: "/program", label: "Your growth plan", blurb: "Your goals, and how the team is helping", icon: "insights" },
+  { to: "/connections", label: "Your tools", blurb: "Gmail, Calendar, Analytics, Instagram, your shop and more", icon: "link" },
   { to: "/plan", label: "Plan and credits", blurb: "What your plan includes, and this month's use", icon: "layers" },
 ];
 
