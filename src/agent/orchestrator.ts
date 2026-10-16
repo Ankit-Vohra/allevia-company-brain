@@ -127,6 +127,7 @@ export interface TurnOutcome {
   reviews: ReviewRecord[];
   proposals: ProposalRecord[];
   path?: { nodes: NodeRef[]; edges: EdgeRef[] };
+  pathGrounded?: boolean;                   // the drawn path has no id nobody looked up, and no pair left unlinked (show_path's result)
   agents: string[];                         // every agent that ran, in order of first involvement
   failed: string[];                         // agents whose work failed
   touched: TouchedSet;
@@ -557,6 +558,15 @@ export function notePathFirst(tools: AlleviaTool[], written: () => boolean): All
   }));
 }
 
+// show_path's result says what it could not draw: ids nobody looked up (refused), unknown ids, pairs with no link within the
+// hops or not checked in time. A path with none of those is fully grounded; the Turn keeps the answer (Turn.pathGrounded).
+export function pathIsGrounded(data: unknown): boolean | undefined {
+  const d = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  if (!Array.isArray(d.ordered)) return undefined; // not show_path's own result: nothing to say
+  const n = (k: string): number => (Array.isArray(d[k]) ? (d[k] as unknown[]).length : 0);
+  return d.ordered.length > 0 && n("refused") + n("missing") + n("unconnected") + n("unchecked") === 0;
+}
+
 // ---------- the turn ----------
 
 interface RunOpts {
@@ -595,6 +605,7 @@ class Turn {
   readonly deliverables: DeliverableRecord[] = [];
   private readonly creative?: CreativeDeps;               // the request's own copy: one credit count for every tool call of the turn
   path?: { nodes: NodeRef[]; edges: EdgeRef[] };
+  pathGrounded?: boolean;
   readonly touched = new TouchedSet();
 
   constructor(readonly input: TurnInput, readonly deps: TurnDeps, readonly emit: Emit) {
@@ -702,7 +713,12 @@ class Turn {
       commit(() => { this.results.push({ agent, name, data: result.data, ids: [...result.nodes.map((n) => n.id), ...result.sources.map((s) => s.id)] }); });
       if (name === "show_path") {
         emit({ type: "path", nodes: result.nodes, edges: result.edges });
-        commit(() => { this.path = { nodes: result.nodes, edges: result.edges }; });
+        // A call that drew nothing (every id refused or unknown) does not replace a path already drawn, and leaves the
+        // turn without one when it is the only call, so the cited ids are tried instead (fallbackPath).
+        if (result.nodes.length) {
+          const grounded = pathIsGrounded(result.data);
+          commit(() => { this.path = { nodes: result.nodes, edges: result.edges }; this.pathGrounded = grounded; });
+        }
       } else if (name === USE_SKILL) {
         const d = (result.data && typeof result.data === "object" ? result.data : {}) as Record<string, unknown>;
         if (typeof d.skill === "string" && typeof d.name === "string") {
@@ -1236,6 +1252,7 @@ export async function runTurn(input: TurnInput, deps: TurnDeps, emit: Emit): Pro
   }
   return {
     ok, answer: text, plan, fastPath, findings, reviews: t.reviews, proposals: t.proposals, agents: t.agents, failed: t.failed, touched: t.touched,
-    guidedBy, skills: t.skillsUsed, deliverables: t.deliverables, ...(t.path ? { path: t.path } : {}),
+    guidedBy, skills: t.skillsUsed, deliverables: t.deliverables,
+    ...(t.path ? { path: t.path, ...(t.pathGrounded !== undefined ? { pathGrounded: t.pathGrounded } : {}) } : {}),
   };
 }

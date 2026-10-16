@@ -221,6 +221,11 @@ export interface SaveTurnInput {
   guidedBy?: string[];              // the owner's instructions (Memory, Rule, BrandRule ids) the turn worked under
   target?: string;                  // a direct chat: the roster agent the owner talked to (saved as Turn.target)
   skills?: Array<{ agent: string; skillId: string }>; // the skills agents opened (saved as Turn.skills: "agent/skill-id")
+  // The path the answer shows ("How we know"): the node ids in order, kept as Turn.pathIds and as onPath/pathIndex on the
+  // TOUCHED edge to each, so "which answers walked through this node" is a read (answersThrough). pathGrounded: show_path
+  // drew it with no id nobody looked up and no pair left unlinked.
+  pathIds?: string[];
+  pathGrounded?: boolean;
   // What the answer cost the model (src/agent/runtime.ts Usage, summed over every run of the turn) and how many graph tool
   // calls it made: saved on the Turn, so "a few hops, few tokens" is a question the graph answers (docs/graph-audit.md).
   cost?: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; modelCalls: number; toolCalls: number };
@@ -241,12 +246,15 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   const touchedIds = t.touched instanceof TouchedSet ? [...t.touched.nodes().map((n) => n.id), ...t.touched.sources().map((s) => s.id)] : t.touched;
   const findingIds = new Set(t.findings.map((f) => f.id));
   const guideIds = [...(t.guidedBy ?? []), ...t.findings.flatMap((f) => f.guidedBy ?? [])].filter((id) => GUIDES.has(typeFromId(id) ?? ""));
-  const known = await existing(g, [...touchedIds, ...t.citations, ...t.findings.flatMap((f) => [...f.citations, ...f.basedOn]), ...guideIds]);
+  const known = await existing(g, [...touchedIds, ...(t.pathIds ?? []), ...t.citations, ...t.findings.flatMap((f) => [...f.citations, ...f.basedOn]), ...guideIds]);
   const guide = (id: string): boolean => known.has(id) && GUIDES.has(typeFromId(id) ?? ""); // an instruction still in the graph
   const exists = (id: string): boolean => known.has(id) && id !== t.turnId;
   const seen = new Set(touchedIds);
   const cited = (id: string): boolean => seen.has(id) && exists(id); // returned by a tool this turn, and in the graph
 
+  // The drawn path, in order, of the records that are in the graph (a node the path names that is not there is dropped).
+  const pathIds = unique(t.pathIds ?? []).filter(exists);
+  const pathIndex = new Map(pathIds.map((id, i) => [id, i] as const));
   const turnProps: Record<string, Prim> = {
     question: t.question, answer: t.answer, at: t.at, status: t.status ?? "ok", sessionId: t.sessionId, asker: t.asker,
     agents: t.agents, citations: t.citations, checks: JSON.stringify(t.checks ?? null), events: JSON.stringify(compactEvents(t.events)),
@@ -256,6 +264,10 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   if (t.ms !== undefined) turnProps.ms = t.ms;
   if (t.error) turnProps.error = t.error;
   if (t.skills?.length) turnProps.skills = unique(t.skills.map((s) => `${s.agent}/${s.skillId}`));
+  if (pathIds.length) {
+    turnProps.pathIds = pathIds;
+    if (t.pathGrounded !== undefined) turnProps.pathGrounded = t.pathGrounded;
+  }
   if (t.cost && (t.cost.modelCalls > 0 || t.cost.toolCalls > 0)) {
     turnProps.tokensIn = t.cost.inputTokens + t.cost.cacheReadTokens + t.cost.cacheWriteTokens; // everything the model read
     turnProps.tokensOut = t.cost.outputTokens;
@@ -267,7 +279,11 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   const edges: EdgeInput[] = [{ from: t.turnId, type: "IN_SESSION", to: t.sessionId }];
   if (askerOk) edges.push({ from: t.asker, type: "ASKED", to: t.turnId });
   for (const a of unique(t.agents)) if (agentById(a)) edges.push({ from: t.turnId, type: "HANDLED_BY", to: agentNodeId(a) });
-  for (const id of unique(touchedIds)) if (exists(id)) edges.push({ from: t.turnId, type: "TOUCHED", to: id });
+  for (const id of unique([...touchedIds, ...pathIds])) {
+    if (!exists(id)) continue;
+    const at = pathIndex.get(id);
+    edges.push({ from: t.turnId, type: "TOUCHED", to: id, ...(at !== undefined ? { props: { onPath: true, pathIndex: at } } : {}) });
+  }
   for (const id of unique(t.citations)) if (cited(id)) edges.push({ from: t.turnId, type: "CITED", to: id });
   for (const id of unique(t.guidedBy ?? [])) if (guide(id)) edges.push({ from: t.turnId, type: "GUIDED_BY", to: id });
 
@@ -324,6 +340,21 @@ async function growKnowsAbout(g: GraphHandle, t: SaveTurnInput, cited: (id: stri
          r.turns = CASE WHEN counted THEN coalesce(r.turns, []) ELSE (coalesce(r.turns, []) + [$turn])[-$keep..] END,
          r.lastTurn = $turn`,
     { pairs: [...pairs.values()], now, turn: t.turnId, keep: KNOWS_TURNS });
+}
+
+// ---------- how we know ----------
+
+export interface AnswerThrough { turnId: string; question: string; at: number; pathIndex: number; sessionId: string | null }
+
+// The answers whose "How we know" path walked through this node, newest first: each Turn whose TOUCHED edge to it is marked
+// onPath (saveTurn), with the question, when it was asked and where on the path the node sat.
+export async function answersThrough(g: Pick<GraphHandle, "roQuery">, nodeId: string, limit = 10): Promise<AnswerThrough[]> {
+  const rows = await g.roQuery<{ id: string; q: string | null; at: number | null; idx: number | null; sid: string | null }>(
+    `MATCH (n:Entity {id:$id}) WITH n
+     MATCH (t:Turn)-[r:TOUCHED]->(n) WHERE r.onPath = true AND r.until IS NULL AND coalesce(t.status, 'ok') = 'ok'
+     RETURN t.id AS id, t.question AS q, t.at AS at, r.pathIndex AS idx, t.sessionId AS sid ORDER BY at DESC, id LIMIT $limit`,
+    { id: nodeId, limit: Math.max(1, Math.min(50, Math.round(limit))) });
+  return rows.map((r) => ({ turnId: r.id, question: r.q ?? "", at: r.at ?? 0, pathIndex: r.idx ?? 0, sessionId: r.sid ?? null }));
 }
 
 // ---------- recall ----------
