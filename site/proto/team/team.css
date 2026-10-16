@@ -156,16 +156,15 @@ html.is-scroll .cards { display: none; }
 .dog[data-says="1"] .dog__says { opacity: 1; transform: translate(-50%, 0) scale(1); transition-duration: 240ms; }
 .dog[data-facing="left"] .dog__says { transform: translate(-50%, 8px) scale(0.95); }
 
-/* JJ and Zoe nap in the game room and sit up when Fluffy arrives */
-.pet { position: absolute; z-index: 1; left: calc(var(--sx) * var(--px)); top: calc(var(--sy) * var(--px)); width: calc(23 * var(--px)); height: calc(17 * var(--px)); }
+/* JJ and Zoe nap in the game room; when Fluffy arrives they wake and trot out to meet her on the lane (team.ts sets where) */
+.pet { position: absolute; z-index: 1; left: calc(var(--sx) * var(--px)); top: calc(var(--sy) * var(--px)); width: calc(23 * var(--px)); height: calc(17 * var(--px)); transition: translate 420ms var(--ease-out); }
+.pet.is-up { z-index: 5; translate: var(--mx, 0px) var(--my, 0px); }
 .pet__svg { width: 100%; height: 100%; }
 .pet .df--lie { opacity: 1; }
 .pet .df--sit { opacity: 0; }
 .pet.is-up .df--lie { opacity: 0; }
 .pet.is-up .df--sit { opacity: 1; }
-.pet.is-up .pet__svg { animation: hop 260ms var(--ease-out); }
-.pet--jj, .pet--zoe { --flip: -1; }
-.pet.is-up .pet__svg { transform-origin: 50% 100%; }
+.pet.is-up .pet__svg { scale: -1 1; }
 .pet__heart { position: absolute; left: 40%; top: -26%; width: calc(5 * var(--px) * 1.3); height: calc(5 * var(--px) * 1.3); opacity: 0; }
 .pet.is-happy .pet__heart { animation: heart 1000ms var(--ease-out) both; }
 

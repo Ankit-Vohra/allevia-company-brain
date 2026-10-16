@@ -147,12 +147,22 @@ class Walk {
     const door = this.act.querySelector(".piece--entrance");
     const doorX = door ? centre(door) - (door as HTMLElement).offsetWidth / 2 + 6 * this.px : 0;
     this.startLeft = Math.max(-this.dogW, doorX - (this.T[0] ?? 0) - this.dogW / 2);
+    // where JJ and Zoe trot to, on the lane beside Fluffy, once the camera has settled on the game room
+    const finalLeft = this.W * 0.47 - this.dogW / 2;
+    const lastT = this.T[this.T.length - 1] ?? 0;
+    this.pets.forEach((pet) => {
+      const n = pet.dataset.pet === "jj" ? 0 : 1;      // JJ stands next to Fluffy, Zoe beside him
+      const leftNow = centre(pet) - pet.offsetWidth / 2 - lastT;
+      const target = finalLeft + (n + 1) * (this.dogW + 3 * this.px);
+      const sy = parseFloat(pet.style.getPropertyValue("--sy")) || 0;
+      pet.style.setProperty("--mx", `${(target - leftNow).toFixed(1)}px`);
+      pet.style.setProperty("--my", `${((DOG_TOP - sy) * this.px).toFixed(1)}px`);
+    });
     // the treat's flight from the desk to the dog's mouth (the same for every person, because every desk stops in the same place)
     const gx = this.baseLeft + this.dogW * 0.9 - this.W * AGENT_AT;
     const gy = MOUTH_Y * this.px - TREAT_Y * this.px;
     this.act.style.setProperty("--gx", `${gx.toFixed(1)}px`);
     this.act.style.setProperty("--gy", `${gy.toFixed(1)}px`);
-    void DOG_TOP;
   }
 
   private apply(p: number, force = false) {
