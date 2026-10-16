@@ -57,12 +57,12 @@ items in the set each passed on a live run. Report: [`docs/evals/2026-10-16-demo
   and brand voice were right on all six. One site blocked the crawler (it answered "slow down"), and the run now says so in plain
   words and stops. Seven generic faults were found and fixed
   ([`onboarding-trials.md`](onboarding-trials.md)).
-- **16 Oct, a business's own site** (the founder's second business, from nothing but its URL): built its brand kit, SEO checks,
+- **15 Oct, a business's own site** (the founder's second business, from nothing but its URL): built its brand kit, SEO checks,
   services, audiences, goals and plan.
 - **16 Oct, from the web app:** Prufrock Coffee (prufrockcoffee.com, a London café) **failed twice** with "the page has almost no
-  text we could read", although the command line read it fine (20 pages). The cause was the crawler's browser failing to start
-  inside the supervised server process. Fix: retry the launch, fall back to reading the pages' HTML, say honestly when a site
-  really is unreadable, log the crawl. Re-run: **onboarded from the web app**, verified live.
+  text we could read", although the command line, a different process, read it fine (20 pages). The crawler's browser could not
+  start inside the long-running server. Fix: retry the launch, read the pages' HTML when the browser still will not start, say
+  honestly when a site really is unreadable, and log the crawl. Re-run: **onboarded from the web app**, verified live.
 - **16 Oct, the product audit:** a fresh public site into a new business through the web app: 40 pages, 464 facts, 3 goals, 12
   people, **477 s**, then deleted ([`product-audit.md`](product-audit.md)).
 
@@ -93,7 +93,7 @@ today.
 
 ## 3. A poster with the owner's logo
 
-**Run on Shiftly (16 Oct, 20:00 IST):** a made-up logo (a teal rounded square with a clock, [`shiftly-logo.png`](demo-screens/shiftly-logo.png))
+**Run on Shiftly (16 Oct, about 19:55 IST):** a made-up logo (a teal rounded square with a clock, [`shiftly-logo.png`](demo-screens/shiftly-logo.png))
 filed through the product's own upload path; the librarian looked at it and answered "Got your logo. I'll put it on every poster
 and ad". Then, as an owner would write it: **"Poster for Insta with my logo"**.
 
@@ -110,7 +110,7 @@ reviewed the design and Nisha checked every word:
 - The owner's line is the headline, exactly as given; the call to action is the owner's; the support line adds only "Pune".
   **No pay, hours or offer** were added, because none was given, and the answer says "if you have a pay rate or shift times,
   send them".
-- The logo is the filed file, **whole**, bottom left (a check of the real logo is part of the design review).
+- The logo is the filed file, **whole**, bottom left.
 - Nisha: all the words are present and spelled right. It waits for the owner's OK as a card (`content_draft`); nothing was posted.
 - **The team's own design review scored it 3.7 out of 5 and said it did not fully pass:** the support line repeats the
   headline, and the call to action is small, pale text in a corner that is easy to miss on a phone. Without brand font files
@@ -153,7 +153,7 @@ ready-to-paste text for its contact page. 4 Higgsfield credits in all, 2 of them
 brand font could not set (the check refused it after the artwork was paid for; now font coverage is checked first). Seven faults
 found, all fixed; follow-ups merged the same day (big fixes lead the note, Hindi-capable fonts, "Change" teaches a rule).
 
-**Run on Shiftly (16 Oct, 19:55 IST), no model needed for the finding:**
+**Run on Shiftly (16 Oct, about 19:50 IST), no model needed for the finding:**
 
 ```
 npm run cli -- seed-demo demo_notice
