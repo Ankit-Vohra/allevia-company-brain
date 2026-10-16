@@ -74,6 +74,7 @@ export interface OnboardDeps {
   // and the business's Google Maps listing is read after the profile. Off or absent: neither happens. Budgeted.
   publicData?: PublicDataPort;
   maxUnderstandPages?: number;                         // default 12
+  tidy?: boolean;                                      // default true: the tidy pass after the index (false: trials measure the graph before it)
   now?: () => number;
   log?: (line: string) => void;
 }
@@ -516,7 +517,7 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
     }
     // the tidy pass (src/ingest/tidy.ts): near-duplicates merged, other businesses retyped, first names retired, each
     // undoable with db:unmerge; then the nodes it made (a Supplier, a Partner…) get their vectors too
-    if (!stopped()) {
+    if (deps.tidy !== false && !stopped()) {
       try {
         const t = await tidyGraph(g, {
           owner: { id: businessId, name, ...(domain ? { domain } : {}) }, ...(modelCheck ? { ask: modelCheck } : {}),
