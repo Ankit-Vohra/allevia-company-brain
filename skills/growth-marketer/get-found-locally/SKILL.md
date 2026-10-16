@@ -14,6 +14,7 @@ needs_ok: false
 2. Read `ai_visibility` for whether AI assistants name the business when a customer asks for its kind of work in its city, and which directories and firms they name instead.
 3. Read `seo_report` for the searches the site already shows up for and the pages that get seen but not clicked.
 4. Check the basics a local business is judged on, using `search` over what the team knows: the same name, address and phone on the website, Google Business Profile and directories (any difference costs trust); a Google Business Profile with the right main category, hours, 10 or more photos and a post in the last week; at least 10 Google reviews with recent ones and replies from the owner; and a page per main service and area served that says the city in its first line.
+   Compare with the top 3 businesses Google Maps shows for the main service in that area, not with an industry average: their main category (the single most specific one, "Hair salon" rather than "Beauty"), and how many reviews they got in the last 90 days. Recent reviews count for more than the all-time total; a steady few each month beats a burst.
 5. Pick three moves for the next month in this order: what stops contact (from the check-up), reviews and listings (they feed Google Maps and AI answers), then one page per service and area. Each with who does it and a time estimate.
 6. Say what you could not see: without Google Business Profile or Search Console connected, calls, direction requests and search clicks are unknown; say "Connect Google Business Profile to see calls and directions".
 
@@ -39,3 +40,5 @@ One line on where the business stands, then three moves for the month, each with
 - Recommending ads before the site can turn a visitor into an enquiry.
 - Counting directories as competitors.
 - Promising a Google position; nobody can.
+- Adding keywords to the business name on the profile ("Studio Nine Best Hair Salon Dubai"): it can get the profile suspended.
+- Offering a discount or gift for reviews: Google does not allow it. Ask every happy customer instead.

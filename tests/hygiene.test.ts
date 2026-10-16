@@ -116,6 +116,11 @@ const ALLOWED_VALUES: Array<{ match: string; why: string }> = [
   { match: "d7ea7852480601af9bc8870942af8311a410e567", why: "vendor NOTICE: pinned upstream commit" },
   { match: "4b99de2f7de7e7d5247042e5fb5b4ea9368ef734", why: "vendor NOTICE: pinned upstream commit" },
   { match: "2dc826f7b9aea762f5557e56ba88a3e515bd2fed", why: "vendor NOTICE: pinned upstream commit" },
+  { match: "45f51253f2d2c67377dd092191ecfccf87df3237", why: "vendor/skills/marketingskills/NOTICE.md: pinned upstream commit" },
+  { match: "e6b505348c39c6e751a70d52ff407e7b0a6bf676", why: "vendor/skills/knowledge-work-plugins/NOTICE.md: pinned upstream commit" },
+  { match: "405ce209775f8cb8f9dbaa511656594bb682cf9f", why: "vendor/skills/localseoskills/NOTICE.md: pinned upstream commit" },
+  { match: "ba75bb1b20d42af5746b246ad348c202419ae681", why: "vendor/skills/madr/NOTICE.md: pinned upstream commit" },
+  { match: "support@brand.com", why: "vendor/skills/marketingskills/sms/references/compliance.md: the upstream's placeholder support address in a HELP-reply template, kept verbatim" },
 ];
 
 const allowedValue = (h: Hit): boolean => ALLOWED_VALUES.some((a) => a.match === h.match);
