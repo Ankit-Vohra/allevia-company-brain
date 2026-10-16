@@ -2,7 +2,7 @@
 // registered (with node/edge counts). `db:migrate`: bring tenant graphs up to the current schema.
 // `db:unmerge`: undo one of the librarian's merges (src/ingest/merge.ts).
 import { loadConfig } from "../config.js";
-import { connect, listGraphs, openGraph, openGraphByName } from "../graph/client.js";
+import { connect, describeUrl, listGraphs, openGraph, openGraphByName, redactUrl } from "../graph/client.js";
 import { ensureSchema } from "../graph/indexes.js";
 import { configDrift, readServerConfig } from "../graph/server-config.js";
 import { unmerge } from "../ingest/merge.js";
@@ -16,18 +16,19 @@ export const commands: Command[] = [
     summary: "Ping FalkorDB, list graphs and registered tenants",
     async run() {
       const url = loadConfig().falkordbUrl;
+      const where = describeUrl(url);
       const t0 = Date.now();
       let graphs: string[];
       try {
         graphs = await listGraphs();
       } catch (e) {
-        console.error(`FalkorDB at ${url}: unreachable (${e instanceof Error ? e.message : String(e)})`);
+        console.error(`FalkorDB at ${where}: unreachable (${redactUrl(e instanceof Error ? e.message : String(e), url)})`);
         return 1;
       }
-      console.log(`FalkorDB at ${url}: ok (${Date.now() - t0} ms)`);
+      console.log(`FalkorDB at ${where}: ok (${Date.now() - t0} ms)`);
       const drift = configDrift(await readServerConfig(await connect()));
       console.log(drift.length
-        ? `Server settings differ from docker-compose.yml: ${drift.map((d) => `${d.name} ${d.have ?? "unset"} (want ${d.want})`).join(", ")}. Restart it with: docker compose up -d falkordb`
+        ? `Server settings differ from docker-compose.yml: ${drift.map((d) => `${d.name} ${d.have ?? "unset"} (want ${d.want})`).join(", ")}${where.includes("<remote>") ? " (a managed server: its provider sets these; see docs/falkordb-cloud.md)" : ". Restart it with: docker compose up -d falkordb"}`
         : "Server settings: as docker-compose.yml");
       const shown = graphs.filter((g) => !g.startsWith("allevia_test_")).sort();
       const tests = graphs.length - shown.length;
