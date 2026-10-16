@@ -31,7 +31,7 @@ import { clip, oneLine } from "../insights/text.js";
 import { activeRules, applyRules, DETERMINISTIC_OPS, markRulesApplied, type ActiveRule } from "./learning.js";
 import { ensureAgentNode, existingIds, findBusinessId, type Payload } from "./shared.js";
 import { getActionTarget } from "./target.js";
-import type { ConnectionsPort } from "../connections/service.js";
+import { RateLimitedError, type ConnectionsPort } from "../connections/service.js";
 import { NeedsAttentionError, NotAllowedError, NotConfiguredError, NotConnectedError } from "../connections/types.js";
 import type { GoogleSession } from "../connections/google/product.js";
 import { GoogleApiError } from "../connectors/google/client.js";
@@ -293,8 +293,10 @@ function refusal(e: unknown, what: string): Outcome {
     return { status: "failed", produced: [], result: `${e.words.replace(/Ask the owner to /g, "").replace(/Ask them to /g, "")} Nothing was done.` };
   }
   if (e instanceof NotConfiguredError) return { status: "failed", produced: [], result: `${e.availability.message} Nothing was done.` };
+  if (e instanceof RateLimitedError) return { status: "failed", produced: [], result: `${e.words} Nothing was done.` };
   if (e instanceof GoogleApiError && e.status < 500 && e.status !== 429) return { status: "failed", produced: [], result: `Google would not ${what} (${e.message.replace(/\.$/, "")}). Nothing was changed.` };
   const sent = what === "send the email";
+  if (what === "do that") return { status: "failed", produced: [], result: "We couldn't confirm that it was done. Check the tool itself before trying again; we won't repeat it on our own." };
   return { status: "failed", produced: [], result: `We couldn't confirm that Google ${sent ? "sent the email" : "added the meeting"}. Check ${sent ? "your Sent folder" : "your calendar"} before trying again; we won't repeat it on our own.` };
 }
 
@@ -343,6 +345,23 @@ async function emailSend(input: ExecInput, deps: ExecutorDeps): Promise<Outcome>
   }
 }
 
+// connection_action: any change on a connected tool (post, send a campaign, add a CRM note, pause a keyword ...) the owner approved.
+async function connectionAction(input: ExecInput, deps: ExecutorDeps): Promise<Outcome> {
+  const p = input.payload;
+  const connection = str(p.connection), tool = str(p.tool);
+  const args = p.args && typeof p.args === "object" && !Array.isArray(p.args) ? (p.args as Record<string, unknown>) : {};
+  if (!connection || !tool || !/^[A-Za-z0-9_]+$/.test(tool)) return { status: "failed", produced: [], result: "Nothing was done: the card does not name a tool and an action." };
+  if (deps.dryRun) {
+    return { status: "dry_run", produced: [], result: `Dry run: would do "${clip(p.title, 120)}" in ${str(p.target) ?? connection}. Nothing was done; ALLEVIA_ACTIONS_LIVE=1 does it.` };
+  }
+  try {
+    const out = await (await portFor(deps)).run<{ execute(t: string, a: Record<string, unknown>): Promise<unknown> }, unknown>(connection, tool, (s) => s.execute(tool, args), { ...(input.agent ? { actor: input.agent } : {}) });
+    return { status: "done", produced: [], result: `Done in ${str(p.target) ?? connection}: "${clip(p.title, 120)}".${out && typeof out === "object" ? "" : ""}` };
+  } catch (e) {
+    return refusal(e, "do that");
+  }
+}
+
 // ---------- the one entry point ----------
 
 async function readAction(g: GraphHandle, id: string): Promise<ActionView | null> {
@@ -375,6 +394,7 @@ export async function executeApproval(g: GraphHandle, input: ExecInput, deps: Ex
       case "discord_post": out = await discordPost(input, deps); break;
       case "calendar_event": out = await calendarEvent(input, deps); break;
       case "email_send": out = await emailSend(input, deps); break;
+      case "connection_action": out = await connectionAction(input, deps); break;
       default: out = { status: "failed", result: `No executor for ${String(input.kind)}.`, produced: [] };
     }
   } catch (e) {

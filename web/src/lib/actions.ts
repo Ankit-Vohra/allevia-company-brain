@@ -30,6 +30,11 @@ export const ACTION: Record<ActionKind, { label: string; icon: IconName; effect:
     effect: () => "Approving adds the meeting to your Google Calendar. The guest, if one is named, gets an invitation.",
     done: "Meeting added",
   },
+  connection_action: {
+    label: "Change in a connected tool", icon: "link",
+    effect: (t) => `Approving makes this change${t ? ` in ${t}` : " in your connected tool"}. Nothing happens before you approve.`,
+    done: "Done",
+  },
   email_send: {
     label: "Email", icon: "chat",
     effect: () => "Approving sends this email from your Gmail address. Nothing is sent before you approve.",

@@ -18,11 +18,11 @@ const MIN_DRAFT_BODY = 20; // a draft's text: shorter than this is a label, not 
 
 export const staffAgentId = (rosterId: string): string => `agent:allevia-${rosterId}`;
 
-interface Args {
+export interface ProposeArgs {
   title: string; why: string; kind: ActionKind; payload: Record<string, unknown>; evidence: string[]; area?: string; confidence?: number;
 }
 
-async function runPropose(args: Args, ctx: ToolContext) {
+export async function runPropose(args: ProposeArgs, ctx: ToolContext) {
   refuseIfReadOnly(ctx, "propose_action");
   const title = args.title.trim();
   if (title.length < 3) throw new InputError("title is too short.");

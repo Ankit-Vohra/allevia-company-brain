@@ -390,7 +390,7 @@ function relevantReviewer(reviewer: string, producer: string, numbers: boolean, 
   }
 }
 
-const ACTION_KINDS: ActionKind[] = ["github_issue", "content_draft", "pause_ad", "discord_post", "calendar_event", "email_send"];
+const ACTION_KINDS: ActionKind[] = ["github_issue", "content_draft", "pause_ad", "discord_post", "calendar_event", "email_send", "connection_action"];
 
 // propose_action's result -> a proposal event. Reads ids from data (flat or nested) or from the returned nodes.
 export function toProposal(agent: string, args: unknown, r: ToolResult): ProposalRecord | undefined {

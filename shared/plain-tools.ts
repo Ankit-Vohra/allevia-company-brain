@@ -35,6 +35,18 @@ export const PLAIN_TOOLS: Record<string, string> = {
   ad_library: "Look up ads in the public ad libraries",
   website_checkup: "Check what to fix on your website first",
   ai_visibility: "See whether AI assistants name you",
+  calendar_free_slots: "Find free times on your calendar",
+  calendar_book: "Prepare a meeting on your calendar for your OK",
+  gmail_draft: "Write an email for you to read first",
+  gmail_send: "Prepare an email from your address for your OK",
+  gmail_inbox: "Look through your inbox, if you allowed it",
+  ga4_report: "Read your website visits live",
+  gsc_report: "Read the searches that bring people to you, live",
+  ads_report: "Read your Google Ads spend and results, live",
+  connections_available: "See which of your tools are connected",
+  connection_tools: "See what a connected tool can do",
+  connection_read: "Look something up in a connected tool",
+  connection_act: "Prepare a change in a connected tool for your OK",
   keyword_ideas: "Find searches you could show up for (paid, within your budget)",
 };
 

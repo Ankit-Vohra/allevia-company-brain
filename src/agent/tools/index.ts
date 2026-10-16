@@ -24,6 +24,7 @@ import { writeCopyTool } from "./copy.js";
 import { generateImageTool, makePosterTool, makeReelTool } from "./creative.js";
 import { adLibrary, competitorWatch, googleListing, instagramPublic } from "./publicdata.js";
 import { aiVisibility, keywordIdeas, websiteCheckup } from "./website.js";
+import { CONNECTION_TOOLS } from "./connections.js";
 
 export const ALL_TOOLS: AlleviaTool[] = [
   search, getEntity, neighbors, findPaths, traceDecision, whoOwns, whoKnows, impactOf, important, topics, metricTrend,
@@ -35,6 +36,8 @@ export const ALL_TOOLS: AlleviaTool[] = [
   googleListing, instagramPublic, competitorWatch, adLibrary,
   // the website check-up (src/checkup): what to fix on the site, whether AI names the business, paid keyword ideas
   websiteCheckup, aiVisibility, keywordIdeas,
+  // the business's connected tools (src/connections): Calendar, Gmail, Analytics, Search Console, Ads, and any connected toolkit
+  ...CONNECTION_TOOLS,
 ];
 
 const BY_NAME = new Map(ALL_TOOLS.map((t) => [t.name, t]));
