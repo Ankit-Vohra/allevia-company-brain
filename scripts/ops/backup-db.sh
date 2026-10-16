@@ -7,6 +7,7 @@ PATH=/Users/ankit/.nvm/versions/node/v24.18.0/bin:/opt/homebrew/bin:/usr/local/b
 DIR="$HOME/allevia-db-backups/nightly"
 mkdir -p "$DIR"
 STAMP=$(date +%Y%m%d-%H%M%S)
+if docker ps --format '{{.Names}}' | grep -qx allevia-falkordb; then
 docker exec allevia-falkordb redis-cli SAVE >/dev/null
 docker run --rm -v allevia-falkordb-data:/d:ro -v "$DIR":/o alpine cp /d/dump.rdb "/o/dump-$STAMP.rdb"
 if docker run --rm --entrypoint sh -v "$DIR":/o falkordb/falkordb:6.0.2 -c "redis-check-rdb /o/dump-$STAMP.rdb" 2>&1 | grep -q "RDB looks OK"; then
@@ -15,7 +16,9 @@ if docker run --rm --entrypoint sh -v "$DIR":/o falkordb/falkordb:6.0.2 -c "redi
 else
   mv "$DIR/dump-$STAMP.rdb" "$DIR/BAD-dump-$STAMP.rdb"
   echo "$STAMP FAILED integrity check" >> "$DIR/backup.log"
-  exit 1
+fi
+else
+  echo "$STAMP local DB not running (live data is on FalkorDB Cloud); local snapshot skipped" >> "$DIR/backup.log"
 fi
 
 # Since 2026-10-16 the live data is on FalkorDB Cloud (free tier: no backups of its own). Export each graph from the
