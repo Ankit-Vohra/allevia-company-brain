@@ -18,7 +18,7 @@ import type { GraphHandle } from "../graph/client.js";
 import { noteGraphWrite } from "../graph/projection.js";
 import { writeBatch, type EdgeInput, type NodeInput, type Prim } from "../graph/upsert.js";
 import { typeFromId } from "../util/ids.js";
-import { istDate } from "../util/time.js";
+import { isoDate, istDate } from "../util/time.js";
 import { TouchedSet } from "./tool.js";
 import type { FindingRecord, RecallBrief, ReviewRecord } from "./types.js";
 
@@ -226,6 +226,9 @@ export interface SaveTurnInput {
   // drew it with no id nobody looked up and no pair left unlinked.
   pathIds?: string[];
   pathGrounded?: boolean;
+  // Cards (Recommendation, Approval) and memories the turn's tools made: each one whose own `src` is this turn gets
+  // SOURCED_FROM this Turn (one a tool only reused, made by an earlier turn, does not).
+  made?: string[];
   // What the answer cost the model (src/agent/runtime.ts Usage, summed over every run of the turn) and how many graph tool
   // calls it made: saved on the Turn, so "a few hops, few tokens" is a question the graph answers (docs/graph-audit.md).
   cost?: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; modelCalls: number; toolCalls: number };
@@ -235,6 +238,8 @@ export interface SaveTurnResult { nodesCreated: number; edgesCreated: number; er
 
 // GUIDED_BY reaches only these (schema: Turn|Finding|Content -GUIDED_BY-> Memory|Rule|BrandRule).
 const GUIDES = new Set(["Memory", "Rule", "BrandRule"]);
+// SOURCED_FROM a Turn (schema MAPPER_PATTERNS): what a turn's tools made.
+const MADE_BY_TURN = new Set(["Recommendation", "Approval", "Memory", "Rule"]);
 
 export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTurnResult> {
   const now = t.at;
@@ -275,17 +280,26 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
     turnProps.modelCalls = t.cost.modelCalls;
     turnProps.toolCalls = t.cost.toolCalls;
   }
-  const nodes: NodeInput[] = [{ type: "Turn", id: t.turnId, name: clip(oneLine(t.question), 120) || t.turnId, summary: clip(t.answer, 600), props: turnProps }];
+  // Every node and edge the turn writes carries where it came from (this turn) and the date; edges start when the turn did.
+  const asOf = isoDate(now);
+  const stamp = { src: t.turnId, asOf, since: now } as const;
+  const nodes: NodeInput[] = [{ type: "Turn", id: t.turnId, name: clip(oneLine(t.question), 120) || t.turnId, summary: clip(t.answer, 600), props: turnProps, src: t.turnId, asOf }];
   const edges: EdgeInput[] = [{ from: t.turnId, type: "IN_SESSION", to: t.sessionId }];
   if (askerOk) edges.push({ from: t.asker, type: "ASKED", to: t.turnId });
-  for (const a of unique(t.agents)) if (agentById(a)) edges.push({ from: t.turnId, type: "HANDLED_BY", to: agentNodeId(a) });
+  for (const a of unique(t.agents)) if (agentById(a)) edges.push({ from: t.turnId, type: "HANDLED_BY", to: agentNodeId(a), ...stamp });
   for (const id of unique([...touchedIds, ...pathIds])) {
     if (!exists(id)) continue;
     const at = pathIndex.get(id);
-    edges.push({ from: t.turnId, type: "TOUCHED", to: id, ...(at !== undefined ? { props: { onPath: true, pathIndex: at } } : {}) });
+    edges.push({ from: t.turnId, type: "TOUCHED", to: id, ...(at !== undefined ? { props: { onPath: true, pathIndex: at } } : {}), ...stamp });
   }
-  for (const id of unique(t.citations)) if (cited(id)) edges.push({ from: t.turnId, type: "CITED", to: id });
-  for (const id of unique(t.guidedBy ?? [])) if (guide(id)) edges.push({ from: t.turnId, type: "GUIDED_BY", to: id });
+  for (const id of unique(t.citations)) if (cited(id)) edges.push({ from: t.turnId, type: "CITED", to: id, ...stamp });
+  for (const id of unique(t.guidedBy ?? [])) if (guide(id)) edges.push({ from: t.turnId, type: "GUIDED_BY", to: id, ...stamp });
+  // What the turn's tools made (a card, a memory) is SOURCED_FROM the turn: only when its own `src` is this turn.
+  const made = unique((t.made ?? []).filter((id) => MADE_BY_TURN.has(typeFromId(id) ?? "")));
+  if (made.length) {
+    const mine = await g.roQuery<{ id: string }>("UNWIND $ids AS id MATCH (n:Entity {id:id}) WHERE n.src = $turn RETURN n.id AS id", { ids: made, turn: t.turnId });
+    for (const r of mine) edges.push({ from: r.id, type: "SOURCED_FROM", to: t.turnId, ...stamp });
+  }
 
   for (const f of t.findings) {
     const who = agentById(f.agent);
@@ -295,16 +309,17 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
         text: f.text, agent: f.agent, task: f.task, turnId: t.turnId, citations: f.citations, basedOn: f.basedOn, proposals: f.proposals,
         revised: f.revised, rejected: f.rejected, partial: f.partial === true, ...(f.skills?.length ? { skills: f.skills } : {}),
       },
+      src: t.turnId, asOf,
     });
-    edges.push({ from: f.id, type: "PART_OF", to: t.turnId });
-    if (who) edges.push({ from: agentNodeId(f.agent), type: "PRODUCED", to: f.id });
-    for (const id of unique(f.citations)) if (cited(id)) edges.push({ from: f.id, type: "CITED", to: id });
-    for (const id of unique(f.basedOn)) if (id !== f.id && (findingIds.has(id) || known.has(id))) edges.push({ from: f.id, type: "BASED_ON", to: id });
-    for (const id of unique(f.guidedBy ?? [])) if (guide(id)) edges.push({ from: f.id, type: "GUIDED_BY", to: id });
+    edges.push({ from: f.id, type: "PART_OF", to: t.turnId, ...stamp });
+    if (who) edges.push({ from: agentNodeId(f.agent), type: "PRODUCED", to: f.id, ...stamp });
+    for (const id of unique(f.citations)) if (cited(id)) edges.push({ from: f.id, type: "CITED", to: id, ...stamp });
+    for (const id of unique(f.basedOn)) if (id !== f.id && (findingIds.has(id) || known.has(id))) edges.push({ from: f.id, type: "BASED_ON", to: id, ...stamp });
+    for (const id of unique(f.guidedBy ?? [])) if (guide(id)) edges.push({ from: f.id, type: "GUIDED_BY", to: id, ...stamp });
   }
   for (const r of t.reviews) {
     if (agentById(r.reviewer) && findingIds.has(r.findingId)) {
-      edges.push({ from: agentNodeId(r.reviewer), type: "REVIEWED", to: r.findingId, props: { verdict: r.verdict, note: r.note, turnId: t.turnId } });
+      edges.push({ from: agentNodeId(r.reviewer), type: "REVIEWED", to: r.findingId, props: { verdict: r.verdict, note: r.note, turnId: t.turnId }, ...stamp });
     }
   }
 

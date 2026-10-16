@@ -133,6 +133,7 @@ export interface TurnOutcome {
   touched: TouchedSet;
   guidedBy: string[];                       // the owner's instructions the turn worked under (saved as Turn GUIDED_BY)
   skills: SkillUse[];                       // the skills agents opened this turn, once each per agent (saved on the Turn)
+  memories?: string[];                      // the Memory ids `remember` saved this turn (each SOURCED_FROM the Turn)
   deliverables: DeliverableRecord[];        // what the team made this turn (posters, images, clips), each waiting for the owner's OK
 }
 
@@ -602,6 +603,7 @@ class Turn {
   readonly reviews: ReviewRecord[] = [];
   readonly proposals: ProposalRecord[] = [];
   readonly skillsUsed: SkillUse[] = [];
+  readonly memories: string[] = [];
   readonly deliverables: DeliverableRecord[] = [];
   private readonly creative?: CreativeDeps;               // the request's own copy: one credit count for every tool call of the turn
   path?: { nodes: NodeRef[]; edges: EdgeRef[] };
@@ -727,6 +729,9 @@ class Turn {
           emit({ type: "agent_status", agent, text: `${nameOf(agent)} is using: ${use.name}` });
           commit(() => { if (!this.skillsUsed.some((u) => u.agent === agent && u.skillId === use.skillId)) this.skillsUsed.push(use); });
         }
+      } else if (name === "remember") {
+        const id = (result.data && typeof result.data === "object" ? (result.data as Record<string, unknown>).id : undefined);
+        if (typeof id === "string" && id) commit(() => { this.memories.push(id); });
       } else if (name === "propose_action") {
         const p = toProposal(agent, args, result);
         if (p) {
@@ -1252,7 +1257,7 @@ export async function runTurn(input: TurnInput, deps: TurnDeps, emit: Emit): Pro
   }
   return {
     ok, answer: text, plan, fastPath, findings, reviews: t.reviews, proposals: t.proposals, agents: t.agents, failed: t.failed, touched: t.touched,
-    guidedBy, skills: t.skillsUsed, deliverables: t.deliverables,
+    guidedBy, skills: t.skillsUsed, deliverables: t.deliverables, ...(t.memories.length ? { memories: t.memories } : {}),
     ...(t.path ? { path: t.path, ...(t.pathGrounded !== undefined ? { pathGrounded: t.pathGrounded } : {}) } : {}),
   };
 }

@@ -23,7 +23,7 @@ import { onConnection } from "./connections.js";
 
 const READ_INBOX_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const when = (ms: number | null): string | null => (ms === null || ms === undefined ? null : toIso(ms));
-const ACTORS = (ctx: ToolContext): Src => ({ src: `turn:${ctx.turnId}`, now: ctx.now, tenant: ctx.tenant });
+const ACTORS = (ctx: ToolContext): Src => ({ src: ctx.turnId, now: ctx.now, tenant: ctx.tenant }); // ctx.turnId is already `turn:<date>-<id>`
 
 async function withNodes(ctx: ToolContext, ids: string[], data: Record<string, unknown>, note?: string): Promise<ToolResult> {
   const col = new Collector();
