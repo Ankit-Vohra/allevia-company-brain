@@ -86,6 +86,13 @@ describe("buildVerdict", () => {
     expect(none.all[0]!.impact).toBe(65);
   });
 
+  it("speaks of sign-up for an online business, and keeps tiny fixes out of the top five", () => {
+    const v = buildVerdict(base({ kind: "online", seo: report([seoFail("/", "missing-canonical")]),
+      conversion: [{ check: "contact-above-fold-mobile", pass: false, page: `${O}/`, evidence: "no button" }] }));
+    expect(v.top.map((f) => f.title)).toEqual(["Put a sign-up or 'get the app' button on the first screen on phones"]);
+    expect(v.all.map((f) => f.key)).toContain("canonical");
+  });
+
   it("keeps the top five to five", () => {
     const v = buildVerdict(base({ seo: report(["missing-title", "missing-meta-description", "missing-h1", "images-missing-alt", "missing-open-graph", "missing-canonical", "mixed-content"]
       .map((c) => seoFail("/", c as SeoResult["check"]))) }));

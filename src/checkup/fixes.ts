@@ -136,6 +136,23 @@ export const FIXES: FixDef[] = [
 ];
 export const FIX_BY_KEY = new Map(FIXES.map((f) => [f.key, f]));
 
+// For a business people sign up to or buy from online, the first-screen button is "sign up" or "get the app", not "call".
+const ONLINE: Record<string, Pick<FixDef, "title" | "what" | "why">> = {
+  "contact-above-fold-mobile": {
+    title: () => "Put a sign-up or 'get the app' button on the first screen on phones",
+    what: "Add one clear button at the top of the home page on phones (sign up, get the app, or start), or one that stays at the bottom of the screen.",
+    why: "Most visitors come on a phone and decide in seconds. If the next step is several screens down, many leave before they see it.",
+  },
+  "contact-path": {
+    title: () => "Give visitors one clear next step",
+    what: "Add a sign-up, download or contact button to every page.",
+    why: "We found no sign-up, download, booking or contact button. A visitor who is ready has nowhere to go.",
+  },
+};
+
+// Fixes below this impact never make the top five, however few problems a site has: they stay behind "Show how".
+export const TOP_MIN_IMPACT = 20;
+
 // Crawl checks (website/seo.ts) → fix keys.
 const SEO_TO_FIX: Record<string, string> = {
   "broken-page": "broken-pages", "server-error": "broken-pages", "missing-title": "titles", "duplicate-title": "titles",
@@ -339,8 +356,9 @@ export function buildVerdict(input: CheckupInput, topN = 5): CheckupVerdict {
     const impact = Math.min(100, Math.round((a.over ?? a.def.base) * weight + Math.min(8, 2 * (n - 1))));
     const tier: Tier = impact >= 60 ? "losing enquiries" : impact >= 30 ? "harder to find or trust" : "tidy-up";
     const minutes = Math.round(a.def.minutes * (["titles", "descriptions", "image-text", "share-preview"].includes(a.def.key) ? Math.min(4, 0.5 + n / 4) : 1));
+    const words = input.kind === "online" ? ONLINE[a.def.key] : undefined;
     return {
-      key: a.def.key, title: a.def.title(n), what: a.what ?? a.def.what, why: a.def.why, who: a.def.who,
+      key: a.def.key, title: (words?.title ?? a.def.title)(n), what: a.what ?? words?.what ?? a.def.what, why: words?.why ?? a.def.why, who: a.def.who,
       effort: effortWords(minutes), minutes, impact, tier,
       pages: pagesSorted.map(([p]) => pathOf(p)).slice(0, 12), urls: pagesSorted.map(([p]) => p).slice(0, 50), pageCount: pagesSorted.length,
       evidence: a.evidence, sources: [...a.sources].sort(),
@@ -356,7 +374,7 @@ export function buildVerdict(input: CheckupInput, topN = 5): CheckupVerdict {
   if (scores.accessibility !== undefined && scores.accessibility >= 90) good.push(`It is easy to read and use (${scores.accessibility}/100).`);
   if (input.site.https) good.push("It is secure (https).");
 
-  return { top: all.slice(0, topN), all, scores, good, kind: input.kind };
+  return { top: all.filter((f) => f.impact >= TOP_MIN_IMPACT).slice(0, topN), all, scores, good, kind: input.kind };
 }
 
 function sameUrl(a: string, b: string): boolean {

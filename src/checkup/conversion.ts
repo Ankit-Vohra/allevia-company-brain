@@ -194,7 +194,7 @@ export function judgePage(p: PageConversion, opts: { home: boolean; businessName
       evidence: first.length
         ? `On a phone the first screen shows ${KIND_WORD[first[0]!.kind]}${first[0]!.text ? ` ("${first[0]!.text}")` : ""}.`
         : anyKey.length
-          ? `On a phone the first screen has no call, WhatsApp, booking or enquiry button; the first one ("${anyKey[0]!.text || anyKey[0]!.kind}") is ${Math.max(1, Math.round(anyKey[0]!.top / m.viewport.height))} screens down.`
+          ? `On a phone the first screen has no call, WhatsApp, booking, sign-up or enquiry button; the first one (${!anyKey[0]!.text || anyKey[0]!.text.includes("[redacted") ? KIND_WORD[anyKey[0]!.kind] : `"${anyKey[0]!.text}"`}) is ${Math.max(1, Math.round(anyKey[0]!.top / m.viewport.height))} screens down.`
           : "On a phone there is no call, WhatsApp, booking or enquiry button anywhere on the home page.",
     });
   }
