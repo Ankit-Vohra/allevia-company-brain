@@ -123,6 +123,8 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
       try { skills = skills.withBusiness(await loadBusinessSkills(g)); } catch (e) { out({ type: "error", message: `Could not read this business's own skills, so the shipped ones are used: ${message(e)}` }); }
     }
 
+    if (skills && team?.skillsOff) skills = skills.restrict(team.skillsOff);
+
     // "Fill it in": the owner accepts the draft's suggestions. Done in code on the draft already in this thread (fillin.ts):
     // no desks run, nothing is re-invented, and the sources are the ones the draft already had.
     const filled = continuing && isFillItIn(question) ? await fillInFromSession(g, sessionId, question).catch(() => null) : null;

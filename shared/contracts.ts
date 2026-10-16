@@ -136,6 +136,7 @@ export interface AgentSettings {
   mode: AgentMode;
   autonomy: number;           // 0 draft only, 1 scheduled after approval, 2 auto-publish with a digest, 3 full
   statusNote?: string;        // "till the new site launches"
+  skillsOff?: string[];       // skill ids the owner switched off for this person (absent: all of their skills are on)
   instructions: Array<{ id: string; text: string; channel?: string; at?: number }>;
 }
 
@@ -147,6 +148,7 @@ export interface SkillView {
   when: string;
   makes?: string;             // plain words, only for a skill that makes something
   needsOk: boolean;
+  on?: boolean;               // false when the owner switched this skill off for this person (GET /api/:t/agents)
   source: "code" | "business";
   rules: Array<{ id: string; text: string; channel?: string }>;  // the owner's or the team's own rules for this skill
   learned: string[];          // things the team learned from the owner's edits that belong to this skill

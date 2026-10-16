@@ -32,6 +32,7 @@ const AgentPatch = z.object({
   mode: z.enum(["full", "light", "off"]).optional(),
   autonomy: z.number().int().min(0).max(3).optional(),
   statusNote: z.string().trim().max(200).nullable().optional(),
+  skillsOff: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,80}$/)).max(60).optional(),
 }).refine((b) => Object.keys(b).length > 0, { message: "says nothing to change" });
 
 const DirectiveBody = z.object({ text: z.string().trim().min(1).max(2000), actor: z.string().regex(/^person:[a-z0-9-]+$/).max(80).optional() });
@@ -43,7 +44,7 @@ async function agentViews(g: GraphHandle): Promise<AgentViewDto[]> {
     const mine = rules.filter((r) => r.status === "active" && r.agents.includes(s.id))
       .map(({ id, text, confidence, appliedCount, learnedAt }) => ({ id, text, confidence, appliedCount, learnedAt }));
     const tools = (agentById(s.id)?.tools ?? []).map((name) => ({ name, words: plainTool(name) }));
-    return { ...s, ...set, learnedRules: mine, tools, skills: skillViewsFor(catalog, s.id, learned) };
+    return { ...s, ...set, learnedRules: mine, tools, skills: skillViewsFor(catalog, s.id, learned, set.skillsOff ?? []) };
   });
 }
 
