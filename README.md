@@ -305,6 +305,7 @@ calling a model. A fresh FalkorDB is empty, so load something first:
 ```sh
 # the synthetic demo company: a small graph with real structure and made-up data (no model calls)
 docker compose exec app tsx scripts/seed-demo.ts demo_seed --register
+docker compose exec app tsx src/cli.ts seed-demo           # the hero-use-case twin: Shiftly, sign-ups fell after a release (demo_growth)
 docker compose exec app tsx src/cli.ts enroll demo_seed --country UK --industry "jobs platform"
 docker compose exec app tsx src/cli.ts insights demo_seed   # deterministic detectors, approval cards
 docker compose exec app tsx src/cli.ts brief demo_seed      # today's note (the morning brief)
