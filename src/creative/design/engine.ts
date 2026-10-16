@@ -66,7 +66,7 @@ export function codeFix(f: Finding[], spec: DesignSpec): { tune: Tune; why: stri
   const hier = f.find((x) => x.code === "hierarchy");
   if (hier) {
     if (t.scale < 1.15) return { tune: { ...t, scale: Math.round((t.scale + 0.1) * 100) / 100 }, why: "the headline did not lead: made it bigger" };
-    if (c.support && !t.dropSupport && !c.keep?.includes("support")) return { tune: { ...t, dropSupport: true }, why: "the headline did not lead: dropped the supporting line" };
+    // dropping a selling line is the review's call (weak_hierarchy), not the code's: the first AVS proof lost "from the first sketch to the last cushion" this way
   }
   const orphan = f.find((x) => x.code === "orphan");
   if (orphan && t.scale > 0.85) return { tune: { ...t, scale: Math.round((t.scale - 0.05) * 100) / 100 }, why: `${orphan.detail}: re-set slightly smaller` };

@@ -356,16 +356,17 @@ const galleryTrio: LayoutDef = {
   </div>
   <footer class="foot">${logo(i, { on: "ground", cls: "lg" })}${cta(i)}</footer>
 </div>`;
-    const wordsH = story ? 380 : sq ? 230 : 290;
+    const wordsH = story ? 420 : sq ? 260 : 340; // the most the words may take; the photos take the rest (no dead band)
     const css = `
 .gt{background:var(--ground)}
-.gt .words{position:absolute;left:var(--m);right:var(--m);top:var(--st);height:${wordsH}px;display:flex;flex-direction:column;gap:14px;overflow:hidden}
+.gt{display:flex;flex-direction:column;gap:28px;padding:var(--st) var(--m) ${story ? "var(--sb)" : "var(--m)"}}
+.gt .words{flex:none;max-height:${wordsH}px;display:flex;flex-direction:column;gap:14px;overflow:hidden}
 .gt .sup{color:var(--muted)}
-.gt .grid{position:absolute;left:var(--m);right:var(--m);top:calc(var(--st) + ${wordsH + 30}px);bottom:calc(${story ? "var(--sb)" : "var(--m)"} + 110px);display:grid;grid-template-columns:${story ? "1fr 1fr" : "1.7fr 1fr"};grid-template-rows:${story ? "1.6fr 1fr" : "1fr 1fr"};gap:16px}
+.gt .grid{flex:1;min-height:0;display:grid;grid-template-columns:${story ? "1fr 1fr" : "1.7fr 1fr"};grid-template-rows:${story ? "1.6fr 1fr" : "1fr 1fr"};gap:16px}
 .gt figure{position:relative;overflow:hidden;border-radius:6px;margin:0}
 .gt .a{${story ? "grid-column:1 / 3" : "grid-row:1 / 3"}}
 .gt .nm{position:absolute;left:14px;bottom:14px;font-size:var(--s);font-weight:700;color:#fff;background:rgba(0,0,0,.62);padding:.25em .6em;border-radius:8px;line-height:1.3}
-.gt .foot{position:absolute;left:var(--m);right:var(--m);bottom:${story ? "var(--sb)" : "var(--m)"};height:74px;display:flex;justify-content:space-between;align-items:center}
+.gt .foot{flex:none;height:74px;display:flex;justify-content:space-between;align-items:center}
 .gt .lg{height:56px}`;
     return { body, css };
   },
