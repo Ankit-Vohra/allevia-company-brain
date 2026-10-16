@@ -53,6 +53,8 @@ export const findPaths = defineTool({
 // explanation path is drawn through the business's own records, so these are left out when two or more other ids remain.
 const PROPOSED = new Set(["Recommendation", "Approval", "Action"]);
 // Allevia's own staff (agent:allevia-*) are not part of the business either: they know about everything, so a path through one explains nothing.
+// The relationships our own cards and staff add between records they cite or know about.
+const PAPERWORK_RELS: RelType[] = ["PROPOSES", "EVIDENCED_BY", "PRODUCED", "KNOWS_ABOUT"];
 const isOurs = (id: string): boolean => PROPOSED.has(typeFromId(id) ?? "") || id.startsWith("agent:allevia-");
 
 async function runShowPath(args: { ids: string[] }, ctx: ToolContext) {
@@ -92,7 +94,14 @@ async function runShowPath(args: { ids: string[] }, ctx: ToolContext) {
       unchecked.push({ from: a, to: b });
       continue;
     }
-    const [p] = await shortestPaths(ctx.graph, a, b, { maxPaths: 1, maxLen: 4, relTypes: PATH_RELS, timeoutMs: left });
+    let [p] = await shortestPaths(ctx.graph, a, b, { maxPaths: 1, maxLen: 4, relTypes: PATH_RELS, timeoutMs: left });
+    // A card drafted this very turn, or one of our own staff, can be the shortest way between two records (a recommendation
+    // EVIDENCED_BY both, an agent that KNOWS_ABOUT both). That is a route through our own paperwork, not an explanation: look
+    // again over the business's own relationships.
+    if (p && p.nodes.some((n) => isOurs(n.id) && !list.includes(n.id))) {
+      const own = PATH_RELS.filter((r) => !PAPERWORK_RELS.includes(r));
+      [p] = await shortestPaths(ctx.graph, a, b, { maxPaths: 1, maxLen: 4, relTypes: own, timeoutMs: Math.max(100, deadline - Date.now()) });
+    }
     if (p) {
       for (const n of p.nodes.slice(1)) col.ref(n);
       for (const pe of p.edges) col.edgeRef(pe);

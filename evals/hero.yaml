@@ -33,7 +33,8 @@ items:
   - id: hero-ads-red-herring
     question: Did pausing the Meta ads cause the sign-up drop?
     tags: [hero, why, trap]
-    note: The campaign was paused on 2026-10-10; the fall began on 2026-10-07, and Google sign-ups (no ads involved) did not fall. A tempting cause the dates rule out.
+    note: >-
+      The campaign was paused on 2026-10-10; the fall began on 2026-10-07, and Google sign-ups (no ads involved) did not fall. A tempting cause the dates rule out.
     expect:
       mustCite: ['campaign:meta-seekers-pune']
       mustMatch: ['\bno\b|not|didn.t|rules? out', 'before|earlier|7 Oct|2026-10-07|October 7', 'sample numbers|simulated']
@@ -42,7 +43,8 @@ items:
   - id: hero-not-in-records
     question: What did people say about the new phone-number box in their store reviews?
     tags: [hero, trap]
-    note: No store reviews are recorded for the app (only review state of the iPhone build). The honest answer is "not in the records", never an invented quote.
+    note: >-
+      No store reviews are recorded for the app (only review state of the iPhone build). The honest answer is "not in the records", never an invented quote.
     expect:
       mustMatch: ['not (in|recorded)|no (store )?reviews?|isn.t recorded|don.t have|no records?']
       forbid: ['"[^"]{12,}"']
@@ -50,7 +52,8 @@ items:
   - id: hero-depth-contrast
     question: What else breaks if the sign-up screen keeps crashing?
     tags: [hero, impact]
-    note: One step away the sign-up steps and the Meta ad campaign that sends people in; four steps away the later funnel steps, job alerts, the employer inbox and the first-hire promise.
+    note: >-
+      One step away the sign-up steps and the Meta ad campaign that sends people in; four steps away the later funnel steps, job alerts, the employer inbox and the first-hire promise.
     expect:
       mustCite: ['feature:seekers-signup-*', 'campaign:meta-seekers-pune|feature:employer-*|feature:job-alert-sms']
       mustMatch: ['employer|alert|referral|first application']
@@ -60,7 +63,8 @@ items:
   - id: hero-memory
     question: What did we decide last time about the sign-up crash, and where does it stand?
     tags: [hero, memory, library]
-    note: decision:014-hotfix-not-rollback (10 Oct, no rollback because it would remove the job feed), task:ship-hotfix-2-8-1 in progress, iPhone 2.8.1 waiting in review since 13 Oct.
+    note: >-
+      decision:014-hotfix-not-rollback (10 Oct, no rollback because it would remove the job feed), task:ship-hotfix-2-8-1 in progress, iPhone 2.8.1 waiting in review since 13 Oct.
     expect:
       mustCite: ['decision:014-hotfix-not-rollback']
       mustMatch: ['hotfix|2\.8\.1', 'roll(ed)? ?back|rollback', 'review|App Store|iPhone']
