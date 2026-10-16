@@ -85,7 +85,7 @@ export class PublicData implements PublicDataPort {
       const started = e instanceof ApifyError && e.started;
       if (started) await this.o.ledger.settle(id); else await this.o.ledger.release(id);
       const kind = e instanceof ApifyError ? e.kind : "http";
-      log(`[publicdata] ${req.tenant} ${actor} failed: ${kind}`);
+      log(`[publicdata] ${req.tenant} ${actor} failed: ${kind}${e instanceof Error ? ` (${e.message})` : ""}`);
       const why = kind === "auth" ? "The public-data account refused our key, so nothing was looked up. The founder needs to check APIFY_TOKEN."
         : kind === "no_credit" ? "The public-data account is out of credit, so nothing was looked up."
         : kind === "timeout" ? `The lookup took too long and was stopped after ${Math.round(spec.timeoutMs / 1000)} seconds.`
