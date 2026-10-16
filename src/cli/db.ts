@@ -1,11 +1,12 @@
 // `db:check`: is FalkorDB reachable, does it run with the settings the code assumes, which graphs exist, which tenants are
 // registered (with node/edge counts). `db:migrate`: bring tenant graphs up to the current schema.
-// `db:unmerge`: undo one of the librarian's merges (src/ingest/merge.ts).
+// `db:unmerge`: undo one of the librarian's merges (src/ingest/merge.ts), or what onboarding's tidy pass did to a node
+// (src/ingest/tidy.ts: a merge, a retyped business, a retired first name).
 import { loadConfig } from "../config.js";
 import { connect, describeUrl, listGraphs, openGraph, openGraphByName, redactUrl } from "../graph/client.js";
 import { ensureSchema } from "../graph/indexes.js";
 import { configDrift, readServerConfig } from "../graph/server-config.js";
-import { unmerge } from "../ingest/merge.js";
+import { undoTidy } from "../ingest/tidy.js";
 import { listTenants } from "../graph/tenants.js";
 import type { Command } from "./_command.js";
 
@@ -52,13 +53,13 @@ export const commands: Command[] = [
   {
     name: "db:unmerge",
     usage: "db:unmerge <tenant> <id>",
-    summary: "Undo the librarian's merge of a duplicate node (it stays apart from then on)",
+    summary: "Undo a merge, a retype or a retirement of one node (the librarian's or onboarding's); it stays as it is from then on",
     async run(args) {
       const [tenant, id] = args;
       if (!tenant || !id) { console.error("Usage: npm run cli -- db:unmerge <tenant> <id>"); return 2; }
-      const into = await unmerge(await openGraph(tenant), id);
-      console.log(into ? `${id} is its own node again (it had been merged into ${into}); the librarian will leave the pair apart.` : `${id} was not merged into anything.`);
-      return into ? 0 : 1;
+      const done = await undoTidy(await openGraph(tenant), id);
+      console.log(done ?? `${id} was not merged, retyped or retired.`);
+      return done ? 0 : 1;
     },
   },
   {

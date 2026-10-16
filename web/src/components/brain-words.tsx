@@ -14,7 +14,7 @@ const KIND: Record<string, string> = {
   Task: "Task", System: "Tool", Event: "Event", Document: "Document", Memory: "Note", Chunk: "Passage",
   Recommendation: "Idea", Finding: "Something we noticed", Turn: "Conversation", Session: "Conversation",
   Approval: "Waiting for your OK", Action: "Action", Checkpoint: "Check-in", Program: "Growth plan", Capability: "Connection",
-  Asset: "Photo or file", Version: "Earlier version",
+  Asset: "Photo or file", Version: "Earlier version", Competitor: "Competitor", Supplier: "Supplier", Partner: "Partner", Client: "Client",
 };
 export const kindName = (label: string) => KIND[label] ?? label.replace(/([a-z])([A-Z])/g, "$1 $2");
 
@@ -33,6 +33,7 @@ export const BRAIN_GROUPS: BrainGroup[] = [
   { id: "numbers", name: "Numbers and results", blurb: "What was measured, and when", labels: ["Metric", "Observation", "Goal"] },
   { id: "brand", name: "Your brand and how you work", blurb: "Voice, look and the methods your team follows", labels: ["BrandRule", "BrandAsset", "Playbook"] },
   { id: "people", name: "People and teams", blurb: "Who is who", labels: ["Person", "Team"] },
+  { id: "others", name: "Businesses you work with", blurb: "Suppliers, partners, clients and competitors", labels: ["Supplier", "Partner", "Client", "Competitor"] },
   { id: "notes", name: "Documents and notes", blurb: "Files, notes and things worth remembering", labels: ["Document", "Memory"] },
   { id: "tools", name: "Tools, tasks and events", blurb: "Systems you use and what is on the list", labels: ["System", "Task", "Event"] },
 ];

@@ -17,7 +17,7 @@ import { getProgram } from "../src/program/scorecard.js";
 const { values: a } = parseArgs({
   options: {
     name: { type: "string" }, slug: { type: "string" }, url: { type: "string" }, country: { type: "string" }, out: { type: "string" },
-    delete: { type: "string" }, "max-pages": { type: "string" }, model: { type: "string" },
+    delete: { type: "string" }, "max-pages": { type: "string" }, model: { type: "string" }, "no-tidy": { type: "boolean" },
   },
 });
 
@@ -41,7 +41,9 @@ let modelMs = 0;
 const base = new AgentSdkRunner({ concurrency: 3 });
 const runner: LlmRunner = {
   async structured(i: StructuredInput) {
-    const label = /profile/i.test(i.system.slice(0, 80)) ? "profile" : /brand/i.test(i.system.slice(0, 120)) ? "brand" : "extract";
+    const head = i.system.slice(0, 160);
+    const label = /duplicate nodes/i.test(head) ? "tidy-pairs" : /other businesses/i.test(head) ? "tidy-businesses" : /opening hours/i.test(head) ? "facts"
+      : /profile/i.test(i.system.slice(0, 80)) ? "profile" : /brand/i.test(i.system.slice(0, 120)) ? "brand" : "extract";
     calls[label] = (calls[label] ?? 0) + 1;
     const t = Date.now();
     try {
@@ -65,7 +67,7 @@ const res = await onboard(
     else if (e.type === "page") pageEvents.push({ url: e.url, title: e.title });
     else if (e.type === "error") { errors.push(e.message); console.log(`${at.toFixed(1)}s ERROR ${e.message}`); }
   },
-  { runner, ...(a.model ? { model: a.model } : {}), ...(a["max-pages"] ? { crawlOptions: { maxPages: Number(a["max-pages"]) } } : {}), log: (l) => { if (!l.startsWith("[crawl]")) console.error(l); } },
+  { runner, ...(a["no-tidy"] ? { tidy: false } : {}), ...(a.model ? { model: a.model } : {}), ...(a["max-pages"] ? { crawlOptions: { maxPages: Number(a["max-pages"]) } } : {}), log: (l) => { if (!l.startsWith("[crawl]")) console.error(l); } },
 );
 const seconds = (Date.now() - t0) / 1000;
 

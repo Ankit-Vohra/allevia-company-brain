@@ -8,6 +8,7 @@ import { redact } from "../../privacy.js";
 import { normalizeUrl, toSiteUrl } from "./urls.js";
 
 export const MAX_TEXT_CHARS = 8_000;
+export const MAX_FOOTER_CHARS = 1_500;
 
 export interface ImageInfo { src: string; alt: string | null; width: number; height: number; naturalWidth: number; naturalHeight: number }
 
@@ -41,6 +42,7 @@ export interface PageData {
   h1: string[];
   h2: string[];
   text: string;               // main visible text, at most MAX_TEXT_CHARS
+  footerText?: string;        // the site footer (hours and address live there), redacted; read by the day-one facts only (facts.ts)
   wordCount: number;          // of the whole main text, before the cut
   internalLinks: string[];    // normalised, same site, deduplicated
   externalLinks: string[];
@@ -134,6 +136,7 @@ export const CAPTURE_SCRIPT = String.raw`(() => {
     lang: document.documentElement.getAttribute("lang") || null, viewport: (metas("viewport")[0] || { getAttribute: () => null }).getAttribute("content"),
     mixed: [...new Set(mixed)].slice(0, 50), favicon: icon ? abs(icon.getAttribute("href")) : null, iconLinks, logo,
     text: text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim(),
+    footer: (() => { const f = document.querySelector("footer, [role='contentinfo']"); return f ? clean(f.innerText || f.textContent).slice(0, 3000) : ""; })(),
   };
 })()`;
 
@@ -183,6 +186,7 @@ export interface Captured {
   canonical: string | null; robotsMeta: string | null; h1: string[]; h2: string[]; links: Array<string | null>;
   images: ImageInfo[]; jsonLd: string[]; og: Record<string, string>; lang: string | null; viewport: string | null;
   mixed: string[]; favicon: string | null; iconLinks?: Array<{ href: string; sizes?: string; rel: string }>; logo: LogoCandidate | null; text: string;
+  footer?: string;
 }
 
 export const countWords = (s: string): number => (s.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length;
@@ -235,6 +239,7 @@ export function redactPage(p: PageData): PageData {
     h1: p.h1.map(scrub),
     h2: p.h2.map(scrub),
     text: scrub(p.text),
+    ...(p.footerText !== undefined ? { footerText: scrub(p.footerText) } : {}),
     jsonLd: p.jsonLd.map((b) => redactJsonLd(b)),
     og: Object.fromEntries(Object.entries(p.og).map(([k, v]) => [k, isUrl(v) ? v : scrub(v)])),
   };
@@ -244,7 +249,7 @@ export function redactPage(p: PageData): PageData {
 // The prose is redacted here (see above): the main text before it is cut to MAX_TEXT_CHARS, so an address that straddles
 // the limit never leaves a fragment, and the word count is of the page as it was.
 export function fromCapture(c: Captured, origin: string): Pick<PageData,
-  "title" | "titleCount" | "metaDescription" | "metaDescriptionCount" | "canonical" | "robotsMeta" | "h1" | "h2" | "text" |
+  "title" | "titleCount" | "metaDescription" | "metaDescriptionCount" | "canonical" | "robotsMeta" | "h1" | "h2" | "text" | "footerText" |
   "wordCount" | "internalLinks" | "externalLinks" | "images" | "jsonLd" | "jsonLdTypes" | "jsonLdErrors" | "og" | "lang" |
   "viewport" | "mixedContent" | "favicon" | "iconLinks" | "logo"> {
   const internal = new Set<string>();
@@ -271,7 +276,7 @@ export function fromCapture(c: Captured, origin: string): Pick<PageData,
   return {
     title: prose(c.title), titleCount: c.titleCount, metaDescription: prose(c.metaDescription), metaDescriptionCount: c.metaDescriptionCount,
     canonical: opt(c.canonical), robotsMeta: opt(c.robotsMeta), h1: c.h1.map(scrub), h2: c.h2.map(scrub),
-    text: cutText(scrub(text), MAX_TEXT_CHARS), wordCount: countWords(text),
+    text: cutText(scrub(text), MAX_TEXT_CHARS), wordCount: countWords(text), ...(c.footer?.trim() ? { footerText: cutText(scrub(c.footer), MAX_FOOTER_CHARS) } : {}),
     internalLinks: [...internal].slice(0, 500), externalLinks: [...external].slice(0, 300),
     images: c.images, jsonLd, jsonLdTypes: jsonLdTypes(jsonLd), jsonLdErrors, og: Object.fromEntries(Object.entries(c.og).map(([k, v]) => [k, isUrl(v) ? v : scrub(v)])),
     lang: opt(c.lang), viewport: opt(c.viewport),

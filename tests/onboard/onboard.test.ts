@@ -149,6 +149,21 @@ describe("onboard (fixture site, fake LLM, test graph)", () => {
     expect(first.capabilities?.map((c) => c.key)).toContain("search_console");
   });
 
+  it("day one: the address read from the footer is a fact on the business with its page and quote; the graph comes out clean (issue #24)", async () => {
+    const [b] = await q<{ address: string; src: string; via: string; ev: string }>(
+      "MATCH (b:Business) WHERE b.address IS NOT NULL RETURN b.address AS address, b.addressSrc AS src, b.addressVia AS via, b.addressEvidence AS ev");
+    expect(b).toMatchObject({ address: "12 Harbour Lane, Bristol, United Kingdom", via: "page text", ev: expect.stringContaining("12 Harbour Lane") });
+    expect(await q("MATCH (:Business)-[s:SOURCED_FROM]->(d:Document {id:$d}) WHERE s.until IS NULL RETURN d.id", { d: b!.src })).toHaveLength(1);
+    // the phone number in the footer stays redacted, and no fact quotes it
+    expect(b!.ev).not.toMatch(/0117/);
+    const { graphQuality } = await import("../../src/ingest/quality.js");
+    const r = await graphQuality(g, `business:${slug.replace(/_/g, "-")}`);
+    expect(r.duplicates.certain).toBe(0);
+    expect(r.mistyped.total).toBe(0);
+    expect(r.unsourced.facts).toBe(0);
+    expect(r.facts.address).toBe(true);
+  });
+
   it("re-runs as a no-op: no new nodes or edges, the LLM is not asked again, the same counts", async () => {
     const calls = llm.calls.length;
     clock += 60 * 60 * 1000;

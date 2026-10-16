@@ -37,7 +37,9 @@ export interface BusinessContext { name: string; industry?: string }
 //   Metric            numbers go in observations; metric definitions come from the ops snapshot
 //   Playbook, Rule    vendored know-how packs and rules learned from approvals
 //   Goal              set in the onboarding wizard against a measured baseline, not read out of a document
-const NOT_EXTRACTED = new Set<EntityType>(["Document", "Recommendation", "Finding", "Memory", "Page", "Metric", "Playbook", "Rule", "Goal"]);
+//   Supplier, Partner, Client   another business is extracted as a Business; onboarding's tidy pass (src/ingest/tidy.ts)
+//                     retypes it, so the prompt (and every tenant's extraction cache) stays as it was
+const NOT_EXTRACTED = new Set<EntityType>(["Document", "Recommendation", "Finding", "Memory", "Page", "Metric", "Playbook", "Rule", "Goal", "Supplier", "Partner", "Client"]);
 export const EXTRACTABLE_TYPES: EntityType[] = SEARCHABLE.filter((t) => !NOT_EXTRACTED.has(t));
 
 // One line each, written for a small business owner's records.
