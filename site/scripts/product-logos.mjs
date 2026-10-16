@@ -20,8 +20,8 @@ if (port === 8787) throw new Error("port 8787 is the real server; use your own")
 
 // app name on the Your tools screen -> file id
 const WANT = {
-  Gmail: "gmail", "Google Calendar": "calendar", "Google Analytics": "analytics", "Google Search Console": "search",
-  "Google Ads": "google-ads", "Meta Ads": "meta-ads", Instagram: "instagram", Shopify: "shopify", Stripe: "stripe",
+  Gmail: "gmail", "Google Calendar": "calendar", "Google Analytics": "analytics",
+  "Meta Ads": "meta-ads", Instagram: "instagram", Shopify: "shopify", Stripe: "stripe",
   HubSpot: "hubspot", Slack: "slack", "WhatsApp Business": "whatsapp",
 };
 

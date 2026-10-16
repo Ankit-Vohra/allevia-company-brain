@@ -131,3 +131,44 @@ Below 861px, and whenever the reader asks for reduced motion, the page does not 
 vertical story: the same stops, the footage recorded on a 390px phone as short muted loops that play only in view (with
 a pause button), the posters as the first paint, every line of copy visible. Scroll-scrubbing on phones is the part a
 headless check cannot prove on a real iPhone, so the phone gets the version that cannot freeze.
+
+---
+
+# v6 addendum (2026-10-16, issue #37)
+
+**Still self-authored under the same delegation.** The founder's feedback after v4 and the 78-word v5: v4 had too much text and
+slop, v5 showed nothing of the product ("I could see the moving parts, agents, how they interact"). v6 keeps the v4 acts that
+worked (the living office, the courier route, real footage) and cuts the words to about 390.
+
+**One thing the page is about: the company brain.** The product is now a Founder OS (`docs/founder-os.md`): a brain, a team
+and the founder's own tools. So the home page is one story with one drawn object.
+
+```
+1  Recognition  the brain, finished and breathing                     (flow, hero)
+2  Pause        paste your website: the brain starts, a thing at a time (pin: formation)
+3  Range        connect your tools: logos snap in, new things arrive    (same pin)
+4  Substance    ask why: the question goes through the brain, the team lights up, the path is drawn  (scrub, the peak)
+5  Appetite     the team makes things: posters, a reply with three times, a fix   (pan)
+6  Control      you tap OK, in the app or in Discord                    (flow, wipe)
+7  Proof        your plan moves                                         (pin, bars)
+8  Commitment   the price, one button                                   (flow)
+```
+
+**Where the picture comes from.** `scripts/site-brain-export.ts` reads the real graph of the sample business (demo_growth,
+"Shiftly", made-up data): 47 things, 60 links, the funnel's real daily numbers. Each thing arrives in the wave of its source
+(a website read; then Gmail, Calendar, Analytics, Meta Ads, files). `site/scripts/record-live.mjs` films a real run of the hero
+question on the Claude subscription and stamps each event with its second in the video; the page draws who read what at those
+seconds and scrubs the recorded office to the same second (`home.ts` Scrubber, checked by `lab.mjs`: the clip and the run's
+clock never differ by more than 1.2 s). The answer on the page is the run's own, shortened, every number from it.
+
+**Honest limits.** The tool tiles are the logos the app's own Your tools screen shows; the sample business has Gmail, Calendar,
+Analytics, Meta Ads and uploaded files connected, the other six tiles show what can join. The Discord card is redrawn to match
+the bot's message (`src/discord/approval-card.ts`) and says so. The plan's numbers are the app's own sample numbers.
+
+**Mobile and reduced motion.** Below 861 px, with reduced motion, on data saver, or if the engine fails, the page does not pin or
+scrub. Each picture plays once when seen (the formation in 11 s, the run in 16 s, sped up) with a Replay button, or stays
+finished. The office clip becomes a 14-second muted loop of the same run with a pause button.
+
+**Checks run** (`site/scripts/lab.mjs`, the skill's verify.md written for this page): dead scroll, cue peak, contrast on the
+composited page, the clip against the run, keyboard order, a strict content-security policy, console errors; plus axe at 390 and
+1440 with motion reduced and with motion on.

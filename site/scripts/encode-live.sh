@@ -20,7 +20,6 @@ ff() { ffmpeg -y -hide_banner -loglevel error "$@"; }
 CROP="fps=12,crop=1008:486:32:144,scale=760:-2:flags=lanczos,format=yuv420p"
 END="${HERO_SECONDS:-100}"
 ff -i "$SRC/hero.webm" -t "$END" -an -vf "$CROP" -c:v libx264 -profile:v high -preset slow -crf 31 -g 12 -keyint_min 12 -sc_threshold 0 -movflags +faststart "$OUT/ask-office.mp4"
-ff -ss "${POSTER_AT:-0.5}" -i "$SRC/hero.webm" -frames:v 1 -vf "crop=1008:486:32:144,scale=760:-2:flags=lanczos" -c:v libwebp -quality 80 "$OUT/ask-office-poster.webp"
 ff -ss "${BUSY_AT:-30}" -i "$SRC/hero.webm" -frames:v 1 -vf "crop=1008:486:32:144,scale=760:-2:flags=lanczos" -c:v libwebp -quality 82 "$OUT/ask-office-busy.webp"
 
 # The phone and hero loop: the busiest 14 seconds of the same run, smaller.
