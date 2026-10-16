@@ -16,7 +16,7 @@ import type { DesignSystem } from "./system.js";
 import type { FormatKey } from "../compose/formats.js";
 import { VisionError, type VisionRunner } from "../../studio/vision.js";
 
-export interface DesignBrief { business: string; goal: string; promoting: string; audience: string; cta?: string; placement: string }
+export interface DesignBrief { business: string; goal: string; promoting: string; audience: string; cta?: string; placement: string; request?: string }
 
 export interface DesignRequest {
   ds: DesignSystem;
@@ -52,8 +52,8 @@ export function codeFix(f: Finding[], spec: DesignSpec): { tune: Tune; why: stri
   const c = spec.copy;
   const textual = f.filter((x) => x.code === "fit" || x.code === "overflow" || x.code === "collide");
   if (textual.length) {
-    if (c.support && !t.dropSupport) return { tune: { ...t, dropSupport: true }, why: `${textual[0]!.detail}: dropped the supporting line` };
-    if (c.eyebrow && !t.dropEyebrow) return { tune: { ...t, dropEyebrow: true }, why: `${textual[0]!.detail}: dropped the small line` };
+    if (c.support && !t.dropSupport && !c.keep?.includes("support")) return { tune: { ...t, dropSupport: true }, why: `${textual[0]!.detail}: dropped the supporting line` };
+    if (c.eyebrow && !t.dropEyebrow && !c.keep?.includes("eyebrow")) return { tune: { ...t, dropEyebrow: true }, why: `${textual[0]!.detail}: dropped the small line` };
     if (t.scale > 0.8) return { tune: { ...t, scale: Math.round((t.scale - 0.1) * 100) / 100 }, why: `${textual[0]!.detail}: smaller headline` };
     return null;
   }
@@ -66,7 +66,7 @@ export function codeFix(f: Finding[], spec: DesignSpec): { tune: Tune; why: stri
   const hier = f.find((x) => x.code === "hierarchy");
   if (hier) {
     if (t.scale < 1.15) return { tune: { ...t, scale: Math.round((t.scale + 0.1) * 100) / 100 }, why: "the headline did not lead: made it bigger" };
-    if (c.support && !t.dropSupport) return { tune: { ...t, dropSupport: true }, why: "the headline did not lead: dropped the supporting line" };
+    if (c.support && !t.dropSupport && !c.keep?.includes("support")) return { tune: { ...t, dropSupport: true }, why: "the headline did not lead: dropped the supporting line" };
   }
   const orphan = f.find((x) => x.code === "orphan");
   if (orphan && t.scale > 0.85) return { tune: { ...t, scale: Math.round((t.scale - 0.05) * 100) / 100 }, why: `${orphan.detail}: re-set slightly smaller` };
@@ -86,14 +86,15 @@ export function reviewFix(r: Review, spec: DesignSpec, pictures: number): { tune
         if (t.scale < 1.15) return { tune: { ...t, scale: Math.round(Math.min(1.15, t.scale + 0.1) * 100) / 100 }, why: `review: ${is.detail || is.code}; bigger headline` };
         break;
       case "weak_hierarchy":
-        if (spec.copy.support && !t.dropSupport) return { tune: { ...t, dropSupport: true, scale: Math.min(1.15, t.scale + 0.05) }, why: `review: ${is.detail || "nothing leads"}; dropped the supporting line` };
+        if (spec.copy.support && !t.dropSupport && !spec.copy.keep?.includes("support")) return { tune: { ...t, dropSupport: true, scale: Math.min(1.15, t.scale + 0.05) }, why: `review: ${is.detail || "nothing leads"}; dropped the supporting line` };
         if (t.scale < 1.15) return { tune: { ...t, scale: Math.min(1.15, t.scale + 0.1) }, why: `review: ${is.detail}; bigger headline` };
         break;
       case "crowded":
-        if (spec.copy.eyebrow && !t.dropEyebrow) return { tune: { ...t, dropEyebrow: true }, why: `review: ${is.detail || "crowded"}; dropped the small line` };
-        if (spec.copy.support && !t.dropSupport) return { tune: { ...t, dropSupport: true }, why: `review: ${is.detail || "crowded"}; dropped the supporting line` };
+        if (spec.copy.eyebrow && !t.dropEyebrow && !spec.copy.keep?.includes("eyebrow")) return { tune: { ...t, dropEyebrow: true }, why: `review: ${is.detail || "crowded"}; dropped the small line` };
+        if (spec.copy.support && !t.dropSupport && !spec.copy.keep?.includes("support")) return { tune: { ...t, dropSupport: true }, why: `review: ${is.detail || "crowded"}; dropped the supporting line` };
         break;
       case "bad_crop": case "words_over_subject": {
+        if (!pictures || !spec.photos.length && !spec.scene) break; // nothing to re-crop: an app screen is shown whole
         const next = FOCAL[(FOCAL.indexOf(t.focal) + 1) % FOCAL.length];
         return { tune: { ...t, focal: next }, why: `review: ${is.detail || "bad crop"}; moved the crop ${next ?? "back to the centre"}` };
       }
@@ -101,7 +102,7 @@ export function reviewFix(r: Review, spec: DesignSpec, pictures: number): { tune
         if (!t.plate) return { tune: { ...t, plate: true }, why: `review: ${is.detail || "logo"}; logo on a plate` };
         break;
       case "repetition":
-        if (spec.copy.eyebrow && !t.dropEyebrow) return { tune: { ...t, dropEyebrow: true }, why: `review: ${is.detail || "repetition"}; dropped the small line` };
+        if (spec.copy.eyebrow && !t.dropEyebrow && !spec.copy.keep?.includes("eyebrow")) return { tune: { ...t, dropEyebrow: true }, why: `review: ${is.detail || "repetition"}; dropped the small line` };
         break;
       case "ai_artefact": case "generic_picture": case "picture_unrelated":
         if (pictures > 1 && !t.swapPhotos) return { tune: { ...t, swapPhotos: true }, why: `review: ${is.detail || is.code}; used the other picture` };

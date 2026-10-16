@@ -52,6 +52,7 @@ export interface PosterRequest {
   pictures?: string[];             // the business's own pictures to use (BrandAsset or Asset ids), in order
   quote?: { text: string; by?: string; illustrative?: boolean };
   pair?: [string, string];
+  reuseScenes?: string[];          // generated artwork already made for this business (Asset ids): used again, nothing new is paid for
 }
 
 // The request could not be made as asked; `plain` says why in the owner's words and what to change.
@@ -127,6 +128,8 @@ export async function makePoster(g: GraphHandle, req: PosterRequest, deps: Creat
   const stop = blockingCopy(prepared.findings);
   if (stop.length) throw new PosterRefused("copy", `The words repeat themselves: ${stop.map((f) => f.detail).join("; ")}. Say each thing once (the headline sells, the button says what to do) and I'll make it.`);
   const copy: DesignCopy = prepared.copy;
+  // an announcement's small line usually IS the news ("coming soon on Google Play"): it is never dropped to make room
+  if ((req.goal ?? goalOf(req.occasion)) === "announce" && copy.eyebrow) copy.keep = ["eyebrow"];
   notes.push(...prepared.findings.filter((f) => f.code === "repeat" || f.code === "long").map((f) => `Words: ${f.detail}.`));
 
   const saveDeps: SaveDeps = { store: deps.store, tenant: req.tenant, agentId: req.agentId, turnId: req.turnId, now: req.now };
@@ -149,14 +152,19 @@ export async function makePoster(g: GraphHandle, req: PosterRequest, deps: Creat
   notes.push(...material.notes);
 
   // 4. the layouts, by the brief and the material; a generated scene only for a layout that needs a picture none exists for
-  const ds = await designSystem(kit.brand, kit.colours, req.format);
+  const ds = await designSystem(kit.brand, kit.colours, req.format, kit.named);
   const recent = await recentLayouts(g);
   const prefer = (req.layouts ?? []).filter((k): k is LayoutKey => (LAYOUT_KEYS as string[]).includes(k));
   const goal = req.goal ?? goalOf(req.occasion);
   const chooseWith = (canGenerate: boolean) => chooseLayouts({ goal, copy, photos: photos.length, screens: screens.length, focusScreens: screens.filter((s) => s.focus).length, canGenerate, recent, prefer, count: count + 3 });
   let choices = chooseWith(req.artwork === "generate");
   const scenes: Array<Picture & { artworkId?: string }> = [];
-  const needScenes = Math.min(count, choices.slice(0, count).filter((c) => c.generateScene).length);
+  for (const id of req.reuseScenes ?? []) {
+    const [row] = await g.roQuery<{ key: string | null }>("MATCH (a:Entity:Asset {id:$id}) WHERE a.kind = 'artwork' RETURN a.storageKey AS key", { id });
+    const bytes = row?.key ? deps.store.get(req.tenant, row.key) : null;
+    if (bytes) scenes.push({ ...(await photoPicture(bytes, { id, kind: "scene" })), artworkId: id });
+  }
+  const needScenes = Math.max(0, Math.min(count, choices.slice(0, count).filter((c) => c.generateScene).length) - scenes.length);
   if (req.artwork === "generate" && needScenes > 0) {
     const b = kit.ctx.business;
     const wanted = Array.from({ length: needScenes }, (_, i) => {
@@ -174,6 +182,8 @@ export async function makePoster(g: GraphHandle, req: PosterRequest, deps: Creat
       generated++;
     }
     if (!scenes.length) choices = chooseWith(false);
+  } else if (scenes.length) {
+    notes.push("I reused the scene already made for you, so no new picture was paid for.");
   } else if (req.artwork === "generate" && photos.length) {
     notes.push(`I used your own ${photos.length === 1 ? "photo" : "photos"} instead of generating a picture: real work sells better than a made-up scene, and it cost nothing.`);
   }
@@ -182,7 +192,7 @@ export async function makePoster(g: GraphHandle, req: PosterRequest, deps: Creat
   let options: DesignOption[] = [];
   let legacy: Array<{ label: string; buffer: Buffer; manifest: PosterManifest; artworkId?: string }> | null = null;
   try {
-    const outcome = await runDesign({ ds, format: req.format, copy, photos, screens, scenes, choices, count, brief: { business: kit.brand.businessName, goal, promoting: req.promoted?.name ?? "the business", audience: req.audience ?? "customers", ...(copy.cta ? { cta: copy.cta } : {}), placement: FORMATS[req.format].label } }, { renderer: deps.renderer ?? sharedRenderer(), vision: deps.vision, ...(deps.log ? { log: deps.log } : {}) });
+    const outcome = await runDesign({ ds, format: req.format, copy, photos, screens, scenes, choices, count, brief: { business: kit.brand.businessName, goal, promoting: req.promoted?.name ?? "the business", audience: req.audience ?? "customers", ...(copy.cta ? { cta: copy.cta } : {}), placement: FORMATS[req.format].label, request: req.question } }, { renderer: deps.renderer ?? sharedRenderer(), vision: deps.vision, ...(deps.log ? { log: deps.log } : {}) });
     options = outcome.options;
     notes.push(...outcome.notes);
     if (!options.length) {

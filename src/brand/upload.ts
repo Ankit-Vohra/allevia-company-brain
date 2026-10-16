@@ -161,7 +161,7 @@ export async function ingestBrandUpload(g: GraphHandle, input: BrandUploadInput,
     const role = /head|display|title|logo/.test(note) ? "heading" : /body|text|paragraph/.test(note) ? "body" : undefined;
     const weight = fontWeight(bytes);
     const asset = await keep({ kind: "font", buffer: bytes, ext: type, mime: type === "ttf" ? "font/ttf" : "font/otf", name: `${family} (font file)`, summary: `The ${family} font file the owner sent.`, props: { family, format: type, ...(weight ? { weight } : {}), ...(role ? { role } : {}) } });
-    return { route: "brand", asset, kind: "font", needsBetter: false, message: `Got your font, ${family}. Posters will use it for headlines and text.` };
+    return { route: "brand", asset, kind: "font", needsBetter: false, message: `Got your font, ${family}. Posters will use it for ${role === "heading" ? "headlines" : role === "body" ? "body text" : "headlines and text"}.` };
   }
 
   // ----- a brand guide PDF -----
@@ -228,6 +228,7 @@ export async function ingestBrandUpload(g: GraphHandle, input: BrandUploadInput,
   } else if (kind === "palette") {
     parts.push(verdict.colours.length ? `Got your colours: ${verdict.colours.join(", ")}. I'll use them on posters.` : "Saved your colour picture. I couldn't pick out exact colours from it, so tell me the main ones if you want them used.");
   } else if (kind === "product-photo") parts.push("Saved your product photo with your brand pictures. I can use it in posters and ads.");
+  else if (kind === "app-screen") parts.push("Saved your app screen. Posters and reels about the app will show this real screen in a phone, never a drawn one.");
   else if (kind === "past-design") parts.push("Saved your past design. I'll use it to match your style when I make new ones.");
   else if (kind === "font-sample") parts.push("Saved your font picture. If you send the font file (.ttf or .otf), I'll use that font on posters.");
   else parts.push("Saved it with your brand files. I'm not sure what it's for, so tell me what to do with it.");

@@ -40,6 +40,7 @@ export interface ComposeKit {
   notes: string[];                 // honest remarks for the owner: no logo file, a fallback font, a small logo
   logoRow: BrandAssetRow | null;
   logoBytes: Buffer | null;
+  named: { paper: boolean; ink: boolean; accent: boolean }; // which colours the record names by role
   colours: string[];               // every brand colour on record (roles first, then palette and guide swatches), for the design system
 }
 
@@ -124,7 +125,9 @@ export async function loadComposeKit(g: GraphHandle, businessId: string, deps: K
   const colours = [...new Set([ctx.brand.ids.length ? ctx.brand.paper : undefined, ctx.brand.ink, ctx.brand.accent, ctx.brand.neutral, ...extra]
     .filter((c): c is string => !!c && HEX6.test(c)).map((c) => c.toLowerCase()))];
   return {
-    brand, ctx, facts: await businessFacts(g, ctx), notes, logoRow, logoBytes, colours: colours.length && !fromLogoFile ? colours : [palette.paper, palette.dark, palette.accent],
+    brand, ctx, facts: await businessFacts(g, ctx), notes, logoRow, logoBytes,
+    named: { paper: ctx.brand.ids.includes(`brand-asset:colour-${ctx.brand.paper.replace("#", "")}`), ink: !!ctx.brand.ink, accent: !!ctx.brand.accent },
+    colours: colours.length && !fromLogoFile ? colours : [palette.paper, palette.dark, palette.accent],
     ids: { ...(logoRow && logoBytes ? { logo: logoRow.id } : {}), fonts: [...new Set(fontIds)], colours: ctx.brand.ids.filter((id) => /colour/.test(id)), rules: ctx.brand.ids.filter((id) => /^brand-rule:/.test(id)) },
   };
 }

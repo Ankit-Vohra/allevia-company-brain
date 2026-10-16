@@ -40,6 +40,7 @@ export interface DesignCopy {
   details?: string[];
   quote?: { text: string; by?: string; illustrative?: boolean };
   pair?: [string, string];     // before / after labels
+  keep?: Array<"eyebrow" | "support">;  // lines that carry the brief's news: never dropped to make room
 }
 
 export interface Tune {
@@ -99,9 +100,10 @@ const headline = (i: LayoutInput, o: { max: number; min?: number; lines?: number
 };
 const support = (i: LayoutInput, cls = ""): string =>
   i.copy.support && !i.tune.dropSupport ? `<p class="sup ${cls}${script(i.copy.support)}" data-role="support" data-fit data-order="2" data-min="${i.ds.type.body}" data-max="${i.ds.type.lede}" data-lines="3">${esc(i.copy.support)}</p>` : "";
+// The small line; when it carries the news (an announcement's "coming soon"), it is a filled chip, not a whisper.
 const eyebrow = (i: LayoutInput, cls = ""): string =>
-  i.copy.eyebrow && !i.tune.dropEyebrow ? `<p class="eb ${cls}${script(i.copy.eyebrow)}" data-role="eyebrow">${esc(i.copy.eyebrow)}</p>` : "";
-const cta = (i: LayoutInput, cls = "pill"): string =>
+  i.copy.eyebrow && !i.tune.dropEyebrow ? `<p class="eb ${cls}${i.copy.keep?.includes("eyebrow") ? " chip" : ""}${script(i.copy.eyebrow)}" data-role="eyebrow">${esc(i.copy.eyebrow)}</p>` : "";
+const cta = (i: LayoutInput, cls = "link"): string =>
   i.copy.cta ? `<p class="cta ${cls}${script(i.copy.cta)}" data-role="cta">${esc(i.copy.cta)}</p>` : "";
 const details = (i: LayoutInput, cls = "chips"): string =>
   i.copy.details?.length ? `<ul class="${cls}">${i.copy.details.map((d) => `<li class="${script(d).trim()}" data-role="detail">${esc(d)}</li>`).join("")}</ul>` : "";
@@ -111,6 +113,13 @@ const logo = (i: LayoutInput, o: { on: "ground" | "deep" | "photo"; cls?: string
   if (!l) return `<p class="wordmark ${o.cls ?? ""} on-${o.on}" data-role="logo">${esc(i.ds.business)}</p>`;
   const plate = i.tune.plate || (o.on === "photo" ? l.dark && !l.opaque : logoNeedsPlate(l, o.on === "deep" ? i.ds.colour.deep : i.ds.colour.ground));
   return `<div class="logo ${o.cls ?? ""}${plate ? " plate" : ""}" data-role="logo" data-kind="image" data-text=""><img src="${l.url}" alt=""></div>`;
+};
+// The part of a real screen the words are about, lifted out as a card at a readable size (the whole screen at phone size is
+// too small to read on a phone: Rohan's note on the first Aamdani proof).
+const screenCard = (s: Picture, width: number, cls = "card"): string => {
+  const f = s.focus ?? { x: 0, y: 0, w: 1, h: Math.min(1, (s.w * 0.6) / s.h) };
+  const scale = width / (f.w * s.w);
+  return `<div class="${cls}" data-role="screen" data-kind="image" data-text="" style="width:${width}px;height:${Math.round(f.h * s.h * scale)}px"><div class="clip"><img src="${s.url}" alt="" style="width:${Math.round(s.w * scale)}px;transform:translate(${-Math.round(f.x * s.w * scale)}px,${-Math.round(f.y * s.h * scale)}px)"></div></div>`;
 };
 const phone = (s: Picture, cls = ""): string =>
   `<div class="phone ${cls}" data-role="screen" data-kind="image" data-text=""><div class="scr" style="background:${s.bg ?? "#ffffff"}"><img src="${s.url}" alt=""></div><i class="isl"></i></div>`;
@@ -135,11 +144,14 @@ body{font-family:var(--body);color:var(--ink);font-kerning:normal;font-feature-s
 .hl.deva{line-height:1.28;letter-spacing:0}
 .sup{font-size:var(--lede);line-height:1.32;text-wrap:pretty;font-weight:400}
 .sup.deva{line-height:1.5}
-.eb{font-size:var(--s);font-weight:700;letter-spacing:.01em;line-height:1.3;color:var(--accent-ink)}
+.eb{font-size:var(--s);font-weight:700;letter-spacing:.01em;line-height:1.3;color:var(--accent-ink);text-wrap:balance}
+.eb.deva{line-height:1.5}
+.eb.chip{align-self:flex-start;background:var(--second);color:var(--on-second);padding:.42em .95em .48em;border-radius:999px}
 .cta{font-size:var(--b);font-weight:700;line-height:1.2;text-wrap:balance}
 .cta.deva{line-height:1.45}
 .pill{display:inline-block;align-self:flex-start;background:var(--accent);color:var(--on-accent);padding:.62em 1.05em .66em;border-radius:999px}
-.link{display:inline-block;border-bottom:3px solid currentColor;padding-bottom:.12em}
+.link{display:inline-block;align-self:flex-start;color:var(--accent-ink);border-bottom:4px solid var(--accent);padding-bottom:.1em}
+.deep .link,.fb .link,.sp .link,.bt .link,.da .link{color:var(--on-deep)}
 .chips{list-style:none;display:flex;flex-wrap:wrap;gap:14px}
 .chips li{font-size:var(--s);font-weight:700;line-height:1.25;padding:.5em .9em;border-radius:999px;background:var(--second);color:var(--on-second)}
 .chips li.deva{line-height:1.5}
@@ -150,6 +162,9 @@ body{font-family:var(--body);color:var(--ink);font-kerning:normal;font-feature-s
 .wordmark.on-deep,.wordmark.on-photo{color:var(--on-deep)}
 .wordmark.on-photo{background:color-mix(in srgb,var(--deep) 80%,transparent);padding:.22em .6em .28em;border-radius:12px;align-self:flex-start}
 .ph{display:block;width:100%;height:100%;object-fit:cover}
+.card{position:absolute;border-radius:26px;background:#fff;box-shadow:0 0 0 7px var(--accent),0 36px 70px -24px rgba(0,0,0,.55)}
+.card .clip{width:100%;height:100%;overflow:hidden;border-radius:26px}
+.card .clip img{display:block;max-width:none}
 .phone{position:absolute;aspect-ratio:9/19.4;background:#101113;border-radius:9.5%/4.4%;padding:2.4%;box-shadow:0 50px 90px -30px rgba(0,0,0,.55),0 0 0 2px #2b2c30 inset}
 .phone .scr{width:100%;height:100%;border-radius:7.6%/3.5%;overflow:hidden}
 .phone .scr img{display:block;width:100%;height:auto}
@@ -161,32 +176,34 @@ body{font-family:var(--body);color:var(--ink);font-kerning:normal;font-feature-s
 
 const deviceHero: LayoutDef = {
   key: "device-hero", name: "Product hero: the real app in a phone",
-  use: "An app or software launch, or 'it's live / coming soon': the real screen IS the product, so it is the hero. Headline and action above, the phone (two phones for two screens) rising from the bottom edge. Needs one real app screen.",
+  use: "An app or software launch, or 'it's live / coming soon': the real screen IS the product, so it is the hero. The words at the top, one large phone rising straight after them and running off the bottom edge (no gap, no second tilted phone: Rohan found it added nothing). Needs one real app screen.",
   needs: { screens: 1 }, goals: ["announce", "sell", "awareness"],
   build: (i) => {
-    const [a, b] = i.screens;
+    const a = i.screens[0]!;
     const deep = i.tune.ground === "deep";
     const story = i.format === "insta_story", sq = i.format === "insta_square";
+    const fw = story ? 640 : sq ? 380 : 560;
     const body = `<div class="f dh ${deep ? "deep" : "light"}">
-  <header class="top">${logo(i, { on: deep ? "deep" : "ground", cls: "lg" })}${eyebrow(i)}</header>
-  <section class="words" data-area>${headline(i, { max: sq ? i.ds.type.h1 : i.ds.type.display, lines: 3 })}${support(i)}${cta(i)}</section>
-  ${b ? phone(b, "back") : ""}${phone(a!, "front")}
+  <header class="top">${logo(i, { on: deep ? "deep" : "ground", cls: "lg" })}</header>
+  <section class="words" data-area>${eyebrow(i)}${headline(i, { max: sq ? i.ds.type.h1 : i.ds.type.display, lines: 3 })}${support(i)}${cta(i)}</section>
+  <div class="stage">${phone(a, "front")}</div>
 </div>`;
-    // geometry: the words take the top band, the phones fill the rest and run off the bottom edge
-    const wordsTop = story ? 370 : 175, wordsH = story ? 620 : sq ? 420 : 470;
-    const phoneTop = wordsTop + wordsH + (story ? 40 : 30);
-    const fw = story ? 640 : sq ? 360 : 500, bw = Math.round(fw * 0.86);
-    const frontLeft = sq ? 1080 - 72 - fw : b ? (story ? 380 : 470) : Math.round((1080 - fw) / 2);
-    const css = `
+    // a flow, not fixed boxes: the phone starts where the words end, so there is never a dead band between them
+    const css = sq ? `
+.dh{display:grid;grid-template-columns:1fr ${fw}px;column-gap:40px;padding:var(--st) var(--m) 0}
 .dh.light{background:var(--ground)}.dh.deep{background:var(--deep);color:var(--on-deep)}
-.dh.deep .sup{color:var(--muted-deep)}.dh.light .sup{color:var(--muted)}.dh.deep .eb{color:var(--accent-deep)}
-.dh .top{position:absolute;left:var(--m);right:var(--m);top:var(--st);height:${story ? 80 : 68}px;display:flex;justify-content:space-between;align-items:center}
-.dh .lg{height:100%}
-.dh .words{position:absolute;left:var(--m);${sq ? "width:560px" : "right:var(--m)"};top:${wordsTop}px;height:${sq ? 1080 - 175 - 72 : wordsH}px;display:flex;flex-direction:column;gap:22px;overflow:hidden}
-.dh .words .pill{margin-top:6px}
-.dh .front{width:${fw}px;left:${frontLeft}px;top:${sq ? 200 : phoneTop}px}
-.dh .back{width:${bw}px;left:${story ? 60 : 110}px;top:${(sq ? 200 : phoneTop) + Math.round(fw * 0.32)}px;transform:rotate(-4deg);opacity:.97}
-.dh.deep .pill{box-shadow:0 10px 30px rgba(0,0,0,.35)}`;
+.dh.deep .sup{color:var(--muted-deep)}.dh.light .sup{color:var(--muted)}
+.dh .top{grid-column:1;height:60px}.dh .lg{height:100%}
+.dh .words{grid-column:1;margin-top:40px;max-height:820px;display:flex;flex-direction:column;gap:20px;overflow:hidden}
+.dh .stage{grid-column:2;grid-row:1 / 3;position:relative}
+.dh .front{position:relative;width:${fw}px;margin-top:60px}` : `
+.dh{display:flex;flex-direction:column;padding:var(--st) var(--m) 0;gap:${story ? 40 : 28}px}
+.dh.light{background:var(--ground)}.dh.deep{background:var(--deep);color:var(--on-deep)}
+.dh.deep .sup{color:var(--muted-deep)}.dh.light .sup{color:var(--muted)}
+.dh .top{height:${story ? 80 : 68}px;flex:none}.dh .lg{height:100%}
+.dh .words{flex:none;max-height:${story ? 760 : 640}px;display:flex;flex-direction:column;gap:20px;overflow:hidden}
+.dh .stage{flex:1;position:relative;min-height:${story ? 520 : 380}px}
+.dh .front{position:absolute;width:${fw}px;left:50%;top:${story ? 10 : 4}px;transform:translateX(-50%)}`;
     return { body, css };
   },
 };
@@ -198,12 +215,12 @@ const sceneDevice: LayoutDef = {
   build: (i) => {
     const p = pics(i)[0]!, s = i.screens[0]!;
     const story = i.format === "insta_story", sq = i.format === "insta_square";
-    const photoH = story ? 1000 : sq ? 560 : 740;
-    const pw = sq ? 280 : 340, ptop = story ? 700 : sq ? 300 : 420;
+    const photoH = story ? 900 : sq ? 520 : 680;
+    const pw = sq ? 220 : story ? 300 : 260, ptop = photoH - Math.round(pw * 2.155) + (story ? 70 : 50);
     const body = `<div class="f sd">
   <div class="pic">${img(p, i.tune)}<div class="fade"></div></div>
   <div class="lgw">${logo(i, { on: "photo", cls: "lg" })}</div>
-  ${phone(s, "ph1")}
+  ${s.focus ? screenCard(s, sq ? 520 : story ? 760 : 640, "card sc") : phone(s, "ph1")}
   <section class="words" data-area>${eyebrow(i)}${headline(i, { max: i.ds.type.h1, lines: 4 })}${support(i)}${cta(i, "link")}</section>
 </div>`;
     const css = `
@@ -214,7 +231,8 @@ const sceneDevice: LayoutDef = {
 .sd .lgw{position:absolute;left:var(--m);top:var(--st);height:${story ? 84 : 76}px;z-index:2}
 .sd .lg{height:100%}
 .sd .ph1{width:${pw}px;right:var(--m);top:${ptop}px;z-index:2}
-.sd .words{position:absolute;left:var(--m);right:${80 + pw + 40}px;top:${photoH + 10}px;bottom:${story ? "var(--sb)" : "var(--m)"};display:flex;flex-direction:column;gap:16px;overflow:hidden}
+.sd .sc{right:var(--m);top:${photoH - (story ? 260 : sq ? 200 : 230)}px;z-index:2}
+.sd .words{position:absolute;left:var(--m);right:var(--m);top:${photoH + (s.focus ? (story ? 120 : 90) : 70)}px;bottom:${story ? "var(--sb)" : "var(--m)"};display:flex;flex-direction:column;gap:16px;overflow:hidden}
 .sd .sup{color:var(--muted)}
 .sd .cta{color:var(--accent-ink);margin-top:auto}`;
     return { body, css };
@@ -223,37 +241,43 @@ const sceneDevice: LayoutDef = {
 
 const featureCallout: LayoutDef = {
   key: "feature-callout", name: "Feature spotlight on the real screen",
-  use: "One feature, shown exactly: the real screen in a phone with the part the words are about lifted out, enlarged and outlined, with a short label. Use for 'see pay, distance and shift before you apply'-type points. Needs a screen with a focus box.",
+  use: "One feature, shown exactly: the real screen in a phone with the part the words are about magnified in place (the lens sits over its own spot on the screen, so nothing shows twice). Use for 'see pay, distance and shift before you apply'-type points. Needs a screen with a focus box.",
   needs: { screens: 1 }, goals: ["sell", "awareness"],
   build: (i) => {
     const s = i.screens.find((x) => x.focus) ?? i.screens[0]!;
     const f = s.focus ?? { x: 0.04, y: 0.25, w: 0.92, h: 0.22 };
     const story = i.format === "insta_story", sq = i.format === "insta_square";
-    const phoneW = story ? 520 : sq ? 360 : 430;
-    const lensW = story ? 900 : sq ? 600 : 700;
-    // the lens shows the focus region at lensW wide: the screen image is scaled so that region fills it
+    const H = story ? 1920 : sq ? 1080 : 1350;
+    const top = (story ? 270 : sq ? 72 : 80) + 96;
+    const wordsH = story ? 600 : sq ? 330 : 440;
+    const phoneW = story ? 560 : sq ? 360 : 460;
+    const phoneLeft = sq ? 100 : 110;
+    const phoneTop = top + wordsH + 40;
+    // the phone's screen geometry (the frame's padding is 2.4% of its width)
+    const innerW = phoneW * 0.952, innerLeft = phoneLeft + phoneW * 0.024, innerTop = phoneTop + phoneW * 0.024;
+    const lensW = story ? 880 : sq ? 620 : 760;
     const scale = lensW / (f.w * s.w);
     const lensH = Math.round(f.h * s.h * scale);
+    // over its own spot: centred on the focus region as the phone draws it, starting at that region's left edge
+    const regionMid = innerTop + (f.y + f.h / 2) * innerW * (s.h / s.w);
+    const lensTop = Math.min(H - (story ? 420 : 100) - lensH, Math.round(regionMid - lensH / 2));
+    const lensLeft = Math.min(1080 - lensW - 40, Math.round(innerLeft + f.x * innerW - 24));
     const body = `<div class="f fc ${i.tune.ground === "deep" ? "deep" : "light"}">
   <header class="hd">${logo(i, { on: i.tune.ground === "deep" ? "deep" : "ground", cls: "lg" })}</header>
-  <section class="words" data-area>${headline(i, { max: sq ? i.ds.type.h1 : i.ds.type.display * 0.8, lines: 3 })}${support(i)}</section>
+  <section class="words" data-area>${eyebrow(i)}${headline(i, { max: sq ? i.ds.type.h1 : i.ds.type.display * 0.8, lines: 3 })}${support(i)}${cta(i)}</section>
   ${phone(s, "ph1")}
   <div class="lens" data-role="callout" data-kind="image" data-text=""><div class="clip"><img src="${s.url}" alt="" style="width:${Math.round(s.w * scale)}px;transform:translate(${-Math.round(f.x * s.w * scale)}px,${-Math.round(f.y * s.h * scale)}px)"></div></div>
-  ${eyebrow(i, "tag")}
-  ${i.copy.cta ? `<footer class="foot">${cta(i)}</footer>` : ""}
+  ${s.label ? `<p class="tag${script(s.label)}" data-role="label">${esc(s.label)}</p>` : ""}
 </div>`;
-    const top = (story ? 270 : sq ? 72 : 80) + 96;
-    const wordsH = story ? 420 : sq ? 260 : 330;
     const css = `
 .fc.light{background:var(--ground)}.fc.deep{background:var(--deep);color:var(--on-deep)}.fc.deep .sup{color:var(--muted-deep)}.fc.light .sup{color:var(--muted)}
 .fc .words{position:absolute;left:var(--m);right:var(--m);top:${top}px;height:${wordsH}px;display:flex;flex-direction:column;gap:16px;overflow:hidden}
-.fc .ph1{width:${phoneW}px;left:${sq ? 90 : 120}px;top:${top + wordsH + 40}px;opacity:.9}
-.fc .lens{position:absolute;right:${sq ? 60 : 70}px;width:${lensW}px;height:${lensH}px;top:${top + wordsH + (story ? 300 : sq ? 120 : 190)}px;border-radius:28px;background:#fff;box-shadow:0 0 0 8px var(--accent),0 40px 80px -24px rgba(0,0,0,.5)}
+.fc .ph1{width:${phoneW}px;left:${phoneLeft}px;top:${phoneTop}px}
+.fc .lens{position:absolute;left:${lensLeft}px;width:${lensW}px;height:${lensH}px;top:${lensTop}px;border-radius:28px;background:#fff;box-shadow:0 0 0 8px var(--accent),0 40px 80px -24px rgba(0,0,0,.5)}
 .fc .clip{width:100%;height:100%;overflow:hidden;border-radius:28px}
 .fc .clip img{display:block;max-width:none}
-.fc .tag{position:absolute;right:${sq ? 60 : 70}px;top:${top + wordsH + (story ? 300 : sq ? 120 : 190) - 74}px;background:var(--accent);color:var(--on-accent);padding:.45em .9em;border-radius:999px;font-size:var(--s)}
-.fc .hd{position:absolute;left:var(--m);top:var(--st);height:64px}.fc .lg{height:100%}
-.fc .foot{position:absolute;right:${sq ? 60 : 70}px;bottom:${story ? "var(--sb)" : "var(--m)"};z-index:3}`;
+.fc .tag{position:absolute;left:${lensLeft + lensW - 40}px;transform:translateX(-100%);top:${lensTop - 74}px;background:var(--accent);color:var(--on-accent);padding:.45em .9em;border-radius:999px;font-size:var(--s);white-space:nowrap}
+.fc .hd{position:absolute;left:var(--m);top:var(--st);height:64px}.fc .lg{height:100%}`;
     return { body, css };
   },
 };
@@ -398,7 +422,7 @@ const offerCard: LayoutDef = {
     ${support(i)}${details(i)}
   </section>
   ${p ? `<div class="strip">${img(p, i.tune)}</div>` : ""}
-  <footer class="act">${cta(i)}</footer>
+  <footer class="act">${cta(i, "pill")}</footer>
 </div>`;
     const stripH = p ? (story ? 440 : sq ? 0 : 250) : 0;
     const css = `
@@ -435,7 +459,8 @@ const bigType: LayoutDef = {
 .bt .hl.deva{line-height:1.25;letter-spacing:0}
 .bt .sup{color:var(--muted-deep);max-width:820px}
 .bt .foot{position:absolute;left:var(--m);right:var(--m);bottom:${story ? "var(--sb)" : "var(--m)"};height:72px;display:flex;justify-content:space-between;align-items:center}
-.bt .lg{height:60px}.bt .cta{color:var(--accent-deep)}`;
+.bt .lg{height:60px}.bt .cta{color:var(--accent-deep);max-width:62%;text-align:right}
+.bt .foot{align-items:flex-end;gap:40px}`;
     return { body, css };
   },
 };

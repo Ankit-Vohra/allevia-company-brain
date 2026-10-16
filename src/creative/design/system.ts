@@ -53,14 +53,24 @@ export function typeScale(format: FormatKey): TypeScale {
 const lum = (c: string): number => luminance(parseHex(c));
 const chroma = (c: string): number => { const x = parseHex(c); return Math.max(x.r, x.g, x.b) - Math.min(x.r, x.g, x.b); };
 
-export function colourRoles(p: Palette, brandColours: string[]): ColourRoles {
-  const ground = p.paper, ink = p.dark;
-  const all = [...new Set([...brandColours, p.paper, p.dark, p.accent].map((c) => c.toLowerCase()))];
+// Which colours the record names by role (background, text, primary); the rest are read from the colours themselves.
+export interface NamedRoles { paper: boolean; ink: boolean; accent: boolean }
+
+export function colourRoles(p: Palette, brandColours: string[], named: NamedRoles = { paper: true, ink: true, accent: true }): ColourRoles {
+  const own = [...new Set(brandColours.map((c) => c.toLowerCase()))];
+  // a palette with no roles (swatches the owner sent): the lightest is the ground, the darkest the ink, the most colourful the accent
+  const lightest = [...own].sort((a, b) => lum(b) - lum(a))[0];
+  const ground = !named.paper && lightest && lum(lightest) > 0.8 ? lightest : p.paper;
+  const darkest = [...own].sort((a, b) => lum(a) - lum(b))[0];
+  const ink = !named.ink && darkest && contrast(darkest, ground) >= 7 ? darkest : p.dark;
+  const vivid = own.filter((c) => lum(c) > 0.05 && lum(c) < 0.75).sort((a, b) => chroma(b) - chroma(a))[0];
+  const accentPick = !named.accent && vivid ? vivid : p.accent;
+  const all = [...new Set([...own, ground, ink, accentPick])];
   // the deep ground: the brand's darkest colour with some colour in it (a forest green, a deep brown), else the ink
   const darks = all.filter((c) => lum(c) < 0.09 && contrast(c, ground) >= 7).sort((a, b) => chroma(b) - chroma(a));
   const deep = darks[0] ?? ink;
   const onDeep = contrast(ground, deep) >= 7 ? ground : "#ffffff";
-  const accent = p.accent;
+  const accent = accentPick;
   const onAccent = ensureContrast(readableOn(accent, onDeep, ink), accent, 4.5, contrast(accent, "#ffffff") > contrast(accent, "#000000") ? "#ffffff" : "#000000");
   // a second colour: the most colourful brand colour that is not the accent and reads against the ground as a fill
   const second = all.filter((c) => c !== accent && c !== ground && c !== deep && chroma(c) > 40 && contrast(c, ground) >= 2).sort((a, b) => chroma(b) - chroma(a))[0] ?? accent;
@@ -100,13 +110,13 @@ export async function logoInfo(bytes: Buffer): Promise<LogoInfo> {
   return { url: dataUrl(trimmed.data, "image/png"), w: trimmed.info.width, h: trimmed.info.height, dark: luminance(mean) < 0.35, opaque: n > 0 && a / n > 0.97, mean: hex };
 }
 
-export async function designSystem(brand: BrandForCompose, colours: string[], format: FormatKey): Promise<DesignSystem> {
+export async function designSystem(brand: BrandForCompose, colours: string[], format: FormatKey, named?: NamedRoles): Promise<DesignSystem> {
   const inter = { regular: { family: "Inter", sha: "inter-400", font: null as never, bytes: vendorFont("Inter-400.ttf") ?? undefined }, bold: { family: "Inter", sha: "inter-700", font: null as never, bytes: vendorFont("Inter-700.ttf") ?? undefined } };
   const css = [faces("BrandDisplay", brand.heading), faces("BrandBody", brand.body), faces("HouseSans", inter)].join("\n");
   const stack = (first: string) => `"${first}", "BrandBody", "HouseSans", "Noto Sans Devanagari", "Kohinoor Devanagari", "Devanagari Sangam MN", system-ui, sans-serif`;
   return {
     business: brand.businessName,
-    colour: colourRoles(brand.palette, colours),
+    colour: colourRoles(brand.palette, colours, named),
     type: typeScale(format),
     space: (n: number) => Math.round(n * 8),
     fonts: { css, display: stack("BrandDisplay"), body: stack("BrandBody") },
