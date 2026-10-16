@@ -46,6 +46,7 @@ import {
 } from "./prompts.js";
 import type { CreativeDeps } from "../creative/ports.js";
 import type { PublicDataPort } from "../publicdata/service.js";
+import type { ConnectionsPort } from "../connections/service.js";
 import { invokeTool, isWriteTool, nextCallId, type AgentRuntime, type Emit, type RunInput, type RunOutput, type RunPhase } from "./runtime.js";
 import { TouchedSet, type AlleviaTool, type ToolContext } from "./tool.js";
 import {
@@ -111,6 +112,7 @@ export interface TurnDeps {
   skills?: SkillCatalog;                    // the skills agents can open (use_skill): the shipped packs plus this business's own; none = no skills
   creative?: CreativeDeps;                  // what the creating tools may use; absent: creating is not set up (the tools say so)
   publicData?: PublicDataPort;              // public-data lookups (Apify, budgeted); absent or off: the tools say so
+  connections?: ConnectionsPort;            // this business's connections; absent: the tools that need one say none is connected
 }
 
 export interface Plan { steps: PlanStep[]; rationale: string; chiefTask?: string }
@@ -388,7 +390,7 @@ function relevantReviewer(reviewer: string, producer: string, numbers: boolean, 
   }
 }
 
-const ACTION_KINDS: ActionKind[] = ["github_issue", "content_draft", "pause_ad", "discord_post"];
+const ACTION_KINDS: ActionKind[] = ["github_issue", "content_draft", "pause_ad", "discord_post", "calendar_event", "email_send"];
 
 // propose_action's result -> a proposal event. Reads ids from data (flat or nested) or from the returned nodes.
 export function toProposal(agent: string, args: unknown, r: ToolResult): ProposalRecord | undefined {
@@ -624,6 +626,7 @@ class Turn {
       ...(embedQuery ? { embedQuery } : {}), ...(readOnly !== undefined ? { readOnly } : {}), ...(skills ? { skills } : {}),
       question: this.input.question, ...(this.creative ? { creative: this.creative } : {}),
       ...(this.deps.publicData ? { publicData: this.deps.publicData } : {}),
+      ...(this.deps.connections ? { connections: this.deps.connections } : {}),
     };
   }
 

@@ -28,6 +28,8 @@ const KIND: Record<ActionKind, { label: string; effect: (target?: string) => str
   content_draft: { label: "A post draft", effect: () => "If you say OK, the draft is saved for you. Nothing is posted.", done: "Draft saved. Nothing was posted." },
   pause_ad: { label: "A change to an ad", effect: () => "If you say OK, the change is made to the ad. You can undo it from your ad account any time.", done: "The change was made." },
   discord_post: { label: "A message to your team chat", effect: (t) => `If you say OK, this is posted${t ? ` to ${t}` : ""}.`, done: "Posted." },
+  calendar_event: { label: "A meeting on your calendar", effect: () => "If you say OK, the meeting is added to your calendar, and the guest is invited if one is named.", done: "Meeting added." },
+  email_send: { label: "An email from your address", effect: () => "If you say OK, this email is sent from your address. Nothing is sent before.", done: "Email sent." },
 };
 
 const OUTCOME: Record<Approval["status"], { text: string; cls: string }> = {

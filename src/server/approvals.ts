@@ -9,6 +9,7 @@
 import type { LearnedEvent } from "../actions/learning.js";
 import { ApprovalNotFound, decideApproval } from "../actions/approvals.js";
 import type { ActionView, Drafter, ExecutorDeps, GhRunner, HttpFn } from "../actions/executors.js";
+import type { ConnectionsPort } from "../connections/service.js";
 import type { LlmRunner } from "../ingest/llm.js";
 import { loadConfig } from "../config.js";
 import type { GraphHandle } from "../graph/client.js";
@@ -34,6 +35,7 @@ export interface ActionOpts {
   http?: HttpFn;
   drafter?: Drafter;
   config?: ExecutorDeps["config"];
+  connections?: (tenant: string) => ConnectionsPort | undefined; // a business's connections for calendar_event and email_send (default: the server's own)
   llm?: LlmRunner;            // optional Haiku summary of a complex edit (off when absent)
 }
 
@@ -53,6 +55,7 @@ export async function decide(g: GraphHandle, tenant: string, id: string, d: Deci
   const executors: Omit<ExecutorDeps, "tenant"> = {
     dryRun: !(a.live ?? loadConfig().actionsLive),
     ...(a.gh ? { gh: a.gh } : {}), ...(a.http ? { http: a.http } : {}), ...(a.drafter ? { drafter: a.drafter } : {}), ...(a.config ? { config: a.config } : {}),
+    ...(a.connections?.(tenant) ? { connections: a.connections(tenant)! } : {}),
   };
   const learned: LearnedEvent[] = [];
   let action: ActionView | null = null;

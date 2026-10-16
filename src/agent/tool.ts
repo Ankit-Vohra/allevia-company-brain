@@ -8,6 +8,7 @@ import type { EdgeRef, NodeRef, SourceRef, ToolResult } from "../../shared/contr
 import type { SkillCatalog } from "./skills/catalog.js";
 import type { CreativeDeps } from "../creative/ports.js";
 import type { PublicDataPort } from "../publicdata/service.js";
+import type { ConnectionsPort } from "../connections/service.js";
 
 export interface ToolContext {
   graph: GraphHandle;
@@ -23,6 +24,7 @@ export interface ToolContext {
   question?: string;        // the owner's own words for this turn: what a poster's claims are grounded in
   creative?: CreativeDeps;  // what the creating tools may use (files, vision, the capped image engine); absent: creating is not set up
   publicData?: PublicDataPort; // public-data lookups (Apify, budgeted); absent or off: those tools say they aren't switched on
+  connections?: ConnectionsPort; // this business's connections (Google, Composio): the tools that use them say plainly when one is missing; absent: none are
   signal?: AbortSignal;     // aborted when the agent's run is stopped (timeout, turn stopped): a write tool checks it
                             // right before it commits, so a run that was stopped mid-call changes nothing
 }

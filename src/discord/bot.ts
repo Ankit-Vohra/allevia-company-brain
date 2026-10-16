@@ -133,6 +133,7 @@ const ALL_OK: TurnChecks = { citationsValid: true, invalidCitations: [], numbers
 // What each card is, in the owner's words (docs/owner-words.md; the web app's Approvals page says the same).
 const KIND_LABEL: Record<ApprovalDto["kind"], string> = {
   github_issue: "a fix for your website", content_draft: "a draft post", pause_ad: "pausing an ad", discord_post: "a message to your team chat",
+  calendar_event: "a meeting on your calendar", email_send: "an email from your address",
 };
 
 const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
