@@ -10,6 +10,7 @@ import { findBusinessId } from "../actions/shared.js";
 import { formatQuality, graphQuality } from "../ingest/quality.js";
 import { tidyGraph } from "../ingest/tidy.js";
 import { formatStory, graphStory, type StoryAxis, type StoryBucket } from "../graph/story.js";
+import { assetLineage } from "../studio/lineage.js";
 import { embedPassages } from "../ingest/embed.js";
 import { AgentSdkRunner } from "../ingest/llm.js";
 import { makeAsk } from "../ingest/sources/website/ask.js";
@@ -57,6 +58,31 @@ export const commands: Command[] = [
       const g = await openGraph(tenant);
       const s = await graphStory(g, { axis: (by === "recorded" ? "recorded" : "source") as StoryAxis, bucket: bucket as StoryBucket | "auto", tenant });
       console.log(args.includes("--json") ? JSON.stringify(s, null, 1) : formatStory(s));
+      return 0;
+    },
+  },
+  {
+    name: "graph:lineage",
+    usage: "graph:lineage <tenant> <assetId> [--json]",
+    summary: "How a Studio picture or clip was made: the photo it came from, each step, the Higgsfield jobs and what they cost, the rules, Nisha's check, the card and the post (read-only)",
+    async run(args) {
+      const [tenant, assetId] = args.filter((a) => !a.startsWith("--"));
+      if (!tenant || !assetId) { console.error("Usage: npm run cli -- graph:lineage <tenant> <assetId> [--json]"); return 2; }
+      if (!(await listGraphs()).includes(graphName(tenant))) { console.error(`no graph for ${tenant} (${graphName(tenant)})`); return 1; }
+      const l = await assetLineage(await openGraph(tenant), assetId);
+      if (!l.root) { console.error(`${assetId} is not an asset in ${tenant}`); return 1; }
+      if (args.includes("--json")) { console.log(JSON.stringify(l, null, 1)); return 0; }
+      const line = (a: { id: string; name: string; kind: string; step?: string; badge?: string; credits?: number }): string =>
+        `${a.kind}${a.step ? ` (${a.step})` : ""} ${a.id}${a.badge ? `, Nisha: ${a.badge}` : ""}${a.credits ? `, ${a.credits} credits` : ""}`;
+      console.log(`${line(l.root)}`);
+      for (const a of l.ancestors) console.log(`  made from  ${line(a)}`);
+      for (const a of l.descendants) console.log(`  led to     ${line(a)}`);
+      for (const j of l.jobs) console.log(`  job        ${j.jobId} ${j.model}${j.mode ? ` (${j.mode})` : ""}, ${j.credits} credits, ${j.assetId}`);
+      console.log(`  spent      ${l.spent} credits in all`);
+      for (const r of l.rules) console.log(`  guided by  ${r.name} (${r.ruleId})`);
+      for (const r of l.reviews) console.log(`  reviewed   ${r.by}: ${r.verdict}${r.note ? ` - ${r.note}` : ""}`);
+      for (const c of l.cards) console.log(`  card       ${c.approvalId} (${c.status}) ${c.title}`);
+      for (const p of l.posts) console.log(`  post       ${p.contentId} (${p.status}) uses ${p.assetId}`);
       return 0;
     },
   },

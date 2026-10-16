@@ -166,7 +166,9 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
     return stoppedResult({ reason: "reshoot", message }, tilt, plan);
   }
 
-  status(TARA, tilt.deg ? `Straightening by ${Math.abs(tilt.deg).toFixed(1)}° and cropping to 4:5 around the building` : "Cropping to 4:5 around the building");
+  // what the photo is of, in the words the owner would use: a product, a dish or a room is not "the building"
+  const thing = assessment.subjectKind === "exterior" ? "the building" : assessment.subjectKind === "interior" ? "the room" : "the subject";
+  status(TARA, tilt.deg ? `Straightening by ${Math.abs(tilt.deg).toFixed(1)}° and cropping to 4:5 around ${thing}` : `Cropping to 4:5 around ${thing}`);
   const privacy = priv.blur;
   const base = await straightenedBase(got.normalized.buffer, plan, privacy);
   const variants: VariantRecord[] = [];
@@ -213,7 +215,7 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
   stopIfAborted();
 
   // 6. Nisha's fidelity check
-  start(NISHA, "Check every variant against the original: same building, nothing invented");
+  start(NISHA, `Check every variant against the original: same ${assessment.subjectKind === "exterior" ? "building" : "subject"}, nothing invented`);
   status(NISHA, "Comparing edges and shapes with the original");
   const fidelity = await checkFidelity(g, { businessName: ctx.business.name, original: kept, base, locks: assessment.locks, variants }, {
     vision: deps.vision, model: models.fidelity, now: now(),
@@ -257,7 +259,7 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
   const okCount = fidelity.filter((f) => f.badge === "unchanged").length;
   const answer = [
     `Tara: ${assessment.verdict} (${assessment.subject}).`,
-    `${variants.length} variant${variants.length === 1 ? "" : "s"}; Nisha passed ${okCount} as "building unchanged".`,
+    `${variants.length} variant${variants.length === 1 ? "" : "s"}; Nisha passed ${okCount} as "${assessment.subjectKind === "exterior" ? "building" : "subject"} unchanged".`,
     `Dev's caption is on the card, waiting for your approval (1 Studio credit when approved).${postsWords ? ` ${postsWords}` : ""}`,
     ...notices,
   ].join(" ");

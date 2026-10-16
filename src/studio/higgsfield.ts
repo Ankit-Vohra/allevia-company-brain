@@ -26,6 +26,12 @@ export const DEFAULT_IMAGE_MODEL = "nano_banana_2_1";
 // its own per-run cap (ALLEVIA_STUDIO_PREMIUM_CREDIT_CAP, default 8): the ordinary per-edit cap of 5 would always refuse it.
 export const PHOTOSHOOT_MODEL = "gpt_image_2";
 export const DEFAULT_PREMIUM_CAP = 8;
+// The parameters of a silent clip differ by model: Kling takes `sound off`, Seedance `generate_audio false` (and a 720p ceiling).
+export function clipParams(model: string, seconds: number, aspect: string): Record<string, string> {
+  return /^seedance/.test(model)
+    ? { duration: String(seconds), aspect_ratio: aspect, resolution: "720p", generate_audio: "false" }
+    : { duration: String(seconds), aspect_ratio: aspect, sound: "off" };
+}
 export const DEFAULT_CLIP_MODEL = process.env.ALLEVIA_STUDIO_CLIP_MODEL?.trim() || "kling3_0";
 const MAX_OUTPUT = 8 * 1024 * 1024;
 const MAX_RESULT_BYTES = 40 * 1024 * 1024;
@@ -311,7 +317,7 @@ export class HiggsfieldEngine implements GenerationEngine {
     const seconds = o.seconds ?? 5;
     const spec: JobSpec = {
       kind: "video", model: this.o.clipModel ?? DEFAULT_CLIP_MODEL, prompt: this.prompt(o.prompt),
-      params: { duration: String(seconds), aspect_ratio: o.aspect ?? "9:16", sound: "off" },
+      params: clipParams(this.o.clipModel ?? DEFAULT_CLIP_MODEL, seconds, o.aspect ?? "9:16"),
       file: { flag: "start-image", name: "start.jpg", bytes: o.image }, tenant: o.tenant,
       keyParts: [o.sourceSha256, "clip", String(seconds), o.aspect ?? "9:16"], maxCredits: o.maxCredits ?? this.caps.run,
       ...(o.onQuote ? { onQuote: o.onQuote } : {}),
@@ -346,7 +352,7 @@ export class HiggsfieldEngine implements GenerationEngine {
     const seconds = o.seconds ?? 5;
     const spec: JobSpec = {
       kind: "video", model: this.o.clipModel ?? DEFAULT_CLIP_MODEL, prompt: this.prompt(o.prompt),
-      params: { duration: String(seconds), aspect_ratio: o.aspect ?? "9:16", sound: "off" },
+      params: clipParams(this.o.clipModel ?? DEFAULT_CLIP_MODEL, seconds, o.aspect ?? "9:16"),
       file: { flag: "start-image", name: "start.jpg", bytes: o.image }, tenant: o.tenant, keyParts: [], maxCredits: o.maxCredits ?? this.caps.run,
     };
     return this.withFile(spec, async (file) => (await this.vet(spec, file)).quote);
