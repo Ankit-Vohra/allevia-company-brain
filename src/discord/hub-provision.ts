@@ -2,7 +2,7 @@
 //   role      customer-<slug>        no permissions of its own; it only unlocks the area
 //   category  <Business name>        private: only that role, the Allevia staff role and the bot can see it
 //   #your-team    ask the team anything; each question opens a thread
-//   #approvals    waiting-for-OK cards with Approve / Reject buttons (the customer can read it, not type in it)
+//   #approvals    waiting-for-OK cards with the thing itself and Approve / Change / No thanks buttons (the customer can read it, not type in it)
 //   #todays-note  the daily note (read-only for the customer)
 //   #support      humans only: the agents never answer it; the bot copies it to the staff-only #support-inbox
 //   a welcome message in plain words, and a single-use join link (1 use, 7 days) on #your-team
@@ -92,7 +92,7 @@ const CHANNEL_NAME: Record<ChannelKind, string> = { "your-team": "your-team", st
 const CHANNEL_TOPIC: Record<ChannelKind, string> = {
   "your-team": "Ask your team anything, in your own words. Each question opens a thread and your team answers there.",
   studio: "Drop photos and videos here. Your team turns a photo into post options for your OK.",
-  approvals: "Things waiting for your OK. Tap Approve or Reject. Nothing goes out until you say so.",
+  approvals: "Things waiting for your OK. Tap Approve, Change or No thanks. Nothing goes out until you say so.",
   "todays-note": "One short note each morning on how the business is doing.",
   support: "Talk to a real person at Allevia. Your team of assistants does not read this channel.",
 };
@@ -104,7 +104,7 @@ export function welcomeText(businessName: string, ids: Record<ChannelKind, strin
     "",
     `<#${ids["your-team"]}> Ask anything in your own words. Each question gets its own thread, and your team answers there.`,
     `<#${ids.studio}> Drop a photo or a video. Your team makes post options from a photo, and you pick one.`,
-    `<#${ids.approvals}> Things waiting for your OK. Tap Approve or Reject. Nothing goes out until you say so.`,
+    `<#${ids.approvals}> Things waiting for your OK. Tap Approve, Change or No thanks. Nothing goes out until you say so.`,
     `<#${ids["todays-note"]}> One short note each morning on how the business is doing.`,
     `<#${ids.support}> Talk to a real person at Allevia. Your team of assistants does not read this channel.`,
     "",

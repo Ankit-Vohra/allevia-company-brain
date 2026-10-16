@@ -18,7 +18,7 @@
 //   answer is the card plus `learned` (the learned-rule AgentEvents, in the JSON) and `action`.
 // Focused route files: routes/program.ts (program, capabilities, learning), routes/team.ts (agents, directives),
 // routes/goals.ts (the owner says OK to the suggested goals), routes/numbers.ts (the owner adds a spreadsheet of their numbers), routes/actions.ts (where an approved fix lands: tasks, or the business's own GitHub repo), routes/connectors.ts (connect Search Console), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/graph-work.ts (the Brain page's "what breaks if something stops"), routes/checkup.ts ("Check my website": the free check-up in the background, and its weekly setting).
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -670,9 +670,21 @@ export function createApp(deps: ServerDeps): Hono {
   // ---- the web app ----
   if (deps.staticDir && existsSync(join(deps.staticDir, "index.html"))) {
     const root = deps.staticDir;
-    const index = readFileSync(join(root, "index.html"), "utf8");
+    // The app shell is read again when the build changes: a rebuild (new hashed file names) must not leave a running server
+    // handing out a shell that points at files that are gone, which shows the owner a blank page.
+    const file = join(root, "index.html");
+    let shell = { at: statSync(file).mtimeMs, html: readFileSync(file, "utf8") };
+    const index = (): string => {
+      try {
+        const at = statSync(file).mtimeMs;
+        if (at !== shell.at) shell = { at, html: readFileSync(file, "utf8") };
+      } catch { /* keep the last good shell */ }
+      return shell.html;
+    };
     app.use("*", serveStatic({ root }));
-    app.get("*", (c) => c.html(index)); // client-side routes (/ask/…, /brain…) get the app shell
+    // a missing built file is a 404, not the app shell (a script that comes back as HTML fails with a confusing MIME error)
+    app.get("/assets/*", (c) => c.notFound());
+    app.get("*", (c) => c.html(index())); // client-side routes (/ask/…, /brain…) get the app shell
   }
   app.notFound((c) => c.json({ error: "Not found." }, 404));
   return app;

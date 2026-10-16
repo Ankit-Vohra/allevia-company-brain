@@ -155,6 +155,9 @@ const envAssignment: Rule = (text, report) =>
       const inner = quoted ? value.slice(1, -1) : value.slice(0, value.length - tail.length);
       if (inner === "" || inner.startsWith("$") || inner.startsWith("<") || inner.startsWith(PLACEHOLDER_START) || PLACEHOLDER_VALUE.test(inner)) return m; // empty, a shell reference, already redacted, or a doc placeholder
       if (sep === ":" && ENV_VAR_NAME.test(inner)) return m;
+      // a JSON field that is just called "key" or "pass" ({"key":"site-down"} in a check-up) is a label, not a secret: a
+      // quoted value after a colon counts for those two names only when it looks like a credential (6+ characters with a digit)
+      if (sep === ":" && quoted && WEAK_NAME.test(name) && !(inner.length >= 6 && /\d/.test(inner))) return m;
       if (sep === ":" && !quoted) {
         if (!/^[A-Za-z0-9]/.test(inner) || FILLER.test(inner)) return m;
         if (WEAK_NAME.test(name) && !(inner.length >= 6 && /\d/.test(inner))) return m;
