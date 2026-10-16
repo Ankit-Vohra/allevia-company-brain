@@ -58,7 +58,7 @@ async function runPropose(args: Args, ctx: ToolContext) {
     }
     // The same recommendation already waiting on the owner: add the new evidence, never a second card.
     const [waiting] = await ro<{ id: string }>(ctx,
-      "MATCH (:Entity {id:$rid})-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL AND a.status = 'pending' RETURN a.id AS id ORDER BY id LIMIT 1", { rid: recId });
+      "MATCH (rec:Entity {id:$rid}) WITH rec MATCH (rec)-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL AND a.status = 'pending' RETURN a.id AS id ORDER BY id LIMIT 1", { rid: recId });
     if (waiting) {
       for (const to of evidence) await upsertEdge(ctx.graph, { from: recId, type: "EVIDENCED_BY", to, src, asOf }, ctx.now);
       return { approvalId: waiting.id, reused: true };
