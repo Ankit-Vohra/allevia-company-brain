@@ -1,5 +1,5 @@
-// Script for the inner pages (Integrations, Product, Pricing, Security, Questions): reveals as sections arrive, the plan bars filling,
-// and the OK demo (a tap, then the card changes, in the app and in Discord). Transform and opacity only; reduced motion shows the end states.
+// Script for the inner pages (Integrations, Product, Pricing, Security, Questions, Contact): reveals as sections arrive and the plan bars
+// filling; the pinned steps, the growing brain and the OK demo come from home-client.ts. Transform and opacity only; reduced motion shows the end states.
 import "./entry.ts";
 import "./home.css";
 import "./pages.css";
@@ -29,24 +29,3 @@ else {
 // the plan's bars
 const plan = document.querySelector<HTMLElement>("[data-plan]");
 if (plan) { if (reduced) plan.classList.add("is-in"); else new IntersectionObserver(([e], o) => { if (e?.isIntersecting) { plan.classList.add("is-in"); o.disconnect(); } }, { threshold: 0.3 }).observe(plan); }
-
-// the OK
-const ok = document.querySelector<HTMLElement>("[data-ok]");
-if (ok) {
-  const stack = ok.querySelector<HTMLElement>("[data-ok-stack]")!; const btn = ok.querySelector<HTMLElement>("[data-ok-dc]");
-  if (reduced) stack.classList.add("is-after");
-  else {
-    let timers: number[] = [];
-    const run = () => {
-      timers.forEach(clearTimeout); timers = [];
-      stack.classList.remove("is-after", "is-tap"); btn?.classList.remove("is-press");
-      const at = (ms: number, fn: () => void) => timers.push(window.setTimeout(fn, ms));
-      at(900, () => { stack.classList.add("is-tap"); });
-      at(1350, () => { stack.classList.add("is-after"); btn?.classList.add("is-press"); });
-      at(1550, () => btn?.classList.remove("is-press"));
-      at(4800, () => { stack.classList.remove("is-tap"); });
-      at(5200, run);
-    };
-    new IntersectionObserver(([e]) => { if (e?.isIntersecting) run(); else { timers.forEach(clearTimeout); timers = []; } }, { threshold: 0.35 }).observe(ok);
-  }
-}

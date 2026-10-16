@@ -6,6 +6,7 @@ import { CHIP_ROWS } from "./data.ts";
 import { TEAM_SECTIONS } from "./team-sections.ts";
 
 import { esc } from "./util.ts";
+import { COMPANY } from "../../src/company.ts";
 import { heroA, heroB, productDiagram } from "./hero-sections.ts";
 import { HOME_SECTIONS } from "./home-sections.ts";
 import { PAGE_SECTIONS } from "./page-sections.ts";
@@ -33,17 +34,23 @@ export function nav(current: string, home: string): string {
 </header>`;
 }
 
-/** The footer: the pages, the legal pages (which live on the real site and stay complete), and the one honest note. */
+/** The footer: the logo and one line about Allevia, three columns of links (the legal pages and About live on the main site and stay complete),
+ *  the contact email and the year. */
 export function footer(): string {
-  const pages = NAV.map((n) => `<a href="${n.href}">${esc(n.label)}</a>`).join("");
-  return `<footer class="foot">
-  <div class="wrap foot__in">
-    <a class="brand" href="/" aria-label="Allevia">allevia</a>
-    <div>
-      <nav class="foot__links" aria-label="Footer">${pages}<a href="/faq/">Questions</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="/cookies/">Cookies</a></nav>
-      <p class="foot__fine">Allevia is a Founder OS: your company brain, an AI team and all your tools, in one place.${usingLogoDev() ? ' <a href="https://logo.dev" rel="noopener">Logos provided by Logo.dev</a>.' : ""}</p>
+  const col = (title: string, links: [string, string][]) => `<nav class="foot__col" aria-label="${esc(title)}"><h2 class="foot__h">${esc(title)}</h2><ul>${links.map(([l, h]) => `<li><a href="${h}">${esc(l)}</a></li>`).join("")}</ul></nav>`;
+  return `<footer class="foot band band--ink on-ink">
+  <div class="wrap foot__grid">
+    <div class="foot__about">
+      <a class="brand" href="/" aria-label="Allevia, home">allevia</a>
+      <p class="foot__line">Your company’s brain, and the team that runs on it.</p>
+      <p class="foot__mail"><a href="mailto:${COMPANY.email.general}">${esc(COMPANY.email.general)}</a></p>
+      <p><a class="btn btn-gold btn-sm" href="/contact/#demo">Book a demo</a></p>
     </div>
+    ${col("Product", [["How it works", "/product/"], ["Integrations", "/integrations/"], ["Team", "/team/"], ["Pricing", "/pricing/"]])}
+    ${col("Company", [["About", "/about/"], ["Contact", "/contact/"], ["Security", "/security/"], ["Questions", "/faq/"]])}
+    ${col("Legal", [["Privacy", "/privacy/"], ["Terms", "/terms/"], ["Cookies", "/cookies/"], ["Data deletion", "/data-deletion/"]])}
   </div>
+  <div class="wrap foot__base"><p>© 2026 Allevia AI</p>${usingLogoDev() ? '<p><a href="https://logo.dev" rel="noopener">Logos provided by Logo.dev</a></p>' : ""}</div>
 </footer>`;
 }
 

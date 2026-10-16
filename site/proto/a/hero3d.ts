@@ -575,10 +575,10 @@ export async function startHero(root: HTMLElement): Promise<void> {
     advance(3.2);
     if (stillMode && params.get("bare") !== "1") { startCycle(qi); let guard = 0; while (waiting && guard++ < 600) frame(1 / 30); advance(Number(params.get("t") ?? 6)); }
     if (reduced && !stillMode) {
-      cycleOn = false; speaker = null;
+      cycleOn = false;
       const q = data.questions[qi]!; showBubble(q); showAnswer(q, true);
-      const sp = chipById(q.agent); if (sp) { sp.glow = 1; frame(0.0001); }
-      if (nextBtn) { nextBtn.hidden = false; nextBtn.addEventListener("click", () => { qi = (qi + 1) % data.questions.length; const n = data.questions[qi]!; showBubble(n); showAnswer(n, true); chips.forEach((c) => (c.glow = 0)); const s = chipById(n.agent); if (s) s.glow = 1; frame(0.0001); }); }
+      const sp = chipById(q.agent); speaker = sp ?? null; if (sp) { sp.glow = 1; frame(0.0001); } // the speaker stays set so the bubble is placed beside its chip
+      if (nextBtn) { nextBtn.hidden = false; nextBtn.addEventListener("click", () => { qi = (qi + 1) % data.questions.length; const n = data.questions[qi]!; showBubble(n); showAnswer(n, true); chips.forEach((c) => (c.glow = 0)); const s = chipById(n.agent); speaker = s ?? null; if (s) s.glow = 1; frame(0.0001); }); }
     }
     if (still) still.classList.add("is-gone");
     return;

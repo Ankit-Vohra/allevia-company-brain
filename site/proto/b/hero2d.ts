@@ -92,7 +92,6 @@ export function startBHero(root: HTMLElement): void {
     els(clusters.values(), "translateY(8px) scale(0.97)", 0.5, 0.07);
     els(agents.values(), "translateX(14px) scale(0.98)", 0.45);
     animate(root.querySelector(".ws__ask")!, { opacity: [0, 1] }, { duration: 0.5, delay: 1.0 });
-    animate(root.querySelector("[data-office]")!, { opacity: [0, 1], transform: ["translateY(10px)", "translateY(0)"] }, { ...spring, delay: 1.1 });
     started = true; drawLines();
     let d = 0.7;
     for (const p of lines.values()) { animate(p, { strokeDashoffset: [1, 0] }, { type: "spring", stiffness: 55, damping: 20, delay: d, restDelta: 0.001 }); d += 0.04; }

@@ -1,11 +1,14 @@
 // Behaviour of the home page's story sections (shared by prototypes A and B).
 //   problem: on a wide screen with motion welcome the section becomes a pinned story driven by one number, --p (0 to 1), from Motion's
 //            scroll(); everything else is CSS reading that number (shared/home.css). Elsewhere it stays static.
+//   steps:   (Product) the three setup steps; pinned on a wide screen with motion, the active step lit and its real screen shown.
+//   makes:   the rough photo and the ad it became, a slider you drag (and a clip that plays while it is on screen).
+//   ok:      the OK card: a tap, then the card changes, in the app and in Discord.
 //   flow:    problems on the left flow into the company brain, shown as the living graph of the sample business (47 things, 60 links),
 //            which lights up the nodes each problem runs through and rearranges them into a short chain, and finished work comes out on the
 //            right. Lines and light pulses on a canvas, cards in HTML.
 // Only transform, opacity and canvas drawing change per frame; both pause off-screen and in a hidden tab.
-import { scroll } from "motion";
+import { animate, scroll } from "motion";
 import { reduceMotion, saveData } from "./chrome.ts";
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
@@ -206,7 +209,9 @@ function initGrow(): void {
   const data = JSON.parse(root.querySelector("#grow-data")!.textContent!) as GrowData;
   const g = canvas.getContext("2d")!;
   const NAMES = ["Week 1", "Month 3", "Year 1"];
-  const COLOURS = ["#c48a2c", "#d1a43a", "#a5651b", "#b87a3a", "#8d7a3d"];
+  const dark = panel.classList.contains("gpanel--dark");
+  const COLOURS = dark ? ["#f0b84a", "#f6cf6e", "#e08a2c", "#e9a05a", "#cdb86a"] : ["#c48a2c", "#d1a43a", "#a5651b", "#b87a3a", "#8d7a3d"];
+  const EDGE = dark ? "245,240,228" : "80,66,46";
   const nn = data.nodes.length;
   const labs = data.labels.map((t) => { const e = document.createElement("span"); e.className = "gpanel__lab"; e.textContent = t; labelsEl.append(e); return e; });
   let W = 1, H = 1, dpr = 1;
@@ -229,7 +234,7 @@ function initGrow(): void {
     for (const [a, b, st] of data.edges) {
       const al = Math.min(appear[a]!, appear[b]!); if (al < 0.02 || st > stage + 0) continue;
       const onPath = inPath[a]! >= 0 && inPath[b]! >= 0 && Math.abs(inPath[a]! - inPath[b]!) === 1;
-      g.strokeStyle = `rgba(80,66,46,${(0.15 * al) * (1 - 0.8 * focus)})`; g.beginPath(); g.moveTo(X[a]!, Y[a]!); g.lineTo(X[b]!, Y[b]!); g.stroke();
+      g.strokeStyle = `rgba(${EDGE},${(dark ? 0.17 : 0.15) * al * (1 - 0.8 * focus)})`; g.beginPath(); g.moveTo(X[a]!, Y[a]!); g.lineTo(X[b]!, Y[b]!); g.stroke();
       if (onPath) { const l = Math.min(lit(inPath[a]!), lit(inPath[b]!)); if (l > 0.02) { g.strokeStyle = `rgba(224,150,40,${0.95 * l})`; g.lineWidth = 2.4; g.beginPath(); g.moveTo(X[a]!, Y[a]!); g.lineTo(X[b]!, Y[b]!); g.stroke(); g.lineWidth = 1; } }
     }
     for (let i = 0; i < nn; i++) {
@@ -263,8 +268,86 @@ function initGrow(): void {
   draw(0, 0);
 }
 
+// ---------- clips: play while they are on screen ----------
+function initVideos(): void {
+  const vids = [...document.querySelectorAll<HTMLVideoElement>(".office__video, .clip__video")];
+  if (!vids.length || reduceMotion() || saveData()) return;
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) { const v = e.target as HTMLVideoElement; if (e.isIntersecting) void v.play().catch(() => { /* refused: the poster stays */ }); else v.pause(); }
+  }, { threshold: 0.25 });
+  vids.forEach((v) => io.observe(v));
+}
+
+// ---------- the photo and the ad: a slider ----------
+function initBA(): void {
+  const el = document.querySelector<HTMLElement>("[data-ba]");
+  if (!el) return;
+  const view = el.querySelector<HTMLElement>(".ba__view")!;
+  const range = el.querySelector<HTMLInputElement>(".ba__range")!;
+  let pos = 50;
+  const set = (v: number) => { pos = Math.min(100, Math.max(0, v)); el.style.setProperty("--pos", `${pos.toFixed(2)}%`); range.value = String(Math.round(pos)); };
+  let sweep: { stop: () => void } | null = null;
+  const stopSweep = () => { sweep?.stop(); sweep = null; };
+  const at = (e: PointerEvent) => { const r = view.getBoundingClientRect(); set(((e.clientX - r.left) / r.width) * 100); };
+  let dragging = false;
+  view.addEventListener("pointerdown", (e) => { stopSweep(); dragging = true; view.setPointerCapture(e.pointerId); at(e); });
+  view.addEventListener("pointermove", (e) => { if (dragging) at(e); });
+  const end = () => { dragging = false; };
+  view.addEventListener("pointerup", end); view.addEventListener("pointercancel", end);
+  range.addEventListener("input", () => { stopSweep(); set(+range.value); });
+  if (reduceMotion()) return;
+  // one gentle sweep the first time it is on screen, so it is clear the picture moves
+  new IntersectionObserver(([e], o) => {
+    if (!e?.isIntersecting) return;
+    o.disconnect();
+    sweep = animate(0, 1, { duration: 3.4, ease: "easeInOut", delay: 0.5, onUpdate: (t: number) => set(50 + 30 * Math.sin(t * Math.PI * 2)), onComplete: () => { sweep = null; } });
+  }, { threshold: 0.6 }).observe(el);
+}
+
+// ---------- the three setup steps ----------
+function initSteps(): void {
+  const el = document.querySelector<HTMLElement>("[data-steps]");
+  if (!el) return;
+  const vid = el.querySelector<HTMLVideoElement>(".step__video");
+  const calm = reduceMotion() || saveData();
+  const pinned = () => wideQuery.matches && !reduceMotion();
+  const setActive = (i: number) => {
+    if (el.dataset.active === String(i)) return;
+    el.dataset.active = String(i);
+    if (vid && !calm) { if (i === 1) { vid.currentTime = 0; void vid.play().catch(() => { /* refused: the poster stays */ }); } else vid.pause(); }
+  };
+  const setMode = () => { el.classList.toggle("is-pinned", pinned()); if (pinned()) setActive(Number(el.dataset.active ?? 0)); else { delete el.dataset.active; } };
+  setMode(); wideQuery.addEventListener("change", setMode);
+  if (vid && !calm) new IntersectionObserver(([e]) => { if (pinned()) return; if (e?.isIntersecting) void vid.play().catch(() => { /* refused */ }); else vid.pause(); }, { threshold: 0.4 }).observe(vid);
+  scroll((p: number) => { if (!pinned()) return; setActive(p < 0.3 ? 0 : p < 0.62 ? 1 : 2); }, { target: el, offset: ["start 68px", "end end"] });
+}
+
+// ---------- the OK: a tap, then the card changes, in the app and in Discord ----------
+function initOk(): void {
+  const ok = document.querySelector<HTMLElement>("[data-ok]");
+  if (!ok) return;
+  const stack = ok.querySelector<HTMLElement>("[data-ok-stack]")!; const btn = ok.querySelector<HTMLElement>("[data-ok-dc]");
+  if (reduceMotion()) { stack.classList.add("is-after"); return; }
+  let timers: number[] = [];
+  const run = () => {
+    timers.forEach(clearTimeout); timers = [];
+    stack.classList.remove("is-after", "is-tap"); btn?.classList.remove("is-press");
+    const at = (ms: number, fn: () => void) => timers.push(window.setTimeout(fn, ms));
+    at(900, () => { stack.classList.add("is-tap"); });
+    at(1350, () => { stack.classList.add("is-after"); btn?.classList.add("is-press"); });
+    at(1550, () => btn?.classList.remove("is-press"));
+    at(4800, () => { stack.classList.remove("is-tap"); });
+    at(5200, run);
+  };
+  new IntersectionObserver(([e]) => { if (e?.isIntersecting) run(); else { timers.forEach(clearTimeout); timers = []; } }, { threshold: 0.35 }).observe(ok);
+}
+
 export function initHome(): void {
   initProblem();
   initGrow();
   initFlow();
+  initVideos();
+  initBA();
+  initSteps();
+  initOk();
 }

@@ -3,7 +3,7 @@
 //   build:   npx vite build --config proto/vite.config.ts      (to site/dist-proto)
 //   preview: npx vite preview --config proto/vite.config.ts    (port 4191)
 // Pages: / (chooser), /a/ (home with the 3D brain), /b/ (home with the calm diagram), /product/, /integrations/, /team/, /pricing/,
-// /security/, /faq/. `<!-- @section name -->` in a page is
+// /security/, /faq/, /contact/. `<!-- @section name -->` in a page is
 // replaced at build time by the shared section (shared/sections.ts), so every page is complete HTML before any script runs.
 // LOGO_DEV_KEY (environment, never committed): when set, tool logos come from logo.dev instead of Simple Icons (shared/logos.ts).
 import "./env.ts"; // first: it sets LOGO_DEV_KEY before the shared modules read it
@@ -43,6 +43,6 @@ export default defineConfig({
     outDir: here("../dist-proto"),
     emptyOutDir: true,
     target: "es2022",
-    rollupOptions: { input: Object.fromEntries(["index", "a", "b", "product", "integrations", "team", "pricing", "security", "faq"].map((k) => [k, here(k === "index" ? "index.html" : `${k}/index.html`)])) },
+    rollupOptions: { input: Object.fromEntries(["index", "a", "b", "product", "integrations", "team", "pricing", "security", "faq", "contact"].map((k) => [k, here(k === "index" ? "index.html" : `${k}/index.html`)])) },
   },
 });

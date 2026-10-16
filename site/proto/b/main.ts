@@ -1,6 +1,7 @@
 // Prototype B: the home page with the calm diagram. The hero script is a separate chunk loaded once the page is parsed and idle.
 import "../shared/entry.ts";
 import "../shared/home.css";
+import "../shared/pages.css";
 import "./b.css";
 import { initHome } from "../shared/home-client.ts";
 

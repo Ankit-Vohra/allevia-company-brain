@@ -73,7 +73,6 @@ function workspaceBlock(): string {
           <p data-wtext></p><p class="wanswer__how" data-whow></p>
         </article>
       </div>
-      <figure class="ws__office" data-office><video muted loop playsinline preload="none" poster="/media/office-loop-poster.webp" data-src="/media/office-loop.mp4" aria-label="Your team at their desks, with the office dogs"></video><figcaption>Your team at their desks</figcaption></figure>
     </div>
   </div>
   <button class="hero__next" type="button" data-next hidden>Next question</button>
@@ -94,7 +93,7 @@ ${workspaceBlock()}
 
 /** B's diagram on the Product page: tools, the brain and its groups, the team, one question and its answer. */
 export function productDiagram(): string {
-  return `<section class="bhero bhero--page" data-bhero aria-label="How your tools, your brain and your team work together">${workspaceBlock()}</section>`;
+  return `<section class="sec bhero bhero--page" data-bhero aria-label="How your tools, your brain and your team work together">${workspaceBlock()}</section>`;
 }
 
 export function heroA(): string {

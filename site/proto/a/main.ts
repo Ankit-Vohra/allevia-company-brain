@@ -2,6 +2,7 @@
 // so the headline, the buttons and the still picture of the brain paint first.
 import "../shared/entry.ts";
 import "../shared/home.css";
+import "../shared/pages.css";
 import "./a.css";
 import { initHome } from "../shared/home-client.ts";
 

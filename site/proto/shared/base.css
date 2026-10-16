@@ -27,13 +27,32 @@
   --shadow-lift: 0 2px 4px rgb(60 44 24 / 0.05), 0 18px 40px -16px rgb(60 44 24 / 0.22);
   --shadow-frame: 0 1px 0 rgb(255 255 255 / 0.7) inset, 0 2px 6px rgb(60 44 24 / 0.06), 0 30px 70px -28px rgb(60 44 24 / 0.34);
 
+  /* ---- the colour system: two bases, accents with jobs ----
+   * Bases: warm peach paper (the ground of every page) and ONE deep warm brown band (--band-ink) for the one or two statement moments of a
+   * page. Nothing else is ever a section background: no tints, no blues. Surfaces on the band are white with dark text and a soft shadow.
+   * Accents stay small: --action (the gold) is only for things you press; --highlight (amber) is the brain's glow, graph paths and signals;
+   * --success (green) is done and approved; --alert (clay) is noise and warnings. Tool logos keep their own colours.
+   * Text on the band comes from .on-ink, which swaps the ink variables for light ones (AA: 9:1 and better). */
+  --band-ink: #2f2621;
+  --band-ink-2: #3a2e26;
+  --surface: #ffffff;
+  --action: var(--color-accent);
+  --highlight: #e0961e;
+  --success: #2e7d4f;
+  --alert: #9a5232;
+  --on-ink: #f6efe3;
+  --on-ink-2: #e2d9ca;
+  --on-ink-muted: #bfb4a4;
+  --on-ink-tone2: #cdbd9c;
+
   --r-pill: 999px;
   --r-frame: 18px;
   --r-card: 12px;
 
   --site-max: 78rem;
   --gutter: clamp(1rem, 0.5rem + 2.5vw, 2.5rem);
-  --section-gap: clamp(4.5rem, 2.5rem + 7vw, 9rem);
+  --space-section: 4rem;                /* one vertical rhythm: 64px on a phone, 96px from 52rem, 128px from 80rem */
+  --section-gap: var(--space-section);
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
@@ -45,6 +64,9 @@
   --fs-h2: clamp(1.9rem, 1.15rem + 2.4vw, 3.1rem);
   --fs-h3: clamp(1.25rem, 1.15rem + 0.4vw, 1.5rem);
 }
+
+@media (min-width: 52rem) { :root { --space-section: 6rem; } }
+@media (min-width: 80rem) { :root { --space-section: 8rem; } }
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; background: var(--color-paper); overflow-x: clip; scroll-padding-top: 5rem; }
@@ -65,12 +87,25 @@ a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 0.2em
 .wrap { width: min(100% - 2 * var(--gutter), var(--site-max)); margin-inline: auto; }
 .num { font-variant-numeric: tabular-nums; }
 
+/* ---------- sections and the one dark band ---------- */
+/* Every section is one rhythm: --space-section above and below its content (64 on a phone, 96, 128 on a wide screen). Two light
+ * sections in a row share one gap, never two, and a band never has an empty strip above or below its content. */
+.sec { padding-block: var(--space-section); }
+.sec:not(.band) + .sec:not(.band) { padding-top: 0; }
+.band { position: relative; isolation: isolate; }
+.band::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(50% - 50vw); background: var(--band, transparent); }
+.band--ink { --band: var(--band-ink); }
+.on-ink { --color-ink: var(--on-ink); --color-ink-2: var(--on-ink-2); --color-muted: var(--on-ink-muted); --color-taupe: var(--on-ink-tone2); --color-rule: rgb(255 255 255 / 0.2); --color-rule-2: rgb(255 255 255 / 0.12); color: var(--on-ink); }
+.on-ink .btn-ghost { border-color: rgb(245 240 228 / 0.4); }
+.on-ink .link { text-decoration-color: var(--on-ink-tone2); }
+
 /* two-tone headings: the first clause in ink, the rest in taupe (large type, so 3:1 is enough) */
 .h2 { font-size: var(--fs-h2); line-height: 1.07; max-width: 21ch; }
 .h2--wide { max-width: 26ch; }
+.h2--split .t2 { display: block; }
 .t1 { color: var(--color-ink); }
 .t2 { color: var(--color-taupe); }
-.lede { font-size: var(--fs-lede); line-height: 1.5; color: var(--color-ink-2); max-width: 36rem; }
+.lede { font-size: var(--fs-lede); line-height: 1.5; color: var(--color-ink-2); max-width: 36rem; text-wrap: pretty; }
 
 /* ---------- buttons ---------- */
 .btn {
@@ -81,6 +116,7 @@ a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 0.2em
 .btn:active { transform: scale(0.97); }
 .btn-gold { background: var(--color-accent); color: var(--color-ink); box-shadow: 0 1px 0 rgb(255 255 255 / 0.5) inset, 0 6px 18px -8px rgb(111 82 15 / 0.55); }
 .btn-ghost { background: transparent; color: var(--color-ink); border-color: rgb(31 26 20 / 0.28); }
+.btn-gold { color: #1f1a14; }
 .btn-sm { min-height: 2.4rem; padding: 0.4rem 1.05rem; font-size: 0.9375rem; }
 @media (hover: hover) and (pointer: fine) {
   .btn-gold:hover { background: #dbb04a; }
@@ -88,8 +124,8 @@ a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 0.2em
 }
 
 /* ---------- top bar ---------- */
-.nav { position: sticky; top: 0; z-index: 40; background: color-mix(in oklab, var(--color-paper) 92%, transparent); border-bottom: 1px solid transparent; transition: border-color 200ms ease; }
-.nav.is-stuck { border-bottom-color: var(--color-rule); }
+.nav { position: sticky; top: 0; z-index: 40; background: var(--color-paper); border-bottom: 1px solid transparent; transition: border-color 200ms ease, box-shadow 200ms ease; }
+.nav.is-stuck { border-bottom-color: var(--color-rule); box-shadow: 0 8px 20px -16px rgb(60 44 24 / 0.45); }
 .nav__in { display: flex; align-items: center; gap: clamp(1rem, 3vw, 2.5rem); height: 4.25rem; }
 .brand { font-family: var(--font-display); font-size: 1.75rem; font-weight: 420; letter-spacing: -0.02em; text-decoration: none; line-height: 1; padding-bottom: 0.35rem; position: relative; }
 .brand::after { content: ""; position: absolute; left: 0; bottom: 0; width: 1.35rem; height: 3px; border-radius: 2px; background: var(--color-accent); }
@@ -108,14 +144,21 @@ a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 0.2em
   .nav__menu { display: inline-grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: var(--r-pill); border: 1px solid var(--color-rule); background: transparent; color: var(--color-ink); cursor: pointer; }
 }
 
-/* ---------- footer ---------- */
-.foot { border-top: 1px solid var(--color-rule); padding-block: 3rem 2.5rem; margin-top: var(--section-gap); }
-.foot__in { display: grid; gap: 2rem; }
-.foot__links { display: flex; flex-wrap: wrap; gap: 0.5rem 1.6rem; font-size: 0.9375rem; color: var(--color-ink-2); }
-.foot__links a { text-decoration: none; }
-.foot__links a:hover { text-decoration: underline; }
-.foot__fine { font-size: 0.8125rem; color: var(--color-muted); max-width: 40rem; }
-@media (min-width: 52rem) { .foot__in { grid-template-columns: auto 1fr; align-items: start; gap: 4rem; } }
+/* ---------- footer (the deep band) ---------- */
+.foot { margin: 0; padding-block: clamp(3rem, 6vw, 4.5rem) 1.6rem; }
+.foot.band { padding-bottom: 1.6rem; }
+.foot__grid { display: grid; gap: 2.4rem 2rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.foot__about { grid-column: 1 / -1; display: grid; gap: 1rem; justify-items: start; max-width: 28rem; }
+.foot__line { color: var(--on-ink-2); font-size: 0.96875rem; line-height: 1.5; }
+.foot__mail a { color: var(--on-ink); text-decoration-color: var(--on-ink-tone2); }
+.foot__h { font-family: var(--font-body); font-size: 0.875rem; font-weight: 600; letter-spacing: 0; margin-bottom: 0.9rem; color: var(--on-ink); }
+.foot__col ul { display: grid; gap: 0.55rem; }
+.foot__col a { text-decoration: none; color: var(--on-ink-2); font-size: 0.9375rem; }
+.foot__col a:hover, .foot__mail a:hover { text-decoration: underline; color: var(--on-ink); }
+.foot__base { display: flex; flex-wrap: wrap; gap: 0.4rem 2rem; justify-content: space-between; margin-top: clamp(2rem, 5vw, 3.2rem); padding-top: 1.2rem; border-top: 1px solid rgb(255 255 255 / 0.14); font-size: 0.8125rem; color: var(--on-ink-muted); }
+.foot__base a { color: var(--on-ink-muted); }
+@media (min-width: 52rem) { .foot__grid { grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 0.7fr)); gap: 2rem 3rem; } .foot__about { grid-column: auto; } }
+.todo { background: #fff3b0; color: #5b4a1d; padding: 0.05rem 0.4rem; border-radius: 4px; font-size: 0.875em; }
 
 /* ---------- prototype chrome: the pill that moves between A and B (not part of the site) ---------- */
 .proto-switch { white-space: nowrap; position: fixed; z-index: 60; left: 50%; bottom: 0.9rem; transform: translateX(-50%); display: flex; align-items: center; gap: 0.2rem; padding: 0.25rem 0.3rem 0.25rem 0.9rem; border-radius: var(--r-pill); background: var(--color-ink); color: #f4eee3; font-size: 0.8125rem; box-shadow: 0 10px 30px -10px rgb(31 26 20 / 0.6); }
