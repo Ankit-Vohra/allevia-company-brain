@@ -1,7 +1,7 @@
 // Query shapes that crash FalkorDB 6.0.2, found by reading the Cypher text. A crash restarts the server and discards
 // every write it had not saved yet, for every agent at once, so GraphHandle refuses such a query before sending it
 // (assertSafeQuery) and a test holds every query in src/ to the same rule (tests/graph/cypher-sources.test.ts).
-// Evidence and minimal reproductions: docs/notes/falkordb-nan-crash.md.
+// Evidence and minimal reproductions: docs/notes/falkordb-nan-crash.md and docs/notes/falkordb-reply-compact-panic.md.
 //
 // 1. A sort that can tie. When rows tie on the key, 6.0.2 orders them by comparing the rest of the row, and comparing
 //    maps in which some rows have a null where others have a value (every NODE() map: `asOf`, `simulated`) is not a
@@ -245,6 +245,121 @@ export function nanRisks(cypher: string): string[] {
   return risks;
 }
 
+// 3. A RETURN that aggregates next to a grouping key that is an expression which can be null. FalkorDB 6.0.2 panics
+//    building the reply (reply.rs:655, `Option::unwrap()` on None, in reply_compact) for, among others,
+//    `RETURN count(c) AS n, c.phone AS p` and `RETURN c.address AS a, c.phone AS p, max(c.id) AS m` when c.phone is
+//    missing, and for `RETURN 'a' AS a, null AS p, max(c.id) AS m`. Whether a given shape panics depends on the column
+//    order and the plan, so a query can pass in tests and crash on data with a missing property. The same keys bound
+//    first by a WITH and returned as bare variables never panicked (docs/notes/falkordb-reply-compact-panic.md).
+//    Rule: in a RETURN with an aggregate, every other column is a bare variable, an id (`x.id`, `id(x)`), a non-null
+//    literal or a coalesce(...); anything else (a property, a function of one) is grouped in a WITH first:
+//    `WITH c.phone AS phone, count(c) AS n RETURN phone, n`.
+const RETURN_CLAUSE = /(?<![\w.$`])RETURN(?![\w`])/gi;
+const PROJECTION_END = /^(?:ORDER|SKIP|LIMIT|UNION)$/i;
+const SAFE_KEY = /^(?:[A-Za-z_]\w*|[A-Za-z_]\w*\.id|(?:id|labels|type|properties)\([A-Za-z_]\w*\)|-?\d+(?:\.\d+)?|true|false|)$/i;
+
+// A map or list literal (never null, even holding nulls) or a coalesce(...): the bracket that opens it closes at the end.
+function nonNullWrapper(expr: string): boolean {
+  const open = /^coalesce\s*\(/i.exec(expr)?.[0].length ?? (expr.startsWith("{") || expr.startsWith("[") ? 1 : 0);
+  if (!open) return false;
+  let depth = 0;
+  for (let i = open - 1; i < expr.length; i++) {
+    const c = expr[i]!;
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") { depth--; if (depth === 0) return i === expr.length - 1; }
+  }
+  return false;
+}
+
+// The RETURN columns of the query that put an aggregate beside a key that can be null; [] when there are none.
+export function nullableGroupKeys(cypher: string): string[] {
+  const b = blankLiterals(cypher);
+  const out: string[] = [];
+  for (const m of b.matchAll(RETURN_CLAUSE)) {
+    let depth = 0;
+    let i = m.index + m[0].length;
+    for (; i < b.length; i++) {
+      const c = b[i]!;
+      if (c === "(" || c === "[" || c === "{") depth++;
+      else if (c === ")" || c === "]" || c === "}") { if (depth === 0) break; depth--; }
+      else if (depth === 0 && c === ";") break;
+      else if (depth === 0 && /[A-Za-z_]/.test(c) && !/[\w.$`]/.test(b[i - 1] ?? " ")) {
+        const word = /^[A-Za-z_]\w*/.exec(b.slice(i))![0];
+        if (PROJECTION_END.test(word)) break;
+        i += word.length - 1;
+      }
+    }
+    const cols = columns(b.slice(m.index + m[0].length, i));
+    if (!cols.some((c) => AGGREGATE.test(c))) continue;
+    for (const col of cols) {
+      if (AGGREGATE.test(col)) continue;
+      const expr = col.replace(/\s+AS\s+[A-Za-z_]\w*\s*$/i, "").replace(/^DISTINCT\s+/i, "").trim();
+      if (!SAFE_KEY.test(expr) && !nonNullWrapper(expr)) out.push(`RETURN … ${tidy(col)} beside an aggregate`);
+    }
+  }
+  return out;
+}
+
+// For queries an agent writes (the cypher tool): the same query with each RETURN that nullableGroupKeys flags turned into
+// `WITH <its columns> RETURN <their aliases>`, which returns the same rows and columns. A column without an alias gets
+// its own text as a backtick alias, so the column keeps its name. Unchanged when nothing is flagged.
+export function groupInWith(cypher: string): string {
+  if (!nullableGroupKeys(cypher).length) return cypher;
+  const b = blankLiterals(cypher);
+  const edits: Array<{ from: number; to: number; text: string }> = [];
+  for (const m of b.matchAll(RETURN_CLAUSE)) {
+    const start = m.index + m[0].length;
+    let depth = 0;
+    let i = start;
+    for (; i < b.length; i++) {
+      const c = b[i]!;
+      if (c === "(" || c === "[" || c === "{") depth++;
+      else if (c === ")" || c === "]" || c === "}") { if (depth === 0) break; depth--; }
+      else if (depth === 0 && c === ";") break;
+      else if (depth === 0 && /[A-Za-z_]/.test(c) && !/[\w.$`]/.test(b[i - 1] ?? " ")) {
+        const word = /^[A-Za-z_]\w*/.exec(b.slice(i))![0];
+        if (PROJECTION_END.test(word)) break;
+        i += word.length - 1;
+      }
+    }
+    if (!nullableGroupKeys(`RETURN ${b.slice(start, i)}`).length) continue;
+    // split the ORIGINAL text at the blanked text's top-level commas (same offsets)
+    const parts: string[] = [];
+    let d = 0;
+    let from = start;
+    for (let k = start; k < i; k++) {
+      const c = b[k]!;
+      if (c === "(" || c === "[" || c === "{") d++;
+      else if (c === ")" || c === "]" || c === "}") d--;
+      else if (c === "," && d === 0) { parts.push(cypher.slice(from, k)); from = k + 1; }
+    }
+    parts.push(cypher.slice(from, i));
+    let distinct = "";
+    const cols = parts.map((p) => p.trim()).filter(Boolean).map((p, n) => {
+      let col = p;
+      if (n === 0 && /^DISTINCT\s+/i.test(col)) { distinct = "DISTINCT "; col = col.replace(/^DISTINCT\s+/i, ""); }
+      const as = /\s+AS\s+([A-Za-z_]\w*|`[^`]+`)\s*$/i.exec(col);
+      return as ? { expr: col.slice(0, as.index), alias: as[1]! } : { expr: col, alias: `\`${col.replace(/`/g, "")}\`` };
+    });
+    // the RETURN's own ORDER BY / SKIP / LIMIT move onto the WITH (where the sort rule wants a grouped sort), up to
+    // the end of the query, a closing bracket, a semicolon or a UNION
+    let j = i;
+    for (let dd = 0; j < b.length; j++) {
+      const c = b[j]!;
+      if (c === "(" || c === "[" || c === "{") dd++;
+      else if (c === ")" || c === "]" || c === "}") { if (dd === 0) break; dd--; }
+      else if (dd === 0 && c === ";") break;
+      else if (dd === 0 && /^UNION(?![\w`])/i.test(b.slice(j)) && !/[\w.$`]/.test(b[j - 1] ?? " ")) break;
+    }
+    const tail = cypher.slice(i, j).trim();
+    const trail = /\s*$/.exec(cypher.slice(start, j))![0];
+    edits.push({ from: m.index, to: j, text: `WITH ${distinct}${cols.map((c) => `${c.expr} AS ${c.alias}`).join(", ")}${tail ? ` ${tail}` : ""} RETURN ${cols.map((c) => c.alias).join(", ")}${trail}` });
+  }
+  let out = cypher;
+  for (const e of edits.reverse()) out = out.slice(0, e.from) + e.text + out.slice(e.to);
+  return out;
+}
+
 const checked = new Map<string, string | null>(); // query text -> why it is refused (null: fine); query texts repeat
 const CHECKED_MAX = 5_000;
 
@@ -254,7 +369,10 @@ export function assertSafeQuery(cypher: string): void {
   if (why === undefined) {
     const sorts = unsafeSorts(cypher);
     const nans = sorts.length ? [] : nanRisks(cypher);
-    why = sorts.length
+    const keys = sorts.length || nans.length ? [] : nullableGroupKeys(cypher);
+    why = keys.length
+      ? `Group in a WITH first and return bare variables (WITH x, count(y) AS n RETURN x.prop AS prop, n): FalkorDB 6.0 crashes replying to a RETURN that aggregates beside a key that can be null. Refused: ${keys[0]}`
+      : sorts.length
       ? `Add , x.id as the last sort key (x.id, id(x), or an alias of one) so rows never tie: FalkorDB 6.0 crashes sorting tied rows. Refused: ${sorts[0]}`
       : nans.length
         ? `Guard the sorted value: CASE WHEN d = 0 OR d IS NULL THEN null ELSE x / d END, or WHERE x = x before ORDER BY: FalkorDB 6.0 crashes sorting NaN. Refused: ${nans[0]}`

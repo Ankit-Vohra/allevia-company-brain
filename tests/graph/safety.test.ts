@@ -1,7 +1,7 @@
 // The two query shapes that crash FalkorDB 6.0.2 (docs/notes/falkordb-nan-crash.md), found by reading the Cypher text:
 // an ORDER BY whose last key can tie, and a NaN in a sort key. Pure text analysis, no server.
 import { describe, it, expect } from "vitest";
-import { assertSafeQuery, blankLiterals, nanRisks, sortClauses, unsafeSorts } from "../../src/graph/safety.js";
+import { assertSafeQuery, blankLiterals, groupInWith, nanRisks, nullableGroupKeys, sortClauses, unsafeSorts } from "../../src/graph/safety.js";
 import { UnsafeQuery } from "../../src/graph/errors.js";
 
 describe("sortClauses", () => {
@@ -102,6 +102,49 @@ describe("nanRisks: a NaN in a sort key crashes the server", () => {
     "MATCH (n) RETURN n.id AS id, avg(n.v) AS a, percentileCont(n.v, 0.5) AS m, max(n.v) AS mx ORDER BY id", // aggregates over NaN do not crash
   ];
   for (const q of fine) it(`accepts ${q.slice(0, 80)}`, () => expect(nanRisks(q)).toEqual([]));
+});
+
+// Every query below was run on a throwaway FalkorDB 6.0.2 (docs/notes/falkordb-reply-compact-panic.md): the ones in
+// `crashed` took the server down when the key was missing; the ones in `safe` did not, with the same data.
+describe("nullableGroupKeys: a RETURN that aggregates beside a key that can be null", () => {
+  const crashed = [
+    "MATCH (c:Entity {id:'c'}) RETURN count(c) AS n, c.phone AS p",
+    "MATCH (c:Entity {id:'c'}) OPTIONAL MATCH (c)-[p:PART_OF]->(:Business {id:'b'}) RETURN c.address AS a, c.hours AS h, count(p) AS n, c.phone AS x",
+    "MATCH (a:Approval {id:'a1'}) RETURN a.id AS id, a.title AS t, count(a) AS n",
+    "MATCH (c:Entity:Channel) RETURN c.address AS a, c.phone AS p, max(c.id) AS m",
+    "MATCH (c:Entity:Channel) RETURN collect(c.id) AS n, c.phone AS p",
+    "MATCH (c:Entity:Channel) RETURN 'a' AS a, null AS p, max(c.id) AS m",
+  ];
+  const safe = [
+    "MATCH (c:Entity:Channel) WITH c.address AS a, c.phone AS p, max(c.id) AS m RETURN a, p, m",
+    "MATCH (c:Entity:Channel) WITH c, c.phone AS p RETURN count(c) AS n, p",
+    "MATCH (c:Entity:Channel) RETURN count(c) AS n, labels(c) AS l, {p: c.phone} AS m, coalesce(c.phone, '') AS q",
+    "MATCH (b:Business) OPTIONAL MATCH (x)-[r:PART_OF]->(b) RETURN b.id AS id, count(x) AS c ORDER BY c DESC, id LIMIT 1",
+    "MATCH (c:Entity) RETURN c.id AS id, c.phone AS p",                       // no aggregate
+    "MATCH (c:Entity) WITH c, count(*) AS n RETURN c.phone AS p, n",           // aggregate only in the WITH
+    "MATCH (c:Entity) RETURN DISTINCT c AS c, count(*) AS n",
+  ];
+  it("flags each shape that crashed", () => {
+    for (const q of crashed) expect(nullableGroupKeys(q).length, q).toBeGreaterThan(0);
+  });
+  it("lets the safe shapes through", () => {
+    for (const q of safe) expect(nullableGroupKeys(q), q).toEqual([]);
+  });
+  it("groupInWith rewrites an agent's query into the safe shape, keeping the columns and the sort", () => {
+    expect(groupInWith("MATCH (n:Entity) RETURN n.asOf AS d, count(*) AS c ORDER BY c DESC, d LIMIT 5"))
+      .toBe("MATCH (n:Entity) WITH n.asOf AS d, count(*) AS c ORDER BY c DESC, d LIMIT 5 RETURN d, c");
+    expect(groupInWith("MATCH (o:Observation) RETURN DISTINCT o.metric, sum(o.value) AS total"))
+      .toBe("MATCH (o:Observation) WITH DISTINCT o.metric AS `o.metric`, sum(o.value) AS total RETURN `o.metric`, total");
+    expect(groupInWith("MATCH (n) WHERE n.name = 'a, b' RETURN n.kind AS k, collect(n.id) AS ids"))
+      .toBe("MATCH (n) WHERE n.name = 'a, b' WITH n.kind AS k, collect(n.id) AS ids RETURN k, ids");
+    for (const q of crashed) expect(nullableGroupKeys(groupInWith(q)), q).toEqual([]);
+    for (const q of safe) expect(groupInWith(q)).toBe(q);
+  });
+
+  it("assertSafeQuery refuses one, naming the fix", () => {
+    expect(() => assertSafeQuery(crashed[0]!)).toThrow(UnsafeQuery);
+    expect(() => assertSafeQuery(crashed[0]!)).toThrow(/^Group in a WITH first/);
+  });
 });
 
 describe("assertSafeQuery", () => {

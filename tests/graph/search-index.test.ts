@@ -37,7 +37,7 @@ describe("search indexes on Searchable (integration)", () => {
 
   it("labels the types search can be asked for, not readings, versions or chunks, on create and on update", async () => {
     const labelled = await g.roQuery<{ t: string; c: number }>(
-      "MATCH (n:Searchable) RETURN [l IN labels(n) WHERE NOT l IN ['Entity', 'Searchable']][0] AS t, count(n) AS c ORDER BY t");
+      "MATCH (n:Searchable) WITH [l IN labels(n) WHERE NOT l IN ['Entity', 'Searchable']][0] AS t, count(n) AS c ORDER BY t RETURN t, c");
     expect(labelled).toEqual([{ t: "Business", c: 1 }, { t: "Channel", c: 1 }, { t: "Decision", c: 1 }, { t: "Page", c: 1 }, { t: "Turn", c: 1 }]);
     expect((await g.roQuery<{ c: number }>("MATCH (o:Observation) WHERE o:Searchable OR o:Version OR o:Chunk RETURN count(o) AS c"))[0]).toEqual({ c: 0 });
   });

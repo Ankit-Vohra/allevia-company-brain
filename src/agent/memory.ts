@@ -355,7 +355,8 @@ export async function recallBrief(g: GraphHandle, o: { question: string; seedIds
       `MATCH (x:Entity) WHERE x.id IN $ids WITH x MATCH (rec:Recommendation)-[r:BASED_ON|EVIDENCED_BY|AFFECTS]->(x) WHERE r.until IS NULL AND NOT coalesce(rec.status, 'open') IN $closed
        WITH DISTINCT rec
        OPTIONAL MATCH (rec)-[pp:PROPOSES]->(ap:Approval) WHERE pp.until IS NULL AND coalesce(ap.status, 'pending') = 'pending'
-       RETURN rec.id AS id, rec.name AS name, rec.status AS status, collect(ap.id) AS approvals LIMIT 8`, { ids: seeds, closed: CLOSED_STATUSES });
+       WITH rec, collect(ap.id) AS approvals
+       RETURN rec.id AS id, rec.name AS name, rec.status AS status, approvals LIMIT 8`, { ids: seeds, closed: CLOSED_STATUSES });
     if (recs.length) {
       sections.push({
         title: "Open recommendations and approvals waiting on the owner:",

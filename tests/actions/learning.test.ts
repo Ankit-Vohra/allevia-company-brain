@@ -160,7 +160,7 @@ describe("the learning loop, end to end", () => {
     expect(r2.metrics).toMatchObject({ firstPassRate: 0.5, decided30d: 2, firstPass30d: 1, learnedRules: 1, deliverablesApproved: 2 });
     const [obs] = await g.roQuery<{ v: number; versions: number }>(
       `MATCH (o:Observation {metric:'allevia.first_pass_rate'})-[:MEASURES]->(:Business {id:'business:aamdani'})
-       OPTIONAL MATCH (o)-[:HAD_VERSION]->(ver:Version) RETURN o.value AS v, count(ver) AS versions`);
+       OPTIONAL MATCH (o)-[:HAD_VERSION]->(ver:Version) WITH o, count(ver) AS versions RETURN o.value AS v, versions`);
     expect(obs).toEqual({ v: 0.5, versions: 1 });
     expect(await count("MATCH (o:Observation {metric:'allevia.learned_rules'}) WHERE o.value = 1 RETURN count(o) AS c")).toBe(1);
     expect(await count("MATCH (o:Observation {metric:'allevia.deliverables_approved'}) WHERE o.value = 2 RETURN count(o) AS c")).toBe(1);

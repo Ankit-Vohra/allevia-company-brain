@@ -21,6 +21,7 @@ import { z } from "zod";
 import type { ToolContext } from "../tool.js";
 import { isRawEdge, isRawNode, isRawPath, toNodeRef, type RawEdge, type RawNode } from "../../graph/read.js";
 import { typeFromId } from "../../util/ids.js";
+import { groupInWith } from "../../graph/safety.js";
 import { Collector, EDGE, InputError, NODE, clip, compactProps, defineTool, getNodes, ro, type EdgeRow, type NodeRow } from "./common.js";
 
 export const CYPHER_TIMEOUT_MS = 5_000;
@@ -239,7 +240,8 @@ async function runCypher(args: { query: string; params?: Record<string, unknown>
   if (base.length > QUERY_MAX) throw new InputError(`query is ${base.length} characters; keep it under ${QUERY_MAX}.`);
   const reason = writeReason(base, args.params);
   if (reason) throw new InputError(reason, { refused: true });
-  const bounded = boundRows(base, args.params, CYPHER_ROW_CAP + 1); // one extra row tells us it was capped
+  // an aggregate beside a key that can be null crashes FalkorDB 6.0.2 (safety.ts): grouped in a WITH, same rows
+  const bounded = boundRows(groupInWith(base), args.params, CYPHER_ROW_CAP + 1); // one extra row tells us it was capped
   let raw: Array<Record<string, unknown>>;
   try {
     raw = await ro(ctx, bounded.query, bounded.params, CYPHER_TIMEOUT_MS);

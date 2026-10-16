@@ -72,7 +72,7 @@ export async function ensureActor(g: GraphHandle, actor: string | undefined, now
 // (a graph can hold other businesses: vendors, partners).
 export async function findBusinessId(g: Read, tenant?: string): Promise<string | null> {
   const rows = await g.roQuery<{ id: string; slug: string | null; degree: number }>(
-    `MATCH (b:Business) OPTIONAL MATCH (b)-[r]-() RETURN b.id AS id, b.slug AS slug, count(r) AS degree ORDER BY degree DESC, id LIMIT 50`);
+    `MATCH (b:Business) OPTIONAL MATCH (b)-[r]-() WITH b, count(r) AS degree RETURN b.id AS id, b.slug AS slug, degree ORDER BY degree DESC, id LIMIT 50`);
   if (!rows.length) return null;
   if (tenant) {
     let own: string | undefined;

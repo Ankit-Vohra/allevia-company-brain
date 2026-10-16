@@ -250,7 +250,8 @@ export async function activeRules(g: Read, scope: { agentId?: string; channelId?
     const brand = await g.roQuery<{ id: string; text: string | null; name: string | null; specific: boolean }>(
       `MATCH (t:Entity) WHERE t.id IN $ids WITH t
        MATCH (r:BrandRule)-[a:APPLIES_TO]->(t) WHERE a.until IS NULL AND coalesce(r.status, 'active') = 'active'
-       RETURN r.id AS id, r.text AS text, r.name AS name, max(CASE WHEN t.id = $biz THEN 0 ELSE 1 END) = 1 AS specific
+       WITH r, max(CASE WHEN t.id = $biz THEN 0 ELSE 1 END) = 1 AS specific
+       RETURN r.id AS id, r.text AS text, r.name AS name, specific
        ORDER BY specific DESC, id LIMIT 8`, { ids, biz: scope.businessId ?? "" });
     for (const r of brand) out.push({ id: r.id, kind: "brand", text: r.text ?? r.name ?? r.id, op: "instruction", confidence: 1, appliedCount: 0 });
   }

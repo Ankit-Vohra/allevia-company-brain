@@ -2,7 +2,7 @@
 // docs/notes/falkordb-nan-crash.md): the last key of every ORDER BY is unique, and nothing sorted can be NaN. Reads the
 // source text, so it covers queries no test happens to run, and queries that only crash on a big or tied graph.
 import { describe, it, expect } from "vitest";
-import { blankLiterals, nanRisks, unsafeSorts } from "../../src/graph/safety.js";
+import { blankLiterals, nanRisks, nullableGroupKeys, unsafeSorts } from "../../src/graph/safety.js";
 import { readSource, sourceFiles, stringLiterals } from "../helpers/ts-strings.js";
 import { idAnchorsWithoutEntity, unguardedEdgeAggregates } from "../helpers/cypher-lint.js";
 
@@ -58,6 +58,11 @@ describe("every Cypher string in src/", () => {
 
   it("ends every ORDER BY in a unique key, so rows never tie", () => {
     const bad = found.flatMap((f) => unsafeSorts(f.text).map((s) => `${f.where}  ${s}`));
+    expect(bad).toEqual([]);
+  });
+
+  it("never returns an aggregate beside a key that can be null (FalkorDB 6.0.2 panics in reply_compact)", () => {
+    const bad = allCypher().flatMap((f) => nullableGroupKeys(f.text).map((r) => `${f.where}  ${r}`));
     expect(bad).toEqual([]);
   });
 
