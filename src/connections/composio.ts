@@ -21,7 +21,7 @@ import { upsertNode } from "../graph/upsert.js";
 import type { GoogleApis } from "./google/apis.js";
 import type { GoogleSession } from "./google/product.js";
 import {
-  NeedsAttentionError, NotConnectedError,
+  NeedsAttentionError, NotConfiguredError, NotConnectedError,
   type Availability, type CompleteOutcome, type ConnectionHealth, type ConnectionStatus, type Connector, type ConnectorCtx, type ConnectorInfo, type ConnectStart,
 } from "./types.js";
 
@@ -60,7 +60,11 @@ export function realComposioClient(apiKey: string, fetchFn: FetchFn = realFetch)
     });
     let body: Record<string, unknown> = {};
     try { body = asRecord(JSON.parse(await res.text())); } catch { body = {}; }
-    if (!res.ok && res.status !== 404) throw new ComposioError(`Composio answered ${res.status}.`, res.status);
+    if (!res.ok && res.status !== 404) {
+      const err = asRecord(body.error);
+      if (res.status === 403 && err.slug === "APIKey_InsufficientPermissions") throw new ComposioError("The Composio key does not have the access this needs (it needs write access to auth configs, connected accounts and tool execution). Make a key with full access in Composio and set it as COMPOSIO_API_KEY.", 403);
+      throw new ComposioError(`Composio answered ${res.status}.`, res.status);
+    }
     return { status: res.status, body };
   };
   const str = (v: unknown) => (typeof v === "string" ? v : "");
@@ -151,14 +155,15 @@ export function composioGoogleApis(execute: (tool: string, args: Record<string, 
   return {
     accountEmail: async () => null,
     async freeBusy(_t, q) {
-      const d = await execute(GOOGLE_SLUGS.freeBusy, { time_min: q.timeMin, time_max: q.timeMax, ...(q.timeZone ? { timezone: q.timeZone } : {}), items: [{ id: "primary" }] });
+      const d = await execute(GOOGLE_SLUGS.freeBusy, { timeMin: q.timeMin, timeMax: q.timeMax, ...(q.timeZone ? { timeZone: q.timeZone } : {}), items: [{ id: "primary" }] });
       return arrAt(d, "busy").flatMap((b) => { const r = asRecord(b); return typeof r.start === "string" && typeof r.end === "string" ? [{ start: r.start, end: r.end }] : []; });
     },
     async createEvent(_t, e) {
       const minutes = Math.max(1, Math.round((Date.parse(e.end) - Date.parse(e.start)) / 60_000));
+      // Composio wants a naive local time and a zone: the instant is sent as UTC, which every calendar shows in its own zone
       const d = await execute(GOOGLE_SLUGS.createEvent, {
-        summary: e.summary, start_datetime: e.start, event_duration_hour: Math.floor(minutes / 60), event_duration_minutes: minutes % 60,
-        ...(e.description ? { description: e.description } : {}), ...(e.timeZone ? { timezone: e.timeZone } : {}), ...(e.attendees?.length ? { attendees: e.attendees } : {}),
+        summary: e.summary, start_datetime: new Date(Date.parse(e.start)).toISOString().slice(0, 19), timezone: "UTC", event_duration_hour: Math.floor(minutes / 60), event_duration_minutes: minutes % 60,
+        ...(e.description ? { description: e.description } : {}), ...(e.attendees?.length ? { attendees: e.attendees, send_updates: "all" } : {}),
       });
       const id = firstStr(d, ["id", "event_id"]);
       if (!id) throw new ComposioError("Google did not confirm the event.", 502);
@@ -167,7 +172,6 @@ export function composioGoogleApis(execute: (tool: string, args: Record<string, 
     async sendEmail(_t, m) {
       const d = await execute(GOOGLE_SLUGS.sendEmail, {
         recipient_email: m.to[0], ...(m.to.length > 1 ? { extra_recipients: m.to.slice(1) } : {}), ...(m.cc?.length ? { cc: m.cc } : {}), subject: m.subject, body: m.body, is_html: false,
-        ...(m.threadId ? { thread_id: m.threadId } : {}),
       });
       const id = firstStr(d, ["id", "message_id", "messageId"]);
       if (!id) throw new ComposioError("Google did not confirm the email.", 502);
@@ -253,10 +257,17 @@ export class ComposioConnector implements Connector {
 
   async connect(ctx: ConnectorCtx): Promise<ConnectStart> {
     const state = ctx.beginAuth({});
-    const authConfigId = await this.client().authConfigId(this.entry.toolkit);
     const callbackUrl = `${ctx.webBaseUrl}/api/connectors/google/callback?${new URLSearchParams({ state })}`; // one callback address for every provider
-    const l = await this.client().link({ authConfigId, userId: this.user(ctx), callbackUrl });
-    return { url: l.redirectUrl };
+    try {
+      const authConfigId = await this.client().authConfigId(this.entry.toolkit);
+      const l = await this.client().link({ authConfigId, userId: this.user(ctx), callbackUrl });
+      return { url: l.redirectUrl };
+    } catch (e) {
+      if (e instanceof ComposioError && e.status === 403) {
+        throw new NotConfiguredError(this.info.id, { ok: false, message: COMPOSIO_OFF_WORDS(this.info.name), missing: [{ setting: "COMPOSIO_API_KEY", words: e.message }] });
+      }
+      throw e;
+    }
   }
 
   async complete(ctx: ConnectorCtx, params: Record<string, string>): Promise<CompleteOutcome> {
