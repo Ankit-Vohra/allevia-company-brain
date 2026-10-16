@@ -366,7 +366,9 @@ export function OfficePage() {
           </div>
           <div className="home-row">
             <p className="home-label">Next step</p>
-            {topIdea ? (
+            {drafted[0] ? (
+              <Link to={`/approvals#${encodeURIComponent(drafted[0].approvalId!)}`} className="home-next">Say OK or change: {lowerFirst(drafted[0].title)}<Icon name="chevron-right" size={15} /></Link>
+            ) : topIdea ? (
               <Link to="/insights" className="home-next">{topIdea.title}<Icon name="chevron-right" size={15} /></Link>
             ) : (
               <p className="home-calm">Ask your team a question below.</p>
