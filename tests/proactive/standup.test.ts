@@ -35,6 +35,10 @@ async function seedStandup(gr: GraphHandle): Promise<void> {
     props: { kind: "seo-check", severity: "warning", issueType: "missing-meta-description", howToFix: "Add a 140-160 character description." } }, t0);
   await upsertNode(gr, { type: "Page", id: "page:www.aamdani.ai/", name: "Aamdani home", props: { url: "https://www.aamdani.ai/", path: "/" } }, t0);
   await upsertEdge(gr, { from: "page:www.aamdani.ai/", type: "FAILS", to: "rule:seo-missing-meta-description", props: { severity: "warning", evidence: "no <meta name=description>" } }, SEED_NOW - 3600_000);
+  // the owner's "Check my website" (src/checkup): a site-wide fix on the website channel, with its impact score
+  await upsertNode(gr, { type: "Rule", id: "rule:allevia-website-checkup-clear-offer", name: "Website check-up: Say what you do in the first line of the home page",
+    props: { kind: "website-check", issueType: "clear-offer", title: "Say what you do in the first line of the home page", howToFix: "Lead with what you do and for whom." } }, t0);
+  await upsertEdge(gr, { from: "channel:website", type: "FAILS", to: "rule:allevia-website-checkup-clear-offer", props: { impact: 75, tier: "losing enquiries", evidence: "the first line says Welcome" } }, t0);
 }
 
 // Fake drafters: the words say what they were asked for; the poster writes its own card the way the creating tools do.
@@ -101,7 +105,8 @@ describe("what the stand-up reviews and turns into opportunities", () => {
     expect(s.business.countryCode).toBe("IN");
     expect(s.today).toBe("2026-10-15");
     expect(s.reviews.map((r) => r.id)).toEqual(["document:google-review-r1"]);
-    expect(s.website.fails[0]).toMatchObject({ ruleId: "rule:seo-missing-meta-description", pages: 1, newPages: 1 });
+    expect(s.website.fails[0]).toMatchObject({ ruleId: "rule:allevia-website-checkup-clear-offer", impact: 75, name: "Say what you do in the first line of the home page" });
+    expect(s.website.fails[1]).toMatchObject({ ruleId: "rule:seo-missing-meta-description", pages: 1, newPages: 1 });
     expect(s.goals.find((x) => x.id === "goal:instagram-followers")).toMatchObject({ status: "at_risk", was: "on_track" });
     opps = opportunitiesFrom(s);
   });
@@ -111,6 +116,7 @@ describe("what the stand-up reviews and turns into opportunities", () => {
     expect(by.get("season:dussehra-2026")).toMatchObject({ kind: "poster", agent: "content-strategist", reason: "Dussehra is in about 5 days (around 2026-10-20)." });
     expect(by.get("review:document:google-review-r1")).toMatchObject({ kind: "reply", agent: "ops-manager", score: 0.8 });
     expect(by.get("website:rule:seo-missing-meta-description")).toMatchObject({ kind: "website_fix", agent: "tech-lead" });
+    expect(by.get("website:rule:allevia-website-checkup-clear-offer")).toMatchObject({ kind: "website_fix", score: 0.69 }) // impact 75 -> 0.3 + 0.375, one page -> +0.01;
     expect(by.get("goal:goal:instagram-followers")).toMatchObject({ kind: "post", goals: ["goal:instagram-followers"] });
     expect(by.get("goal:goal:instagram-followers")!.reason).toMatch(/slipped and now needs a push/);
     for (const o of opps) {

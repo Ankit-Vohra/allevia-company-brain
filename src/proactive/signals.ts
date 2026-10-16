@@ -24,7 +24,7 @@ export interface BusinessInfo {
 
 export interface ReviewSignal { id: string; stars: number | null; text: string; author: string | null; publishedAt: string | null }
 export interface CompetitorSignal { id: string; name: string; metric: string; value: number; prev: number | null; obsId: string }
-export interface WebsiteFail { ruleId: string; name: string; severity: string; fix: string | null; issueType: string | null; pages: number; newPages: number; page: string | null; pageName: string | null; pageUrl: string | null; evidence: string | null }
+export interface WebsiteFail { ruleId: string; name: string; severity: string; fix: string | null; issueType: string | null; pages: number; newPages: number; impact: number; page: string | null; pageName: string | null; pageUrl: string | null; evidence: string | null }
 export interface FindingSignal {
   id: string; key: string; title: string; why: string; area: string; by: string | null; score: number; detector: string | null;
   cardId: string | null; cardKind: string | null; evidence: string[]; simulated: boolean | null;
@@ -109,15 +109,18 @@ export async function gatherSignals(g: Read, o: SignalOpts): Promise<Signals> {
      RETURN c.id AS id, coalesce(c.name, c.id) AS name, o.metric AS metric, o.value AS value, p.value AS prev, o.id AS obsId
      ORDER BY obsId LIMIT 20`, { since }) : [];
 
-  // the website check-up (onboarding's crawl, or a later one)
-  const [checked] = await ro<{ n: number }>(g, "MATCH (p:Page)-[f]->(r:Rule) WHERE f.until IS NULL AND type(f) IN ['FAILS', 'PASSES'] AND r.kind = 'seo-check' RETURN count(f) AS n");
+  // the website check-up: onboarding's crawl (Rule kind 'seo-check') and the owner's "Check my website" runs (src/checkup,
+  // Rule kind 'website-check', with an impact score per fix; a site-wide fix hangs off the website Channel)
+  const [checked] = await ro<{ n: number }>(g,
+    "MATCH (p:Entity)-[f]->(r:Rule) WHERE f.until IS NULL AND type(f) IN ['FAILS', 'PASSES'] AND r.kind IN ['seo-check', 'website-check'] RETURN count(f) AS n");
   const fails = (checked?.n ?? 0) > 0 ? await ro<WebsiteFail>(g,
-    `MATCH (p:Page)-[f:FAILS]->(r:Rule) WHERE f.until IS NULL AND r.kind = 'seo-check'
-     WITH r, p, f ORDER BY coalesce(p.priority, 0) DESC, p.id
-     WITH r, collect(p)[0] AS page, collect(f.evidence)[0] AS evidence, count(f) AS pages, sum(CASE WHEN coalesce(f.since, 0) >= $since THEN 1 ELSE 0 END) AS newPages
-     RETURN r.id AS ruleId, coalesce(r.name, r.id) AS name, coalesce(r.severity, 'info') AS severity, coalesce(r.howToFix, r.text) AS fix, r.issueType AS issueType,
-            pages, newPages, page.id AS page, page.name AS pageName, page.url AS pageUrl, evidence
-     ORDER BY pages DESC, ruleId LIMIT 25`, { since }) : [];
+    `MATCH (p:Entity)-[f:FAILS]->(r:Rule) WHERE f.until IS NULL AND r.kind IN ['seo-check', 'website-check'] AND (p:Page OR p:Channel)
+     WITH r, p, f ORDER BY coalesce(p.priority, 0) DESC, p.id, id(f)
+     WITH r, collect(p)[0] AS page, collect(f.evidence)[0] AS evidence, count(f) AS pages, max(coalesce(f.impact, 0)) AS impact,
+          sum(CASE WHEN coalesce(f.since, 0) >= $since THEN 1 ELSE 0 END) AS newPages
+     RETURN r.id AS ruleId, coalesce(r.title, r.name, r.id) AS name, coalesce(r.severity, 'info') AS severity, coalesce(r.howToFix, r.text) AS fix, r.issueType AS issueType,
+            pages, newPages, impact, page.id AS page, page.name AS pageName, page.url AS pageUrl, evidence
+     ORDER BY impact DESC, pages DESC, ruleId LIMIT 25`, { since }) : [];
 
   const findings = await ro<FindingSignal>(g,
     `MATCH (r:Recommendation) WHERE r.status = 'open' AND r.source = 'insights'

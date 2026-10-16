@@ -54,7 +54,7 @@ const mk = (o: Omit<Opportunity, "agent" | "skill" | "goals"> & { goals?: string
   ({ ...o, agent: o.agent ?? AGENT[o.kind], skill: SKILL[o.kind], goals: o.goals ?? [], score: clamp(o.score), reason: oneLine(o.reason) });
 
 // Checks whose fix is a piece of writing (the team can draft the words, not just say what is wrong).
-const WORDY = /title|description|meta|h1|heading|alt|open-graph|og-|thin|content|cta/i;
+const WORDY = /title|description|meta|h1|heading|alt|open-graph|og-|thin|content|cta|contact-path|clear-offer|proof|location|opening-hours|share-preview|image-text|link-words/i;
 
 // The channel a posting-gap idea is about ("No Facebook post in 10 days" -> Facebook, channel:facebook).
 function channelOf(f: { detector: string | null; key: string; title: string }): { id: string; name: string } | undefined {
@@ -109,8 +109,9 @@ export function opportunitiesFrom(s: Signals): Opportunity[] {
 
   // ---- the website check-up ----
   for (const f of s.website.fails.filter((x) => WORDY.test(`${x.issueType ?? ""} ${x.name}`)).slice(0, 3)) {
-    const sev = f.severity === "critical" ? 0.65 : f.severity === "warning" ? 0.5 : 0.38;
-    const name = f.name.replace(/^SEO check:\s*/i, "");
+    // the check-up's own impact (0..100, how likely it costs enquiries) when it has one, else the crawl's severity
+    const sev = f.impact > 0 ? 0.3 + Math.min(100, f.impact) / 200 : f.severity === "critical" ? 0.65 : f.severity === "warning" ? 0.5 : 0.38;
+    const name = f.name.replace(/^(SEO check|Website check-up):\s*/i, "");
     out.push(mk({
       key: `website:${f.ruleId}`, kind: "website_fix", source: "website", title: `New words for the website: ${name.toLowerCase()}`,
       reason: `The website check-up found "${name}" on ${plural(f.pages, "page")}${f.newPages ? `, ${fmt(f.newPages)} of them new since the last look` : ""}.`,
