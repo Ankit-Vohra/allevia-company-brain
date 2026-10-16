@@ -71,14 +71,13 @@ export const publishPost = defineTool({
         ? refusal(plan.connect.id, plan.connect.name, plan.why, "not_connected")
         : { data: { made: false, why: plan.why, nothingChanged: true, say: `Tell the owner plainly: ${plan.why}` }, nodes: [], edges: [], sources: [], note: plan.why };
     }
-    const label = media ? media.name.replace(/:.*$/, "").trim() : clip(oneLine(a.caption.split("\n")[0] ?? ""), 40);
+    // the title names the post by its words, so two different posts are two cards and the same words are one
+    const label = clip(oneLine(a.caption.split("\n")[0] ?? ""), 40);
     const title = clip(`${postTitle(spec, plan.block.account)}${label ? `: ${label}` : ""}`, 200);
     const badge = media?.check === "held" ? "held" : media?.check === "ok" ? "unchanged" : "unchecked";
     const biz = await findBusiness(ctx.graph);
     if (!biz) throw new InputError("There is no business in the records to attach this to.");
-    const r = await runPropose({
-      title, why: a.why, kind: "publish_post", area: "content", evidence: [biz, ...(media ? [media.id] : [])],
-      payload: {
+    const payload = {
         title, body: a.caption.trim(), target: `${spec.name}: ${plan.block.account.handle ?? plan.block.account.name}`, publish: plan.block,
         ...(media ? {
           studio: {
@@ -87,8 +86,11 @@ export const publishPost = defineTool({
             creative: { kind: "image", aspect: "4:5", channel: spec.id, by: ctx.agentId, allowUnchecked: true },
           },
         } : {}),
-      },
-    }, ctx);
+    };
+    const r = await runPropose({ title, why: a.why, kind: "publish_post", area: "content", evidence: [biz, ...(media ? [media.id] : [])], payload }, ctx);
+    // the same card is already waiting (a card is one per title): what was asked for now is what it shows, never the older words
+    const waiting = (r.data as { alreadyPending?: boolean; approvalId?: string }).alreadyPending ? (r.data as { approvalId: string }).approvalId : undefined;
+    if (waiting) await ctx.graph.query("MATCH (a:Entity:Approval {id:$id}) WHERE a.status = 'pending' SET a.payload = $payload", { id: waiting, payload: JSON.stringify(payload) });
     const words = approvingWords(spec, plan.block);
     const timed = when ? ` It is set for ${whenWords(when.at, when.tz, ctx.now)} (${when.tz}).` : "";
     const textOnly = spec.media === "never" && a.asset_id ? ` ${spec.name} posts from here are text only, so the picture is left out.` : "";
