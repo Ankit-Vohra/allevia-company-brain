@@ -1,7 +1,7 @@
 // Bakes the small illustration at the top of each person's card on the "Meet your team" page (issue #37), from the product's own
 // drawing code (web/src/office/*), so the desks, chairs, boards, plants and rugs on the website are the ones in the app.
 //
-// One vignette per person: their team's board standing behind the desk, the team's rug (tinted the way the app tints it), the
+// One vignette per person: their team's board standing behind the desk, a rug (drawn the way the app draws them, in a warm tone), the
 // chair and the desk, on transparent ground. The person (the app's pixel sprite) sits between the chair and the desk and is
 // laid over by the page as real SVG, so it can wave. Writes
 //   site/proto/team/assets/v-<person>-back.svg    board, rug, plant, chair (behind the person)
@@ -111,20 +111,13 @@ const base = buildLayout("landscape");
 /** What stands behind each team's desk in the app (layout.ts KIT): the board. The Library has its shelves instead. */
 const BOARD: Record<string, string> = { leadership: "whiteboard", coe: "chart", analytics: "screen-dash", marketing: "pinboard", content: "clapper", tech: "screen-code", ops: "kanban", sales: "pinboard" };
 
-// the app's rugs (scene.ts drawRugTinted and drawRugGold, which are not exported)
+// the app's rug (scene.ts drawRugTinted, which is not exported)
 function rugTinted(c: any, r: any, hue: number) {
   const edge = pal.rugEdge(hue), fill = pal.rugFill(hue);
   R(c, r.x + 1, r.y, r.w - 2, r.h, edge); R(c, r.x, r.y + 1, r.w, r.h - 2, edge); R(c, r.x + 1, r.y + 1, r.w - 2, r.h - 2, fill);
   R(c, r.x + 3, r.y + 3, r.w - 6, 1, edge); R(c, r.x + 3, r.y + r.h - 4, r.w - 6, 1, edge);
   for (let y = r.y + 3; y < r.y + r.h - 3; y += 2) { P(c, r.x - 1, y, edge); P(c, r.x + r.w, y, edge); }
 }
-function rugGold(c: any, r: any) {
-  R(c, r.x, r.y, r.w, r.h, pal.rug);
-  R(c, r.x + 1, r.y + 1, r.w - 2, 1, pal.gold); R(c, r.x + 1, r.y + r.h - 2, r.w - 2, 1, pal.gold);
-  R(c, r.x + 1, r.y + 1, 1, r.h - 2, pal.gold); R(c, r.x + r.w - 2, r.y + 1, 1, r.h - 2, pal.gold);
-  for (let x = r.x + 4; x < r.x + r.w - 4; x += 4) P(c, x, r.y + Math.floor(r.h / 2), pal.goldDark);
-}
-
 interface Person { id: string; name: string; dept: string; hue: number; sprite: { x: number; y: number }; desk: { x: number; y: number; w: number; h: number }; kind: string }
 const people: Person[] = [];
 for (const a of AGENTS) {
@@ -142,7 +135,8 @@ for (const a of AGENTS) {
     R(back as any, it.rect.x + 2, it.rect.y + it.rect.h, 1, 2, pal.metalDark); R(back as any, it.rect.x + it.rect.w - 3, it.rect.y + it.rect.h, 1, 2, pal.metalDark);
   }
   const rug = { x: 6, y: 16, w: 52, h: 38 };
-  if (a.department === "leadership") rugGold(back as any, rug); else rugTinted(back as any, rug, dept.hue);
+  // the site has two colours (warm paper and one dark band), so every rug is a warm tone: the one sand gold
+  rugTinted(back as any, rug, 85);
   if (!kind) drawFloorItem(back as any, { kind: "bookshelf", rect: { x: 3, y: 3, w: 26, h: 26 } }, pal);
   drawFloorItem(back as any, { kind: "plant", rect: { x: 49, y: 32, w: 10, h: 14 } }, pal);
   drawChair(back as any, d, pal);

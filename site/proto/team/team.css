@@ -6,16 +6,17 @@
  *                   progress (--sc-p) and moves her; everything else is CSS.
  *   (default)       a phone, a tablet, reduced motion, data saver or no JavaScript: the cards stacked, the dog between them.
  *                   On a phone the cards and the dog come in as you reach them (html.can-animate); with reduced motion nothing moves.
- * One logical pixel of the app's office is --px on screen (a whole number of CSS pixels, so the pixel art stays crisp).
- * Motion rules: transform and opacity only, ease-out, 140 to 320 ms. One accent: the gold, as a fill with ink on it. */
+ * Colour comes from the site's colour system (shared/base.css): warm paper and the one deep dark band, alternating team by team (never
+ * more than two paper sections in a row), white cards on both, the amber highlight for the trail, the gold only for the button. One logical pixel of the app's office is --px on screen (a whole number of CSS pixels, so the pixel art stays crisp).
+ * Motion rules: transform and opacity only, ease-out, 140 to 320 ms. */
 
 :root {
   /* the engine's six colour roles and two faces, set from the site's tokens (as the live home page does) */
   --sc-canvas: var(--color-paper);
-  --sc-surface: var(--color-card);
+  --sc-surface: var(--surface);
   --sc-ink: var(--color-ink);
   --sc-ink-soft: var(--color-muted);
-  --sc-accent: var(--color-accent);
+  --sc-accent: var(--action);
   --sc-accent-ink: var(--color-ink);
   --sc-font-display: var(--font-display);
   --sc-font-text: var(--font-body);
@@ -25,25 +26,27 @@ html { scroll-behavior: auto; }
 .symbols { position: absolute; width: 0; height: 0; overflow: hidden; }
 
 /* ---------- the top of the page ---------- */
-.team__head { padding-block: clamp(2.5rem, 1.5rem + 4vw, 5rem) clamp(1.5rem, 1rem + 2vw, 3rem); }
+.team__head { padding-block: calc(var(--space-section) / 2); }
 .team__head .h2 { font-size: var(--fs-h1); max-width: 17ch; }
 .team__head .lede { margin-top: 1.25rem; max-width: 33rem; }
-.team__close { padding-block: clamp(3rem, 2rem + 5vw, 7rem) 0; }
-.team__close .lede { margin-top: 1.25rem; }
-.team__cta { margin-top: 2rem; }
+
+/* ---------- a team: a band of colour, a heading, its cards ---------- */
+.trail { --px: 4px; --dpx: 4px; position: relative; }
+@media (min-width: 62rem) { .trail { --px: 5px; --dpx: 5px; } }
+.team { --team-pt: var(--space-section); padding-block: var(--team-pt) var(--space-section); }
+/* a paper team that follows paper (the intro, or the team before it) takes half the space above, so two paper sections read as one stretch */
+.team[data-team="leadership"], .team:not(.band) + .team:not(.band) { --team-pt: calc(var(--space-section) / 2); }
+.team__h { font-size: var(--fs-h2); max-width: 16ch; margin-bottom: 2rem; }
+
+.people { display: grid; justify-items: center; width: min(100%, 34rem); margin-inline: auto; }
+.stop { width: 100%; }
 
 /* ================================================================== the cards (every screen) ======================= */
 
-.trail { --px: 4px; --dpx: 4px; position: relative; padding-bottom: 1rem; }
-@media (min-width: 62rem) { .trail { --px: 5px; --dpx: 5px; } }
-
-.people { display: grid; justify-items: center; width: min(100% - 2 * var(--gutter), 34rem); margin-inline: auto; }
-.stop { width: 100%; }
-
-.card { overflow: clip; background: var(--color-card); border: 1px solid var(--color-rule-2); border-radius: var(--r-frame); box-shadow: var(--shadow-frame); padding: 0.75rem; }
+.card { overflow: clip; background: var(--surface); border: 1px solid var(--color-rule-2); border-radius: var(--r-frame); box-shadow: var(--shadow-frame); padding: 0.75rem; }
 
 /* the picture: a small desk with the person at it, in their team's rug */
-.card__art { position: relative; display: grid; place-items: center; padding: 2.9rem 0.5rem 0.9rem; background: var(--color-paper-2); border-radius: var(--r-card); }
+.card__art { position: relative; display: grid; place-items: center; padding: 1.4rem 0.5rem 1rem; background: var(--color-paper-2); border-radius: var(--r-card); }
 .art { position: relative; width: calc(64 * var(--px)); height: calc(58 * var(--px)); }
 .art__back, .art__front { position: absolute; left: 0; top: 0; width: 100%; height: 100%; max-width: none; }
 .art__back { z-index: 0; }
@@ -54,9 +57,6 @@ html { scroll-behavior: auto; }
 .fig { transform-origin: 8px 20px; transform-box: view-box; }
 .hands__tap--b, .hands__rest, .hands__wave { opacity: 0; }
 .hands__wave { transform-origin: 14px 13px; transform-box: view-box; }
-/* the team's name, on a small chip edged in the rug's colour */
-.sign { position: absolute; left: 0.9rem; top: 0.85rem; margin: 0; }
-.sign span { display: block; padding: 0.3rem 0.85rem; background: #fff; border: 2px solid oklch(0.74 0.09 var(--hue)); border-radius: var(--r-pill); font-size: 0.8125rem; font-weight: 600; line-height: 1; color: var(--color-ink); white-space: nowrap; }
 
 .card__body { display: grid; gap: 0.7rem; padding: 1.15rem 0.5rem 0.6rem; }
 .card__name { font-size: clamp(1.9rem, 1.6rem + 0.9vw, 2.35rem); line-height: 1.05; font-weight: 400; letter-spacing: -0.02em; color: var(--color-ink); }
@@ -64,9 +64,9 @@ html { scroll-behavior: auto; }
 .card__best { font-size: 1.0625rem; line-height: 1.45; color: var(--color-ink-2); text-wrap: pretty; }
 .card__label { display: block; margin-bottom: 0.15rem; font-size: 0.875rem; font-weight: 600; color: var(--color-muted); }
 .card__asks { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0.2rem 0 0.1rem; }
-.card__asks li { padding: 0.42rem 0.8rem; background: var(--color-accent-soft); border-radius: var(--r-card); font-size: 0.9375rem; line-height: 1.3; color: var(--color-ink); }
+.card__asks li { padding: 0.42rem 0.8rem; background: var(--color-paper-2); border-radius: var(--r-card); font-size: 0.9375rem; line-height: 1.3; color: var(--color-ink); }
 .tools { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.3rem 0 0; }
-.tool { display: flex; align-items: center; gap: 0.45rem; padding: 0.28rem 0.75rem 0.28rem 0.35rem; background: #fff; border: 1px solid var(--color-rule); border-radius: var(--r-pill); font-size: 0.8125rem; line-height: 1; color: var(--color-ink-2); }
+.tool { display: flex; align-items: center; gap: 0.45rem; padding: 0.28rem 0.75rem 0.28rem 0.35rem; background: var(--surface); border: 1px solid var(--color-rule); border-radius: var(--r-pill); font-size: 0.8125rem; line-height: 1; color: var(--color-ink-2); }
 .tool .logo { width: 22px; height: 22px; border-radius: 5px; }
 
 /* when the dog arrives the person looks up, leans toward her and waves three times; their tools hop once */
@@ -85,7 +85,7 @@ html { scroll-behavior: auto; }
 @keyframes tap-a { 0% { opacity: 1; } 50% { opacity: 0; } }
 @keyframes tap-b { 0% { opacity: 0; } 50% { opacity: 1; } }
 
-/* the dog's frames (a, b are walking with a page, sit is not), wherever she is */
+/* the dog's frames (a, b are walking with a page; sit and lie are not), wherever she is */
 .df { opacity: 0; }
 .dog__svg, .hop__svg, .gang__dog { width: 100%; height: 100%; overflow: visible; max-width: none; }
 
@@ -116,14 +116,15 @@ html.can-animate .hop.is-seen .hop__heart { animation: heart 1000ms var(--ease-o
 @keyframes hop-treat { 0% { opacity: 0; transform: translateY(-1.6rem); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(0.9rem); } }
 @keyframes heart { 0% { opacity: 0; transform: translateY(0) scale(0.85); } 22% { opacity: 1; transform: translateY(-0.4rem) scale(1); } 100% { opacity: 0; transform: translateY(-2.2rem) scale(1); } }
 
-/* the end of the walk: all three dogs, sitting */
+/* ---------- the end of the walk: the dogs resting, then the one button ---------- */
 .stop--gang { display: grid; justify-items: center; }
-.gang { display: grid; justify-items: center; gap: 0.7rem; margin-top: 0.8rem; }
+.gang { display: grid; justify-items: center; gap: 0.9rem; }
 .gang__row { display: flex; align-items: flex-end; gap: 0.7rem; }
 .gang__slot { display: block; }
 .gang__dog { width: 5.6rem; height: 4.15rem; }
-.gang .df--sit { opacity: 1; }
-.gang figcaption { font-size: 1.0625rem; color: var(--color-ink-2); text-align: center; text-wrap: balance; max-width: 22rem; }
+.gang__dog .df, .gang__dog use { opacity: 1; }
+.team--end .lede { margin-top: 1.25rem; max-width: 33rem; }
+.team__cta { margin-top: 2rem; }
 
 /* the trail and the walking dog exist only on wide screens that welcome motion */
 .trail__line, .trail__dog { display: none; }
@@ -133,45 +134,47 @@ html.can-animate .hop.is-seen .hop__heart { animation: heart 1000ms var(--ease-o
 
 /* ================================================================== the trail (wide screens, motion welcome) ======== */
 
-html.is-scroll .trail { --trail-w: 7rem; padding-top: 1rem; padding-bottom: 3rem; }
+html.is-scroll .trail { --trail-w: 7rem; }
 @media (min-width: 72rem) { html.is-scroll .trail { --trail-w: 11rem; } }
-html.is-scroll .people { grid-template-columns: minmax(0, 1fr) var(--trail-w) minmax(0, 1fr); width: min(100% - 2 * var(--gutter), 82rem); justify-items: stretch; }
+html.is-scroll .team { position: relative; }
+html.is-scroll .team .people { grid-template-columns: minmax(0, 1fr) var(--trail-w) minmax(0, 1fr); width: 100%; justify-items: stretch; }
 html.is-scroll .stop { grid-row: var(--row); width: auto; max-width: 32rem; position: relative; z-index: 1; }
 html.is-scroll .stop--left { grid-column: 1; justify-self: end; }
 html.is-scroll .stop--right { grid-column: 3; justify-self: start; }
-html.is-scroll .stop[data-stop]:not([data-stop="0"]) { margin-top: -7rem; }
-html.is-scroll .stop--gang { grid-column: 1 / -1; justify-self: center; margin-top: 2.5rem !important; }
+html.is-scroll .stop[data-stop] ~ .stop[data-stop] { margin-top: -7rem; }
+html.is-scroll .stop--gang { grid-column: 1 / -1; justify-self: center; }
 html.is-scroll .hop { display: none; }
-html.is-scroll .trail__line { display: block; position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 0; }
-html.is-scroll .trail__line path { fill: none; stroke: var(--color-taupe); stroke-opacity: 0.6; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 0.1 9; }
+/* the team's heading sits in the empty column opposite its first card, beside the trail */
+html.is-scroll .team__h { position: absolute; top: var(--team-pt); width: calc((100% - var(--trail-w)) / 2); max-width: none; margin: 0; padding-inline: 0.25rem; z-index: 1; }
+html.is-scroll .team__h--right { right: 0; }
+html.is-scroll .team__h--left { left: 0; }
+html.is-scroll .trail__line { display: block; position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 2; }
+html.is-scroll .trail__line path { fill: none; stroke: var(--highlight); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 0.1 9; }
 
 /* the dog: team.ts sets her place with transform; her frame, and what she gets, are attributes on her */
 html.is-scroll .trail__dog { display: block; position: absolute; left: 0; top: 0; width: calc(23 * var(--dpx)); height: calc(17 * var(--dpx)); z-index: 3; opacity: 0; will-change: transform; pointer-events: none; }
 html.is-scroll .trail__dog.is-ready { opacity: 1; }
 .dog__flip { position: relative; width: 100%; height: 100%; }
 .trail__dog[data-facing="left"] .dog__flip { transform: scaleX(-1); }
-.trail__dog[data-pose="a"] .df--a, .trail__dog[data-pose="b"] .df--b, .trail__dog[data-pose="sit"] .df--sit { opacity: 1; }
+.trail__dog[data-pose="a"] .df--a, .trail__dog[data-pose="b"] .df--b, .trail__dog[data-pose="sit"] .df--sit, .trail__dog[data-pose="lie"] .df--lie { opacity: 1; }
 .dog__treat, .dog__pat, .dog__heart { position: absolute; opacity: 0; max-width: none; }
 .dog__treat { left: 74%; top: -2%; width: calc(5 * var(--dpx) * 0.9); height: calc(3 * var(--dpx) * 0.9); }
 .dog__pat { left: 52%; top: -62%; width: calc(4 * var(--dpx) * 0.9); height: calc(8 * var(--dpx) * 0.9); }
-.pat__sleeve { fill: var(--shirt, #1f2a6b); }
-.pat__hand { fill: var(--skin, #c68b59); }
+.pat__sleeve { fill: var(--shirt, var(--color-ink)); }
+.pat__hand { fill: var(--skin, var(--color-sand)); }
 .dog__heart { left: 60%; top: -42%; width: calc(5 * var(--dpx) * 1.3); height: calc(5 * var(--dpx) * 1.3); }
 .trail__dog[data-happy="1"][data-reward="treat"] .dog__treat { animation: treat-in 340ms var(--ease-out) both; }
 .trail__dog[data-happy="1"][data-reward="pat"] .dog__pat { animation: pat 1000ms ease-in-out both; }
 .trail__dog[data-happy="1"] .dog__heart { animation: heart 1000ms var(--ease-out) 420ms both; }
 .trail__dog[data-happy="1"] .dog__svg { animation: bob 260ms var(--ease-out) 380ms 2; }
+.trail__dog[data-pose="lie"] .dog__svg { animation: none; }
 @keyframes treat-in { 0% { opacity: 0; transform: translate(1.4rem, -2.6rem); } 15% { opacity: 1; } 85% { opacity: 1; transform: translate(0, 0); } 100% { opacity: 0; transform: translate(0, 0.2rem); } }
 @keyframes pat { 0% { opacity: 0; transform: translateY(-0.8rem); } 14% { opacity: 1; } 30% { transform: translateY(0.25rem); } 46% { transform: translateY(-0.5rem); } 62% { transform: translateY(0.25rem); } 86% { opacity: 1; transform: translateY(-0.5rem); } 100% { opacity: 0; transform: translateY(-0.9rem); } }
 @keyframes bob { 0%, 100% { transform: none; } 45% { transform: translateY(-0.4rem); } }
 
-/* JJ and Zoe lie waiting; when Fluffy sits down they sit up and face her */
+/* in the scroll version Fluffy's own place in the pile of sleeping dogs is empty until she walks in and lies down there */
 html.is-scroll .gang__fluffy { visibility: hidden; }
-html.is-scroll .gang__jj .df--lie, html.is-scroll .gang__zoe .df--lie { opacity: 1; }
-html.is-scroll .gang__jj .df--sit, html.is-scroll .gang__zoe .df--sit { opacity: 0; }
-html.is-scroll .stop--gang.is-on .gang__jj .df--lie, html.is-scroll .stop--gang.is-on .gang__zoe .df--lie { opacity: 0; }
-html.is-scroll .stop--gang.is-on .gang__jj .df--sit, html.is-scroll .stop--gang.is-on .gang__zoe .df--sit { opacity: 1; }
-html.is-scroll .stop--gang.is-on .gang__jj, html.is-scroll .stop--gang.is-on .gang__zoe { scale: -1 1; animation: bob 300ms var(--ease-out); }
+html.is-scroll .gang__dog { width: calc(23 * var(--dpx)); height: calc(17 * var(--dpx)); }
 
 /* reduced motion: the cards are still cards, the dog sits, nothing moves */
 @media (prefers-reduced-motion: reduce) {

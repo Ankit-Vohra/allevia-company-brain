@@ -43,9 +43,6 @@ const SAY: Record<string, Say> = {
   "ops-manager": { title: "Ops manager", best: "I keep track of what is pending and who owns it.", asks: ["What is waiting on me?", "Which follow-ups are late?", "Who owns the supplier invoice?"], tools: ["slack", "gmail", "google-sheets", "quickbooks"] },
   librarian: { title: "Librarian", best: "I keep the company’s memory: what we decided, why, and who knows.", asks: ["Why did we pause those ads?", "Who knows about our supplier?", "What did we decide about pricing?"], tools: ["gmail", "slack", "google-sheets"] },
 };
-/** The team's name on the card (the app says "Center of Excellence"; the owner reads "Numbers"). */
-const TEAM_NAME: Record<string, string> = { coe: "Numbers" };
-const teamName = (dept: string) => TEAM_NAME[dept] ?? DEPARTMENTS.find((d) => d.id === dept)?.name ?? dept;
 const agent = (id: string): AgentDef => AGENTS.find((a) => a.id === id)!;
 /** The order of the walk (the founder's): Chief of Staff, Numbers, Analytics, Marketing, Content Studio, Sales, Tech, Ops, Library. */
 const ORDER = ["leadership", "coe", "analytics", "marketing", "content", "sales", "tech", "ops", "knowledge"];
@@ -76,7 +73,7 @@ function symbols(): string {
   return `<svg class="symbols" width="0" height="0" aria-hidden="true" focusable="false"><defs>${dogs}${heart}${treat}</defs></svg>`;
 }
 /** A dog with the frames CSS switches between (data-pose on the wrapper: a, b, sit). */
-const dogFrames = (id: PetId, cls: string) => `<svg class="${cls}" viewBox="0 0 ${DW} ${DH}" shape-rendering="crispEdges" aria-hidden="true" focusable="false"><use class="df df--a" href="#d-${id}-a"/><use class="df df--b" href="#d-${id}-b"/><use class="df df--sit" href="#d-${id}-sit"/></svg>`;
+const dogFrames = (id: PetId, cls: string) => `<svg class="${cls}" viewBox="0 0 ${DW} ${DH}" shape-rendering="crispEdges" aria-hidden="true" focusable="false"><use class="df df--a" href="#d-${id}-a"/><use class="df df--b" href="#d-${id}-b"/><use class="df df--sit" href="#d-${id}-sit"/><use class="df df--lie" href="#d-${id}-lie"/></svg>`;
 const heartSvg = (cls: string) => `<svg class="${cls}" viewBox="0 0 5 5" shape-rendering="crispEdges" aria-hidden="true"><use href="#d-heart"/></svg>`;
 const treatSvg = (cls: string) => `<svg class="${cls}" viewBox="0 0 5 3" shape-rendering="crispEdges" aria-hidden="true"><use href="#d-treat"/></svg>`;
 
@@ -109,14 +106,13 @@ function toolsHtml(id: string): string {
 
 const img = (id: string, layer: "back" | "front") => `<img class="art__${layer}" src="./assets/v-${id}-${layer}.svg" alt="" width="${VIGNETTE_W}" height="${VIGNETTE_H}" decoding="async">`;
 
-function card(p: (typeof PEOPLE)[number], i: number): string {
+function card(p: (typeof PEOPLE)[number], i: number, row: number): string {
   const a = agent(p.id), s = SAY[p.id]!;
   const side = i % 2 === 0 ? "left" : "right";
-  return `<li class="stop stop--${side}" data-stop="${i}" data-side="${side}" style="--row:${i + 1}">
+  return `<li class="stop stop--${side}" data-stop="${i}" data-side="${side}" style="--row:${row + 1}">
   <article class="card" aria-labelledby="who-${p.id}" style="--hue:${p.hue};--skin:${a.sprite.skin};--shirt:${a.sprite.shirt}">
     <div class="card__art" aria-hidden="true">
       <div class="art">${img(p.id, "back")}<div class="who">${figSvg(p.id)}</div>${img(p.id, "front")}<div class="who who--hands">${handsSvg(p.id)}</div></div>
-      <p class="sign"><span>${esc(teamName(p.dept))}</span></p>
     </div>
     <div class="card__body">
       <h3 class="card__name" id="who-${p.id}">${esc(a.name)}</h3>
@@ -135,42 +131,68 @@ function hop(i: number): string {
   return `<li class="hop hop--${dir}" aria-hidden="true"><div class="hop__dog">${dogFrames("fluffy", "hop__svg")}${treatSvg("hop__treat")}${heartSvg("hop__heart")}</div></li>`;
 }
 
-/** The end of the walk: JJ and Zoe are waiting. On wide screens Fluffy's own place is left empty for the walking dog to sit in. */
-function gang(n: number): string {
-  const dog = (id: PetId, cls: string) => `<svg class="gang__dog ${cls}" viewBox="0 0 ${DW} ${DH}" shape-rendering="crispEdges" aria-hidden="true" focusable="false"><use class="df df--lie" href="#d-${id}-lie"/><use class="df df--sit" href="#d-${id}-sit"/></svg>`;
-  return `<li class="stop stop--gang" data-gang style="--row:${n + 1}">
+/** The end of the walk: JJ and Zoe are resting. On wide screens Fluffy's own place is left empty for the walking dog to lie down in. */
+function gang(row: number): string {
+  const dog = (id: PetId, cls: string) => `<svg class="gang__dog ${cls}" viewBox="0 0 ${DW} ${DH}" shape-rendering="crispEdges" aria-hidden="true" focusable="false"><use href="#d-${id}-lie"/></svg>`;
+  return `<li class="stop stop--gang" data-gang style="--row:${row + 1}">
   <figure class="gang">
     <div class="gang__row" aria-hidden="true"><span class="gang__slot" data-slot>${dog("fluffy", "gang__fluffy")}</span>${dog("jj", "gang__jj")}${dog("zoe", "gang__zoe")}</div>
-    <figcaption>Woof. That is the whole team. Fluffy, JJ and Zoe say hello.</figcaption>
   </figure>
 </li>`;
 }
 
 // ---------- the page ----------
 
+/** Each team is its own moment: a band of colour (the site's colour system, shared/base.css), a heading that carries the change, then its cards. */
+const TEAMS: { dept: string; band: string; name: string; line: string }[] = [
+  { dept: "leadership", band: "", name: "Chief of Staff", line: "Every request starts here." },
+  { dept: "coe", band: "band--ink", name: "Numbers", line: "The figures you can trust." },
+  { dept: "analytics", band: "", name: "Analytics", line: "Where customers come from." },
+  { dept: "marketing", band: "", name: "Marketing", line: "Ads and channels, with your OK." },
+  { dept: "content", band: "band--ink", name: "Content Studio", line: "Posts and reels in your voice." },
+  { dept: "sales", band: "", name: "Sales", line: "Every enquiry answered." },
+  { dept: "tech", band: "", name: "Tech", line: "Watching the site and the app, day and night." },
+  { dept: "ops", band: "band--ink", name: "Operations", line: "What is pending, and who owns it." },
+  { dept: "knowledge", band: "", name: "Library", line: "The company’s memory." },
+];
+
+function teams(): string {
+  let i = 0;
+  return TEAMS.map((t) => {
+    const first = i;
+    let r = 0;
+    const items = WALK.filter((p) => p.dept === t.dept).map((p) => card(p, i++, r++) + hop(i - 1)).join("");
+    const side = first % 2 === 0 ? "right" : "left";    // the heading takes the empty column opposite the team's first card
+    const dark = t.band === "band--ink";
+    const rest = t.dept === "knowledge" ? gang(r) : "";    // the dogs lie down at the end of the last team
+    return `<section class="${t.band ? `band ${t.band} ` : ""}wrap team" data-team="${t.dept}" aria-labelledby="team-${t.dept}">
+  <h2 class="h2 team__h team__h--${side}${dark ? " on-ink" : ""}" id="team-${t.dept}"><span class="t1">${esc(t.name)}.</span> <span class="t2">${esc(t.line)}</span></h2>
+  <ol class="people">${items}${rest}</ol>
+</section>`;
+  }).join("\n");
+}
+
 function story(): string {
   const n = numberWord(STAFF_COUNT);
-  const cards = WALK.map((p, i) => card(p, i) + hop(i)).join("") + gang(WALK.length);
   return `${symbols()}
-<main id="main" class="team">
+<main id="main" class="team-page">
   <header class="team__head wrap">
     <h1 class="h2 h2--wide"><span class="t1">Meet the people</span> <span class="t2">who run on your brain.</span></h1>
-    <p class="lede">${esc(n.charAt(0).toUpperCase() + n.slice(1))} people, each with a name, a job and a way of working. Fluffy walks you over to meet each one.</p>
+    <p class="lede">${esc(n.charAt(0).toUpperCase() + n.slice(1))} people with a name, a job and a way of working. They know your business and do the work.</p>
   </header>
-  <section class="trail" id="walk" aria-labelledby="walk-h">
-    <h2 class="visually-hidden" id="walk-h">The team, one person at a time</h2>
+  <div class="trail" id="walk">
     <div class="trail__act" data-sc-act="flow" aria-hidden="true"></div>
     <svg class="trail__line" data-line aria-hidden="true" focusable="false"><path d=""/></svg>
     <div class="trail__dog" data-dog data-pose="sit" data-facing="right" data-reward="treat" aria-hidden="true">
       <div class="dog__flip">${dogFrames("fluffy", "dog__svg")}${treatSvg("dog__treat")}<svg class="dog__pat" viewBox="0 0 4 8" shape-rendering="crispEdges" aria-hidden="true"><rect class="pat__sleeve" x="0" y="0" width="4" height="5"/><rect class="pat__hand" x="0" y="5" width="4" height="3"/></svg>${heartSvg("dog__heart")}</div>
     </div>
-    <ol class="people">${cards}</ol>
-  </section>
-  <section class="team__close wrap" id="after-walk" aria-labelledby="close-h">
-    <h2 class="h2 h2--wide" id="close-h"><span class="t1">Meet them on your own business.</span> <span class="t2">We set it up.</span></h2>
-    <p class="lede">We read your website and connect the tools you already use. After that, nothing goes out without your OK.</p>
-    <p class="team__cta"><a class="btn btn-gold" href="/contact/">Get a free Brain Snapshot</a></p>
-  </section>
+    ${teams()}
+    <section class="wrap team team--end" id="after-walk" aria-labelledby="close-h">
+      <h2 class="h2 h2--wide" id="close-h"><span class="t1">Meet them on your own business.</span> <span class="t2">We set it up.</span></h2>
+      <p class="lede">We read your website and connect the tools you already use. After that, nothing goes out without your OK.</p>
+      <p class="team__cta"><a class="btn btn-gold" href="/contact/">Get a free Brain Snapshot</a></p>
+    </section>
+  </div>
 </main>`;
 }
 

@@ -195,7 +195,9 @@ class Trail {
     let best = 1e9;
     this.stops.forEach((s, i) => { const dd = Math.abs(a - s.a); if (dd < best) { best = dd; near = i; } });
     const into = this.active === near ? 1.25 : 1;
-    const beside = best < this.dw * into ? near : -1;
+    let beside = best < this.dw * into ? near : -1;
+    const end = this.stops.length - 1;
+    if (a > this.stops[end]!.a - this.dw) beside = end;     // once she has reached the end of the walk she stays there, asleep
 
     if (force || pos.x !== this.x || pos.y !== this.y) this.dog.style.transform = `translate3d(${Math.round(pos.x - this.dogW / 2)}px,${Math.round(pos.y - this.dogH)}px,0)`;   // whole pixels keep the pixel art crisp
     const moved = (Number.isNaN(this.x) ? 0 : Math.hypot(pos.x - this.x, pos.y - this.y));
@@ -209,7 +211,8 @@ class Trail {
       if (Math.abs(dx) > 0.05) this.set("facing", dx < 0 ? "left" : "right");
       this.idle = window.setTimeout(() => this.set("pose", "sit"), 220);
     } else {
-      this.set("pose", "sit");
+      // beside a card she sits; at the end of the walk she lies down beside JJ and Zoe
+      this.set("pose", beside >= 0 && !this.stops[beside]!.card ? "lie" : "sit");
       if (beside >= 0) this.set("facing", this.stops[beside]!.side < 0 ? "left" : "right");
     }
     this.sit(beside, force);
