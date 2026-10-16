@@ -17,3 +17,15 @@ else
   echo "$STAMP FAILED integrity check" >> "$DIR/backup.log"
   exit 1
 fi
+
+# Since 2026-10-16 the live data is on FalkorDB Cloud (free tier: no backups of its own). Export each graph from the
+# cloud every night too, keeping the last 7 nights per graph.
+cd "$(dirname "$0")/../.."
+for t in meta aamdani avs_atelier demo_seed; do
+  if npm run -s cli -- db:export "$t" "$DIR/cloud-$t-$STAMP.jsonl" --from env:ALLEVIA_FALKORDB_CLOUD_URL >/dev/null 2>&1; then
+    echo "$STAMP cloud $t ok" >> "$DIR/backup.log"
+    ls -1t "$DIR"/cloud-"$t"-*.jsonl | tail -n +8 | xargs rm -f
+  else
+    echo "$STAMP cloud $t FAILED" >> "$DIR/backup.log"
+  fi
+done
