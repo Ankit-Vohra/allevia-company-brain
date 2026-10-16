@@ -10,6 +10,7 @@
 //     compares the latest two: "Your mobile speed went from 41 to 78".
 import type { EdgeInput, NodeInput, ObservationInput } from "../graph/upsert.js";
 import { channelId, channelNode } from "../ingest/sources/channels.js";
+import { pageName } from "../ingest/sources/website/urls.js";
 import type { GraphWrite } from "../ingest/types.js";
 import { entityId } from "../util/ids.js";
 import { FIXES, type CheckupVerdict, type Fix } from "./fixes.js";
@@ -59,6 +60,7 @@ export interface CheckupRun {
   verdict: CheckupVerdict;
   lighthouse: LighthouseResult[];
   pagesChecked: string[];       // crawled page URLs
+  pageTitles?: Record<string, string>; // page URL -> its title as the crawl read it (redacted): a page is named by its title, as onboarding names it
   conversionPages: string[];    // pages read at phone and desktop size
   notes: string[];              // what could not be checked, plainly
 }
@@ -88,9 +90,16 @@ export function checkupWrite(run: CheckupRun): GraphWrite {
   const site = channelId("website");
   const edges: EdgeInput[] = [];
   const seenPages = new Set<string>();
+  const named = (url: string): string => pageName(url, run.pageTitles?.[url]);
   for (const f of v.all) {
     const to = checkupRuleId(f.key);
-    const props = { evidence: clip(f.evidence.join(" | "), 400), impact: f.impact, tier: f.tier, severity: f.tier === "losing enquiries" ? "critical" : f.tier === "tidy-up" ? "info" : "warning" };
+    // Each FAILS edge is a whole finding: what it is, why it matters, how long it takes and how bad it is for this run, so the
+    // latest findings, and the ones fixed since, are read from the edges (history.ts) and not from the report's JSON.
+    const props = {
+      evidence: clip(f.evidence.join(" | "), 400), evidenceItems: f.evidence.slice(0, 6).map((e) => clip(e, 300)), impact: f.impact, tier: f.tier,
+      severity: f.tier === "losing enquiries" ? "critical" : f.tier === "tidy-up" ? "info" : "warning",
+      title: f.title, what: clip(f.what, 500), why: clip(f.why, 400), who: f.who, effort: f.effort, minutes: f.minutes, pageCount: f.pageCount,
+    };
     if (!f.urls.length) {
       edges.push({ from: site, type: "FAILS", to, src: doc, asOf: run.asOf, props });
       continue;
@@ -100,7 +109,7 @@ export function checkupWrite(run: CheckupRun): GraphWrite {
       if (!seenPages.has(pid)) {
         seenPages.add(pid);
         const u = new URL(url);
-        nodes.push({ type: "Page", id: pid, name: u.pathname, props: { url, path: u.pathname + u.search } });
+        nodes.push({ type: "Page", id: pid, name: named(url), props: { url, path: u.pathname + u.search } });
         edges.push({ from: pid, type: "PART_OF", to: site, src: doc, asOf: run.asOf });
       }
       edges.push({ from: pid, type: "FAILS", to, src: doc, asOf: run.asOf, props });
@@ -108,7 +117,7 @@ export function checkupWrite(run: CheckupRun): GraphWrite {
   }
   const home = pageNodeId(`${run.origin}/`);
   if (!seenPages.has(home)) {
-    nodes.push({ type: "Page", id: home, name: "/", props: { url: `${run.origin}/`, path: "/" } });
+    nodes.push({ type: "Page", id: home, name: named(`${run.origin}/`), props: { url: `${run.origin}/`, path: "/" } });
     edges.push({ from: home, type: "PART_OF", to: site, src: doc, asOf: run.asOf });
   }
   edges.push({ from: doc, type: "LINKS_TO_PAGE", to: home, src: doc, asOf: run.asOf });
@@ -135,7 +144,7 @@ export function checkupWrite(run: CheckupRun): GraphWrite {
     if (!seenPages.has(pid)) {
       seenPages.add(pid);
       const u = new URL(r.url);
-      nodes.push({ type: "Page", id: pid, name: u.pathname, props: { url: r.url, path: u.pathname + u.search } });
+      nodes.push({ type: "Page", id: pid, name: named(r.url), props: { url: r.url, path: u.pathname + u.search } });
       edges.push({ from: pid, type: "PART_OF", to: site, src: doc, asOf: run.asOf });
     }
     obs(pid, "checkup_mobile_speed", r.scores.performance, `${new URL(r.url).pathname}, ${lab}`);
@@ -153,34 +162,48 @@ const fmt = (metric: CheckupMetric, v: number) => {
   return u === "s" ? `${v} s` : u === "ms" ? `${Math.round(v)} ms` : String(Math.round(v * 1000) / 1000);
 };
 
-/**
- * What changed since the previous check-up, in plain words. `prev` and `cur` are the website channel's readings of
- * each run; `prevFixes`/`curFixes` are the runs' "key|title" lists. A change smaller than the noise of a lab test
- * (5 points of a score, 0.3 s, 0.05 of layout shift, 100 ms) is not reported.
- */
-export function progress(prev: Reading[], cur: Reading[], prevFixes: string[], curFixes: string[], previousAsOf?: string): Progress {
+const MIN_CHANGE: Partial<Record<CheckupMetric, number>> = {
+  checkup_mobile_speed: 5, checkup_desktop_speed: 5, checkup_easy_to_use: 5, checkup_google_basics: 5, checkup_best_practices: 5,
+  checkup_load_seconds_mobile: 0.3, checkup_layout_shift_mobile: 0.05, checkup_blocking_ms_mobile: 100,
+};
+
+/** The numbers that moved by more than a lab test's own noise (5 points of a score, 0.3 s, 0.05 of layout shift, 100 ms), in plain words. */
+export function readingLines(prev: Reading[], cur: Reading[]): string[] {
   const lines: string[] = [];
-  const min: Partial<Record<CheckupMetric, number>> = {
-    checkup_mobile_speed: 5, checkup_desktop_speed: 5, checkup_easy_to_use: 5, checkup_google_basics: 5, checkup_best_practices: 5,
-    checkup_load_seconds_mobile: 0.3, checkup_layout_shift_mobile: 0.05, checkup_blocking_ms_mobile: 100,
-  };
   const p = new Map(prev.map((r) => [r.metric, r.value]));
   for (const r of cur) {
     const m = r.metric as CheckupMetric;
-    const threshold = min[m];
+    const threshold = MIN_CHANGE[m];
     const before = p.get(m);
     if (threshold === undefined || before === undefined || Math.abs(r.value - before) < threshold) continue;
     const def = CHECKUP_METRICS[m];
     const better = def.better === "up" ? r.value > before : r.value < before;
     lines.push(`Your ${def.label} went from ${fmt(m, before)} to ${fmt(m, r.value)}${better ? "" : " (worse)"}.`);
   }
+  return lines;
+}
+
+/** The "fixed" and "new" lines, from the titles of each. */
+export function changeLines(fixed: string[], newFixes: string[]): string[] {
+  const lines: string[] = [];
+  if (fixed.length) lines.push(`Fixed since the last check-up: ${fixed.slice(0, 5).join("; ")}${fixed.length > 5 ? ` and ${fixed.length - 5} more` : ""}.`);
+  if (newFixes.length) lines.push(`New since the last check-up: ${newFixes.slice(0, 3).join("; ")}${newFixes.length > 3 ? ` and ${newFixes.length - 3} more` : ""}.`);
+  return lines;
+}
+
+/**
+ * What changed since the previous check-up, in plain words. `prev` and `cur` are the website channel's readings of
+ * each run; `prevFixes`/`curFixes` are the runs' "key|title" lists. A change smaller than the noise of a lab test
+ * (5 points of a score, 0.3 s, 0.05 of layout shift, 100 ms) is not reported. This is the report-JSON way; the graph way
+ * (history.ts) takes the fixed and new titles from the FAILS edges and calls readingLines and changeLines itself.
+ */
+export function progress(prev: Reading[], cur: Reading[], prevFixes: string[], curFixes: string[], previousAsOf?: string): Progress {
   const title = (x: string) => x.slice(x.indexOf("|") + 1);
   const key = (x: string) => x.slice(0, x.indexOf("|"));
   const curKeys = new Set(curFixes.map(key));
   const prevKeys = new Set(prevFixes.map(key));
   const fixed = prevFixes.filter((x) => !curKeys.has(key(x))).map(title);
   const newFixes = curFixes.filter((x) => !prevKeys.has(key(x))).map(title);
-  if (fixed.length) lines.push(`Fixed since the last check-up: ${fixed.slice(0, 5).join("; ")}${fixed.length > 5 ? ` and ${fixed.length - 5} more` : ""}.`);
-  if (newFixes.length && prevFixes.length) lines.push(`New since the last check-up: ${newFixes.slice(0, 3).join("; ")}${newFixes.length > 3 ? ` and ${newFixes.length - 3} more` : ""}.`);
+  const lines = [...readingLines(prev, cur), ...changeLines(fixed, prevFixes.length ? newFixes : [])];
   return { lines, fixed, newFixes, ...(previousAsOf ? { previousAsOf } : {}) };
 }

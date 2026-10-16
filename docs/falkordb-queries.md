@@ -124,7 +124,7 @@ Plan: two `Node By Index Scan` anchors, then `ProcedureCall`.
 
 | | |
 |---|---|
-| Code | `src/graph/algorithms.ts:131`, from `src/agent/tools/ranking.ts:39`; the librarian stores it as `rank` (`src/ingest/librarian.ts:180`) |
+| Code | `src/graph/algorithms.ts:131`, from `src/agent/tools/ranking.ts:39`; stored as `rank` by `rankAndCommunities` (`src/ingest/librarian.ts:173`): the librarian runs it after an ingest, and onboarding runs it at the end for a business read from a website |
 | Answers | The most central things in the business, optionally one label and/or one relationship type ("core systems" = `System` over `DEPENDS_ON`). |
 | Why a graph | Importance here is "how much of the business leads to it", a property of the whole link structure, not of any row. |
 
@@ -144,7 +144,7 @@ publisher, Instagram.
 | | |
 |---|---|
 | Code | `src/graph/algorithms.ts:155`, from `src/agent/tools/ranking.ts:94`; stored communities read at `src/agent/tools/ranking.ts:85`; projection reads at `src/graph/projection.ts:149` and `src/graph/projection.ts:167`, writes at `src/graph/projection.ts:254` |
-| Answers | Clusters of documents and the things they mention or link, each named by its best-connected members. |
+| Answers | Clusters of documents and the things they mention or link, each named by its best-connected members. The relationships it groups by are `MENTIONS`, `LINKS_TO` and `LINKS_TO_PAGE` (a website's own link structure), stored as `community` by the same `rankAndCommunities`. |
 
 ```cypher
 CALL algo.labelPropagation({relationshipTypes: $rels}) YIELD node, communityId

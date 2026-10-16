@@ -250,6 +250,12 @@ export const pageWeight = (url: string): number => {
   }
 };
 
+// The ranking rule: the most enquiries first, ties to the quicker fix, then by key. Shared with the graph reader (history.ts),
+// which rebuilds the list from the open FAILS edges and must order it the same way.
+export const byImpact = (x: Pick<Fix, "impact" | "minutes" | "key">, y: Pick<Fix, "impact" | "minutes" | "key">): number =>
+  y.impact - x.impact || x.minutes - y.minutes || x.key.localeCompare(y.key);
+export const topFixes = <T extends Pick<Fix, "impact">>(ranked: T[], n = 5): T[] => ranked.filter((f) => f.impact >= TOP_MIN_IMPACT).slice(0, n);
+
 interface Acc { def: FixDef; pages: Map<string, number>; evidence: string[]; sources: Set<Fix["sources"][number]>; over?: number; what?: string }
 
 export function buildVerdict(input: CheckupInput, topN = 5): CheckupVerdict {
@@ -363,7 +369,7 @@ export function buildVerdict(input: CheckupInput, topN = 5): CheckupVerdict {
       pages: pagesSorted.map(([p]) => pathOf(p)).slice(0, 12), urls: pagesSorted.map(([p]) => p).slice(0, 50), pageCount: pagesSorted.length,
       evidence: a.evidence, sources: [...a.sources].sort(),
     };
-  }).sort((x, y) => y.impact - x.impact || x.minutes - y.minutes || x.key.localeCompare(y.key));
+  }).sort(byImpact);
 
   const good: string[] = [];
   const passed = new Set(input.conversion.filter((c) => c.pass).map((c) => c.check));
@@ -374,7 +380,7 @@ export function buildVerdict(input: CheckupInput, topN = 5): CheckupVerdict {
   if (scores.accessibility !== undefined && scores.accessibility >= 90) good.push(`It is easy to read and use (${scores.accessibility}/100).`);
   if (input.site.https) good.push("It is secure (https).");
 
-  return { top: all.filter((f) => f.impact >= TOP_MIN_IMPACT).slice(0, topN), all, scores, good, kind: input.kind };
+  return { top: topFixes(all, topN), all, scores, good, kind: input.kind };
 }
 
 function sameUrl(a: string, b: string): boolean {

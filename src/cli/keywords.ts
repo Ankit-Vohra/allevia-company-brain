@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import { findBusinessId } from "../actions/shared.js";
 import { graphName, listGraphs, openGraph } from "../graph/client.js";
 import { writeBatch } from "../graph/upsert.js";
+import { keepPageNames } from "../checkup/pages.js";
 import {
   DataForSeo, NOT_CONFIGURED, backlinksCall, competitorsCall, dfsConfig, estimateUsd, graphLedger, keywordIdeasCall, keywordsWrite, marketFor,
   rankedKeywordsCall, withinBudget, type PaidCall,
@@ -54,7 +55,7 @@ export const commands: Command[] = [
         out[c.op] = r.value;
         console.log(`${c.op}: cost $${r.costUsd.toFixed(4)}; month so far $${r.spentThisMonthUsd.toFixed(3)} of $${r.budgetUsd.toFixed(2)}`);
       }
-      const w = keywordsWrite({ asOf, host: domain, ideas: out.keyword_ideas as never, ranked: out.ranked_keywords as never });
+      const w = await keepPageNames(g, keywordsWrite({ asOf, host: domain, ideas: out.keyword_ideas as never, ranked: out.ranked_keywords as never }));
       const s = await writeBatch(g, w, Date.now());
       if (s.errors.length) console.error(`${s.errors.length} write(s) failed: ${s.errors[0]!.error}`);
       console.log(JSON.stringify(out, null, 2));
