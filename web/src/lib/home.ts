@@ -8,6 +8,7 @@ import type { AgentId, AgentMode, ProgramGoal } from "../../../shared/contracts.
 import { AGENTS } from "../../../shared/roster.js";
 import { CHIEF, TEAM, dotOf, workingNow, type Dot } from "./chat.js";
 import { goalState, goalView, monthWeek, notStartedYet, type GoalView } from "./plainwords.js";
+import { humanDates } from "./words.js";
 
 // ---------------------------------------------------------------- waiting for your OK
 
@@ -46,7 +47,10 @@ export function waitingList<A extends DraftLike>(approvals: readonly A[] | undef
   });
   return [...pending]
     .sort((a, b) => (rank.get(a.id) ?? 1e6) - (rank.get(b.id) ?? 1e6) || b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
-    .map((a) => ({ approval: a, ...(why.get(a.id) || a.preview?.why ? { why: why.get(a.id) || a.preview?.why } : {}), big: big.has(a.id) }));
+    .map((a) => {
+      const line = why.get(a.id) || a.preview?.why;
+      return { approval: a, ...(line ? { why: humanDates(line) } : {}), big: big.has(a.id) };
+    });
 }
 
 /** The first few to decide here, and how many more wait on the Approvals page. */
@@ -69,7 +73,7 @@ export function noteLine(standup: StandupLike | null | undefined): string {
 
 /** The stand-up's picks, each with its reason: the full note, behind one tap. */
 export function notePicks(standup: StandupLike | null | undefined): Array<{ key: string; agent: AgentId; title: string; why: string; approvalId?: string }> {
-  return (standup?.items ?? []).filter((i) => i.status === "drafted").map((i) => ({ key: i.key, agent: i.agent, title: plainTitle(i.title), why: i.why, ...(i.approvalId ? { approvalId: i.approvalId } : {}) }));
+  return (standup?.items ?? []).filter((i) => i.status === "drafted").map((i) => ({ key: i.key, agent: i.agent, title: plainTitle(i.title), why: humanDates(i.why), ...(i.approvalId ? { approvalId: i.approvalId } : {}) }));
 }
 
 // ---------------------------------------------------------------- your plan
@@ -205,9 +209,10 @@ export function meetingWords(when: { start: string; end?: string; timeZone?: str
   const day = new Intl.DateTimeFormat(loc, { weekday: "long", day: "numeric", month: "long", ...(zone ? { timeZone: zone } : {}) }).format(start).replace(",", "");
   const clock = new Intl.DateTimeFormat(loc, { hour: "numeric", minute: "2-digit", ...(zone ? { timeZone: zone } : {}) });
   const end = when.end ? new Date(when.end) : undefined;
-  const from = clock.format(start);
+  const keep = (t: string) => t.replace(/\s(?=[ap]m$)/i, " "); // "11:30 am" never breaks between the time and the am
+  const from = keep(clock.format(start));
   if (!end || Number.isNaN(end.getTime())) return `${day}, ${from}`;
-  return `${day}, ${from} to ${clock.format(end)}`;
+  return `${day}, ${from} to ${keep(clock.format(end))}`;
 }
 
 const pick = (z: string | undefined): string | undefined => {

@@ -25,7 +25,7 @@ export function PlanCard({ program, loading, error, toOk }: {
           <p className="hm-plan-when">{plan.when}</p>
           {toOk > 0 && <p className="hm-plan-ok"><Link to="/program">{toOk === 1 ? "One goal is" : `${toOk} goals are`} waiting for your OK</Link></p>}
           {plan.goals.length > 0 ? (
-            <ul className="hm-goals">{plan.goals.map((g) => <Goal key={g.name} g={g} />)}</ul>
+            <ul className="hm-goals">{plan.goals.map((g) => <Goal key={g.name} g={g} quiet={plan.allWaiting} />)}</ul>
           ) : (
             <p className="hm-quiet">Your team will suggest two or three goals once it has had a first look at your business.</p>
           )}
@@ -36,7 +36,8 @@ export function PlanCard({ program, loading, error, toOk }: {
   );
 }
 
-function Goal({ g }: { g: GoalView }) {
+/** `quiet`: every goal is waiting for its first reading, so the card says so once instead of under each bar. */
+function Goal({ g, quiet }: { g: GoalView; quiet: boolean }) {
   const tone = g.status?.tone ?? "none";
   return (
     <li className={`hm-goal tone-${tone}`}>
@@ -50,7 +51,9 @@ function Goal({ g }: { g: GoalView }) {
       >
         {g.progress !== null && <span style={{ width: `${Math.max(3, g.progress * 100)}%` }} />}
       </span>
-      <p className="hm-goal-line">{g.known && g.now !== null ? <><b className="num">{g.now}</b> now{g.start !== null ? <> · started at <span className="num">{g.start}</span></> : null}</> : g.why}</p>
+      {!(quiet && !g.known) && (
+        <p className="hm-goal-line">{g.known && g.now !== null ? <><b className="num">{g.now}</b> now{g.start !== null ? <> · started at <span className="num">{g.start}</span></> : null}</> : g.why}</p>
+      )}
     </li>
   );
 }

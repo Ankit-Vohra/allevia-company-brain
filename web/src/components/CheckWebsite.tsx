@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, getMode, getPublicMode } from "../api";
+import { humanDates } from "../lib/words";
 import type { CheckupStatus } from "../types-ext";
 import { ShowDetails } from "./ShowDetails";
 import "./numbers.css";
@@ -43,7 +44,7 @@ export function CheckWebsite({ tenantId }: { tenantId: string }) {
   return (
     <div className="connect" aria-live="polite">
       <h3 className="plan-h">Your website</h3>
-      <p className="connect-line">{s.message}</p>
+      <p className="connect-line">{humanDates(s.message)}</p>
       {s.last && !working && (
         <div className="numbers-done">
           <p className="numbers-headline">{s.last.verdict}</p>

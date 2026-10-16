@@ -104,6 +104,7 @@
 .hm-options-wrap { display: grid; gap: 4px; }
 .hm-options { list-style: none; display: flex; gap: 8px; overflow-x: auto; padding: 3px 3px 4px; margin: -3px; scroll-snap-type: x proximity; }
 .hm-option { flex: 0 0 auto; width: 104px; display: grid; gap: 4px; scroll-snap-align: start; }
+.hm-options.is-single .hm-option { width: 168px; }
 .hm-option-img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 8px; border: 1px solid var(--color-rule-2); background: var(--color-paper-2); }
 .hm-option.is-pick .hm-option-img { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 .hm-option.is-held .hm-option-img { opacity: 0.45; }
@@ -114,6 +115,8 @@
 
 /* a decision, said back */
 .hm-done { display: grid; gap: 4px; justify-items: start; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); background: var(--color-ok-soft); animation: hm-fade var(--dur-short) var(--ease-out); }
+.hm-done.is-failed { background: var(--color-warn-soft); }
+.hm-done.is-failed .hm-done-line svg { color: var(--color-warn); }
 .hm-done-line { display: flex; align-items: flex-start; gap: 8px; font-size: var(--text-sm); color: var(--color-ink); }
 .hm-done-line svg { flex: none; margin-top: 2px; color: var(--color-ok); }
 @keyframes hm-fade { from { opacity: 0; } }

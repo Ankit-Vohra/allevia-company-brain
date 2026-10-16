@@ -313,7 +313,8 @@ docker compose exec app tsx src/cli.ts insights demo_seed   # deterministic dete
 docker compose exec app tsx src/cli.ts brief demo_seed      # today's note (the morning brief)
 ```
 
-Then open http://127.0.0.1:8787: the office, the 90-day card, the brain explorer, insights and approval cards for
+Then open http://127.0.0.1:8787: Home (the ask box, what waits for your OK, today's note, the plan, tools and team), the office
+(`/office`), the 90-day card, the brain explorer, insights and approval cards for
 "Demo Seed". The FalkorDB Browser is on http://127.0.0.1:3090. The demo company has no recorded showcase turns, so
 Ask has nothing to replay in public mode; the hosted demo carries the recorded Aamdani and AVS Atelier turns.
 

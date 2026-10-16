@@ -18,13 +18,14 @@ import { APPROVALS_CHANGED } from "../TopBar";
 import { CardSkeleton, HomeCard } from "./HomeCard";
 
 type Payload = Approval["payload"];
-interface Done { id: string; title: string; kind: ActionKind; outcome: "approved" | "edited" | "rejected"; learned: LearnedEvent[] }
+/** `failed`: the owner said OK but the tool refused, in the executor's own plain words ("Nothing was done."). */
+interface Done { id: string; title: string; kind: ActionKind; outcome: "approved" | "edited" | "rejected"; learned: LearnedEvent[]; failed?: string }
 
 const bodyOf = (a: Approval) => a.payload.body.replace(/^Evidence: .*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
-/** A website address or a place; never a repo name, which is plumbing. */
+/** A website address or a place ("Instagram post"); never a repo name or a one-word tag, which is plumbing. */
 const aboutOf = (a: Approval): string | undefined => {
   const t = a.payload.target?.trim();
-  return t && t.length <= 90 && !/^[\w.-]+\/[\w.-]+$/.test(t) ? t : undefined;
+  return t && t.length <= 90 && !/^[\w.-]+\/[\w.-]+$/.test(t) && (/^https?:\/\//.test(t) || /\s/.test(t)) ? t : undefined;
 };
 
 export function WaitingCard({ tenantId, tz, locale, items, loading, error, onChanged, onLearned }: {
@@ -42,7 +43,11 @@ export function WaitingCard({ tenantId, tz, locale, items, loading, error, onCha
 
   const decide = async (a: Approval, decision: "approve" | "reject", edited?: Payload) => {
     const out = await api.decide(tenantId, a.id, { decision, ...(edited ? { editedPayload: edited } : {}) });
-    setDone((d) => [{ id: a.id, title: plainTitle(a.title), kind: a.kind, outcome: decision === "reject" ? "rejected" as const : edited ? "edited" as const : "approved" as const, learned: out.learned ?? [] }, ...d].slice(0, 2));
+    const failed = decision === "approve" && out.action?.status === "failed" ? out.action.result : undefined;
+    setDone((d) => [{
+      id: a.id, title: plainTitle(a.title), kind: a.kind, outcome: decision === "reject" ? "rejected" as const : edited ? "edited" as const : "approved" as const,
+      learned: out.learned ?? [], ...(failed ? { failed } : {}),
+    }, ...d].slice(0, 2));
     window.dispatchEvent(new Event(APPROVALS_CHANGED));
     if (out.learned?.length) onLearned();
     onChanged();
@@ -64,12 +69,12 @@ export function WaitingCard({ tenantId, tz, locale, items, loading, error, onCha
       )}
       {more > 0 && <p className="hm-more"><Link to="/approvals">{more} more waiting for you</Link></p>}
       {done.map((d) => (
-        <div key={d.id} className="hm-done" role="status">
+        <div key={d.id} className={`hm-done${d.failed ? " is-failed" : ""}`} role="status">
           <p className="hm-done-line">
-            <Icon name={d.outcome === "rejected" ? "x" : "check"} size={15} />
-            <span><b>{d.outcome === "rejected" ? "You said no" : d.outcome === "edited" ? "Approved with your edits" : "Approved"}:</b> {d.title}</span>
+            <Icon name={d.failed ? "warn" : d.outcome === "rejected" ? "x" : "check"} size={15} />
+            <span><b>{d.failed ? "Did not go through" : d.outcome === "rejected" ? "You said no" : d.outcome === "edited" ? "Approved with your edits" : "Approved"}:</b> {d.title}</span>
           </p>
-          <p className="small muted">{d.outcome === "rejected" ? "Nothing was changed." : kindWords({ kind: d.kind, title: d.title }).done}</p>
+          <p className="small muted">{d.failed ? d.failed : d.outcome === "rejected" ? "Nothing was changed." : kindWords({ kind: d.kind, title: d.title }).done}</p>
           <LearnedChips events={d.learned} edited={d.outcome === "edited"} />
         </div>
       ))}
@@ -214,13 +219,13 @@ function Options({ tenantId, media }: { tenantId: string; media: NonNullable<Non
   const many = media.options.length > 1;
   return (
     <div className="hm-options-wrap">
-      <ul className="hm-options" aria-label={`The ${noun}${many ? " options" : ""}`}>
+      <ul className={`hm-options${many ? "" : " is-single"}`} aria-label={`The ${noun}${many ? " options" : ""}`}>
         {media.options.map((o) => (
           <li key={o.id} className={`hm-option${o.pick ? " is-pick" : ""}${o.held ? " is-held" : ""}`}>
             {media.kind === "clip" ? (
               <video className="hm-option-img" src={rawSrc(tenantId, o.id)} muted playsInline preload="metadata" aria-label={`Option ${o.label}`} />
             ) : (
-              <img className="hm-option-img" src={assetSrc(tenantId, o.id, 260)} alt={`Option ${o.label}${o.note ? `: ${o.note}` : ""}`} loading="lazy" width={104} height={130} />
+              <img className="hm-option-img" src={assetSrc(tenantId, o.id, 260)} alt={many ? `Option ${o.label}` : `The ${noun}`} loading="lazy" width={104} height={130} />
             )}
             <span className="hm-option-label"><b>{many ? `Option ${o.label}` : `The ${noun}`}</b>{o.pick && many ? <span className="hm-pick">Our pick</span> : o.held ? <span className="hm-held">Held back</span> : null}</span>
           </li>
