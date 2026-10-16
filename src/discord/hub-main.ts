@@ -4,45 +4,22 @@
 // channels. Provisioning retries run here too (the same claim keeps two processes from doing one business twice).
 import { loadConfig } from "../config.js";
 import { checkupJobs } from "../checkup/jobs.js";
-import { getActionTarget } from "../actions/target.js";
-import { usesFoundersAccounts } from "../actions/executors.js";
 import { businessId } from "../graph/tenants.js";
 import { ask } from "../agent/ask.js";
 import type { GraphHandle } from "../graph/client.js";
-import { approval as readApproval, approvals as readApprovals, latestBrief } from "../server/reads.js";
+import { approval as readApproval } from "../server/reads.js";
 import { AlleviaBot } from "./bot.js";
 import { HubBot } from "./hub-bot.js";
 import { sweepOfflineJoins } from "./hub-join.js";
 import { loadAssetFile } from "../creative/files.js";
 import { StudioDiscord, StudioGate } from "./studio-bot.js";
-import { syncArea, type TenantSource } from "./hub-provision.js";
+import { syncArea } from "./hub-provision.js";
+import { tenantSource } from "./hub-source.js";
+import { startApprovalNudge } from "./hub-nudge.js";
 import { hubSettings, productionHub } from "./hub-service.js";
 import { tenantTimeZone } from "./main.js";
-import { readStandup } from "../proactive/note.js";
-import { isoDate } from "../util/time.js";
-import type { ApprovalDto } from "../server/types.js";
 
 export interface StartedHub { stop: () => Promise<void> }
-
-export const tenantSource = (g: GraphHandle, slug?: string): TenantSource => ({
-  pendingApprovals: async () => (await readApprovals(g)).filter((a) => a.status === "pending"),
-  approval: (id) => readApproval(g, id),
-  latestBrief: async () => {
-    const b = await latestBrief(g);
-    return b ? { id: b.id, title: b.title, ...(b.asOf ? { asOf: b.asOf } : {}), text: b.text } : null;
-  },
-  ...(slug ? { actionTarget: () => getActionTarget(g, slug, { founders: usesFoundersAccounts(slug) }) } : {}),
-  standupCards: async () => {
-    const s = await readStandup(g, isoDate(Date.now()));
-    const out: Array<{ approval: ApprovalDto; why: string }> = [];
-    for (const i of s?.items ?? []) {
-      if (i.status !== "drafted" || !i.approvalId) continue;
-      const a = await readApproval(g, i.approvalId);
-      if (a) out.push({ approval: a, why: i.why });
-    }
-    return out;
-  },
-});
 
 export async function startHubBot(o: { model?: string; log?: (line: string) => void; syncEveryMs?: number }): Promise<StartedHub> {
   const log = o.log ?? ((line: string) => console.error(line));
@@ -121,7 +98,7 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
       for (const a of await service.deps.store.listAreas()) {
         if (a.status !== "ready") continue;
         try {
-          await syncArea(a.slug, service.deps, tenantSource(await tenantGraph(a.slug), a.slug));
+          await syncArea(a.slug, service.deps, tenantSource(await tenantGraph(a.slug), a.slug, { store: studioDeps.store, webBase: cfg.webBaseUrl }));
         } catch (e) {
           log(`[hub] ${a.slug}: could not post cards or the note: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -134,8 +111,10 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
     }
   };
   void sync();
+  // a card made in this process (a chat turn, Studio, an insight) is posted within seconds, not at the next minute
+  const stopNudge = startApprovalNudge({ deps: service.deps, log, source: async (slug) => tenantSource(await tenantGraph(slug), slug, { store: studioDeps.store, webBase: cfg.webBaseUrl }) });
   const timer = setInterval(() => void sync(), o.syncEveryMs ?? 60_000);
   timer.unref();
   log(`Allevia on the Discord hub: every customer's own channels, one shared bot. Path links go to ${cfg.webBaseUrl}.`);
-  return { stop: async () => { clearInterval(timer); stopRetry(); await client.stop(); } };
+  return { stop: async () => { clearInterval(timer); stopNudge(); stopRetry(); await client.stop(); } };
 }

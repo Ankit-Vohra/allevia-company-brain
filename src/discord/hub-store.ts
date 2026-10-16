@@ -155,6 +155,21 @@ export class GraphHubStore implements HubStore {
     await g.query("MATCH (a:DiscordArea {slug:$slug}) WHERE a.lockToken = $token SET a.lockUntil = 0, a.lockToken = null", { slug, token });
   }
 
+  async claimSync(slug: string, now: number, ttlMs: number): Promise<string | null> {
+    const g = await this.graph();
+    const token = `${now.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    const rows = await g.query<{ mine: boolean }>(
+      `MATCH (a:DiscordArea {slug:$slug}) WHERE coalesce(a.syncUntil, 0) < $now
+       SET a.syncUntil = $until, a.syncToken = $token
+       RETURN a.syncToken = $token AS mine`, { slug, now, until: now + ttlMs, token });
+    return rows[0]?.mine ? token : null;
+  }
+
+  async releaseSync(slug: string, token: string): Promise<void> {
+    const g = await this.graph();
+    await g.query("MATCH (a:DiscordArea {slug:$slug}) WHERE a.syncToken = $token SET a.syncUntil = 0, a.syncToken = null", { slug, token });
+  }
+
   async saveInvite(rec: InviteRecord): Promise<void> {
     const g = await this.graph();
     const { usedAt, ...rest } = rec;

@@ -24,6 +24,7 @@ beforeAll(async () => {
   await upsertNode(g, { type: "Approval", id: "approval:standup-diwali-1", name: "content_draft: A Diwali post", props: {
     status: "pending", kind: "content_draft", title: "A Diwali post", by: "content-strategist", standup: true, standupKey: "season:diwali", standupKind: "post",
     payload: JSON.stringify({ title: "A Diwali post", body: "A long Diwali post that goes on and on.", target: "Instagram post" }) } }, SEED_NOW);
+  await upsertNode(g, { type: "Approval", id: "approval:ad", name: "pause_ad: Pause it", props: { status: "pending", kind: "pause_ad", title: "Pause it", payload: "{}" } }, SEED_NOW);
   await upsertNode(g, { type: "Approval", id: "approval:other", name: "github_issue: Fix it", props: { status: "pending", kind: "github_issue", title: "Fix it", payload: "{}" } }, SEED_NOW);
 });
 afterAll(async () => { await cleanup(); await closeAll(); });
@@ -53,7 +54,9 @@ describe("reviseDraft", () => {
   });
 
   it("only changes a stand-up draft that is still waiting", async () => {
-    expect(await reviseDraft(g, "approval:other", "x", { text })).toMatchObject({ ok: false, why: expect.stringMatching(/web app/) });
+    expect(await reviseDraft(g, "approval:ad", "x", { text })).toMatchObject({ ok: false, why: expect.stringMatching(/web app/) }); // nothing to reword
+    // any other waiting draft is redrafted by whoever made it, not only the ones from today's note (Discord is where owners work)
+    expect(await reviseDraft(g, "approval:other", "shorter", { text })).toMatchObject({ ok: true });
     expect(await reviseDraft(g, "approval:nope", "x", { text })).toMatchObject({ ok: false });
     expect(await reviseDraft(g, "approval:standup-diwali-1", "   ", { text })).toMatchObject({ ok: false });
   });

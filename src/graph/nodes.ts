@@ -15,6 +15,7 @@ import { CHUNK_VECTOR_PROP, ENTITY_VECTOR_PROP, vectorPropFor } from "./indexes.
 import { InvalidWrite } from "./errors.js";
 import { defined, num, sameValue, validateNode, type NodeInput, type Prim } from "./validate.js";
 import { noteGraphWrite } from "./projection.js";
+import { approvalCreated } from "./approval-hook.js";
 import { sha256 } from "../util/ids.js";
 
 export interface NodeResult { created: boolean; versioned: boolean; updated: boolean }
@@ -133,6 +134,7 @@ export async function upsertNode(g: GraphHandle, n: NodeInput, now: number = Dat
       }
       if (rows[0]?.created) {
         await noteGraphWrite(g.name); // a new node changes what the algorithms see
+        if (n.type === "Approval" && props?.status === "pending") approvalCreated(g.name); // a card is waiting: the Discord hub posts it now
         return { created: true, versioned: false, updated: false };
       }
       continue; // another writer created it between our read and MERGE: go round as an update

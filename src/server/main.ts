@@ -96,6 +96,12 @@ export async function startServer(opts: ServeOpts = {}): Promise<{ server: Serve
   // A business whose Discord area could not be set up at onboarding is retried in the background.
   const hub = publicMode ? null : await deps.discordHub?.().catch(() => null);
   const stopRetry = hub ? hub.startRetryLoop() : undefined;
+  // a card made here (a chat turn, Studio, an insight) reaches the business's Discord #approvals within seconds
+  const stopNudge = hub ? await (async () => {
+    const [{ startApprovalNudge }, { tenantSource }, { AssetStore }] = await Promise.all([import("../discord/hub-nudge.js"), import("../discord/hub-source.js"), import("../studio/store.js")]);
+    const store = new AssetStore(cfg.dataDir);
+    return startApprovalNudge({ deps: hub.deps, log: (l) => console.error(l), source: async (slug) => tenantSource(await deps.openGraph(slug), slug, { store, webBase: cfg.webBaseUrl }) });
+  })() : undefined;
   const server = await new Promise<ServerType>((resolve, reject) => {
     const s = serve({ fetch: app.fetch, port, hostname: host }, () => resolve(s));
     s.once("error", reject);
@@ -126,7 +132,7 @@ export async function startServer(opts: ServeOpts = {}): Promise<{ server: Serve
       log: (l) => console.error(l),
     })
     : () => undefined;
-  return { server, url, close: () => { stopRetry?.(); stopSchedule(); stopCheckups(); stopStandups(); return new Promise<void>((r) => server.close(() => r())); } };
+  return { server, url, close: () => { stopRetry?.(); stopNudge?.(); stopSchedule(); stopCheckups(); stopStandups(); return new Promise<void>((r) => server.close(() => r())); } };
 }
 
 // Resolves on SIGINT/SIGTERM after the server has stopped taking requests.

@@ -10,11 +10,11 @@ import { FakeHub, snowflake } from "../helpers/hub-fakes.js";
 
 // ---------- the REST adapter ----------
 
-interface Call { method: string; route: string; body?: Record<string, any> }
+interface Call { method: string; route: string; body?: Record<string, any>; files?: Array<{ name: string; data: Buffer }> }
 function fakeRest(answers: Record<string, unknown | ((c: Call) => unknown)>) {
   const calls: Call[] = [];
-  const handle = (method: string) => async (route: string, o?: { body?: Record<string, any> }) => {
-    const c: Call = { method, route, ...(o?.body ? { body: o.body } : {}) };
+  const handle = (method: string) => async (route: string, o?: { body?: Record<string, any>; files?: Array<{ name: string; data: Buffer }> }) => {
+    const c: Call = { method, route, ...(o?.body ? { body: o.body } : {}), ...(o?.files ? { files: o.files } : {}) };
     calls.push(c);
     const a = answers[`${method} ${route}`];
     const v = typeof a === "function" ? (a as (c: Call) => unknown)(c) : a;
@@ -77,6 +77,15 @@ describe("RestHubPort", () => {
     });
     await hub.editMessage(C, "m1", { content: "done", buttons: [] });
     expect(calls[2]!.body).toMatchObject({ content: "done", components: [], allowed_mentions: { parse: [] } });
+  });
+
+  it("sends a card's pictures as attachments with the message, and none when there are none (audit #39)", async () => {
+    const { rest, calls } = fakeRest({ [`POST /channels/${C}/messages`]: { id: "m9" } });
+    const hub = new RestHubPort(rest, G);
+    await hub.sendMessage(C, { content: "card", files: [{ name: "option-a.jpg", data: Buffer.from("jpg") }] });
+    expect(calls[0]!.files).toEqual([{ name: "option-a.jpg", data: Buffer.from("jpg") }]);
+    await hub.sendMessage(C, { content: "plain" });
+    expect(calls[1]!.files).toBeUndefined();
   });
 
   it("makes a single-use, seven-day invite; reads a channel's invites; treats 'cannot see' as unknown, not as empty", async () => {

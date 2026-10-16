@@ -129,7 +129,8 @@ export class RestHubPort implements HubPort {
   }
 
   async sendMessage(channelId: string, m: Outgoing): Promise<{ id: string }> {
-    return { id: String(((await this.rest.post(Routes.channelMessages(channelId), { body: messageJson(m) })) as Json).id) };
+    const files = typeof m === "string" ? [] : (m.files ?? []).map((f) => ({ name: f.name, data: f.data }));
+    return { id: String(((await this.rest.post(Routes.channelMessages(channelId), { body: messageJson(m), ...(files.length ? { files } : {}) })) as Json).id) };
   }
 
   async editMessage(channelId: string, messageId: string, m: Outgoing): Promise<void> {

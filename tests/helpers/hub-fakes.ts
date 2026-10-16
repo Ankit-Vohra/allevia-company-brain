@@ -11,7 +11,7 @@ let seq = 0;
 export const snowflake = (): string => String(700000000000000000n + BigInt(++seq));
 const copy = <T>(x: T): T => structuredClone(x);
 
-export interface SentMessage { id: string; channelId: string; content: string; buttons: string[]; edits: string[] }
+export interface SentMessage { id: string; channelId: string; content: string; buttons: string[]; edits: string[]; files: string[] }
 
 export class FakeHub implements HubPort {
   readonly guildId = snowflake();
@@ -90,7 +90,7 @@ export class FakeHub implements HubPort {
   }
   async sendMessage(channelId: string, m: Outgoing) {
     this.guildOnly("sendMessage", channelId);
-    const msg: SentMessage = { id: snowflake(), channelId, content: typeof m === "string" ? m : m.content, buttons: typeof m === "string" ? [] : (m.buttons ?? []).map((b) => b.customId), edits: [] };
+    const msg: SentMessage = { id: snowflake(), channelId, content: typeof m === "string" ? m : m.content, buttons: typeof m === "string" ? [] : (m.buttons ?? []).map((b) => b.customId), edits: [], files: typeof m === "string" ? [] : (m.files ?? []).map((f) => f.name) };
     this.messages.set(msg.id, msg);
     return { id: msg.id };
   }
@@ -213,6 +213,15 @@ export class MemoryHubStore implements HubStore {
     return token;
   }
   async release(slug: string, token: string) { if (this.locks.get(slug)?.token === token) this.locks.delete(slug); }
+  syncLocks = new Map<string, { token: string; until: number }>();
+  async claimSync(slug: string, now: number, ttl: number) {
+    const l = this.syncLocks.get(slug);
+    if (l && l.until > now) return null;
+    const token = `s${Math.random().toString(36).slice(2)}`;
+    this.syncLocks.set(slug, { token, until: now + ttl });
+    return token;
+  }
+  async releaseSync(slug: string, token: string) { if (this.syncLocks.get(slug)?.token === token) this.syncLocks.delete(slug); }
   async saveInvite(r: InviteRecord) { this.invs.set(r.code, copy(r)); }
   async invites(slug: string) { return copy([...this.invs.values()].filter((i) => i.slug === slug).sort((a, b) => a.createdAt - b.createdAt || (a.code < b.code ? -1 : 1))); }
   async openInvites(g: string) { return copy([...this.invs.values()].filter((i) => i.guildId === g && i.status === "open")); }
