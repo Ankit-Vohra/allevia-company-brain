@@ -21,7 +21,11 @@ describe("scripts/export-public.sh", () => {
       expect(git(out, "rev-list", "--count", "HEAD")).toBe("1");
       expect(git(out, "remote")).toBe("");
       const files = git(out, "ls-files").split("\n");
-      for (const gone of ["docs/evals/2026-10-15-aamdani.md", "evals/aamdani.yaml", "evals/avs.yaml", "docs/content-trials.md"]) expect(files).not.toContain(gone);
+      for (const gone of ["docs/evals/2026-10-15-aamdani.md", "evals/aamdani.yaml", "evals/avs.yaml", "evals/hero-aamdani.yaml", "docs/content-trials.md", "docs/proactive-trials.md"]) expect(files).not.toContain(gone);
+      // pictures and generated work that show the real businesses stay out unless the founder says keep (--keep-real-material)
+      expect(files.some((f) => /^docs\/(screenshots|creative-live|proactive)\//.test(f))).toBe(false);
+      // the synthetic business's evidence ships
+      for (const kept of ["evals/hero.yaml", "docs/evals/2026-10-16-demo_growth.md"]) expect(files).toContain(kept);
       expect(files.some((f) => f.startsWith("data/") || f.startsWith("models/") || /(^|\/)\.env(?!\.example$)/.test(f))).toBe(false);
       expect(files).toContain("scripts/seed-demo.ts");
       expect(files).toContain("tests/fixtures/seed-graph.ts");

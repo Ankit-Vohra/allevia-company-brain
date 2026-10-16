@@ -3,7 +3,11 @@
 # files that hold real business data, as ONE commit with no history, plus a LICENSE (MIT, unless the tree has one).
 # It then runs the repo's hygiene test and a secrets scan on exactly that copy, and prints what it left out.
 #
-#   scripts/export-public.sh [--ref <commit>] [--out <dir>] [--exclude <path or glob>]... [--drop-screenshots] [--no-tests]
+#   scripts/export-public.sh [--ref <commit>] [--out <dir>] [--exclude <path or glob>]... [--keep-real-material] [--no-tests]
+#
+# What stays out (by default): the evals, notes, screenshots and generated posters or reels that show the founder's real
+# businesses. Only the founder can say they may ship (issues #12 and #13); then pass --keep-real-material. The public copy
+# shows the synthetic business (Shiftly, `seed-demo`) in docs/demo-screens/ instead.
 #
 # Safety:
 # - It never pushes and never adds a remote. Publishing is a separate, manual step (docs/submission-checklist.md §2).
@@ -18,16 +22,17 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REF="HEAD"
 OUT=""
 RUN_TESTS=1
-DROP_SHOTS=0
+KEEP_REAL=0
 EXTRA=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --ref) REF="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
     --exclude) EXTRA+=("$2"); shift 2 ;;
-    --drop-screenshots) DROP_SHOTS=1; shift ;;
+    --keep-real-material) KEEP_REAL=1; shift ;;
+    --drop-screenshots) shift ;; # the old name of what is now the default
     --no-tests) RUN_TESTS=0; shift ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -44,11 +49,16 @@ mkdir -p "$OUT"
 EXCLUDE=(
   "data" "models" "node_modules" "web/node_modules" "web/dist" "site/dist" ".env" ".env.local"
   # eval reports quote real answers about Aamdani and AVS Atelier; the eval sets name their real entities
-  "docs/evals/2026-*" "evals/aamdani.yaml" "evals/avs.yaml"
-  # notes written from private copies of the real graphs
-  "docs/MORNING-REPORT.md" "docs/content-trials.md"
+  # (the synthetic business's reports, docs/evals/*-demo_growth.md and evals/hero.yaml, ship)
+  "docs/evals/2026-*-aamdani.md" "docs/evals/2026-*-avs_atelier.md" "evals/aamdani.yaml" "evals/avs.yaml" "evals/hero-aamdani.yaml"
+  # notes written from private copies of the real graphs, or from their real drafts, numbers and brand files
+  "docs/MORNING-REPORT.md" "docs/content-trials.md" "docs/proactive-trials.md" "docs/skills-trials.md"
+  "docs/website-checkup-trials.md" "docs/design-research.md"
 )
-if [[ "$DROP_SHOTS" == 1 ]]; then EXCLUDE+=("docs/screenshots"); fi
+# Pictures and generated work that show the real businesses: screenshots of their screens, the posters, ads and reels made
+# for them, the stand-up drafts. Left out unless the founder says to keep them (--keep-real-material).
+REAL_MATERIAL=("docs/screenshots" "docs/creative-live" "docs/proactive")
+if [[ "$KEEP_REAL" == 0 ]]; then EXCLUDE+=("${REAL_MATERIAL[@]}"); fi
 EXCLUDE+=("${EXTRA[@]+"${EXTRA[@]}"}")
 
 echo "Exporting $SHA to $OUT"
@@ -141,6 +151,12 @@ if [[ "$RUN_TESTS" == 1 ]]; then
   fi
 fi
 
+# Links that point at what was left out would be dead in the public repo: say which, so the pages can be fixed (a warning,
+# not a failure: the founder may add the material back).
+echo "Relative links in README.md and docs/**/*.md…"
+broken="$(node "$REPO/scripts/maint/check-links.mjs" "$OUT")"
+if [[ -n "$broken" ]]; then echo "  dead links in the copy (file -> target):"; echo "$broken" | sed 's/^/    /'; else echo "  none"; fi
+
 if [[ "$fail" == 1 ]]; then
   echo "Not committed: fix the findings above, then commit in $OUT yourself." >&2
   exit 1
@@ -155,8 +171,8 @@ echo "  left out:"
 for r in "${removed[@]+"${removed[@]}"}"; do echo "    $r"; done
 [[ ${#removed[@]} -eq 0 ]] && echo "    (nothing matched)"
 echo "  also never exported: anything untracked or ignored (data/, models/, node_modules/, env files)"
-if [[ "$DROP_SHOTS" == 0 && -d "$OUT/docs/screenshots" ]]; then
-  echo "  REVIEW before publishing: docs/screenshots/ ($(ls "$OUT/docs/screenshots" | wc -l | tr -d ' ') images) shows the real"
-  echo "  Aamdani and AVS Atelier screens; keep them only if the founder approves, or re-run with --drop-screenshots."
+if [[ "$KEEP_REAL" == 1 ]]; then
+  echo "  REVIEW before publishing: --keep-real-material put the real businesses' screenshots, posters and reels in the copy"
+  echo "  (docs/screenshots, docs/creative-live, docs/proactive). Keep them only with the founder's yes."
 fi
 echo "Nothing was pushed. To publish, follow docs/submission-checklist.md §2."
