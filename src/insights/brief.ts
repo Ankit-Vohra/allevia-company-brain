@@ -266,6 +266,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   // the day's stand-up leads: what the team noticed and already drafted, or that nothing was worth the owner's time
   const standup = await readStandup(g, date);
   const drafted = (standup?.items ?? []).filter((i) => i.status === "drafted" && i.approvalId);
+  if (standup?.waitingHeading) lines.push(standup.waitingHeading, ...standup.waitingLines, "");
   if (standup) lines.push(standup.heading, ...standup.lines, "");
   lines.push("Your goals");
   if (goals.length) lines.push(...goals.map(goalLine));
@@ -301,6 +302,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   const atRisk = goals.find((x) => x.status === "at_risk" || x.status === "off_track");
   const urgent = onCall.find((r) => r.score >= 0.8);
   const next = urgent ? `Look at this first: ${clip(urgent.title, 80).replace(/[.:]$/, "")}. [[${urgent.id}]]`
+    : standup?.waiting?.[0] ? `Say OK to the biggest fix first: ${clip(standup.waiting[0].title, 80).replace(/[.:]$/, "")}. [[${standup.waiting[0].approvalId}]]`
     : drafted[0] ? `Say OK or change what your team drafted: ${clip(drafted[0].title, 80).replace(/[.:]$/, "")}. [[${drafted[0].approvalId}]]`
     : firstCard ? `Say OK or edit: ${clip(firstCard.title, 80).replace(/[.:]$/, "")}. [[${firstCard.id}]]`
     : top[0] ? `Take a look: ${clip(top[0].title, 80).replace(/[.:]$/, "")}. [[${top[0].id}]]`
@@ -324,7 +326,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   const mentions = [...new Set([
     ...(biz ? [biz] : []), ...goals.map((x) => x.id), ...goals.flatMap((x) => (x.obsId ? [x.obsId] : [])), ...changes.map((c) => c.obsId),
     ...learned.map((r) => r.id), ...top.map((r) => r.id), ...(onCall.length <= 4 ? onCall : onCall.slice(0, 3)).map((r) => r.id), ...pending.cards.map((c) => c.id),
-    ...(standup ? [standup.id] : []), ...drafted.map((d) => d.approvalId!),
+    ...(standup ? [standup.id] : []), ...drafted.map((d) => d.approvalId!), ...(standup?.waiting ?? []).map((w) => w.approvalId),
   ])];
   const present = await existingIds(g, mentions);
   const agent = await ensureAgentNode(g, "chief-of-staff", now);

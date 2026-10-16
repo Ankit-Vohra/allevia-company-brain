@@ -3,6 +3,10 @@
 // the kind of thing they will draft, and the skill they draft it with. Fixed rules, no model: Meera (choose.ts) picks from
 // these, so a reason can never carry a number that is not in the graph.
 //
+// Impact first (the founder, 2026-10-16): every opportunity is scored by its expected effect on the business's goals. One
+// tied to a goal that needs a push or is behind counts most; one tied to a goal going well counts less; one tied to no
+// goal counts little. Festivals and seasons move no goal by themselves: they are fillers, used only for a spare slot.
+//
 // The kinds the team drafts (each waits for the owner's OK; nothing is posted without it):
 //   post         a social post (Tara, content)
 //   poster       a post with a poster made by the creating tools (Tara); a paid picture only within the day's budget
@@ -35,12 +39,16 @@ export interface Opportunity {
   score: number;               // 0..1
   occasion?: { name: string; date: string; approx?: boolean };
   channel?: { id: string; name: string };   // where a post goes, when it is not Instagram
+  effect?: number;             // 0..1: the expected effect on the goals (set by opportunitiesFrom)
+  filler?: boolean;            // a festival or season: only for a slot nothing goal-moving needs
+  moves?: string[];            // the names of the goals it moves, for Meera and the reason
+  issueType?: string | null;   // a website fix: which check
 }
 
 const AGENT: Record<OpportunityKind, string> = {
   post: "content-strategist", poster: "content-strategist", reply: "ops-manager", website_fix: "tech-lead", follow_up: "ops-manager", offer: "growth-marketer",
 };
-const SKILL: Record<OpportunityKind, { agent: string; id: string }> = {
+export const SKILL: Record<OpportunityKind, { agent: string; id: string }> = {
   post: { agent: "content-strategist", id: "instagram-post" },
   poster: { agent: "content-strategist", id: "instagram-post" },
   reply: { agent: "ops-manager", id: "follow-up-drafts" },
@@ -116,6 +124,7 @@ export function opportunitiesFrom(s: Signals): Opportunity[] {
       key: `website:${f.ruleId}`, kind: "website_fix", source: "website", title: `New words for the website: ${name.toLowerCase()}`,
       reason: `The website check-up found "${name}" on ${plural(f.pages, "page")}${f.newPages ? `, ${fmt(f.newPages)} of them new since the last look` : ""}.`,
       brief: `Purpose: make the page easier to find and to understand. Write the new text that fixes "${name}" on ${f.pageName ?? f.pageUrl ?? "the page"}, ready to paste in, and say where it goes.${f.fix ? ` How to fix: ${clip(f.fix, 300)}` : ""}`,
+      issueType: f.issueType,
       facts: [...(f.pageName ? [`Page: ${f.pageName}`] : []), ...(f.pageUrl ? [`Address: ${f.pageUrl}`] : []), ...(f.evidence ? [`Found: ${clip(f.evidence, 200)}`] : [])],
       evidence: [f.ruleId, ...(f.page ? [f.page] : [])], score: sev + (f.newPages ? 0.1 : 0) + Math.min(0.1, f.pages / 100),
     }));
@@ -177,10 +186,14 @@ export function opportunitiesFrom(s: Signals): Opportunity[] {
   for (const f of s.findings) {
     if (f.area === "tech" || f.area === "knowledge") continue;      // on call and the library have their own place in the note
     if (f.simulated === true || /\(simulated\)/i.test(f.title)) continue; // sample numbers never lead the owner's day
-    if (f.cardKind && f.cardKind !== "content_draft") continue;    // a fix or a pause is already waiting for the owner as it is
+    // a fix or a pause already waiting for the owner is led with in the note, not drafted again; but people who dropped out
+    // of a sign-up or enquiry step can be followed up today, while the fix waits
+    const waiting = !!f.cardKind && f.cardKind !== "content_draft";
+    if (waiting && f.area !== "funnel") continue;
     const kind: OpportunityKind = f.area === "content" ? "post" : f.area === "funnel" ? "follow_up" : f.area === "ads" ? "offer" : "website_fix";
     out.push(mk({
-      key: `finding:${f.key}`, kind, source: "finding", title: kind === "post" ? findingPostTitle(f) : kind === "follow_up" ? `A follow-up message: ${clip(f.title, 60)}` : kind === "offer" ? `An offer idea: ${clip(f.title, 60)}` : `New words for the website: ${clip(f.title, 60)}`,
+      ...(f.goals?.length ? { goals: f.goals } : {}),
+      key: `finding:${f.key}${waiting ? ":follow-up" : ""}`, kind, source: "finding", title: kind === "post" ? findingPostTitle(f) : kind === "follow_up" ? `A follow-up message: ${clip(f.title, 60)}` : kind === "offer" ? `An offer idea: ${clip(f.title, 60)}` : `New words for the website: ${clip(f.title, 60)}`,
       reason: clip(oneLine(f.why || f.title).split(/(?<=\.)\s/)[0] ?? f.title, 200),
       brief: `Purpose: act on what we noticed: ${clip(oneLine(f.why || f.title), 300)} Draft the actual ${kind === "post" ? "post" : kind === "follow_up" ? "message" : kind === "offer" ? "offer wording" : "text"}, ready to use.`,
       facts: [clip(oneLine(f.why), 400)].filter(Boolean), evidence: [f.id, ...f.evidence.slice(0, 5)], score: Math.min(0.75, f.score * 0.85),
@@ -188,8 +201,35 @@ export function opportunitiesFrom(s: Signals): Opportunity[] {
     }));
   }
 
-  // one per key, best first
+  // one per key, scored by the expected effect on the goals, goal-movers first
   const best = new Map<string, Opportunity>();
-  for (const o of out) if (!best.has(o.key) || best.get(o.key)!.score < o.score) best.set(o.key, o);
-  return [...best.values()].sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
+  for (const o of out.map((x) => withEffect(x, s.goals))) if (!best.has(o.key) || best.get(o.key)!.score < o.score) best.set(o.key, o);
+  return [...best.values()].sort((a, b) => Number(!!a.filler) - Number(!!b.filler) || b.score - a.score || a.key.localeCompare(b.key));
+}
+
+// ---------- impact: the expected effect on the goals ----------
+
+type GoalLite = Signals["goals"][number];
+const STATUS_WEIGHT: Record<string, number> = { off_track: 1, at_risk: 1, on_track: 0.7, no_data: 0.6, achieved: 0.3 };
+export const UNLINKED_EFFECT = 0.15;
+export const FILLER_FACTOR = 0.6;
+// Website checks that cost enquiries (the visitor cannot reach you or does not see what you do) move the enquiry goals.
+const ENQUIRY_CHECK = /contact|clear-offer|proof|location|opening-hours|cta/i;
+
+/** The goals an opportunity moves: the ones the rule checks tied it to, else the goals whose metric fits its kind of work. */
+export function goalsMoved(o: Pick<Opportunity, "kind" | "source" | "goals" | "issueType">, goals: GoalLite[]): GoalLite[] {
+  const live = goals.filter((g) => g.status !== "achieved" || o.goals.includes(g.id));
+  if (o.goals.length) return live.filter((g) => o.goals.includes(g.id));
+  if (o.source === "season") return [];
+  const family = o.kind === "post" || o.kind === "poster" ? CONTENT_METRIC
+    : o.kind === "website_fix" ? (ENQUIRY_CHECK.test(o.issueType ?? "") ? FUNNEL_METRIC : SEO_METRIC)
+    : FUNNEL_METRIC; // follow-ups, offers and replies to reviews bring people back to enquire or sign up
+  return live.filter((g) => !!g.metricKey && family.test(g.metricKey));
+}
+
+export function withEffect(o: Opportunity, goals: GoalLite[]): Opportunity {
+  if (o.source === "season") return { ...o, filler: true, effect: 0, score: clamp(o.score * FILLER_FACTOR) };
+  const moved = goalsMoved(o, goals);
+  const effect = moved.length ? Math.max(...moved.map((g) => STATUS_WEIGHT[g.status] ?? 0.6)) : UNLINKED_EFFECT;
+  return { ...o, goals: moved.map((g) => g.id), moves: moved.map((g) => g.name), effect, score: clamp(0.45 * o.score + 0.55 * effect) };
 }
