@@ -9,7 +9,7 @@ import {
   marketFor, memoryLedger, rankedKeywordsCall, withinBudget, type DfsFetch,
 } from "../../src/checkup/dataforseo.js";
 
-const CREDS = { login: "owner@example.test", password: "s3cret-pass-123" };
+const CREDS = { login: "owner@example.test", password: "pass-1234-abcd" };
 const NOW = Date.parse("2026-10-16T10:00:00Z");
 
 function fakeApi(result: unknown, opts: { status?: number; cost?: number; statusCode?: number; message?: string } = {}) {

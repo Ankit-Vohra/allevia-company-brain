@@ -29,6 +29,9 @@ export const PLAIN_TOOLS: Record<string, string> = {
   make_reel_script_and_clip: "Make a short reel draft for your OK",
   write_copy: "Write captions and ad text",
   research: "Look something up on the web",
+  website_checkup: "Check what to fix on your website first",
+  ai_visibility: "See whether AI assistants name you",
+  keyword_ideas: "Find searches you could show up for (paid, within your budget)",
 };
 
 /** The owner's words for a tool; an unknown tool reads as its name with spaces. */
