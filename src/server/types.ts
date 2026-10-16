@@ -139,6 +139,21 @@ export type ApprovalStatus = (typeof APPROVAL_STATUSES)[number];
 
 export interface ApprovalPayload { title: string; body: string; target?: string }
 
+/** What a card carries beyond its title and text (src/server/preview.ts); mirrored in web/src/types-ext.ts. */
+export interface ApprovalPreview {
+  /** The reason, one sentence. */
+  why?: string;
+  /** Emails: who it goes to, who is copied, the subject; `draftOnly`: saved as a draft in the owner's inbox, not sent. */
+  to?: string;
+  cc?: string;
+  subject?: string;
+  draftOnly?: boolean;
+  /** Meetings: when, and who is invited. `start` and `end` are ISO times; `timeZone` is the owner's. */
+  when?: { start: string; end?: string; timeZone?: string; guests: string[] };
+  /** Posts, posters and clips: the options to show (asset ids, served by /api/:t/assets/:id) and which one approving uses. */
+  media?: { kind: "photo" | "poster" | "image" | "clip"; options: Array<{ id: string; label: string; note: string; pick: boolean; held: boolean }> };
+}
+
 export interface ApprovalDto {
   id: string;
   kind: ActionKind;
@@ -148,6 +163,8 @@ export interface ApprovalDto {
   recommendationId?: string;
   payload: ApprovalPayload;
   editedPayload?: ApprovalPayload;
+  /** Set when the card has something to show beyond its text. Absent on the answer to a decision. */
+  preview?: ApprovalPreview;
   createdAt: string;
   decidedAt?: string;
   result?: string;
