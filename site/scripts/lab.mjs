@@ -43,7 +43,7 @@ const consoleErrors = [];
 const failed = [];
 page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
 page.on("pageerror", (e) => consoleErrors.push(String(e.message)));
-page.on("requestfailed", (r) => failed.push(r.url()));
+page.on("requestfailed", (r) => { if (!r.url().startsWith("blob:")) failed.push(r.url()); });
 page.on("response", (r) => { if (r.status() >= 400) failed.push(`${r.status()} ${r.url()}`); });
 await page.goto(base + PATH, { waitUntil: "load" });
 await page.evaluate(() => document.fonts.ready);
@@ -98,8 +98,8 @@ for (const [n, pos] of positions.entries()) {
       const cs = getComputedStyle(el);
       return { t: (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 46), o: Math.round(Number(cs.opacity) * 100) / 100, on: r.bottom > 0 && r.top < vh && r.width > 0, color: cs.color };
     }).filter((c) => c.on && c.o > 0.02);
-    const scenes = [...document.querySelectorAll("[data-scene]")].map((s) => ({ scene: s.dataset.scene, sig: s.dataset.scVerifyState ?? null, rect: (() => { const r = s.getBoundingClientRect(); return r.bottom > 0 && r.top < vh; })() }));
-    const videos = [...document.querySelectorAll("video[data-sc-src]")].map((v) => ({ t: Math.round(v.currentTime * 100) / 100, dur: Math.round((v.duration || 0) * 10) / 10, live: v.classList.contains("is-live"), vis: (() => { const r = v.getBoundingClientRect(); return r.bottom > 0 && r.top < vh; })() }));
+    const scenes = [...document.querySelectorAll("[data-scene]")].map((s) => ({ scene: s.dataset.scene, sig: s.dataset.scVerifyState ?? null, runT: s.dataset.runT ? Number(s.dataset.runT) : null, rect: (() => { const r = s.getBoundingClientRect(); return r.bottom > 0 && r.top < vh; })() }));
+    const videos = [...document.querySelectorAll("video[data-clip-src]")].map((v) => ({ t: Math.round(v.currentTime * 100) / 100, dur: Math.round((v.duration || 0) * 10) / 10, live: v.classList.contains("is-live"), vis: (() => { const r = v.getBoundingClientRect(); return r.bottom > 0 && r.top < vh; })() }));
     const rails = [...document.querySelectorAll("[data-sc-pan]")].map((r) => new DOMMatrix(getComputedStyle(r).transform).m41);
     const wipes = [...document.querySelectorAll("[data-sc-reveal]")].map((w) => getComputedStyle(w).clipPath);
     const mid = document.elementFromPoint(innerWidth / 2, vh / 2)?.closest("[data-sc-act]");
@@ -164,10 +164,7 @@ for (const r of report) for (const c of r.contrast) {
 if (scrollMode) for (const r of report) {
   for (const v of r.videos) if (v.vis && !v.live && r.id === "ask" && r.f > 0.1 && r.f < 0.95) findings.push({ kind: "clip not painting", at: r.file, note: "the office clip is still on its poster" });
   const run = r.scenes.find((s) => s.scene === "ask");
-  for (const v of r.videos) if (v.vis && v.live && run && r.id === "ask") {
-    const expect = (r.f - 0.02) / 0.96; // the walk position, 0..1, is the act's progress (within a hair)
-    void expect;
-  }
+  for (const v of r.videos) if (v.vis && v.live && run && run.runT !== null && Math.abs(v.t - run.runT) > 1.2) findings.push({ kind: "clip out of step with the run", at: r.file, clip: v.t, run: run.runT });
 }
 for (const e of consoleErrors) findings.push({ kind: "console error", text: e });
 for (const f of failed) findings.push({ kind: "failed request", url: f });

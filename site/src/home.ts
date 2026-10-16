@@ -33,9 +33,8 @@ export function prepareHome(): HomeMode {
   root.classList.add(mode === "scroll" ? "is-scroll" : "is-flat");
   if (mode === "flat") {
     // the scrubbed office clip becomes a short muted loop of the same run, played only while on screen
-    q<HTMLVideoElement>("video[data-sc-scrub]").forEach((v) => {
-      v.removeAttribute("data-sc-scrub");
-      v.removeAttribute("data-sc-src");
+    q<HTMLVideoElement>("video[data-clip-src]").forEach((v) => {
+      v.removeAttribute("data-clip-src");
       v.dataset.mp4 = "/media/office-loop.mp4";
       v.loop = true;
       v.classList.add("loop__video");
@@ -180,6 +179,7 @@ function runApply(stage: HTMLElement, svg: SVGElement, parsed: ReturnType<typeof
   const step = T < parsed.run.plan ? 0 : T < parsed.run.path ? 1 : 2;
   q<HTMLElement>(".steps__li", stage).forEach((li, i) => li.classList.toggle("is-now", i === step));
   stage.dataset.step = String(step);
+  stage.dataset.runT = T.toFixed(1);
   const sig = `${routes}:${working}:${segs}:${step}`;
   stage.dataset.scVerifyState = sig;
   return sig;
@@ -205,7 +205,7 @@ function scrollScenes() {
   const parsed = svg ? parseRun(svg) : null;
   const nodeEls = new Map<string, Element[]>();
   if (svg) q("[data-id]", svg).forEach((e) => { const id = e.getAttribute("data-id")!; if (!e.classList.contains("br")) (nodeEls.get(id) ?? nodeEls.set(id, []).get(id)!).push(e); });
-  const video = ask?.querySelector<HTMLVideoElement>("video[data-sc-src]") ?? null;
+  const video = ask?.querySelector<HTMLVideoElement>("video[data-clip-src]") ?? null;
   const scrubber = video ? new Scrubber(video, ask!) : null;
 
   let raf = 0;
@@ -268,7 +268,7 @@ class Scrubber {
     io.observe(this.stage);
   }
   private async load() {
-    const src = this.v.dataset.scSrc;
+    const src = this.v.dataset.clipSrc;
     if (!src) return;
     try {
       const res = await fetch(src);

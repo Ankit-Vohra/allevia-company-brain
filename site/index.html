@@ -16,16 +16,16 @@
 
       <!-- 0. The brain, finished: what you are buying (flow) -->
       <section class="act act--hero" id="top" data-sc-act="flow" aria-labelledby="hero-h">
-        <div class="wrap hero">
-          <div class="hero__copy" data-sc-in data-sc-stagger="80">
-            <h1 id="hero-h" class="hero__h">A brain for your business, and a team that works from&nbsp;it.</h1>
-            <p class="hero__p">Paste your website. __STAFF_WORD_CAP__ AI staff learn your business, use your tools, and ask before anything goes out.</p>
-            <p class="hero__cta">
+        <div class="wrap lead">
+          <div class="lead__copy" data-sc-in data-sc-stagger="80">
+            <h1 id="hero-h" class="lead__h">A brain for your business, and a team that works from&nbsp;it.</h1>
+            <p class="lead__p">Paste your website. __STAFF_WORD_CAP__ AI staff learn your business, use your tools, and ask before anything goes out.</p>
+            <p class="lead__cta">
               <a class="btn btn-gold btn-lg" href="__CONTACT_URL__">Get a free Brain Snapshot</a>
               <a class="link" href="#brain">See how it works</a>
             </p>
           </div>
-          <figure class="panel hero__panel" data-sc-in>
+          <figure class="panel lead__panel" data-sc-in>
             <div class="panel__plot"><!-- @render brain-hero --></div>
             <figcaption class="panel__cap">A sample business. <span class="tag">made-up data</span></figcaption>
           </figure>
@@ -34,8 +34,8 @@
 
       <!-- 1. Paste your website, then connect your tools: the brain forms and grows (pin; the reader drives the formation) -->
       <section class="act act--brain" id="brain" data-sc-act="pin" data-sc-span="4.4" data-stop-at="0" aria-label="How the brain forms">
-        <div class="stage stage--brain" data-sc-stage data-scene="form">
-          <div class="stage__copy">
+        <div class="scene scene--brain" data-sc-stage data-scene="form">
+          <div class="scene__copy">
             <div class="copy" data-sc-cue="0 0.4 0 0.05">
               <h2 class="h2">Paste your website. <span class="h2__soft">Your brain starts.</span></h2>
               <p class="p">Your team reads your pages and learns what you sell. Every fact keeps its source.</p>
@@ -56,11 +56,11 @@
 
       <!-- 2. Ask why: the question travels through the brain, the team lights up in the office, the path is drawn (the peak: scrub, the largest span) -->
       <section class="act act--ask" id="ask" data-sc-act="scrub" data-sc-span="5" data-sc-dwell="0.18" data-stop-at="1" aria-label="One question, followed through the brain">
-        <div class="stage stage--ask" data-sc-stage data-scene="ask">
-          <div class="stage__copy">
+        <div class="scene scene--ask" data-sc-stage data-scene="ask">
+          <div class="scene__copy">
             <h2 class="h2">Ask why. <span class="h2__soft">The team goes looking.</span></h2>
             <p class="qcard"><span class="qcard__who visually-hidden">You asked: </span>Why did sign-ups drop this week, and what should we do?</p>
-            <div class="stage__swap">
+            <div class="scene__swap">
               <ol class="steps" data-sc-cue="0 0.74 0 0.03">
                 <li class="steps__li" data-step="0">Meera splits the question.</li>
                 <li class="steps__li" data-step="1">Four colleagues read the brain.</li>
@@ -71,12 +71,12 @@
               </div>
             </div>
           </div>
-          <div class="stage__panels">
+          <div class="scene__panels">
             <figure class="panel panel--office">
               <div class="panel__media">
-                <img class="sc-stage__poster" src="/media/ask-office-busy.webp" width="760" height="366" loading="lazy" decoding="async"
+                <img class="panel__poster" src="/media/ask-office-busy.webp" width="760" height="366" loading="lazy" decoding="async"
                   alt="The office in the app during the question: twelve people at desks in coloured zones, speech bubbles over the ones working, dogs carrying papers, and a line under the floor that says who is doing what.">
-                <video data-sc-scrub data-sc-src="/media/ask-office.mp4" muted playsinline preload="none" aria-hidden="true" tabindex="-1"></video>
+                <video data-clip-src="/media/ask-office.mp4" muted playsinline preload="none" aria-hidden="true" tabindex="-1"></video>
               </div>
               <figcaption class="panel__cap"><span class="tag">real run</span><span class="visually-hidden"> The office, recorded in the app.</span></figcaption>
             </figure>
@@ -90,7 +90,7 @@
 
       <!-- 3. They make things (pan) -->
       <section class="act act--made" id="made" data-sc-act="pan" data-sc-span="2.6" data-stop-at="2" aria-labelledby="made-h">
-        <div class="stage stage--made" data-sc-stage>
+        <div class="scene scene--made" data-sc-stage>
           <!-- @render made-rail -->
         </div>
       </section>
@@ -108,8 +108,8 @@
 
       <!-- 5. Your growth plan moves (pin; the bars run from where the sample business started to now) -->
       <section class="act act--plan" id="plan" data-sc-act="pin" data-sc-span="1.8" data-stop-at="4" aria-labelledby="plan-h">
-        <div class="stage stage--plan" data-sc-stage>
-          <div class="stage__copy" data-sc-cue="0 1 0 0.03">
+        <div class="scene scene--plan" data-sc-stage>
+          <div class="scene__copy" data-sc-cue="0 1 0 0.03">
             <h2 id="plan-h" class="h2">Your plan moves. <span class="h2__soft">Three goals, one bar each.</span></h2>
           </div>
           <div class="plan__card" data-sc-cue="0 1 0 0.03">
@@ -121,11 +121,11 @@
 
       <!-- 6. The price and the way in (flow; the page ends on one button) -->
       <section class="act act--close" id="begin" data-sc-act="flow" data-stop-at="5" aria-labelledby="close-h">
-        <div class="wrap close">
+        <div class="wrap finale">
           <!-- @render price-line -->
-          <h2 id="close-h" class="close__h">Start with a free Brain&nbsp;Snapshot.</h2>
+          <h2 id="close-h" class="finale__h">Start with a free Brain&nbsp;Snapshot.</h2>
           <p class="p">Send us your website. We send back five fixes, before you pay.</p>
-          <p class="close__cta"><a class="btn btn-gold btn-lg" href="__CONTACT_URL__">Get a free Brain Snapshot</a> <a class="link" href="/pricing/">See the plans</a></p>
+          <p class="finale__cta"><a class="btn btn-gold btn-lg" href="__CONTACT_URL__">Get a free Brain Snapshot</a> <a class="link" href="/pricing/">See the plans</a></p>
         </div>
       </section>
     </main>

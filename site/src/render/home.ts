@@ -45,6 +45,7 @@ const MAJOR = new Set(["business:shiftly", "audience:seekers", "person:farhan", 
   "event:release-shiftly-2-8-1", "decision:014-hotfix-not-rollback", "campaign:meta-seekers-pune"]);
 
 // the few worth reading on a phone
+const FUNNEL_IDS = new Set(Object.keys(B.spark));
 const KEY = new Set(["business:shiftly", "feature:seekers-signup-phone-number-entered", "page:screen/app/auth/sign-up", "event:sentry-issue-shiftly-41", "event:release-shiftly-2-8-0", "person:farhan"]);
 
 const kindOf = (t: string): string => ({ Business: "biz", Person: "person", Team: "person", Audience: "person", Channel: "chan", Page: "chan", Feature: "feat", Campaign: "feat", Decision: "feat", Task: "feat", Event: "event", Lead: "sales", Deal: "sales", Meeting: "sales", Message: "sales", Document: "doc" } as Record<string, string>)[t] ?? "feat";
@@ -67,6 +68,10 @@ type Variant = "hero" | "form" | "ask";
 /** The brain, as one SVG. `form` carries the formation timing; `ask` the run; `hero` neither (a finished picture that breathes). */
 export function brainSvg(variant: Variant): string {
   const w = B.box.w, h = B.box.h;
+  // the picture is cropped to what it holds (the run's version keeps the strip of people along the bottom)
+  const minX = Math.floor(Math.min(...B.nodes.map((n) => n.x - n.r)) - 26), maxX = Math.ceil(Math.max(...B.nodes.map((n) => n.x + n.r)) + 34);
+  const minY = Math.floor(Math.min(...B.nodes.map((n) => n.y - n.r)) - 24), maxY = Math.ceil(Math.max(...B.nodes.map((n) => n.y + n.r)) + 26);
+  const vb = variant === "ask" ? `${minX} ${minY} ${maxX - minX} ${h - minY}` : `${minX} ${minY} ${maxX - minX} ${maxY - minY}`;
   const form = variant === "form";
   const ask = variant === "ask";
   const t0 = new Map(B.nodes.map((n) => [n.id, arrival(n)]));
@@ -109,14 +114,17 @@ export function brainSvg(variant: Variant): string {
     const right = n.x < w - 150;
     const f = form && major ? ` data-f="fade ${r3(t0.get(n.id)! + 0.02)} 0.03"` : "";
     const read = ask ? ` data-id="${esc(n.id)}"` : "";
-    return `<text class="bl${major ? " bl--major" : ""}${KEY.has(n.id) ? " bl--key" : ""}" x="${r1(right ? n.x + n.r + 5 : n.x - n.r - 5)}" y="${r1(n.y + 4)}" text-anchor="${right ? "start" : "end"}"${f}${read}>${esc(n.label)}</text>`;
+    const above = FUNNEL_IDS.has(n.id); // the funnel steps are named above them, so the bars of their neighbours do not run under the words
+    const x = above ? n.x : right ? n.x + n.r + 5 : n.x - n.r - 5;
+    const y = above ? n.y - n.r - 7 : n.y + 4;
+    return `<text class="bl${major ? " bl--major" : ""}${KEY.has(n.id) ? " bl--key" : ""}" x="${r1(x)}" y="${r1(y)}" text-anchor="${above ? "middle" : right ? "start" : "end"}"${f}${read}>${esc(n.label)}</text>`;
   }).join("");
 
   let overlay = "";
   if (ask) overlay = askOverlay();
   const names = B.nodes.filter((n) => n.labelled).map((n) => n.label).join(", ");
   const title = form ? "The company brain of a sample business growing: first from its website, then from each tool it connects." : ask ? "The brain, and the route the question took through it: who read what, and the path of the answer." : "The company brain of a sample business: the business, its people, channels, funnel, screens, releases and crashes, leads and calls, all linked.";
-  return `<svg class="brain__svg brain__svg--${variant}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(title)}" data-brain="${variant}"${ask ? runAttr() : ""} preserveAspectRatio="xMidYMid meet">
+  return `<svg class="brain__svg brain__svg--${variant}" viewBox="${vb}" role="img" aria-label="${esc(title)}" data-brain="${variant}"${ask ? runAttr() : ""} preserveAspectRatio="xMidYMid meet">
 <desc>${esc(`${B.counts.nodes} things and ${B.counts.edges} links. Includes: ${names}.`)}</desc>
 <g class="b-edges" aria-hidden="true">${edges}</g>
 <g class="b-spark" aria-hidden="true">${spark}</g>
@@ -178,7 +186,9 @@ function askOverlay(): string {
     const n = NODE.get(id);
     return n ? `<circle class="bpn" cx="${n.x}" cy="${n.y}" r="${n.r + 5}" data-r="fade ${r1(t + 0.3 + i * 0.7)} ${r1(t + 0.9 + i * 0.7)}"/>` : "";
   }).join("");
-  const marks = `<text class="bnote" x="${r1((NODE.get("feature:seekers-signup-phone-number-entered")?.x ?? 330))}" y="${r1((NODE.get("feature:seekers-signup-phone-number-entered")?.y ?? 100) + 56)}" text-anchor="middle" data-r="fade ${r1(t + 1)} ${r1(t + 2)}">fell on 7 Oct</text>`;
+  const pn = NODE.get("feature:seekers-signup-phone-number-entered");
+  const days = (B.spark["feature:seekers-signup-phone-number-entered"] ?? []).length;
+  const marks = pn ? `<text class="bnote" x="${r1(pn.x + (days * 4.1) / 2 + 6)}" y="${r1(pn.y + 36)}" data-r="fade ${r1(t + 1)} ${r1(t + 2)}">fell on 7 Oct</text>` : "";
   return `<g class="b-routes" aria-hidden="true">${routes.join("")}</g><g class="b-path" aria-hidden="true">${segs}${pathNodes}${marks}</g>\n`;
 }
 
@@ -224,7 +234,7 @@ export const ANSWER = [
 ];
 
 export function askAnswer(): string {
-  const lines = ANSWER.map((a) => `<li><p>${esc(a.text)}</p><p class="src">${a.src.map((s) => `<span>${esc(s)}</span>`).join("")}</p></li>`).join("");
+  const lines = ANSWER.map((a) => `<li><p>${esc(a.text)}</p><p class="cites">${a.src.map((s) => `<span>${esc(s)}</span>`).join("")}</p></li>`).join("");
   return `<ul class="answer__lines">${lines}</ul><p class="answer__ok"><span class="ok-dot" aria-hidden="true"></span>Two things wait for your OK.</p>`;
 }
 
