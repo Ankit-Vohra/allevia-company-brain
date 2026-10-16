@@ -30,6 +30,12 @@ export interface ServiceDeps {
   openGraph: (tenant: string) => Promise<GraphHandle>;
   businessIdOf?: (tenant: string) => Promise<string | undefined>;
   now?: () => number;
+  /** A connector for any toolkit in the catalogue, by its slug (`app-<slug>`); absent: only the registered ones. */
+  dynamic?: (slug: string) => Connector | null;
+  /** Searches the catalogue behind the Connections page's search box; absent: no search. */
+  search?: (query: string) => Promise<Array<{ slug: string; name: string; description: string }>>;
+  /** Calls allowed per business and connection (a runaway agent cannot hammer someone's account). */
+  limits?: { perMinute?: number; perDay?: number };
 }
 
 interface Pending { tenant: string; connector: string; data: Record<string, string>; exp: number }
@@ -38,6 +44,10 @@ interface Pending { tenant: string; connector: string; data: Record<string, stri
 export interface ConnectionsPort {
   readonly tenant: string;
   status(id: string): Promise<ConnectionStatus>;
+  /** Every connection with its state, for the agents' "what can I use" and the starter chips. */
+  list(): Promise<ConnectionView[]>;
+  /** One short paragraph for an agent's prompt: what is connected, what is not (empty when nothing is configured). */
+  note(): Promise<string>;
   /** Runs `fn` with a live session on a connection (the session type belongs to the connector). Refusals are thrown as
    *  NotConnectedError, NeedsAttentionError, NotAllowedError or NotConfiguredError, each with `words` for the owner. */
   run<S, T>(id: string, op: string, fn: (session: S) => Promise<T>, o?: { actor?: string }): Promise<T>;
@@ -56,12 +66,26 @@ export class ConnectionsService {
   get vault(): SealedVault<unknown> { return this.d.vault; }
   get webBaseUrl(): string { return this.d.webBaseUrl; }
 
+  private dyn = new Map<string, Connector>();
   connector(id: string): Connector {
-    const c = this.d.connectors.find((x) => x.info.id === id);
-    if (!c) throw new UnknownConnection(id);
-    return c;
+    const c = this.d.connectors.find((x) => x.info.id === id) ?? this.dyn.get(id);
+    if (c) return c;
+    if (id.startsWith("app-") && this.d.dynamic) {
+      const made = this.d.dynamic(id.slice(4));
+      if (made) { this.dyn.set(id, made); return made; }
+    }
+    throw new UnknownConnection(id);
   }
-  has(id: string): boolean { return this.d.connectors.some((x) => x.info.id === id); }
+  has(id: string): boolean {
+    try { this.connector(id); return true; } catch { return false; }
+  }
+
+  /** The catalogue behind the search box: toolkits Allevia has not listed itself, each as a connection id and a name. */
+  async search(query: string): Promise<Array<{ id: string; name: string; description: string }>> {
+    if (!this.d.search || query.trim().length < 2) return [];
+    const found = await this.d.search(query.trim().slice(0, 60)).catch(() => []);
+    return found.filter((f) => /^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(f.slug)).slice(0, 20).map((f) => ({ id: `app-${f.slug}`, name: f.name, description: f.description.slice(0, 200) }));
+  }
 
   private keyOk(): boolean { return typeof this.d.connectorKey === "string" && this.d.connectorKey.length >= MIN_KEY; }
 
@@ -119,7 +143,8 @@ export class ConnectionsService {
   }
 
   async list(tenant: string): Promise<ConnectionView[]> {
-    const views = await Promise.all(this.d.connectors.map((c) => this.view(tenant, c.info.id)));
+    const extra = (await this.d.vault.list(tenant).catch(() => [] as string[])).filter((n) => n.startsWith("app-") && !this.d.connectors.some((c) => c.info.id === n) && this.has(n));
+    const views = await Promise.all([...this.d.connectors.map((c) => c.info.id), ...extra].map((id) => this.view(tenant, id)));
     return views.sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group));
   }
 
@@ -261,12 +286,44 @@ export class ConnectionsService {
 
   rotateKeys(): Promise<{ rotated: number; unreadable: string[] }> { return this.d.vault.rotateAll(); }
 
+  // ---------- limits and the prompt note ----------
+
+  private calls = new Map<string, number[]>();
+  private allow(tenant: string, id: string): boolean {
+    const now = this.now();
+    const key = `${tenant}\u0000${id}`;
+    const day = (this.calls.get(key) ?? []).filter((t) => now - t < 86_400_000);
+    const perMinute = this.d.limits?.perMinute ?? 30, perDay = this.d.limits?.perDay ?? 2000;
+    if (day.length >= perDay || day.filter((t) => now - t < 60_000).length >= perMinute) { this.calls.set(key, day); return false; }
+    day.push(now);
+    this.calls.set(key, day);
+    return true;
+  }
+
+  /** What an agent is told at the start of a turn: which tools of this business it can use, and which it could ask for. */
+  async note(tenant: string): Promise<string> {
+    const views = await this.list(tenant).catch(() => [] as ConnectionView[]);
+    const usable = views.filter((v) => v.available);
+    if (!usable.length) return "";
+    const on = usable.filter((v) => v.state === "connected");
+    const attention = usable.filter((v) => v.state === "needs_attention");
+    const off = usable.filter((v) => v.state === "not_connected" && v.id.indexOf("app-") !== 0).slice(0, 8);
+    return [
+      `Connected tools of this business: ${on.length ? on.map((v) => `${v.name} (${v.id})`).join(", ") : "none yet"}.`,
+      attention.length ? `These stopped working and need the owner to connect them again: ${attention.map((v) => v.name).join(", ")}.` : "",
+      off.length ? `Not connected yet: ${off.map((v) => `${v.name} (${v.id})`).join(", ")}.` : "",
+      "Use connections_available to see which ones you may use, connection_read to look something up and connection_act to propose a change. If a job needs a tool that is not connected, say so plainly and give the owner this link: [Connect <name>](/connections?connect=<id>). Never invent data from a tool that is not connected.",
+    ].filter(Boolean).join(" ");
+  }
+
   // ---------- what tools and executors use ----------
 
   port(tenant: string, defaults: { actor?: string } = {}): ConnectionsPort {
     return {
       tenant,
       status: async (id) => (await this.view(tenant, id)),
+      list: () => this.list(tenant),
+      note: () => this.note(tenant),
       run: async <S, T>(id: string, op: string, fn: (session: S) => Promise<T>, o: { actor?: string } = {}): Promise<T> => {
         const c = this.connector(id);
         const a = c.availability();
@@ -275,6 +332,7 @@ export class ConnectionsService {
         const record = (ok: boolean, detail?: string) =>
           this.d.audit.append({ at: t0, tenant, connector: id, op, ok, ms: this.now() - t0, ...(detail ? { detail } : {}), ...(actor ? { actor } : {}) }).catch(() => undefined);
         if (!a.ok) { await record(false, "not switched on"); throw new NotConfiguredError(id, a); }
+        if (!this.allow(tenant, id)) { await record(false, "too many calls"); throw new RateLimitedError(id, c.info.name); }
         const run = (c as Connector & { run?: (ctx: ConnectorCtx, fn: (s: unknown) => Promise<unknown>) => Promise<unknown> }).run;
         if (!run) throw new Error(`${c.info.name} has no live session.`);
         const ctx = this.ctx(tenant, id, await this.businessId(tenant));
@@ -289,6 +347,15 @@ export class ConnectionsService {
         }
       },
     };
+  }
+}
+
+export class RateLimitedError extends Error {
+  override name = "RateLimitedError";
+  readonly words: string;
+  constructor(readonly connector: string, readonly connectorName: string) {
+    super(`That is a lot of calls to ${connectorName} in a short time, so this one was held back. Try again in a minute or two.`);
+    this.words = this.message;
   }
 }
 

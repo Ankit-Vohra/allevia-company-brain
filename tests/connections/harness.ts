@@ -34,12 +34,12 @@ export interface ConnHarness {
   cleanup: () => Promise<void>;
 }
 
-export async function connHarness(o: { env?: Record<string, string>; apis?: FakeApisScript; codes?: Record<string, ReturnType<typeof tokens>>; graph?: boolean } = {}): Promise<ConnHarness> {
+export async function connHarness(o: { via?: "own" | "composio"; env?: Record<string, string>; apis?: FakeApisScript; codes?: Record<string, ReturnType<typeof tokens>>; graph?: boolean } = {}): Promise<ConnHarness> {
   const dir = mkdtempSync(join(tmpdir(), "allevia-connections-"));
   const cfg = loadConfig({
     ALLEVIA_ENV_FILE: ENV_FILE, ALLEVIA_DATA_DIR: dir, ALLEVIA_WEB_URL: WEB,
     ALLEVIA_GOOGLE_CLIENT_ID: "test-client-id.apps.example", ALLEVIA_GOOGLE_CLIENT_SECRET: "test-client-secret-xxxxxxxxxxxx", ALLEVIA_CONNECTOR_KEY: KEY,
-    ALLEVIA_GOOGLE_ADS_DEVELOPER_TOKEN: "test-dev-token", ...o.env,
+    ALLEVIA_GOOGLE_ADS_DEVELOPER_TOKEN: "test-dev-token", ALLEVIA_GOOGLE_VIA: o.via ?? "own", ...o.env,
   });
   const clock = { now: NOW };
   const google = new FakeGoogle({ codes: o.codes ?? {} });

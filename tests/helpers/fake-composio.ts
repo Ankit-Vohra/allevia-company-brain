@@ -1,9 +1,11 @@
 // A fake Composio: makes connect links, holds connected accounts per user id, runs scripted tools, records every call.
-import type { ComposioAccount, ComposioClient } from "../../src/connections/composio.js";
+import type { ComposioAccount, ComposioClient, ComposioToolInfo, ComposioToolkitInfo } from "../../src/connections/composio.js";
 
 export class FakeComposio implements ComposioClient {
   calls: Array<{ op: string; args: unknown }> = [];
   accounts = new Map<string, ComposioAccount>();
+  toolList = new Map<string, ComposioToolInfo[]>();
+  catalogue: ComposioToolkitInfo[] = [{ slug: "notion", name: "Notion", description: "Notes and docs" }];
   results = new Map<string, unknown>();           // tool slug -> data
   private n = 0;
   async authConfigId(toolkit: string): Promise<string> { this.calls.push({ op: "authConfigId", args: toolkit }); return `ac_${toolkit}`; }
@@ -23,4 +25,7 @@ export class FakeComposio implements ComposioClient {
     if (!a || a.userId !== o.userId) return { ok: false, data: null, error: "no such account" };
     return { ok: true, data: this.results.get(o.tool) ?? null };
   }
+  async tools(toolkit: string, search?: string): Promise<ComposioToolInfo[]> { this.calls.push({ op: "tools", args: { toolkit, search } }); return (this.toolList.get(toolkit) ?? []).filter((t) => !search || t.slug.toLowerCase().includes(search.toLowerCase())); }
+  async searchToolkits(q: string): Promise<ComposioToolkitInfo[]> { this.calls.push({ op: "searchToolkits", args: q }); return this.catalogue.filter((t) => t.name.toLowerCase().includes(q.toLowerCase())); }
+  async toolkit(slug: string): Promise<ComposioToolkitInfo | null> { return this.catalogue.find((t) => t.slug === slug) ?? null; }
 }

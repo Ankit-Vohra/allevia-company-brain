@@ -36,6 +36,7 @@ export interface AlleviaConfig {
     googleAdsDeveloperToken?: string;
     googleAdsLoginCustomerId?: string;
     googleAdsApiVersion?: string;
+    googleVia?: "own" | "composio"; // ALLEVIA_GOOGLE_VIA: Google products on our own Google app or through Composio (default: Composio when its key is set, else our own)
     gmailRead: boolean; // ALLEVIA_GMAIL_READ=1: the owner may allow reading the inbox (Google's restricted-scope review must be done first)
   };
   // Public-data lookups through Apify store actors (docs/apify-setup.md). No token: the lookups say they are not switched
@@ -122,6 +123,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
       googleAdsDeveloperToken: get("ALLEVIA_GOOGLE_ADS_DEVELOPER_TOKEN"),
       googleAdsLoginCustomerId: get("ALLEVIA_GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
       googleAdsApiVersion: get("ALLEVIA_GOOGLE_ADS_API_VERSION"),
+      ...(get("ALLEVIA_GOOGLE_VIA") === "own" || get("ALLEVIA_GOOGLE_VIA") === "composio" ? { googleVia: get("ALLEVIA_GOOGLE_VIA") as "own" | "composio" } : {}),
       gmailRead: (get("ALLEVIA_GMAIL_READ") ?? "") === "1",
     },
     apify: { token: get("APIFY_TOKEN"), monthlyUsd: get("ALLEVIA_APIFY_MONTHLY_USD"), dailyUsd: get("ALLEVIA_APIFY_DAILY_USD") },

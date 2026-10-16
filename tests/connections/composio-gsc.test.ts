@@ -1,5 +1,6 @@
 // Composio (fake) for the long tail, Search Console through the framework, and the page's list: groups, one line each, states.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { entryById } from "../../shared/connection-map.js";
 import { closeAll } from "../../src/graph/client.js";
 import { composioUserId } from "../../src/connections/composio.js";
 import { GROUP_ORDER, NotConnectedError } from "../../src/connections/types.js";
@@ -28,8 +29,8 @@ describe("Composio", () => {
   it("is off, and plainly explained, without a key", async () => {
     const off = await connHarness({ graph: false });
     try {
-      const noKey = new (await import("../../src/connections/composio.js")).ComposioConnector(
-        (await import("../../src/connections/composio.js")).COMPOSIO_SPECS[4]!, { apiKey: "", client: null, connectorKey: KEY });
+      const { ComposioConnector } = await import("../../src/connections/composio.js");
+      const noKey = new ComposioConnector(entryById("shopify")!, { apiKey: "", client: null, connectorKey: KEY });
       const a = noKey.availability();
       expect(a.ok).toBe(false);
       expect(a.missing.map((m) => m.setting)).toEqual(["COMPOSIO_API_KEY"]);
@@ -80,10 +81,13 @@ describe("Composio", () => {
     expect(h.composio.calls.some((c) => c.op === "deleteAccount")).toBe(true);
   });
 
-  it("WhatsApp is coming soon and cannot be connected", async () => {
-    const v = await h.svc.view("kestrel", "whatsapp");
-    expect(v).toMatchObject({ available: false, soon: true });
-    await expect(h.svc.connect("kestrel", "whatsapp")).rejects.toThrow(/coming soon/);
+  it("any toolkit in Composio's catalogue can be found and connected, as app-<slug>", async () => {
+    const found = await h.svc.search("notion");
+    expect(found).toEqual([{ id: "app-notion", name: "Notion", description: "Notes and docs" }]);
+    const v = await h.svc.view("kestrel", "app-notion");
+    expect(v).toMatchObject({ id: "app-notion", state: "not_connected", available: true });
+    expect(h.svc.has("app-not a slug")).toBe(false);
+    expect(h.svc.has("nonsense")).toBe(false);
   });
 });
 

@@ -1,17 +1,25 @@
-// Composio for the long tail (Shopify, HubSpot, Stripe, Slack, Meta while our own Meta app is in review), behind the same
-// Connector interface. Composio holds those tokens; Allevia stores only the connected-account id, sealed per business.
+// Composio is the main path to a business's tools (Gmail, Calendar, Analytics, Search Console, Google Ads, Instagram, Facebook,
+// Meta Ads, WhatsApp, Shopify, Stripe, HubSpot, Calendly, Mailchimp, LinkedIn, Slack and the rest of its catalogue), behind the
+// same Connector interface as our own Google app. Composio holds those tokens; Allevia stores only the connected-account id,
+// sealed per business.
 //   entity     each business has an opaque Composio user id derived from its slug and the connector key (not the slug, not an
 //              email); the server sets it, a model never does
 //   connect    ask Composio for a hosted connect link for that user and toolkit; our callback comes back with a signed state
-//   complete   Composio sends the owner back; the account is fetched and must belong to THIS business's user id and be active
-//              before its id is sealed
-//   execute    a tool call for one business: the stored account id is used, and its owner is re-checked against the business
-// Off, and plainly explained, without COMPOSIO_API_KEY. The REST shapes below follow Composio's v3 API as documented when this
-// was written and have NEVER run against the real service: expect a fix or two the first time (docs/connections-setup.md).
+//   complete   Composio sends the owner back; the account is fetched and must belong to THIS business's user id, be for this
+//              toolkit and be active before its id is sealed
+//   run        a session for one call: `execute(tool, args)` runs a Composio tool as this business, and only this business;
+//              `listTools()` says what the toolkit can do. Google toolkits also carry `apis`, the same Calendar/Gmail/Analytics
+//              calls our own Google app offers, so the agents' tools work on either path.
+// Off, and plainly explained, without COMPOSIO_API_KEY. The REST shapes and the tool slugs below follow Composio's v3 API and
+// catalogue as known when this was written and have NEVER run against the real service: `connect toolkits` checks the slugs, and
+// docs/connections-setup.md lists what to verify first.
 import { createHmac } from "node:crypto";
+import { entryById, entryByToolkit, TOOLKIT_CATALOG, type ToolkitEntry } from "../../shared/connection-map.js";
 import { asRecord, realFetch, type FetchFn } from "../connectors/google/client.js";
 import { syncCapabilities } from "../capabilities/ladder.js";
 import { upsertNode } from "../graph/upsert.js";
+import type { GoogleApis } from "./google/apis.js";
+import type { GoogleSession } from "./google/product.js";
 import {
   NeedsAttentionError, NotConnectedError,
   type Availability, type CompleteOutcome, type ConnectionHealth, type ConnectionStatus, type Connector, type ConnectorCtx, type ConnectorInfo, type ConnectStart,
@@ -20,6 +28,8 @@ import {
 const BASE = "https://backend.composio.dev/api/v3";
 
 export interface ComposioAccount { id: string; status: string; userId: string; toolkit: string }
+export interface ComposioToolInfo { slug: string; name: string; description: string }
+export interface ComposioToolkitInfo { slug: string; name: string; description: string }
 
 export interface ComposioClient {
   /** Finds or makes the auth config for a toolkit (Composio's own app until ours is approved). */
@@ -28,6 +38,11 @@ export interface ComposioClient {
   account(id: string): Promise<ComposioAccount | null>;
   deleteAccount(id: string): Promise<void>;
   execute(o: { tool: string; accountId: string; userId: string; args: Record<string, unknown> }): Promise<{ ok: boolean; data: unknown; error?: string }>;
+  /** The actions a toolkit offers. */
+  tools(toolkit: string, search?: string): Promise<ComposioToolInfo[]>;
+  /** Composio's catalogue, searched by words. */
+  searchToolkits(query: string): Promise<ComposioToolkitInfo[]>;
+  toolkit(slug: string): Promise<ComposioToolkitInfo | null>;
 }
 
 export class ComposioError extends Error {
@@ -49,10 +64,11 @@ export function realComposioClient(apiKey: string, fetchFn: FetchFn = realFetch)
     return { status: res.status, body };
   };
   const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const items = (b: Record<string, unknown>): Record<string, unknown>[] => (Array.isArray(b.items) ? b.items : Array.isArray(b.data) ? b.data : []).map(asRecord);
   return {
     async authConfigId(toolkit) {
       const found = await call(`/auth_configs?toolkit_slug=${encodeURIComponent(toolkit)}`);
-      const first = (Array.isArray(found.body.items) ? found.body.items : []).map(asRecord).find((i) => str(i.id));
+      const first = items(found.body).find((i) => str(i.id));
       if (first) return str(first.id);
       const made = await call("/auth_configs", { method: "POST", body: { toolkit: { slug: toolkit }, auth_config: { type: "use_composio_managed_auth" } } });
       const id = str(asRecord(made.body.auth_config).id) || str(made.body.id);
@@ -78,15 +94,98 @@ export function realComposioClient(apiKey: string, fetchFn: FetchFn = realFetch)
       const success = r.body.successful === true || r.body.success === true;
       return { ok: success, data: r.body.data ?? null, ...(success ? {} : { error: str(r.body.error) || "The tool did not work." }) };
     },
+    async tools(toolkit, search) {
+      const q = new URLSearchParams({ toolkit_slug: toolkit, limit: "100", ...(search ? { search } : {}) });
+      return items((await call(`/tools?${q}`)).body).map((t) => ({ slug: str(t.slug), name: str(t.name), description: str(t.description).slice(0, 240) })).filter((t) => t.slug);
+    },
+    async searchToolkits(query) {
+      const q = new URLSearchParams({ search: query, limit: "20" });
+      return items((await call(`/toolkits?${q}`)).body).map((t) => ({ slug: str(t.slug), name: str(t.name) || str(t.slug), description: str(asRecord(t.meta).description) || str(t.description) })).filter((t) => t.slug);
+    },
+    async toolkit(slug) {
+      const r = await call(`/toolkits/${encodeURIComponent(slug)}`);
+      return r.status === 404 ? null : { slug: str(r.body.slug) || slug, name: str(r.body.name) || slug, description: str(asRecord(r.body.meta).description) };
+    },
   };
 }
 
-export interface ComposioSpec {
-  info: ConnectorInfo;
-  toolkit: string;                // Composio's slug ("shopify")
-  system: { id: string; name: string };
-  soon?: boolean;                 // planned, not built
+// ---------- reading or changing: what a tool slug does ----------
+
+const CHANGES = /(CREATE|SEND|POST|DELETE|REMOVE|UPDATE|PATCH|PAUSE|ENABLE|DISABLE|INSERT|ADD|REPLY|PUBLISH|MODIFY|CANCEL|TRASH|MOVE|SET|ARCHIVE|WRITE|UPLOAD|SUBMIT|APPROVE|REFUND|CHARGE|PAY|TRANSFER|BOOK|INVITE|SCHEDULE|FORWARD|DRAFT|COMMENT|LIKE|FOLLOW|SHARE|ASSIGN|MERGE|IMPORT|APPEND|CLEAR|BATCH_UPDATE|SUBSCRIBE|UNSUBSCRIBE|RUN_CAMPAIGN)/;
+const READS = /(GET|LIST|FETCH|FIND|SEARCH|READ|QUERY|RETRIEVE|VIEW|LOOKUP|FREE_BUSY|REPORT|COUNT|DESCRIBE|CHECK|ANALYTICS|INSIGHTS|STATS)/;
+
+/** "read" only when the slug clearly looks up something and clearly changes nothing; everything else waits for the owner's OK. */
+export function classifyTool(slug: string): "read" | "act" {
+  const s = slug.toUpperCase();
+  return READS.test(s) && !CHANGES.test(s) ? "read" : "act";
 }
+
+// ---------- the Google calls on Composio, so the agents' Calendar, Gmail tools work on either path ----------
+
+// Tool slugs for the calls we wrap. UNVERIFIED against the live catalogue (see the header): the agent can always list a
+// toolkit's real actions with connection_tools and call them by name.
+export const GOOGLE_SLUGS = {
+  freeBusy: "GOOGLECALENDAR_FREE_BUSY_QUERY",
+  createEvent: "GOOGLECALENDAR_CREATE_EVENT",
+  sendEmail: "GMAIL_SEND_EMAIL",
+  fetchEmails: "GMAIL_FETCH_EMAILS",
+} as const;
+
+const arrAt = (v: unknown, key: string, depth = 0): unknown[] => {
+  if (!v || typeof v !== "object" || depth > 5) return [];
+  const o = v as Record<string, unknown>;
+  if (Array.isArray(o[key])) return o[key] as unknown[];
+  for (const x of Object.values(o)) { const r = arrAt(x, key, depth + 1); if (r.length) return r; }
+  return [];
+};
+const firstStr = (v: unknown, keys: string[], depth = 0): string => {
+  if (!v || typeof v !== "object" || depth > 5) return "";
+  const o = v as Record<string, unknown>;
+  for (const k of keys) if (typeof o[k] === "string" && o[k]) return o[k] as string;
+  for (const x of Object.values(o)) { const r = firstStr(x, keys, depth + 1); if (r) return r; }
+  return "";
+};
+
+export function composioGoogleApis(execute: (tool: string, args: Record<string, unknown>) => Promise<unknown>): GoogleApis {
+  const unsupported = (what: string) => async (): Promise<never> => { throw new ComposioError(`${what} is not wrapped on this path: list the toolkit's actions with connection_tools and call one by name.`, 501); };
+  return {
+    accountEmail: async () => null,
+    async freeBusy(_t, q) {
+      const d = await execute(GOOGLE_SLUGS.freeBusy, { time_min: q.timeMin, time_max: q.timeMax, ...(q.timeZone ? { timezone: q.timeZone } : {}), items: [{ id: "primary" }] });
+      return arrAt(d, "busy").flatMap((b) => { const r = asRecord(b); return typeof r.start === "string" && typeof r.end === "string" ? [{ start: r.start, end: r.end }] : []; });
+    },
+    async createEvent(_t, e) {
+      const minutes = Math.max(1, Math.round((Date.parse(e.end) - Date.parse(e.start)) / 60_000));
+      const d = await execute(GOOGLE_SLUGS.createEvent, {
+        summary: e.summary, start_datetime: e.start, event_duration_hour: Math.floor(minutes / 60), event_duration_minutes: minutes % 60,
+        ...(e.description ? { description: e.description } : {}), ...(e.timeZone ? { timezone: e.timeZone } : {}), ...(e.attendees?.length ? { attendees: e.attendees } : {}),
+      });
+      const id = firstStr(d, ["id", "event_id"]);
+      if (!id) throw new ComposioError("Google did not confirm the event.", 502);
+      return { id, ...(firstStr(d, ["htmlLink", "html_link"]) ? { link: firstStr(d, ["htmlLink", "html_link"]) } : {}) };
+    },
+    async sendEmail(_t, m) {
+      const d = await execute(GOOGLE_SLUGS.sendEmail, {
+        recipient_email: m.to[0], ...(m.to.length > 1 ? { extra_recipients: m.to.slice(1) } : {}), ...(m.cc?.length ? { cc: m.cc } : {}), subject: m.subject, body: m.body, is_html: false,
+        ...(m.threadId ? { thread_id: m.threadId } : {}),
+      });
+      const id = firstStr(d, ["id", "message_id", "messageId"]);
+      if (!id) throw new ComposioError("Google did not confirm the email.", 502);
+      return { id, ...(firstStr(d, ["threadId", "thread_id"]) ? { threadId: firstStr(d, ["threadId", "thread_id"]) } : {}) };
+    },
+    async searchInbox(_t, q) {
+      const d = await execute(GOOGLE_SLUGS.fetchEmails, { query: q.query, max_results: Math.min(q.max, 25) });
+      return arrAt(d, "messages").slice(0, q.max).map((m) => {
+        const r = asRecord(m);
+        return { id: firstStr(r, ["messageId", "id"]), from: firstStr(r, ["sender", "from"]), subject: firstStr(r, ["subject"]), date: firstStr(r, ["messageTimestamp", "date"]), snippet: firstStr(r, ["preview", "snippet", "messageText"]).slice(0, 300) };
+      });
+    },
+    ga4Properties: unsupported("Listing analytics properties"), ga4Report: unsupported("An analytics report"),
+    adsCustomers: unsupported("Listing ads accounts"), adsCampaigns: unsupported("An ads report"),
+  };
+}
+
+// ---------- connectors ----------
 
 export interface ComposioDeps { apiKey: string; client: ComposioClient | null; connectorKey: string }
 
@@ -95,18 +194,32 @@ export function composioUserId(connectorKey: string, tenant: string): string {
   return `al_${createHmac("sha256", connectorKey).update(`composio-user\u0000${tenant}`).digest("hex").slice(0, 24)}`;
 }
 
-interface Record_ { accountId: string; userId: string; at: number }
+interface Stored { accountId: string; userId: string; at: number }
 
 export const COMPOSIO_OFF_WORDS = (what: string) => `Connecting ${what} isn't switched on yet. Your team is setting up the connection service and will let you know when it's ready.`;
 
+export interface ComposioSession {
+  execute(tool: string, args: Record<string, unknown>): Promise<unknown>;
+  listTools(search?: string): Promise<ComposioToolInfo[]>;
+  toolkit: string;
+  // present for the Google toolkits: the same session shape the own-Google path gives
+  apis?: GoogleApis;
+  accessToken?: string;
+  meta?: Readonly<Record<string, string>>;
+  allowed?: (scope: string) => boolean;
+}
+
+export function infoOf(e: ToolkitEntry): ConnectorInfo {
+  return { id: e.id, name: e.name, group: e.group, provider: "composio", blurb: e.blurb, reads: e.reads, acts: e.acts, capabilities: e.capabilities as ConnectorInfo["capabilities"] };
+}
+
 export class ComposioConnector implements Connector {
   readonly info: ConnectorInfo;
-  constructor(readonly spec: ComposioSpec, private deps: ComposioDeps) {
-    this.info = spec.info;
+  constructor(readonly entry: ToolkitEntry, private deps: ComposioDeps) {
+    this.info = infoOf(entry);
   }
 
   availability(): Availability {
-    if (this.spec.soon) return { ok: false, soon: true, message: `${this.info.name} is coming soon.`, missing: [] };
     const missing = [
       ...(this.deps.apiKey ? [] : [{ setting: "COMPOSIO_API_KEY", words: "the key for Allevia's connection service (Composio)" }]),
       ...(this.deps.connectorKey.length >= 32 ? [] : [{ setting: "ALLEVIA_CONNECTOR_KEY", words: "the key that locks stored connections (at least 32 characters)" }]),
@@ -118,15 +231,13 @@ export class ComposioConnector implements Connector {
     if (!this.deps.client) throw new NotConnectedError(this.info.id, this.info.name, COMPOSIO_OFF_WORDS(this.info.name));
     return this.deps.client;
   }
-  private rec(ctx: ConnectorCtx): Promise<Record_ | null> {
-    return ctx.vault.get(ctx.tenant, this.info.id) as Promise<Record_ | null>;
-  }
+  private stored(ctx: ConnectorCtx): Promise<Stored | null> { return ctx.vault.get(ctx.tenant, this.info.id) as Promise<Stored | null>; }
   private user(ctx: ConnectorCtx): string { return composioUserId(this.deps.connectorKey, ctx.tenant); }
 
   private async markSystem(ctx: ConnectorCtx, status: string): Promise<void> {
     try {
       const g = await ctx.graph();
-      await upsertNode(g, { type: "System", id: this.spec.system.id, name: this.spec.system.name, props: { kind: "connector", provider: "composio", status } }, ctx.now());
+      await upsertNode(g, { type: "System", id: this.entry.system.id, name: this.entry.system.name, props: { kind: "connector", provider: "composio", status } }, ctx.now());
       await syncCapabilities(g, { now: ctx.now(), ...(ctx.businessId ? { businessId: ctx.businessId } : {}) });
     } catch {
       // the ladder catches up on its next sync
@@ -134,7 +245,7 @@ export class ComposioConnector implements Connector {
   }
 
   async status(ctx: ConnectorCtx): Promise<ConnectionStatus> {
-    const r = await this.rec(ctx);
+    const r = await this.stored(ctx);
     if (!r) return { state: "not_connected", message: this.info.blurb };
     if (r.userId !== this.user(ctx)) return { state: "needs_attention", message: `We can't use the saved ${this.info.name} connection any more. Connect it again.` };
     return { state: "connected", message: `${this.info.name} is connected.`, lastReadAt: new Date(r.at).toISOString() };
@@ -142,10 +253,9 @@ export class ComposioConnector implements Connector {
 
   async connect(ctx: ConnectorCtx): Promise<ConnectStart> {
     const state = ctx.beginAuth({});
-    const authConfigId = await this.client().authConfigId(this.spec.toolkit);
-    const callbackUrl = `${ctx.webBaseUrl}/api/connections/callback?${new URLSearchParams({ state })}`;
+    const authConfigId = await this.client().authConfigId(this.entry.toolkit);
+    const callbackUrl = `${ctx.webBaseUrl}/api/connectors/google/callback?${new URLSearchParams({ state })}`; // one callback address for every provider
     const l = await this.client().link({ authConfigId, userId: this.user(ctx), callbackUrl });
-    // the account id Composio made is kept with the state's memory by re-reading it on return (Composio sends it back too)
     return { url: l.redirectUrl };
   }
 
@@ -155,21 +265,21 @@ export class ComposioConnector implements Connector {
     if (!id) return { result: "problem", reason: "no_account" };
     const acct = await this.client().account(id);
     // the account must be this business's own, for this toolkit, and active: never take an id on the word of the address bar
-    if (!acct || acct.userId !== this.user(ctx) || acct.toolkit.toLowerCase() !== this.spec.toolkit || acct.status.toUpperCase() !== "ACTIVE") return { result: "problem", reason: "not_active" };
-    await ctx.vault.put(ctx.tenant, this.info.id, { accountId: acct.id, userId: acct.userId, at: ctx.now() } satisfies Record_);
+    if (!acct || acct.userId !== this.user(ctx) || acct.toolkit.toLowerCase() !== this.entry.toolkit || acct.status.toUpperCase() !== "ACTIVE") return { result: "problem", reason: "not_active" };
+    await ctx.vault.put(ctx.tenant, this.info.id, { accountId: acct.id, userId: acct.userId, at: ctx.now() } satisfies Stored);
     await this.markSystem(ctx, "ok");
     return { result: "connected" };
   }
 
   async disconnect(ctx: ConnectorCtx): Promise<void> {
-    const r = await this.rec(ctx).catch(() => null);
+    const r = await this.stored(ctx).catch(() => null);
     if (r && this.deps.client) await this.deps.client.deleteAccount(r.accountId).catch(() => undefined);
     await ctx.vault.delete(ctx.tenant, this.info.id);
     await this.markSystem(ctx, "not_connected");
   }
 
   async health(ctx: ConnectorCtx): Promise<ConnectionHealth> {
-    const r = await this.rec(ctx).catch(() => null);
+    const r = await this.stored(ctx).catch(() => null);
     if (!r) return { ok: false, message: `${this.info.name} isn't connected.` };
     const a = await this.client().account(r.accountId);
     return a && a.userId === this.user(ctx) && a.status.toUpperCase() === "ACTIVE"
@@ -177,36 +287,39 @@ export class ComposioConnector implements Connector {
       : { ok: false, message: `${this.info.name} stopped letting us in. Connect it again.` };
   }
 
-  /** A session for one call: `execute(tool, args)` runs a Composio tool as this business, and only this business. */
-  async run<T>(ctx: ConnectorCtx, fn: (s: { execute(tool: string, args: Record<string, unknown>): Promise<unknown> }) => Promise<T>): Promise<T> {
-    const r = await this.rec(ctx).catch(() => { throw new NeedsAttentionError(this.info.id, this.info.name, `We can't open the saved ${this.info.name} connection. Ask the owner to connect it again.`); });
+  /** A session for one call: runs Composio tools as this business, and only this business. */
+  async run<T>(ctx: ConnectorCtx, fn: (s: ComposioSession & GoogleSession) => Promise<T>): Promise<T> {
+    const r = await this.stored(ctx).catch(() => { throw new NeedsAttentionError(this.info.id, this.info.name, `We can't open the saved ${this.info.name} connection. Ask the owner to connect it again.`); });
     if (!r) throw new NotConnectedError(this.info.id, this.info.name, `${this.info.name} isn't connected yet. Ask the owner to connect it: open Connections in Allevia and tap Connect ${this.info.name}.`);
     if (r.userId !== this.user(ctx)) throw new NeedsAttentionError(this.info.id, this.info.name, `${this.info.name} is not set up for this business. Ask the owner to connect it again.`);
     const client = this.client();
+    const execute = async (tool: string, args: Record<string, unknown>): Promise<unknown> => {
+      const out = await client.execute({ tool, accountId: r.accountId, userId: r.userId, args });
+      if (!out.ok) throw new ComposioError(out.error ?? "The tool did not work.", 502);
+      return out.data;
+    };
+    const google = this.entry.group === "google";
     return fn({
-      execute: async (tool, args) => {
-        const out = await client.execute({ tool, accountId: r.accountId, userId: r.userId, args });
-        if (!out.ok) throw new ComposioError(out.error ?? "The tool did not work.", 502);
-        return out.data;
-      },
-    });
+      toolkit: this.entry.toolkit, execute, listTools: (q) => client.tools(this.entry.toolkit, q),
+      apis: composioGoogleApis(execute), accessToken: "composio", meta: {}, allowed: () => true, ...(google ? {} : {}),
+    } as ComposioSession & GoogleSession);
   }
 }
 
-const c = (id: string, name: string, group: ConnectorInfo["group"], blurb: string, reads: string[], acts: string[], capabilities: ConnectorInfo["capabilities"] = []): ConnectorInfo =>
-  ({ id, name, group, provider: "composio", blurb, reads, acts, capabilities });
-
-export const COMPOSIO_SPECS: ComposioSpec[] = [
-  { toolkit: "instagram", system: { id: "system:instagram", name: "Instagram" }, info: c("instagram", "Instagram", "meta", "Your team sees which posts bring you enquiries, and drafts posts for your OK.", ["Reach, followers and how each post did."], ["Posts only after you say OK."], ["instagram_insights"]) },
-  { toolkit: "facebook", system: { id: "system:facebook-pages", name: "Facebook Page" }, info: c("facebook-pages", "Facebook Page", "meta", "Your team reads how your Page is doing and drafts posts for your OK.", ["Page visits, reach and posts."], ["Posts only after you say OK."]) },
-  { toolkit: "metaads", system: { id: "system:meta-ads", name: "Meta Ads" }, info: c("meta-ads", "Meta Ads", "meta", "Your team reads your Facebook and Instagram ad spend and results.", ["Campaigns, spend and results. Read only."], [], ["ads"]) },
-  { toolkit: "whatsapp", soon: true, system: { id: "system:whatsapp", name: "WhatsApp Business" }, info: c("whatsapp", "WhatsApp Business", "meta", "Your team answers customer messages for your OK.", [], []) },
-  { toolkit: "shopify", system: { id: "system:shopify", name: "Shopify" }, info: c("shopify", "Shopify", "commerce", "Your team counts your orders and best sellers so it can tell what to push.", ["Orders, products and customers' order counts."], []) },
-  { toolkit: "stripe", system: { id: "system:stripe", name: "Stripe" }, info: c("stripe", "Stripe", "commerce", "Your team reads your payments so the morning note has real revenue.", ["Payments and refunds. Read only."], []) },
-  { toolkit: "hubspot", system: { id: "system:hubspot", name: "HubSpot" }, info: c("hubspot", "HubSpot", "customers", "Your team sees your leads and deals so Sales can follow up on every one.", ["Contacts, deals and their stages."], ["Notes and follow-ups only after you say OK."]) },
-  { toolkit: "slack", system: { id: "system:slack", name: "Slack" }, info: c("slack", "Slack", "team", "Your team posts its morning note and questions in the Slack channel you choose.", ["The channels you pick."], ["Messages only after you say OK."]) },
-];
-
-export function composioConnectors(deps: ComposioDeps): ComposioConnector[] {
-  return COMPOSIO_SPECS.map((s) => new ComposioConnector(s, deps));
+export function composioConnectors(deps: ComposioDeps, only?: (e: ToolkitEntry) => boolean): ComposioConnector[] {
+  return TOOLKIT_CATALOG.filter((e) => !only || only(e)).map((e) => new ComposioConnector(e, deps));
 }
+
+/** Any toolkit in Composio's catalogue, not just ours: its connection id is `app-<slug>`. */
+export const DYNAMIC_SLUG = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
+export function dynamicEntry(slug: string, name: string, description: string): ToolkitEntry {
+  const known = entryByToolkit(slug);
+  if (known) return known;
+  return {
+    id: `app-${slug}`, toolkit: slug, name, group: "team",
+    blurb: description ? `Your team can use ${name}: ${description.replace(/\s+/g, " ").slice(0, 110)}` : `Your team can use ${name}.`, reads: [`What you let it read in ${name}.`], acts: [`Changes in ${name} only after you say OK.`],
+    recommended: null, fits: [], departments: ["leadership", "ops"], capabilities: [], system: { id: `system:app-${slug}`, name },
+  };
+}
+
+export { entryById };

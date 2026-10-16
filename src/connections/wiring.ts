@@ -8,7 +8,7 @@ import { googleSettings } from "../connectors/google/settings.js";
 import { FileTokenStore } from "../connectors/google/store.js";
 import type { GraphHandle } from "../graph/client.js";
 import { FileAuditLog, type AuditLog } from "./audit.js";
-import { composioConnectors, realComposioClient, type ComposioClient } from "./composio.js";
+import { composioConnectors, ComposioConnector, DYNAMIC_SLUG, dynamicEntry, realComposioClient, type ComposioClient } from "./composio.js";
 import { realGoogleApis, type GoogleApis } from "./google/apis.js";
 import { googleConnSettings } from "./google/oauth.js";
 import { SearchConsoleConnector } from "./google/search-console.js";
@@ -40,13 +40,18 @@ export function buildConnections(cfg: AlleviaConfig, over: WiringOver): Connecti
   const legacy: GoogleDeps = { settings: googleSettings({ ...cfg.google, enabled: true }), store, client, now };
   const composioKey = cfg.connections.composioApiKey ?? "";
   const composio = over.composio === undefined ? (composioKey ? realComposioClient(composioKey) : null) : over.composio;
+  // Google products: through Composio (the main path) or on our own Google app (branded consent). Both give the same connection ids.
+  const via = cfg.connections.googleVia ?? (composioKey || over.composio ? "composio" : "own");
+  const OWN_GOOGLE = new Set(["gmail", "google-calendar", "google-analytics", "search-console", "google-ads"]);
+  const composioDeps = { apiKey: composioKey || (over.composio ? "test" : ""), client: composio, connectorKey: key };
   const connectors = [
-    new SearchConsoleConnector(legacy, settings),
-    ...googleProductConnectors({ settings, store, client, apis }),
-    ...composioConnectors({ apiKey: composioKey || (over.composio ? "test" : ""), client: composio, connectorKey: key }),
+    ...(via === "own" ? [new SearchConsoleConnector(legacy, settings), ...googleProductConnectors({ settings, store, client, apis })] : []),
+    ...composioConnectors(composioDeps, (e) => via === "composio" || !OWN_GOOGLE.has(e.id)),
   ];
   return new ConnectionsService({
     connectors, vault: store as never, audit: over.audit ?? new FileAuditLog(cfg.dataDir), connectorKey: key, webBaseUrl: cfg.webBaseUrl,
-    openGraph: over.openGraph, ...(over.businessIdOf ? { businessIdOf: over.businessIdOf } : {}), now,
+    openGraph: over.openGraph,
+    dynamic: (slug) => (DYNAMIC_SLUG.test(slug) ? new ComposioConnector(dynamicEntry(slug, slug.replace(/_/g, " "), ""), composioDeps) : null),
+    ...(composio ? { search: (q: string) => composio.searchToolkits(q) } : {}), ...(over.businessIdOf ? { businessIdOf: over.businessIdOf } : {}), now,
   });
 }
