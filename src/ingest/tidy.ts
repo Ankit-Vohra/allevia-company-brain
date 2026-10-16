@@ -179,7 +179,6 @@ export async function tidyGraph(g: GraphHandle, deps: TidyDeps): Promise<TidyRep
   }
 
   const state = await readGraphState(g, deps.owner.id, { embeddings: true });
-  const byId = new Map(state.nodes.map((n) => [n.id, n] as const));
 
   // vectors for nodes that have none yet (in memory only: the index stage stores them)
   const missing = state.nodes.filter((n) => !n.embedding);
@@ -192,22 +191,24 @@ export async function tidyGraph(g: GraphHandle, deps: TidyDeps): Promise<TidyRep
     }
   }
 
-  // ---- 1. near-duplicates ----
-  const { certain, borderline } = findDuplicatePairs(state.nodes, { business: deps.owner.name });
+  // ---- 1. near-duplicates (again after step 2: a retyped business can now pair with its twin) ----
+  const dedupe = async (st: typeof state, withModel: boolean) => {
+  const byIdOf = new Map(st.nodes.map((n) => [n.id, n] as const));
+  const { certain, borderline } = findDuplicatePairs(st.nodes, { business: deps.owner.name });
   const accepted: Pair[] = [...certain];
   const distinct = new Set<string>();
-  if (borderline.length && deps.ask) {
+  if (borderline.length && deps.ask && withModel) {
     const shown = [...borderline].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || pairKey(a.a, a.b).localeCompare(pairKey(b.a, b.b))).slice(0, MAX_JUDGED_PAIRS);
     try {
-      const j = await judgePairs(deps.ask, shown, byId, deps.owner.name);
+      const j = await judgePairs(deps.ask, shown, byIdOf, deps.owner.name);
       report.judged = { pairs: shown.length, same: j.same.length, different: j.different.length, calls: j.calls };
       accepted.push(...j.same.map((p) => ({ ...p, how: "similar" as const })));
       for (const p of j.different) distinct.add(pairKey(p.a, p.b));
     } catch (e) {
       log(`[tidy] the model check did not answer; borderline pairs left as they are: ${msg(e)}`);
     }
-  } else if (borderline.length) log(`[tidy] ${borderline.length} borderline pair(s) left for a model check`);
-  const { groups, skipped } = groupPairs(state.nodes, accepted, distinct);
+  } else if (borderline.length && withModel) log(`[tidy] ${borderline.length} borderline pair(s) left for a model check`);
+  const { groups, skipped } = groupPairs(st.nodes, accepted, distinct);
   report.skipped.push(...skipped);
   const plan: MergeGroup[] = groups.map((grp) => ({
     type: grp.type, canonical: grp.canonical,
@@ -218,7 +219,7 @@ export async function tidyGraph(g: GraphHandle, deps: TidyDeps): Promise<TidyRep
   }));
   for (const grp of plan) for (const m of grp.members) {
     bump(report.byHow, (m.basis ?? "").replace(/ \(.*$/, "").replace(/^model check: same thing.*/, "model check"));
-    if (report.examples.length < 12) report.examples.push(`merged ${grp.type} "${byId.get(m.id)?.name}" into "${byId.get(grp.canonical)?.name}" (${m.basis})`);
+    if (report.examples.length < 12) report.examples.push(`merged ${grp.type} "${byIdOf.get(m.id)?.name}" into "${byIdOf.get(grp.canonical)?.name}" (${m.basis})`);
   }
   if (!deps.dryRun) {
     // the model's "different" verdicts, so the pair is never asked about again
@@ -241,7 +242,10 @@ export async function tidyGraph(g: GraphHandle, deps: TidyDeps): Promise<TidyRep
       for (const grp of plan) { touched.add(grp.canonical); for (const m of grp.members) touched.add(m.id); }
     }
   } else report.merged = plan.reduce((n, grp) => n + grp.members.length, 0);
-  report.groups = plan.length;
+  report.groups += plan.length;
+
+  };
+  await dedupe(state, true);
 
   // ---- 2. other businesses ----
   const others = state.nodes.filter((n) => n.type === "Business" && !n.notSameAs?.length);
@@ -284,6 +288,10 @@ export async function tidyGraph(g: GraphHandle, deps: TidyDeps): Promise<TidyRep
     } catch (e) {
       report.errors.push(`${b.id}: ${msg(e)}`);
     }
+  }
+
+  if (!deps.dryRun && report.retyped) {
+    await dedupe(await readGraphState(g, deps.owner.id, { embeddings: true }), true);
   }
 
   // ---- 3. first names stored as People ----

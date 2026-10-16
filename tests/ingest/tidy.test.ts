@@ -162,3 +162,26 @@ describe("tidyGraph (test graph)", () => {
     expect(again.merged + again.retyped + again.retired).toBe(0);
   });
 });
+
+describe("a merge keeps the price only the duplicate held (test graph)", () => {
+  it("copies the price facts to the canonical node, and unmerge takes them back", async () => {
+    const { g, cleanup } = await testGraph();
+    try {
+      const src = { src: DOC, asOf: AS_OF };
+      const s = await writeBatch(g, { nodes: [
+        { type: "Business", id: OWNER.id, name: OWNER.name },
+        { type: "Document", id: DOC, name: "Home", props: { kind: "webpage" } },
+        { type: "Product", id: "product:gift-card", name: "Gift card", ...src },
+        { type: "Product", id: "product:gift-card-cafe", name: "Gift card Cafe", props: { price: 25, priceCurrency: "GBP", priceSrc: DOC, priceVia: "structured data" }, ...src },
+      ], edges: [], observations: [] }, Date.parse(AS_OF));
+      expect(s.errors).toEqual([]);
+      const { applyMergePlan } = await import("../../src/ingest/merge.js");
+      await applyMergePlan(g, { groups: [{ type: "Product", canonical: "product:gift-card", members: [{ id: "product:gift-card-cafe", key: "", basis: "test" }] }], links: [], skipped: [] }, NOW, { by: "onboarding", credentials: false });
+      expect(await g.roQuery("MATCH (p:Product {id:'product:gift-card'}) RETURN p.price AS price, p.priceCurrency AS cur, p.priceVia AS via")).toEqual([{ price: 25, cur: "GBP", via: "structured data" }]);
+      await undoTidy(g, "product:gift-card-cafe", NOW + 1);
+      expect(await g.roQuery("MATCH (p:Product {id:'product:gift-card'}) RETURN p.price AS price")).toEqual([{ price: null }]);
+    } finally {
+      await cleanup();
+    }
+  });
+});

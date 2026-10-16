@@ -262,6 +262,21 @@ async function moveEdges(g: GraphHandle, dup: string, canonical: string, group: 
 }
 
 // `by` is who derived the merges (the SAME_AS edge's derivedBy): the librarian, or onboarding's tidy pass.
+const FACT_KEYS = ["price", "priceSrc", "priceVia", "priceCurrency", "priceText", "priceEvidence"];
+
+// Copies the price facts the duplicate holds onto a canonical node that has no price; returns the keys it set.
+async function fillFacts(g: GraphHandle, canonical: string, dup: string): Promise<string[]> {
+  const [row] = await g.roQuery<{ cp: unknown; dp: Record<string, unknown> | null }>(
+    "MATCH (c:Entity {id:$c}), (d:Entity {id:$d}) RETURN c.price AS cp, properties(d) AS dp", { c: canonical, d: dup });
+  if (!row || (row.cp !== null && row.cp !== undefined) || !row.dp || row.dp.price === undefined || row.dp.price === null) return [];
+  const set: Record<string, string | number | boolean> = {};
+  for (const k of FACT_KEYS) { const v = row.dp[k]; if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") set[k] = v; }
+  const keys = Object.keys(set);
+  if (!keys.length) return [];
+  await g.query(`MATCH (c:Entity {id:$c}) SET ${keys.map((k) => `c.${k} = $${k}`).join(", ")}`, { c: canonical, ...set });
+  return keys;
+}
+
 export async function applyMergePlan(g: GraphHandle, plan: MergePlan, now: number = Date.now(), opts: { by?: string; credentials?: boolean } = {}): Promise<MergeReport> {
   const report: MergeReport = { groups: plan.groups.length, merged: 0, edgesMoved: 0, edgesNotMoved: 0, credentialLinks: 0, linksClosed: 0, skipped: plan.skipped, errors: [] };
   for (const grp of plan.groups) {
@@ -283,9 +298,12 @@ export async function applyMergePlan(g: GraphHandle, plan: MergePlan, now: numbe
         }
         if (fresh.length) await g.query("MATCH (c:Entity {id:$c}) SET c.aliases = $aliases", { c: grp.canonical, aliases: [...strs(row.ca), ...fresh] });
         const added = [...new Set([...strs(row.added), ...fresh])];
+        // a day-one fact only the duplicate holds (a price the website gave it) moves to the canonical node, and which keys
+        // moved is kept on SAME_AS so unmerge takes them back
+        const filled = await fillFacts(g, grp.canonical, m.id);
         await upsertEdge(g, {
           from: m.id, type: "SAME_AS", to: grp.canonical,
-          props: { derivedBy: row.by ?? opts.by ?? "librarian", basis: row.basis ?? m.basis ?? (m.key ? `same name: ${m.key}` : "same name"), ...(added.length ? { aliasesAdded: added } : {}) },
+          props: { derivedBy: row.by ?? opts.by ?? "librarian", basis: row.basis ?? m.basis ?? (m.key ? `same name: ${m.key}` : "same name"), ...(added.length ? { aliasesAdded: added } : {}), ...(filled.length ? { factsAdded: filled } : {}) },
         }, now);
         await g.query("MATCH (d:Entity {id:$d}) SET d.mergedInto = $c", { d: m.id, c: grp.canonical });
         const mv = await moveEdges(g, m.id, grp.canonical, ids, now);
@@ -332,8 +350,8 @@ export async function mergeDuplicates(g: GraphHandle, now: number = Date.now()):
 // duplicate, the aliases it gave the canonical node are taken back, and the pair is marked notSameAs so the next
 // librarian run leaves it apart. Returns the canonical id it was merged into, or undefined when it was not merged.
 export async function unmerge(g: GraphHandle, dup: string, now: number = Date.now()): Promise<string | undefined> {
-  const [s] = await g.roQuery<{ c: string; added: unknown }>(
-    "MATCH (:Entity {id:$d})-[s:SAME_AS]->(c:Entity) WHERE s.until IS NULL RETURN c.id AS c, s.aliasesAdded AS added", { d: dup });
+  const [s] = await g.roQuery<{ c: string; added: unknown; facts: unknown }>(
+    "MATCH (:Entity {id:$d})-[s:SAME_AS]->(c:Entity) WHERE s.until IS NULL RETURN c.id AS c, s.aliasesAdded AS added, s.factsAdded AS facts", { d: dup });
   if (!s) return undefined;
   const c = s.c;
   await closeEdge(g, dup, "SAME_AS", c, now, "unmerged");
@@ -352,6 +370,9 @@ export async function unmerge(g: GraphHandle, dup: string, now: number = Date.no
      SET c.aliases = [a IN coalesce(c.aliases, []) WHERE NOT a IN $added], d.mergedInto = null, d.retypedTo = null,
          d.notSameAs = [x IN coalesce(d.notSameAs, []) WHERE x <> $c] + [$c]`,
     { c, d: dup, added });
+  // price facts the canonical node took from the duplicate go back with it (only keys this merge set)
+  const facts = (Array.isArray(s.facts) ? s.facts.filter((x): x is string => typeof x === "string") : []).filter((k) => FACT_KEYS.includes(k));
+  if (facts.length) await g.query(`MATCH (c:Entity {id:$c}) SET ${facts.map((k) => `c.${k} = null`).join(", ")}`, { c });
   // A retype (src/ingest/tidy.ts) made the canonical node for this duplicate alone: with its edges closed above, it
   // now points back at the node it came from, so a lookup of its id finds the original.
   await g.query("MATCH (c:Entity {id:$c}) WHERE c.retypedFrom = $d SET c.mergedInto = $d", { c, d: dup });
