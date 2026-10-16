@@ -57,7 +57,7 @@ export function workRail(): string {
     return `<article class="exhibit">${media}<h3 class="exhibit__what">${esc(w.what)}</h3><dl class="exhibit__label"><div><dt>Made by</dt><dd>${esc(w.who)}</dd></div><div><dt>Time</dt><dd>${esc(w.time)}</dd></div><div><dt>Now</dt><dd>${esc(w.status)}</dd></div></dl>${note}</article>`;
   }).join("");
   const checkup = `<article class="exhibit exhibit--text"><div class="exhibit__report"><p class="exhibit__report-h">Your website is losing enquiries in a few places. Fix these first.</p><ol>${CHECKUP_TOP.map((t) => `<li>${esc(t)}</li>`).join("")}</ol></div><h3 class="exhibit__what">A website check-up for the same studio</h3><dl class="exhibit__label"><div><dt>Made by</dt><dd>Arjun and Zoya, Tech</dd></div><div><dt>Time</dt><dd>1 minute 53 seconds, 24 pages read</dd></div><div><dt>Now</dt><dd>The top five, quoted from the real report</dd></div></dl></article>`;
-  return `<div class="rail" data-sc-pan="0.04" role="region" aria-labelledby="made-h" tabindex="0">
+  return `<div class="rail" data-sc-pan="0.04" role="region" aria-label="Work the team made, scrolls sideways" tabindex="0">
   <div class="rail__lead"><h2 class="story-h" id="made-h">Not just answers. Things you can use.</h2><p class="story-p">Real work from our first two businesses this week: an architecture studio and a jobs app, both in Raipur. Each piece waits for its owner's OK.</p></div>
   ${items}${checkup}
   <div class="rail__end"><p class="story-p">Every piece above was made by the team, checked by the team, and is still waiting for a person to say OK.</p></div>

@@ -63,3 +63,7 @@ If you want to see what a filled-in table looks like, and which shapes tend to
 collide, read `EXAMPLES.md` in the scroll-craft repository. Treat it as
 illustration only: those rows are somebody else's builds and they do **not**
 constrain yours.
+
+| Build | Grammar | Nav treatment | Hero device | Act-sequence shape | Close pattern | Signature move |
+|---|---|---|---|---|---|---|
+| allevia-site (2026-10) | Courier route (stops on a delivery route), product tour as gallery | Fixed route strip at the bottom with six named stops | Real input field beside layered, scrubbed footage of the live office | scrub, flow, scrub (peak), flow, pin (waterline), pan, flow, flow, pin, flow, pin | Arrival: courier sits, one button, page holds | The office dog carries what you type as "your website" down the route |
