@@ -42,6 +42,7 @@ import { enrichOwnListing, readBlockedSite } from "../publicdata/enrich.js";
 import { factsWrite, readDayOneFacts } from "../ingest/sources/website/facts.js";
 import type { Ask } from "../ingest/sources/website/ask.js";
 import { tidyGraph } from "../ingest/tidy.js";
+import { rankAndCommunities } from "../ingest/librarian.js";
 
 export interface OnboardInput {
   name: string;
@@ -565,6 +566,19 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
     }
   }
 
+  // ---------- the map: rank and groups, now that everything is written (the librarian's second step, graph only) ----------
+  // A business read from a website never goes through ingest, so nothing else would store `rank` and `community`: the
+  // Brain map would fall back to a rough ranking of whatever it loads. LINKS_TO_PAGE feeds the groups, so a site's own
+  // link structure shows. Best effort: a failure is a soft note, never a failed onboarding.
+  if (website && !stopped()) {
+    try {
+      const r = await rankAndCommunities(g, { timeoutMs: 60_000, log });
+      log(`[onboard] map: ${r.rank.nodes} nodes ranked, ${r.community.communities} groups`);
+    } catch (e) {
+      fail("map", e);
+    }
+  }
+
   // ---------- done ----------
   try {
     result.counts = await retrying(() => countGraph(g));
@@ -649,6 +663,7 @@ const SOFT: Record<string, string> = {
   baseline: "We could not write down where you start yet. It will be filled in after your first full week.",
   index: "We could not finish filing what we read for search, so some answers may miss things until it is done again.",
   capabilities: "We could not check which of your accounts the team can see yet.",
+  map: "We could not arrange the map of your business yet. Everything else works, and the map improves with your next update.",
   done: "The final tally did not finish. Nothing was lost.",
   stopped: "The set-up was stopped.",
 };

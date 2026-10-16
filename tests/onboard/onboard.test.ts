@@ -119,6 +119,23 @@ describe("onboard (fixture site, fake LLM, test graph)", () => {
     expect((await q<{ c: number }>("MATCH (c:Chunk) WHERE c.textEmbedding IS NULL RETURN count(c) AS c"))[0]!.c).toBe(0);
   });
 
+  it("the map is arranged at the end: every page and the business carry a rank and a group, and the site's own links make the groups (issue #38, G5)", async () => {
+    const rows = await q<{ id: string; label: string; rank: number | null; community: number | null }>(
+      "MATCH (n:Entity) WHERE n:Page OR n:Business OR n:Product RETURN n.id AS id, head([l IN labels(n) WHERE l <> 'Entity' AND l <> 'Searchable']) AS label, n.rank AS rank, n.community AS community ORDER BY id");
+    expect(rows.length).toBeGreaterThan(first.pages);
+    expect(rows.filter((r) => typeof r.rank !== "number" || typeof r.community !== "number")).toEqual([]);
+    // the Brain map reads the stored values (no JavaScript ranking of its own)
+    const { overviewGraph } = await import("../../src/server/reads.js");
+    const view = await overviewGraph(g);
+    const stored = new Map(rows.map((r) => [r.id, r]));
+    const shown = view.nodes.filter((n) => stored.has(n.id));
+    expect(shown.length).toBeGreaterThan(0);
+    for (const n of shown) expect(n.community, n.id).toBe(stored.get(n.id)!.community);
+    // pages that link to each other share a group: home links to every key page, so most pages sit in few groups
+    const pageGroups = new Set(rows.filter((r) => r.label === "Page").map((r) => r.community));
+    expect(pageGroups.size).toBeLessThan(first.pages);
+  });
+
   it("keeps the business's own contact details out of the graph and away from the model: placeholders, and the privacy scan finds nothing else", async () => {
     // the fixture's contact page says "Email hello@example.com or call 0117 496 0000."
     const chunk = await q<{ t: string }>("MATCH (c:Chunk) WHERE c.url ENDS WITH '/contact' RETURN c.text AS t ORDER BY c.id");
