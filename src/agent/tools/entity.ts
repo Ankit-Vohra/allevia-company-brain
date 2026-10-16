@@ -57,7 +57,7 @@ async function runGetEntity(args: { id: string; asOf?: string }, ctx: ToolContex
        RETURN x.o AS o, x.e AS e, x.metric AS metric, x.value AS value, x.unit AS unit, x.ws AS ws, x.we AS we, x.at AS at
        ORDER BY at DESC, metric, o.id LIMIT $metrics`, { ...p, metrics: METRIC_CAP }),
     asOf === undefined ? Promise.resolve([]) : ro<{ id: string; props: string }>(ctx,
-      "MATCH (:Entity {id:$id})-[:HAD_VERSION]->(v:Version) WHERE v.since <= $asOf AND v.until > $asOf RETURN v.id AS id, v.props AS props ORDER BY v.until, v.id LIMIT 1", p),
+      "MATCH (e:Entity {id:$id}) WITH e MATCH (e)-[:HAD_VERSION]->(v:Version) WHERE v.since <= $asOf AND v.until > $asOf RETURN v.id AS id, v.props AS props ORDER BY v.until, v.id LIMIT 1", p),
   ]);
 
   const col = new Collector();

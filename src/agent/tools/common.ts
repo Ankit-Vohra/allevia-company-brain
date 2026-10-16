@@ -350,7 +350,7 @@ export async function ftEntities(ctx: ToolContext, text: string, types: readonly
 export async function canonicalOf(ctx: ToolContext, ids: string[]): Promise<Map<string, NodeRow>> {
   if (!ids.length) return new Map();
   const rows = await ro<{ id: string; c: NodeRow }>(ctx,
-    `UNWIND $ids AS id MATCH (d:Entity {id:id}) WHERE d.mergedInto IS NOT NULL MATCH (c:Entity {id: d.mergedInto})
+    `UNWIND $ids AS id MATCH (d:Entity {id:id}) WHERE d.mergedInto IS NOT NULL WITH d, d.mergedInto AS into MATCH (c:Entity {id: into})
      RETURN d.id AS id, ${NODE("c")} AS c`, { ids: [...new Set(ids)] });
   return new Map(rows.map((r) => [r.id, r.c]));
 }

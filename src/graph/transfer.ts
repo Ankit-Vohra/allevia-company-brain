@@ -329,8 +329,8 @@ export async function importDump(dump: GraphDump, url: string, opts: ImportOpts 
       for (const r of res) map.set(r.i, r.n);
       done += b.length;
     }
-    log(`nodes ${done}/${dump.nodes.length}`);
   }
+  log(`${done} nodes written`);
 
   // edges, one statement shape per type
   const byType = new Map<string, EdgeLine[]>();
@@ -352,8 +352,8 @@ export async function importDump(dump: GraphDump, url: string, opts: ImportOpts 
       if ((res[0]?.c ?? 0) !== b.length) throw new Error(`a batch of ${b.length} ${t} edges created ${res[0]?.c ?? 0}`);
       done += b.length;
     }
-    log(`edges ${done}/${dump.edges.length}`);
   }
+  log(`${done} edges written`);
 
   // schema: the source's own node indexes and constraints; a business graph also gets the whole current schema
   log("indexes and constraints");
@@ -407,23 +407,27 @@ export async function verifyGraph(dump: GraphDump, g: GraphHandle, db: Awaited<R
   const have = new Set(back.header.indexes.map((i) => `${i.label}|${i.prop}|${i.type}`));
   for (const i of dump.header.indexes) if (!have.has(`${i.label}|${i.prop}|${i.type}`)) problems.push(`index ${i.type} ${i.label}.${i.prop} missing`);
 
-  // spot checks through a different read: by the `id` property, each key on its own, vectors included
+  // spot checks through a different read: by the `id` property, every key with its type, vectors included (one query a node)
   const withId = dump.nodes.filter((n) => typeof n.p.id === "string" && n.l.includes("Entity"));
   const step = Math.max(1, Math.floor(withId.length / Math.max(1, spotChecks)));
   const sample = [...withId.filter((_, k) => k % step === 0).slice(0, spotChecks), ...withId.filter((n) => n.v?.length).slice(0, 5)];
   for (const n of sample) {
-    for (const k of Object.keys(n.p)) {
-      if (!IDENT.test(k)) continue;
-      const rows = await g.roQuery<{ x: unknown; t: string }>(`MATCH (n:Entity {id:$id}) RETURN n.${k} AS x, typeOf(n.${k}) AS t`, { id: n.p.id });
+    const keys = Object.keys(n.p);
+    const rows = await g.roQuery<{ kv: Array<[unknown, string]>; nk: number }>(
+      "MATCH (n:Entity {id:$id}) RETURN [k IN $keys | [n[k], typeOf(n[k])]] AS kv, size(keys(n)) AS nk", { id: n.p.id, keys });
+    const r = rows[0];
+    if (!r || rows.length !== 1) { problems.push(`spot check ${String(n.p.id)}: ${rows.length} nodes`); continue; }
+    if (r.nk !== keys.length) problems.push(`spot check ${String(n.p.id)}: ${r.nk} properties, want ${keys.length}`);
+    keys.forEach((k, j) => {
+      const [x, t] = r.kv[j]!;
       const want = n.p[k]!;
       const isVec = n.v?.includes(k), isFloat = n.f?.includes(k);
       const wantType = isVec ? "Vectorf32" : isFloat ? "Float" : typeof want === "string" ? "String" : typeof want === "boolean" ? "Boolean" : Array.isArray(want) ? "List" : "Integer";
-      const r = rows[0];
-      const ok = r && rows.length === 1 && r.t === wantType && (isVec
-        ? sameJson((r.x as number[]).map(Math.fround), (want as number[]).map((x) => Math.fround(Number(x))))
-        : sameJson(r.x, want));
-      if (!ok) problems.push(`spot check ${String(n.p.id)}.${k}: got ${r ? `${r.t} ${JSON.stringify(r.x).slice(0, 60)}` : "no node"}, want ${wantType} ${JSON.stringify(want).slice(0, 60)}`);
-    }
+      const ok = t === wantType && (isVec
+        ? sameJson((x as number[]).map(Math.fround), (want as number[]).map((y) => Math.fround(Number(y))))
+        : sameJson(x, want));
+      if (!ok) problems.push(`spot check ${String(n.p.id)}.${k}: got ${t} ${JSON.stringify(x).slice(0, 60)}, want ${wantType} ${JSON.stringify(want).slice(0, 60)}`);
+    });
   }
   return { ok: problems.length === 0, problems, spotChecked: sample.length, summary: got };
 }

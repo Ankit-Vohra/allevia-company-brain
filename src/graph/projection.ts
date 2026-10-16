@@ -105,13 +105,32 @@ export const writeStampKey = (graph: string): string => `allevia:graph-writes:${
 
 const redis = async () => (await connect()).connection;
 
+// A server whose access rules refuse GET/SET on plain keys (FalkorDB Cloud's free tier: its user may run graph commands
+// only, "NOPERM") cannot share stamps between processes. That is said once and not asked again; a cached projection then
+// lives NO_STAMP_TTL_MS instead of CACHE_TTL_MS, so a write from another process shows within a minute.
+export const NO_STAMP_TTL_MS = 60_000;
+let stampsRefused = false;
+export const stampsShared = (): boolean => !stampsRefused;
+function stampFailed(what: string, e: unknown): void {
+  if (/NOPERM/i.test(String((e as Error)?.message))) {
+    if (!stampsRefused) {
+      console.error(`[graph] this server refuses plain keys (${(e as Error).message}): write stamps are not shared between ` +
+        `processes; cached projections are kept ${NO_STAMP_TTL_MS / 1000} s`);
+    }
+    stampsRefused = true;
+    return;
+  }
+  log(what)(e);
+}
+
 // The graph's current write stamp; null when no write was stamped (or the key expired, or Redis refused).
 async function readStamp(graph: string): Promise<string | null> {
+  if (stampsRefused) return null;
   try {
     const v = await (await redis()).get(writeStampKey(graph));
     return v === null || v === undefined ? null : String(v);
   } catch (e) {
-    log(`could not read the write stamp of ${graph}`)(e);
+    stampFailed(`could not read the write stamp of ${graph}`, e);
     return null;
   }
 }
@@ -121,10 +140,11 @@ async function readStamp(graph: string): Promise<string | null> {
 // another process must see the write before you go on.
 export function noteGraphWrite(graph: string): Promise<void> {
   writes.set(graph, (writes.get(graph) ?? 0) + 1);
+  if (stampsRefused) return Promise.resolve();
   const token = `${Date.now().toString(36)}-${randomBytes(6).toString("hex")}`;
   return redis()
     .then((r) => r.set(writeStampKey(graph), token, { expiration: { type: "PX", value: WRITE_STAMP_TTL_MS } }))
-    .then(() => undefined, log(`could not stamp a write on ${graph}`));
+    .then(() => undefined, (e) => stampFailed(`could not stamp a write on ${graph}`, e));
 }
 
 // The graph's write mark: changes with every noteGraphWrite, in this process or another.
@@ -307,7 +327,7 @@ function forget(graph: string, c: Cached): Promise<void> {
   return retire(c);
 }
 
-const fresh = (c: Cached, mark: WriteMark): boolean => !c.retired && sameMark(c.mark, mark) && Date.now() - c.builtAt < CACHE_TTL_MS;
+const fresh = (c: Cached, mark: WriteMark): boolean => !c.retired && sameMark(c.mark, mark) && Date.now() - c.builtAt < (stampsRefused ? NO_STAMP_TTL_MS : CACHE_TTL_MS);
 const usableFallback = (c: Cached | undefined): c is Cached =>
   c !== undefined && !c.retired && c.handle !== null && Date.now() - c.builtAt < FALLBACK_MAX_AGE_MS;
 
