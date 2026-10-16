@@ -21,11 +21,12 @@ export const hasLogo = (id: string): boolean => {
 };
 
 /** The tool's logo as markup at `size` px (square). Empty string when there is none. */
-export function logoMarkup(id: string, size = 28): string {
+export function logoMarkup(id: string, size = 28, eager = false): string {
   const l = LOGOS[id];
   if (!l) return "";
-  if (KEY && !(l.siFirst && l.path)) return `<img class="logo" src="https://img.logo.dev/${l.domain}?token=${KEY}&amp;size=${size * 2}&amp;format=png&amp;retina=true" width="${size}" height="${size}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`;
+  const loading = eager ? "eager" : "lazy";
+  if (KEY && !(l.siFirst && l.path)) return `<img class="logo" src="https://img.logo.dev/${l.domain}?token=${KEY}&amp;size=${size * 2}&amp;format=png&amp;retina=true" width="${size}" height="${size}" alt="" loading="${loading}" decoding="async" referrerpolicy="no-referrer">`;
   if (l.path) return `<svg class="logo" viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" focusable="false"><path fill="${l.hex}" d="${l.path}"/></svg>`;
-  if (l.img) return `<img class="logo" src="${l.img}" width="${size}" height="${size}" alt="" loading="lazy" decoding="async">`;
+  if (l.img) return `<img class="logo" src="${l.img}" width="${size}" height="${size}" alt="" loading="${loading}" decoding="async">`;
   return "";
 }

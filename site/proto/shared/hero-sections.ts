@@ -24,7 +24,7 @@ const chipHtml = (s: (typeof ORBIT_SLOTS)[number], i: number): string => {
     return `<span class="orb-chip orb-chip--agent" data-chip data-kind="agent" data-id="${s.id}" data-orbit="${s.orbit}" data-i="${i}"><span class="orb-chip__face">${a.svg}</span><span class="orb-chip__name">${esc(a.name)}</span></span>`;
   }
   const l = logo(s.id);
-  return `<span class="orb-chip orb-chip--tool" data-chip data-kind="tool" data-id="${s.id}" data-orbit="${s.orbit}" data-i="${i}"><span class="orb-chip__logo">${logoMarkup(s.id, 26)}</span><span class="orb-chip__name">${esc(l?.name ?? s.id)}</span></span>`;
+  return `<span class="orb-chip orb-chip--tool" data-chip data-kind="tool" data-id="${s.id}" data-orbit="${s.orbit}" data-i="${i}"><span class="orb-chip__logo">${logoMarkup(s.id, 26, true)}</span><span class="orb-chip__name">${esc(l?.name ?? s.id)}</span></span>`;
 };
 
 export function heroData(): string {
@@ -53,17 +53,11 @@ const B_TEAM = ["chief-of-staff", "data-analyst", "growth-marketer", "content-st
 const ROLE: Record<string, string> = { "chief-of-staff": "Chief of Staff", "data-analyst": "Analytics", "growth-marketer": "Marketing", "content-strategist": "Content", "sales-lead": "Sales", "tech-lead": "Tech" };
 const CLUSTER_AREA: Record<string, string> = { people: "p", signups: "s", app: "a", reach: "r", customers: "c" };
 
-export function heroB(): string {
-  const tools = B_TOOLS.map((id) => `<li class="wtool" data-tool="${id}">${logoMarkup(id, 22)}<span>${esc(logo(id)?.name ?? id)}</span></li>`).join("");
+function workspaceBlock(): string {
+  const tools = B_TOOLS.map((id) => `<li class="wtool" data-tool="${id}">${logoMarkup(id, 22, true)}<span>${esc(logo(id)?.name ?? id)}</span></li>`).join("");
   const team = B_TEAM.map((id) => `<li class="wagent" data-agent="${id}"><span class="face face--sm" aria-hidden="true">${AGENTS[id]?.svg ?? ""}</span><span><b>${esc(AGENTS[id]?.name ?? id)}</b><i>${ROLE[id]}</i></span></li>`).join("");
   const clusters = BRAIN.clusters.map((c) => `<li class="ccard" data-cluster="${c.id}" style="grid-area:${CLUSTER_AREA[c.id]}"><b>${esc(c.label)}</b><span class="num">${c.count}</span><i>${esc(c.sample.slice(0, 3).join(", "))}</i></li>`).join("");
-  return `<section class="bhero" data-bhero aria-labelledby="bh-h">
-  <div class="wrap bhero__copy">
-    <h1 id="bh-h" class="bhero__h1"><span class="t1">Your company’s brain.</span> <span class="t2">And the team that runs on it.</span></h1>
-    <p class="bhero__sub">${HERO_SUB}</p>
-    <p class="bhero__cta"><a class="btn btn-gold" href="/contact/">Get a free Brain Snapshot</a><a class="btn btn-ghost" href="#problem">See how it works</a></p>
-  </div>
-  <div class="wrap">
+  return `<div class="wrap">
     <div class="ws" data-ws role="group" aria-label="The company brain with its tools and its team, answering a founder's questions">
       <svg class="ws__lines" data-lines aria-hidden="true"></svg>
       <div class="ws__col ws__col--tools"><p class="ws__label">Your tools</p><ul>${tools}</ul></div>
@@ -84,8 +78,23 @@ export function heroB(): string {
   </div>
   <button class="hero__next" type="button" data-next hidden>Next question</button>
   <p class="visually-hidden">The brain answers questions founders ask every day. ${esc(QUESTIONS.map((q) => `${q.q} ${q.answer}`).join(" "))}</p>
-  <script type="application/json" id="hero-data">${heroData()}</script>
+  <script type="application/json" id="hero-data">${heroData()}</script>`;
+}
+
+export function heroB(): string {
+  return `<section class="bhero" data-bhero aria-labelledby="bh-h">
+  <div class="wrap bhero__copy">
+    <h1 id="bh-h" class="bhero__h1"><span class="t1">Your company’s brain.</span> <span class="t2">And the team that runs on it.</span></h1>
+    <p class="bhero__sub">${HERO_SUB}</p>
+    <p class="bhero__cta"><a class="btn btn-gold" href="/contact/">Get a free Brain Snapshot</a><a class="btn btn-ghost" href="#problem">See how it works</a></p>
+  </div>
+${workspaceBlock()}
 </section>`;
+}
+
+/** B's diagram on the Product page: tools, the brain and its groups, the team, one question and its answer. */
+export function productDiagram(): string {
+  return `<section class="bhero bhero--page" data-bhero aria-label="How your tools, your brain and your team work together">${workspaceBlock()}</section>`;
 }
 
 export function heroA(): string {

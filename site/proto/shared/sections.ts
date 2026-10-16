@@ -6,7 +6,7 @@ import { CHIP_ROWS } from "./data.ts";
 import { TEAM_SECTIONS } from "./team-sections.ts";
 
 import { esc } from "./util.ts";
-import { heroA, heroB } from "./hero-sections.ts";
+import { heroA, heroB, productDiagram } from "./hero-sections.ts";
 import { HOME_SECTIONS } from "./home-sections.ts";
 import { PAGE_SECTIONS } from "./page-sections.ts";
 export { esc };
@@ -69,6 +69,7 @@ export const SECTIONS: Record<string, (page: string) => string> = {
   ...PAGE_SECTIONS,
   "hero-a": () => heroA(),
   "hero-b": () => heroB(),
+  "product-diagram": () => productDiagram(),
   nav: (page) => nav(NAV.some((n) => n.id === page) ? page : "", page === "b" ? "/b/" : "/a/"),
   footer: () => footer(),
   switcher: (page) => switcher(page),

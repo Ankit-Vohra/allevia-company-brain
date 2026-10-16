@@ -192,7 +192,79 @@ function initFlow(): void {
   document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));
 }
 
+// ---------- the brain that keeps growing ----------
+interface GrowData { nodes: [number, number, number, number][]; edges: [number, number, number][]; path: number[]; labels: string[] }
+
+function initGrow(): void {
+  const root = document.querySelector<HTMLElement>("[data-grow]");
+  if (!root) return;
+  const panel = root.querySelector<HTMLElement>(".gpanel")!;
+  const canvas = root.querySelector<HTMLCanvasElement>("[data-grow-canvas]")!;
+  const labelsEl = root.querySelector<HTMLElement>("[data-grow-labels]")!;
+  const cap = root.querySelector<HTMLElement>("[data-grow-cap]")!;
+  const btns = [...root.querySelectorAll<HTMLButtonElement>("[data-grow-stage]")];
+  const data = JSON.parse(root.querySelector("#grow-data")!.textContent!) as GrowData;
+  const g = canvas.getContext("2d")!;
+  const NAMES = ["Week 1", "Month 3", "Year 1"];
+  const COLOURS = ["#c48a2c", "#d1a43a", "#a5651b", "#b87a3a", "#8d7a3d"];
+  const nn = data.nodes.length;
+  const labs = data.labels.map((t) => { const e = document.createElement("span"); e.className = "gpanel__lab"; e.textContent = t; labelsEl.append(e); return e; });
+  let W = 1, H = 1, dpr = 1;
+  const X = new Float32Array(nn), Y = new Float32Array(nn);
+  const appear = new Float32Array(nn);
+  const layout = () => { const r = panel.getBoundingClientRect(); W = r.width; H = r.height; dpr = Math.min(window.devicePixelRatio || 1, 2); canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); data.nodes.forEach((n, i) => { X[i] = W * (0.1 + 0.8 * n[0]); Y[i] = H * (0.1 + 0.72 * n[1]); }); };
+  new ResizeObserver(() => { layout(); draw(0, 0); }).observe(panel);
+  let stage = 0, since = 0; // seconds since the stage or the question last changed
+  const inPath = new Int8Array(nn).fill(-1); data.path.forEach((ni, k) => (inPath[ni] = k));
+  const setStage = (s: number) => { stage = s; since = 0; btns.forEach((b, i) => b.setAttribute("aria-pressed", String(i === s))); cap.textContent = NAMES[s]!; };
+
+  /** Draw: `dt` seconds since the last frame (0 for a static picture). The path lights 0.9 s after a stage appears, holds, then relaxes. */
+  const draw = (t: number, dt: number) => {
+    since += dt;
+    const k = since - 0.9; const lit = (i: number) => clamp01((k - i * 0.26) / 0.3) * (1 - sm(3.6, 4.2, k));
+    const focus = sm(0, 0.5, k) * (1 - sm(3.6, 4.2, k));
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    for (let i = 0; i < nn; i++) { const target = data.nodes[i]![3] <= stage ? 1 : 0; appear[i] = dt === 0 ? target : appear[i]! + (target - appear[i]!) * (1 - Math.exp(-dt * 3.2)); }
+    g.lineWidth = 1;
+    for (const [a, b, st] of data.edges) {
+      const al = Math.min(appear[a]!, appear[b]!); if (al < 0.02 || st > stage + 0) continue;
+      const onPath = inPath[a]! >= 0 && inPath[b]! >= 0 && Math.abs(inPath[a]! - inPath[b]!) === 1;
+      g.strokeStyle = `rgba(80,66,46,${(0.15 * al) * (1 - 0.8 * focus)})`; g.beginPath(); g.moveTo(X[a]!, Y[a]!); g.lineTo(X[b]!, Y[b]!); g.stroke();
+      if (onPath) { const l = Math.min(lit(inPath[a]!), lit(inPath[b]!)); if (l > 0.02) { g.strokeStyle = `rgba(224,150,40,${0.95 * l})`; g.lineWidth = 2.4; g.beginPath(); g.moveTo(X[a]!, Y[a]!); g.lineTo(X[b]!, Y[b]!); g.stroke(); g.lineWidth = 1; } }
+    }
+    for (let i = 0; i < nn; i++) {
+      const al = appear[i]!; if (al < 0.02) continue;
+      const pk = inPath[i]!; const l = pk >= 0 ? lit(pk) : 0;
+      const dim = 1 - 0.78 * focus * (pk >= 0 ? 0 : 1);
+      const base = i < 47 ? 3.4 : 2.8; const r = (base + l * 3) * (0.4 + 0.6 * al);
+      if (l > 0.02) { const gr = g.createRadialGradient(X[i]!, Y[i]!, 0, X[i]!, Y[i]!, r * 3.4); gr.addColorStop(0, `rgba(255,226,150,${0.8 * l})`); gr.addColorStop(1, "rgba(224,150,40,0)"); g.fillStyle = gr; g.beginPath(); g.arc(X[i]!, Y[i]!, r * 3.4, 0, 6.2832); g.fill(); }
+      g.globalAlpha = al * (0.6 + 0.35 * l) * dim; g.fillStyle = pk >= 0 && l > 0.3 ? "#e0961e" : COLOURS[data.nodes[i]![2]! % COLOURS.length]!;
+      g.beginPath(); g.arc(X[i]!, Y[i]!, r, 0, 6.2832); g.fill(); g.globalAlpha = 1;
+    }
+    labs.forEach((e, j) => { const ni = data.path[j]!; const l = lit(j); e.style.opacity = l.toFixed(2); e.style.transform = `translate3d(${X[ni]!.toFixed(1)}px, ${(Y[ni]! - 12).toFixed(1)}px, 0) translate(-50%, -100%)`; });
+    void t;
+  };
+  layout();
+  const reduced = reduceMotion();
+  let pausedUntil = 0, last = 0, raf = 0, running = false, visible = false, autoAt = 0;
+  btns.forEach((b, i) => b.addEventListener("click", () => { setStage(i); pausedUntil = performance.now() + 14000; if (reduced) { since = 2; draw(0, 0); } }));
+  if (reduced) { setStage(0); since = 2.5; draw(0, 0); return; }
+  const frame = (ts: number) => {
+    if (!running) return;
+    const dt = Math.min(0.05, (ts - last) / 1000); last = ts;
+    if (ts > pausedUntil && since > 7.2 && ts > autoAt) { setStage((stage + 1) % 3); autoAt = ts + 500; }
+    draw(ts / 1000, dt);
+    raf = requestAnimationFrame(frame);
+  };
+  const start = () => { if (running || !visible || document.hidden) return; running = true; last = performance.now(); raf = requestAnimationFrame(frame); };
+  const stop = () => { running = false; cancelAnimationFrame(raf); };
+  new IntersectionObserver(([e]) => { visible = !!e?.isIntersecting; visible ? start() : stop(); }, { rootMargin: "60px" }).observe(root);
+  document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));
+  draw(0, 0);
+}
+
 export function initHome(): void {
   initProblem();
+  initGrow();
   initFlow();
 }

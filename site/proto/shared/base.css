@@ -118,7 +118,7 @@ a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 0.2em
 @media (min-width: 52rem) { .foot__in { grid-template-columns: auto 1fr; align-items: start; gap: 4rem; } }
 
 /* ---------- prototype chrome: the pill that moves between A and B (not part of the site) ---------- */
-.proto-switch { position: fixed; z-index: 60; left: 50%; bottom: 0.9rem; transform: translateX(-50%); display: flex; align-items: center; gap: 0.2rem; padding: 0.25rem 0.3rem 0.25rem 0.9rem; border-radius: var(--r-pill); background: var(--color-ink); color: #f4eee3; font-size: 0.8125rem; box-shadow: 0 10px 30px -10px rgb(31 26 20 / 0.6); }
+.proto-switch { white-space: nowrap; position: fixed; z-index: 60; left: 50%; bottom: 0.9rem; transform: translateX(-50%); display: flex; align-items: center; gap: 0.2rem; padding: 0.25rem 0.3rem 0.25rem 0.9rem; border-radius: var(--r-pill); background: var(--color-ink); color: #f4eee3; font-size: 0.8125rem; box-shadow: 0 10px 30px -10px rgb(31 26 20 / 0.6); }
 .proto-switch span { opacity: 0.7; margin-right: 0.3rem; }
 .proto-switch a { text-decoration: none; padding: 0.35rem 0.8rem; border-radius: var(--r-pill); }
 .proto-switch a[aria-current="true"] { background: var(--color-accent); color: var(--color-ink); }

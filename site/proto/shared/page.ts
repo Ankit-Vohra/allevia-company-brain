@@ -4,6 +4,12 @@ import "./entry.ts";
 import "./home.css";
 import "./pages.css";
 import { reduceMotion } from "./chrome.ts";
+import { initHome } from "./home-client.ts";
+
+initHome(); // the growing brain, where the page has one
+// the diagram of the brain, the tools and the team (Product page)
+const diagram = document.querySelector<HTMLElement>("[data-bhero]");
+if (diagram) { void import("../b/b.css"); void import("../b/hero2d.ts").then((m) => m.startBHero(diagram)); }
 
 const html = document.documentElement;
 html.classList.add("js");

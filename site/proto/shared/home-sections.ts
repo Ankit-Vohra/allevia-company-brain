@@ -13,8 +13,8 @@ const rng = (seed: number) => () => { seed = (Math.imul(seed, 1664525) + 1013904
 const BEATS: [string, string][] = [
   ["Too many people to answer.", "Customers, staff, suppliers, agencies."],
   ["Too many tools.", "Each with its own login, its own numbers and its own problems."],
-  ["Too much to remember.", "Who was promised what, why you decided it, what changed last week."],
-  ["Nothing talks to anything else.", "Every tool and every chat keeps its own piece."],
+  ["Too much to remember.", "Who was promised what, why you decided it, what changed last week. It all lives in your head."],
+  ["Nobody has the whole picture.", "Every tool and every person holds a piece. Nothing talks to anything else."],
   ["And all of it lands on you.", ""],
 ];
 
@@ -66,7 +66,7 @@ export function problem(): string {
   <div class="problem__pin">
     <div class="problem__text">
       <ol class="beats" data-beats>${beats}</ol>
-      <h2 id="problem-h" class="h2 h2--wide problem__head" data-head><span class="t1">One brain for everything your business knows.</span> <span class="t2">Allevia pulls it into one place, sorts it, and hands you a short list: answers, and things waiting for your OK.</span></h2>
+      <h2 id="problem-h" class="h2 h2--wide problem__head" data-head><span class="t1">One brain for everything your business knows.</span> <span class="t2">Every decision, conversation, number and change, kept with where it came from and when. Then a short list for you: answers, and things waiting for your OK.</span></h2>
     </div>
     <div class="problem__stage" data-pstage>
       <svg class="problem__links" viewBox="-50 -50 100 100" preserveAspectRatio="none" aria-hidden="true">${links}</svg>
@@ -169,4 +169,57 @@ export function closeCta(): string {
 </section>`;
 }
 
-export const HOME_SECTIONS: Record<string, () => string> = { problem, glimpse, teaser, flow, close: closeCta };
+// ---------- the brain that keeps growing, and still finds things in a few hops ----------
+
+/** The real 47-node graph, then, for the picture only, more nodes around the same five groups as the weeks go by (week 1, month 3, year 1). */
+function growJson(): string {
+  const r = rng(29);
+  const real = BRAIN_GRAPH.nodes;
+  const nodes: [number, number, number, number][] = real.map((n) => [n[1], n[2], n[3], 0]); // x, y, cluster, stage
+  const edges: [number, number, number][] = BRAIN_GRAPH.edges.map(([a, b]) => [a, b, 0]); // a, b, stage
+  const centre = (c: number) => { const m = real.filter((n) => n[3] === c); return [m.reduce((s, n) => s + n[1], 0) / m.length, m.reduce((s, n) => s + n[2], 0) / m.length] as const; };
+  const gauss = () => (r() + r() + r() + r() - 2) / 2;
+  const add = (count: number, stage: number) => {
+    for (let k = 0; k < count; k++) {
+      const c = Math.floor(r() * 5); const [cx, cy] = centre(c);
+      const x = Math.min(0.97, Math.max(0.03, cx + gauss() * 0.2)), y = Math.min(0.97, Math.max(0.03, cy + gauss() * 0.2));
+      const idx = nodes.length; nodes.push([+x.toFixed(3), +y.toFixed(3), c, stage]);
+      const near = nodes.slice(0, idx).map((n, i) => [i, (n[0] - x) ** 2 + (n[1] - y) ** 2] as const).sort((a, b) => a[1] - b[1]).slice(0, 2 + (r() < 0.35 ? 1 : 0));
+      near.forEach(([i]) => edges.push([i, idx, stage]));
+    }
+  };
+  add(120, 1); add(320, 2);
+  const ix = new Map(real.map((n, i) => [n[0], i]));
+  const path = FLOW_PATHS[4]!.length ? ["feature:seekers-signup-phone-number-entered", "page:screen/app/auth/sign-up", "event:sentry-issue-shiftly-41", "event:release-shiftly-2-8-0", "person:farhan"].map((id) => ix.get(id)!).filter((i) => i !== undefined) : [];
+  return JSON.stringify({ nodes, edges, path, labels: path.map((i) => real[i]![4]) }).replace(/</g, "\\u003c");
+}
+
+export function grow(): string {
+  return `<section class="grow wrap" id="grow" data-grow aria-labelledby="grow-h">
+  <div class="grow__copy">
+    <h2 id="grow-h" class="h2"><span class="t1">It keeps growing.</span> <span class="t2">The longer you use it, the more it knows.</span></h2>
+    <ul class="grow__points">
+      <li><b>Everything is kept.</b> Every decision, conversation, number and change, with where it came from and when.</li>
+      <li><b>Everything is connected.</b> Your team follows a few links to the answer. It does not reread the pile, so it is quick and light.</li>
+      <li><b>Powered by <a href="https://www.falkordb.com" rel="noopener">FalkorDB</a>.</b> A graph database keeps the links between your facts.</li>
+    </ul>
+  </div>
+  <div class="grow__viz">
+    <div class="gpanel gpanel--grow" role="img" aria-label="The company brain as a graph that gets bigger over a week, three months and a year. The same question lights the same short path through it each time.">
+      <img class="gpanel__brain" src="/shared/img/brain-still-900.webp" width="900" height="900" alt="" loading="lazy" decoding="async">
+      <canvas class="gpanel__canvas" data-grow-canvas aria-hidden="true"></canvas>
+      <div class="gpanel__labels" data-grow-labels aria-hidden="true"></div>
+      <p class="gpanel__cap" data-grow-cap aria-hidden="true">Week 1</p>
+    </div>
+    <div class="grow__ctl" role="group" aria-label="How long you have used it">
+      <button type="button" class="grow__b" data-grow-stage="0" aria-pressed="true">Week 1</button>
+      <button type="button" class="grow__b" data-grow-stage="1" aria-pressed="false">Month 3</button>
+      <button type="button" class="grow__b" data-grow-stage="2" aria-pressed="false">Year 1</button>
+    </div>
+    <p class="grow__ask"><span>Why did sign-ups drop?</span> <b>4 hops, every time</b></p>
+  </div>
+  <script type="application/json" id="grow-data">${growJson()}</script>
+</section>`;
+}
+
+export const HOME_SECTIONS: Record<string, () => string> = { problem, grow, glimpse, teaser, flow, close: closeCta };
