@@ -145,6 +145,7 @@ const ALL_OK: TurnChecks = { citationsValid: true, invalidCitations: [], numbers
 const KIND_LABEL: Record<ApprovalDto["kind"], string> = {
   github_issue: "a fix for your website", content_draft: "a draft post", pause_ad: "pausing an ad", discord_post: "a message to your team chat",
   calendar_event: "a meeting on your calendar", email_send: "an email from your address", connection_action: "a change in one of your connected tools",
+  publish_post: "a post to your own account",
 };
 
 // A fix says whether it is for the website or the app (shared/fix-words.ts).

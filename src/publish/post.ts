@@ -121,7 +121,8 @@ async function step(spec: PlatformSpec, s: PostSession, slug: string, args: Reco
 
 // ---------- who the connection is signed in as ----------
 
-export async function readAccount(spec: PlatformSpec, s: PostSession): Promise<Account> {
+/** `want`: the account id the owner approved. A Facebook login can manage several Pages; the one approved is found among them (not "the first"). */
+export async function readAccount(spec: PlatformSpec, s: PostSession, want?: string): Promise<Account> {
   const a = spec.actions;
   if (spec.id === "instagram") {
     const d = await step(spec, s, a.account!.slug, {});
@@ -133,8 +134,8 @@ export async function readAccount(spec: PlatformSpec, s: PostSession): Promise<A
   if (spec.id === "facebook") {
     const d = await step(spec, s, a.account!.slug, {});
     const pages = deepArr(d, "data").map(asObj).filter((p) => typeof p.id === "string" && p.id);
-    const first = pages[0];
-    if (!first) throw new PublishFailure("No Facebook Page is connected to this login. Connect Facebook again and choose your Page.", { reconnect: true });
+    const first = want ? pages.find((p) => String(p.id) === want) : pages[0];
+    if (!first) throw new PublishFailure(want && pages.length ? "The Facebook Page you approved isn't on this login any more, so nothing was posted. Connect Facebook again and choose that Page." : "No Facebook Page is connected to this login. Connect Facebook again and choose your Page.", { reconnect: true });
     // only the id and the name are kept: the list also carries an access token for each Page, which never leaves this function
     return { id: String(first.id), name: typeof first.name === "string" && first.name ? first.name : String(first.id) };
   }

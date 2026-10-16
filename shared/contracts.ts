@@ -77,7 +77,7 @@ export type AssessmentVerdict = "use" | "enhance" | "recompose" | "reshoot";
 // so new overlay types need no contract change; today: "clutter", "privacy", "text", "lock".
 export interface AssessmentOverlay { kind: string; x: number; y: number; w: number; h: number; note: string }
 
-export type ActionKind = "github_issue" | "content_draft" | "pause_ad" | "discord_post" | "calendar_event" | "email_send" | "connection_action";
+export type ActionKind = "github_issue" | "content_draft" | "pause_ad" | "discord_post" | "calendar_event" | "email_send" | "connection_action" | "publish_post";
 
 // Onboarding (paste a website URL) streams these. profile, goals, baseline and capabilities arrived with schema v2.
 export type OnboardStage =

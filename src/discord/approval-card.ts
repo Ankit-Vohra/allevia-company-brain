@@ -14,6 +14,7 @@ import { DISCORD_MAX, splitMessage } from "./format.js";
 export const KIND_LABEL: Record<ApprovalDto["kind"], string> = {
   github_issue: "a fix for your website", content_draft: "a draft post", pause_ad: "pausing an ad", discord_post: "a message to your team chat",
   calendar_event: "a meeting on your calendar", email_send: "an email from your address", connection_action: "a change in one of your connected tools",
+  publish_post: "a post to your own account",
 };
 
 /** What a card is, in the owner's words. A fix says whether it is for the website or the app (shared/fix-words.ts). */

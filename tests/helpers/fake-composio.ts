@@ -7,9 +7,12 @@ export class FakeComposio implements ComposioClient {
   toolList = new Map<string, ComposioToolInfo[]>();
   catalogue: ComposioToolkitInfo[] = [{ slug: "notion", name: "Notion", description: "Notes and docs" }];
   results = new Map<string, unknown>();           // tool slug -> data
-  /** tool slug -> what to do for one call: data to return, an Error to throw (Composio itself failed), or { fail } (the tool said no). */
-  handlers = new Map<string, (args: Record<string, unknown>, n: number) => unknown>();
   private perTool = new Map<string, number>();
+  /** tool slug -> what to do for one call: data to return, an Error to throw (Composio itself failed), or { fail } (the tool said no). */
+  handlers: Map<string, (args: Record<string, unknown>, n: number) => unknown> = ((counts) => new (class extends Map<string, (args: Record<string, unknown>, n: number) => unknown> {
+    // a handler set again starts counting its calls from one
+    override set(k: string, v: (args: Record<string, unknown>, n: number) => unknown) { counts.delete(k); return super.set(k, v); }
+  })())(this.perTool);
   private n = 0;
   async authConfigId(toolkit: string): Promise<string> { this.calls.push({ op: "authConfigId", args: toolkit }); return `ac_${toolkit}`; }
   async link(o: { authConfigId: string; userId: string; callbackUrl: string }) {
