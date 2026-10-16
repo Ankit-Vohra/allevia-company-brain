@@ -11,27 +11,59 @@ working demo video. Coding assistants are allowed, and the team must be able to 
 
 ## 1. What to submit
 
-Status as of 15 October 2026: **done** (ready in the repo), **open** (still to do), **blocked** (waiting on something
-named). Nothing is submitted yet.
+Status as of 16 October 2026, evening: **done** (ready in the repo), **needs founder** (only he can do it), **later** (waiting
+on a decision or on the deployment). Nothing is submitted yet, nothing is pushed, and no public repository exists.
 
 | Item | Where it comes from | Status |
 |---|---|---|
-| Project name and one-line pitch | README first lines: "A done-for-you AI growth team for small businesses, with a company brain in FalkorDB behind every answer." | done |
-| Tracks | All three, verbatim in the form: "Agents That Act on Connected Data", "Agent Memory and Coordination", "Company Brain" (README "Tracks", with what fits each and its limits) | done in README; open in the form |
-| README with setup steps | README "Run it" (Docker demo, live mode, development setup) | done |
-| Graph data model | README "The graph data model" (Mermaid diagram and the three patterns) | done |
+| Project name and one-line pitch | README first lines: "Founder OS: an AI team and a company brain on FalkorDB, working through the founder's own tools." | done |
+| Tracks | All three, verbatim in the form: "Agents That Act on Connected Data", "Agent Memory and Coordination", "Company Brain" (README "The three tracks" and "Tracks", with what fits each and its limits) | done in README; **needs founder** in the form |
+| README with setup steps | README top (60 seconds) and "Run it": no accounts in 3 commands, live in 5. **Checked on a clean copy on 16 Oct** (below) | done |
+| Setup verified on a clean machine | 16 Oct, 19:25 to 20:10 IST: export, `npm install`, web build, FalkorDB, `seed-demo`, serve, the hero question live and replayed; Docker image built and run from the export. Times and what broke: "Clean-machine check" below | done |
+| Graph data model | README "The data model" and "The graph data model" (Mermaid diagrams and the three patterns) | done |
 | Cypher queries and graph algorithms the product depends on | [`docs/falkordb-queries.md`](falkordb-queries.md), each with file:line, held to the code by `tests/graph/queries-doc.test.ts` | done |
-| The graph doing real work, visible | Brain page, "What breaks if something stops": depth 1 vs depth 4 with paths, owner, PageRank, communities; "not in your records" vs "not mapped" | done |
-| AI-tool disclosure | README "AI tools used" (Claude Code with subagents, Claude on the subscription at runtime, Higgsfield, local embeddings; what the founder decided) | done |
-| Data rules (public, synthetic or own data only) | Public copy ships only the synthetic demo company; real-business eval reports and trial notes are left out by `scripts/export-public.sh`. Screenshots of the real businesses need the founder's yes (§2 step 7) | open (screenshots decision) |
-| Public repository URL | Section 2 below. **Not** the existing private repo. | open |
-| Live demo URL | Section 3 below (public read-only mode) | blocked: deployment comes later; until then the README's full local setup stands in |
-| Demo video URL | Section 4 below (YouTube, unlisted or public) | blocked: not recorded yet; the founder holds it until the product is ready |
-| Description | README "The problem", "What it does", "How FalkorDB is central" | done |
-| How FalkorDB is used | README "How FalkorDB is central" table and the queries doc | done |
-| Team members | Every member registered in the team panel (prizes go to every member) | open |
-| Blog post (side prize) | `docs/blog-post.md`, published on a public platform (dev.to, Hashnode or Medium), link submitted | open |
-| Screenshots | `docs/screenshots/` (README uses a selection) | done; see the data-rules row |
+| The graph doing real work, visible | The lit path under the hero answer and the Brain page's "What breaks if something stops" (depth 1 vs depth 4); replayable in public mode (`seed-demo --recorded`) | done |
+| AI-tool disclosure | README "AI tools and licence" and "AI tools used" (Claude Code with subagents, Claude on the subscription at runtime, Higgsfield, local embeddings; what the founder decided) | done |
+| Licence | MIT, added by `scripts/export-public.sh` (the private repo has none) | done |
+| The five live scenarios | [`docs/live-scenarios.md`](live-scenarios.md): what ran, when, the result, what is open | done; two items **need founder** (a Discord question from his account, the Calendar connect link) |
+| Data rules (public, synthetic or own data only) | The public copy ships only the synthetic business (Shiftly). By default the export now leaves out everything that shows the real businesses: screenshots, generated posters and reels, stand-up drafts, trial notes, real-business evals (list in section 2) | done by default; **needs founder**: #12 (keep real screenshots?) and #13 (is founder-owned data allowed?) |
+| Public repository URL | Section 2 below. **Not** the existing private repo. | **needs founder** (create it, then put its URL in the README clone line) |
+| Live demo URL | Section 3 below (public read-only mode) | later: deployment follows; until then the README's local setup and the replayed answers stand in |
+| Demo video URL | Section 4 below (YouTube, unlisted or public) | **needs founder**: he holds it until the product is ready; script ready |
+| Description | README top, "The problem", "What it does", "How FalkorDB is central" | done |
+| How FalkorDB is used | README "Why FalkorDB does real work", "How FalkorDB is central" and the queries doc | done |
+| Team members | Every member registered in the team panel (prizes go to every member) | **needs founder** |
+| Blog post (side prize) | `docs/blog-post.md`, published on a public platform (dev.to, Hashnode or Medium), link submitted | **needs founder** (publishing is his call) |
+| Screenshots | `docs/demo-screens/` (the synthetic business; README uses them). The 165 real-business images in `docs/screenshots/` stay out unless he says keep | done; real ones **needs founder** (#12) |
+| Submission form | WeMakeDevs team panel | **needs founder** |
+
+### Clean-machine check (16 October 2026)
+
+What a judge does, run from `scripts/export-public.sh` output on a Mac that had never run it (its own FalkorDB on a free port,
+no founder data, no env file, the Claude subscription only):
+
+| Step | Result | Time |
+|---|---|---|
+| `scripts/export-public.sh` (export, secrets scan, hygiene test, dead-link report) | one commit, no remote, secrets scan clean, hygiene passed | about 20 s |
+| `npm install` and `cd web && npm install && npm run build` | clean; npm 11.16 prints "install scripts not yet covered by allowScripts" (a notice: esbuild, sharp, onnxruntime and the Agent SDK all load) | 16 s with a warm npm cache |
+| `npm run typecheck` | clean | 25 s |
+| FalkorDB 6.0.2, `db:check` | "ok", settings as docker-compose.yml | 4 s |
+| `npm run cli -- seed-demo` | Shiftly: 52 nodes, 73 edges, 312 readings, registered | 3 s |
+| `npm run cli -- serve`, then the hero question in the web app (live, on the subscription) | answered, path drawn, two cards waiting, all checks green | 92 s |
+| The same in public mode, `seed-demo --recorded` | the four recorded answers replay with their work logs and lit paths; writes refused (403); an unrecorded question says live chat needs the owner's model | 2 s |
+| Docker: `docker build` of the export, then the app container against a fresh FalkorDB, `seed-demo --recorded`, the optional `demo_seed` commands | healthy, public mode on, replay works | 140 s to build with the base image cached |
+
+**What broke, and what changed.** (1) **Public mode had nothing to ask on a fresh clone**: the synthetic business had no
+recorded answers, so Ask said "pick a recorded thread" and there were none. Now `seed-demo --recorded` loads four answers
+recorded live (a db:export file in `src/demo/recorded/`, held to the seed by a test). (2) **`docker compose exec app tsx
+scripts/seed-demo.ts demo_seed --register` failed in the image** (a second fixture was not copied in): fixed in the
+Dockerfile and `.dockerignore`. (3) A recorded question typed without the hyphen ("signups") did not match "sign-ups": matching
+now ignores case, spacing, punctuation and hyphens. (4) The export script could not run its hygiene test from a worktree
+(no `node_modules`): fixed. (5) The README's setup now says what each command needs and what to do about npm's notice.
+**Not verifiable on the build machine:** `docker compose` itself (its Compose plugin is missing there); the image and the
+containers were run with the compose file's exact environment instead, and the compose file is unchanged since it was last run
+by hand. **If FalkorDB crashes** (6.0.2 has crashed under repeated writes; issue 29) and will not restart from its append-only
+file, `docker compose down -v` and seed again: the demo data is rebuilt in seconds.
 
 ## 2. Make the repository public (fresh history only)
 
@@ -45,7 +77,16 @@ it exports the tracked tree of a commit into a new temporary directory, leaves o
 eval reports about the real businesses (`docs/evals/2026-*`, `evals/aamdani.yaml`, `evals/avs.yaml`) and the notes
 written from private copies of their graphs, adds an MIT `LICENSE`, runs a secrets scan and the hygiene test on exactly
 that copy, commits it once and prints what it left out. It never pushes and never touches this repository's history
-(`tests/export-public.test.ts`). `--drop-screenshots` also leaves out `docs/screenshots/`.
+(`tests/export-public.test.ts`).
+
+**What stays out by default** (everything that shows the founder's real businesses): `docs/screenshots/` (165 images of their
+screens), `docs/creative-live/` (posters, ads and a reel made for them), `docs/proactive/` (their stand-up screens), the eval
+reports and sets that quote their answers (`docs/evals/2026-*-aamdani.md`, `*-avs_atelier.md`, `evals/aamdani.yaml`,
+`evals/avs.yaml`, `evals/hero-aamdani.yaml`), and the notes written from their graphs and drafts (`docs/MORNING-REPORT.md`,
+`content-trials.md`, `proactive-trials.md`, `skills-trials.md`, `website-checkup-trials.md`, `design-research.md`). What ships
+instead is the synthetic business's evidence: `evals/hero.yaml`, `docs/evals/2026-10-16-demo_growth.md`, `docs/demo-screens/`.
+`--keep-real-material` puts the pictures back, only with the founder's yes (#12). The script ends with a **dead-link report** for
+README.md and docs/**/*.md; on 16 Oct it listed only `docs/research/kylon.md` and `docs/tenant-isolation.md`.
 
 ```sh
 scripts/export-public.sh --ref dev                 # prints the directory, e.g. /tmp/allevia-public.XXXXXX
@@ -85,11 +126,12 @@ scripts/export-public.sh --ref dev                 # prints the directory, e.g. 
    npx vitest run tests/hygiene.test.ts
    ```
    Then a manual pass: `git grep -n -i -E 'ankit@|\.local\b|aws|ssh '` and read every hit.
-7. [ ] (open, the founder's call) **Check the graph-facing docs for data you do not want public.** The export leaves
-   out the eval reports and trial notes; the screenshots stay unless `--drop-screenshots`. The eval reports (`docs/evals/`) quote the first
-   300 characters of real Aamdani answers, and screenshots show real Aamdani goal numbers. The founder approved real
-   numbers for the demo; confirm that includes the repo.
-8. [ ] (open; the export script commits, publishing is manual) **Commit and publish:**
+7. [ ] (the founder's call, #12 and #13) **Decide about the real businesses' material.** By default none of it is in the copy
+   (see above): the README and the live-scenarios page show only Shiftly, and say the real businesses' screens stay private. To
+   keep the 165 screenshots and the generated posters, re-run with `--keep-real-material`; the founder approved real numbers
+   for the demo, and the organisers' answer on founder-owned data (#13) decides whether they can be public.
+8. [ ] (**needs founder**; the export script commits, publishing is manual) **Put the repository URL in the README** (`git clone
+   <repository-url>` appears twice near the top), add the demo video link under the title once it exists, then **commit and publish:**
    ```sh
    git commit -m "Allevia: Graph Hacks submission"
    gh repo create Ankit-Vohra/allevia --public --source . --push --description "A done-for-you AI growth team for small businesses, with a company brain in FalkorDB"
@@ -164,11 +206,12 @@ Before sharing the URL:
 
 ## 4. Demo video
 
-**Status: blocked.** Not recorded yet; the founder holds it until the product is ready.
+**Status: needs founder.** Not recorded yet; he holds it until the product is ready.
 
-Script: [`docs/demo-script.md`](demo-script.md): the five live scenarios (onboard from a URL; an unscripted question on
-Discord with its path; a poster with the owner's logo, blocked on the creative tools; a bad photo turned into good
-content; the team noticing something and drafting it). Live first; a recorded replay only as a labelled fallback.
+Script: [`docs/demo-script.md`](demo-script.md): the hero use case first, then the five live scenarios (onboard from a URL; an
+unscripted question on Discord with its path; a poster with the owner's logo; a bad photo turned into good content; the team
+noticing something and drafting it). What ran and what each needs is in [`docs/live-scenarios.md`](live-scenarios.md). Live
+first; a recorded replay only as a labelled fallback (`seed-demo --recorded` replays the four hero-set answers).
 
 - [ ] Recorded as a **live** run of the five scenarios; any replay is labelled on screen.
 - [ ] Under 3:00, 1080p, readable at phone size; captions on.
@@ -181,8 +224,18 @@ content; the team noticing something and drafting it). Live first; a recorded re
 
 ## 5. Final pass (18 October)
 
-- [ ] `npm run typecheck`, `npm test` (against a throwaway FalkorDB: `ALLEVIA_FALKORDB_URL=redis://127.0.0.1:<port>`).
+Done on 16 October on the then-current tree (the numbers are in the README): typecheck, the full suite against a throwaway
+FalkorDB (`ALLEVIA_TEST_FALKORDB_URL=redis://127.0.0.1:<port>`; the tests never use the real database), the export's secrets
+scan and hygiene test. Repeat after the last merge:
+
+- [ ] `scripts/export-public.sh --ref dev` prints no secrets, no failing hygiene test and no dead link you did not expect.
+- [ ] `npm run typecheck`, `npm test` against a throwaway FalkorDB.
+- [ ] If the seed changed (a new department adds records to Shiftly): `tests/demo/recorded.test.ts` fails until the recorded
+      answers are made again (`scripts/maint/record-demo.mjs`, about 5 minutes on the subscription), then the screenshots
+      (`web/scripts/screenshots-demo.mjs`) and the thread link in the README.
 - [ ] The README's test count and eval numbers match the latest run and `docs/evals/`.
-- [ ] Hygiene test passes on the published tree; the public repo has one commit.
+- [ ] `<repository-url>` in the README is the real public URL; the demo video link is under the title.
+- [ ] Hygiene test passes on the published tree; the public repo has one commit; a logged-out browser shows the README
+      (Mermaid diagrams and screenshots render), no `data/` or `models/`.
 - [ ] Live URL, repo URL, video URL and blog URL all open logged out.
 - [ ] Submitted before 23:59 IST, with a screenshot of the confirmation.
