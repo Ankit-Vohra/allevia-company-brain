@@ -19,8 +19,10 @@ repository, so they are named below as results and not linked.
 
 ## 0. The hero
 
-**Run:** the question as an owner would type it, in the web app, on Shiftly, from a clean export of this repository on a machine
-that had never run it. **When:** 16 Oct, 19:37 to 19:41 IST. **Cost:** subscription time only.
+**Run:** the question as an owner would type it, through the web app's API, on Shiftly, from a clean export of this repository on a
+machine that had never run it, with the server's own morning jobs switched off. **When:** 16 Oct, 20:30 to 20:34 IST, on the
+tree that includes the Sales department. **Cost:** subscription time only. (The same four questions were also run at 19:37 on the
+tree before Sales landed; they were made again so the replayed copy matches the product as it is.)
 
 Four questions, one after the other, each a new thread: the hero, "What else breaks if the sign-up screen keeps crashing?",
 "Did pausing the Meta ads cause the sign-up drop?" and "What did people say about the new phone-number box in their store
@@ -28,15 +30,17 @@ reviews?" (a question with no records behind it).
 
 | Question | Time | Who worked | What it did |
 |---|---|---|---|
-| Why did sign-ups drop this week, and what should we do? | 92 s | Meera, Kabir, Zoya, Imran, Sara, Isha, Arjun | Cause (the phone-number field that came with 2.8.0 crashes the sign-up screen), chain with dates, how sure, what is not recorded, where the fix stands, two cards waiting for OK |
-| What else breaks if the sign-up screen keeps crashing? | 58 s | | Depth 1 against depth 4 from `impact_of`: the next steps, then job-alert texts, referral invites, the employer inbox; Farhan owns the screen; owners of the rest "not recorded" |
-| Did pausing the Meta ads cause the sign-up drop? | 49 s | | "Almost certainly not": the fall began on 7 Oct, the pause was on 10 Oct; ad numbers called sample numbers; keeps Meta off until the fix is live |
-| What did people say about the new phone-number box in their store reviews? | 35 s | | "Not recorded": no store reviews in the records; says what to export; invents no quote |
+| Why did sign-ups drop this week, and what should we do? | 101 s | Meera, Kabir, Zoya, Imran, Sara, Isha, Arjun | Cause (the phone-number field that came with 2.8.0 crashes the sign-up screen): "proven" for the crash and the release, "likely" for the link to the drop; chain with dates, what is not recorded, where the fix stands, two cards waiting for OK |
+| What else breaks if the sign-up screen keeps crashing? | 73 s | Meera, Arjun, Imran | Depth 1 against depth 4 from `impact_of`: ten things depend on the screen, three straight away (the Pune ads, the phone-number step, screen views), the rest down the line; owners named where recorded, "not recorded" where not |
+| Did pausing the Meta ads cause the sign-up drop? | 47 s | Meera, Kabir, Zoya, Imran, Isha | "No": the fall began on 7 Oct, the pause was on 10 Oct; ad numbers called sample numbers; Google sign-ups held |
+| What did people say about the new phone-number box in their store reviews? | 38 s | Meera, Imran | "Not recorded": no store reviews in the records; says what to export; invents no quote |
 
 All four passed every check (citations valid, numbers grounded, sample numbers disclosed, dates disclosed, mode disclosed).
-Honest note on variance: a first take of the depth question, run earlier the same hour, **failed two checks** (it named the ad
-campaign without saying its figures are sample numbers) and showed the "unverified" badge; it was not kept, and the re-run
-passed. Answers differ in wording and detail from run to run; the cause and the path do not.
+Honest notes on variance: a first take of the depth question, run at 19:36 the same evening, **failed two checks** (it named the ad
+campaign without saying its figures are sample numbers) and showed the "unverified" badge; it was not kept. A later recording
+attempt picked up three extra notes and cards written by the server's own morning stand-up and weekly check-up running in the
+background; it was discarded, and the recorder now refuses a copy like that. Answers differ in wording and detail from run to run;
+the cause and the path do not.
 
 These four are what [`seed-demo --recorded`](../src/demo/recorded) replays in the public read-only mode, so a judge without a
 Claude login sees them, work log and path included. Screenshots:

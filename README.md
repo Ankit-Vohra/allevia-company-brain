@@ -436,7 +436,7 @@ All of Shiftly, the synthetic business, from the public read-only mode (`node we
 
 | | |
 |---|---|
-| ![The answer to the hero question, with its citations as labels](docs/demo-screens/hero-answer-desktop.png) | ![The same answer's path: five nodes lit out of 91 things checked](docs/demo-screens/hero-path-desktop.png) |
+| ![The answer to the hero question, with its citations as labels](docs/demo-screens/hero-answer-desktop.png) | ![The same answer's path: five nodes lit out of everything the team checked](docs/demo-screens/hero-path-desktop.png) |
 | **The answer.** Cause, chain, what is not recorded, what waits for OK; every claim is a label on a node. | **"How we know".** The path the answer stands on, lit in the business's own graph: step, screen, crash, release, fix. |
 | ![Brain: what breaks if the sign-up screen stops, one step away against up to four](docs/demo-screens/brain-desktop.png) | ![Waiting for your OK: a fix task and a message, nothing sent](docs/demo-screens/approvals-desktop.png) |
 | **What breaks if something stops.** Three things straight away, ten in all, each with its path and who looks after it. | **Approvals.** An edit becomes a learned rule that later drafts apply; executors are dry runs by default. |
