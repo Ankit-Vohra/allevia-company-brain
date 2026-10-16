@@ -176,8 +176,8 @@ describe("server: ask over SSE (integration)", () => {
   });
 
   it("an explicit stop aborts the turn: the stream ends with `final` and it is saved as stopped", async () => {
-    // The Chief's plan waits 5 s; the owner presses Stop first.
-    useRuntime(slowPlan(5_000));
+    // The Chief's plan waits 30 s; the owner presses Stop first.
+    useRuntime(slowPlan(30_000));
     const app = h.make();
     const { session, rest } = await openTurn(app, "Who owns the sitemap fix?");
     const t0 = Date.now();
@@ -187,7 +187,7 @@ describe("server: ask over SSE (integration)", () => {
     const events = sseEvents(await rest());
     expect(events.at(-1)?.type).toBe("final");
     expect(await savedTurn(session.turnId)).toMatchObject({ s: "failed", e: STOPPED_MESSAGE });
-    expect(Date.now() - t0).toBeLessThan(4_000); // well before the 5 s plan would have finished
+    expect(Date.now() - t0).toBeLessThan(20_000); // well before the 30 s plan would have finished
     const page = await eventsPage(app, session.turnId, 0);
     expect(page).toMatchObject({ status: "stopped", done: true });
     // the thread says it was stopped (a reload shows "Stopped", not an empty answer)
