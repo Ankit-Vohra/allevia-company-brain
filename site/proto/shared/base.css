@@ -1,0 +1,128 @@
+/* Prototype base (issue #37). The product's tokens (ledger paper, indigo ink, one gold mark), then the website's own warmer ground
+ * (the same overrides as src/styles/site.css), one scale of type, one shape rule, the top bar, buttons and the footer.
+ * Shape rule: pills for buttons and chips, 18px for frames, 12px for small cards. One accent: the gold, always a fill with ink on
+ * it, never gold text on paper. Motion rule: transform and opacity only, ease-out curves, nothing over 300 ms for UI. */
+@import "../../../web/src/styles/tokens.css";
+
+:root {
+  --color-paper: #f4eee3;
+  --color-paper-2: #ece4d5;
+  --color-card: #ffffff;
+  --color-rule: #ddd3c2;
+  --color-rule-2: #e8e0d1;
+  --color-ink: #1f1a14;
+  --color-ink-2: #463d33;
+  --color-muted: #675b4e;
+  --color-taupe: #8a7c69;           /* the second tone of a two-tone headline: large type only (3.5:1 on paper) */
+  --color-accent: #d1a43a;
+  --color-accent-soft: #f4e7c4;
+  --color-accent-ink: #6f520f;
+  --color-focus: #3f4a2a;
+  --color-sand: #e7dbc6;
+  --color-sage: #e2e3cf;
+  --color-olive: #4f5433;
+  --color-clay: #9a5232;
+  --color-ok: #2e7d4f;
+  --shadow-whisper: 0 1px 2px rgb(60 44 24 / 0.06);
+  --shadow-lift: 0 2px 4px rgb(60 44 24 / 0.05), 0 18px 40px -16px rgb(60 44 24 / 0.22);
+  --shadow-frame: 0 1px 0 rgb(255 255 255 / 0.7) inset, 0 2px 6px rgb(60 44 24 / 0.06), 0 30px 70px -28px rgb(60 44 24 / 0.34);
+
+  --r-pill: 999px;
+  --r-frame: 18px;
+  --r-card: 12px;
+
+  --site-max: 78rem;
+  --gutter: clamp(1rem, 0.5rem + 2.5vw, 2.5rem);
+  --section-gap: clamp(4.5rem, 2.5rem + 7vw, 9rem);
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  --fs-body: 1.0625rem;
+  --fs-lede: clamp(1.125rem, 1.05rem + 0.35vw, 1.3125rem);
+  --fs-small: 0.875rem;
+  --fs-h1: clamp(2.4rem, 1.2rem + 3.9vw, 4.5rem);
+  --fs-h2: clamp(1.95rem, 1.2rem + 2.7vw, 3.5rem);
+  --fs-h3: clamp(1.25rem, 1.15rem + 0.4vw, 1.5rem);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; background: var(--color-paper); overflow-x: clip; scroll-padding-top: 5rem; }
+body {
+  margin: 0; overflow-x: clip; background: var(--color-paper); color: var(--color-ink);
+  font-family: var(--font-body); font-size: var(--fs-body); line-height: 1.55;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+h1, h2, h3, h4 { margin: 0; font-family: var(--font-display); font-weight: 380; font-style: normal; font-optical-sizing: auto; letter-spacing: -0.018em; text-wrap: balance; overflow-wrap: anywhere; min-width: 0; }
+p, ul, ol, dl, dd, figure, blockquote { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+img, svg, video, canvas { display: block; max-width: 100%; }
+img, video { height: auto; }
+a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 0.2em; }
+::selection { background: var(--color-accent); color: var(--color-ink); }
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; border-radius: 4px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; padding: 0; }
+.wrap { width: min(100% - 2 * var(--gutter), var(--site-max)); margin-inline: auto; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* two-tone headings: the first clause in ink, the rest in taupe (large type, so 3:1 is enough) */
+.h2 { font-size: var(--fs-h2); line-height: 1.07; max-width: 21ch; }
+.h2--wide { max-width: 26ch; }
+.t1 { color: var(--color-ink); }
+.t2 { color: var(--color-taupe); }
+.lede { font-size: var(--fs-lede); line-height: 1.5; color: var(--color-ink-2); max-width: 36rem; }
+
+/* ---------- buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 2.9rem; padding: 0.55rem 1.4rem;
+  border-radius: var(--r-pill); border: 1px solid transparent; font: 500 1rem / 1 var(--font-body); text-decoration: none; white-space: nowrap;
+  cursor: pointer; transition: transform 160ms var(--ease-out), background-color 160ms ease, border-color 160ms ease;
+}
+.btn:active { transform: scale(0.97); }
+.btn-gold { background: var(--color-accent); color: var(--color-ink); box-shadow: 0 1px 0 rgb(255 255 255 / 0.5) inset, 0 6px 18px -8px rgb(111 82 15 / 0.55); }
+.btn-ghost { background: transparent; color: var(--color-ink); border-color: rgb(31 26 20 / 0.28); }
+.btn-sm { min-height: 2.4rem; padding: 0.4rem 1.05rem; font-size: 0.9375rem; }
+@media (hover: hover) and (pointer: fine) {
+  .btn-gold:hover { background: #dbb04a; }
+  .btn-ghost:hover { border-color: var(--color-ink); background: rgb(255 255 255 / 0.5); }
+}
+
+/* ---------- top bar ---------- */
+.nav { position: sticky; top: 0; z-index: 40; background: color-mix(in oklab, var(--color-paper) 92%, transparent); border-bottom: 1px solid transparent; transition: border-color 200ms ease; }
+.nav.is-stuck { border-bottom-color: var(--color-rule); }
+.nav__in { display: flex; align-items: center; gap: clamp(1rem, 3vw, 2.5rem); height: 4.25rem; }
+.brand { font-family: var(--font-display); font-size: 1.75rem; font-weight: 420; letter-spacing: -0.02em; text-decoration: none; line-height: 1; padding-bottom: 0.35rem; position: relative; }
+.brand::after { content: ""; position: absolute; left: 0; bottom: 0; width: 1.35rem; height: 3px; border-radius: 2px; background: var(--color-accent); }
+.nav__links { display: flex; gap: clamp(1rem, 2.4vw, 2rem); margin-left: auto; }
+.nav__links a { text-decoration: none; font-size: 0.9375rem; color: var(--color-ink-2); padding: 0.4rem 0; border-bottom: 1px solid transparent; }
+.nav__links a[aria-current="page"] { border-bottom-color: var(--color-ink); color: var(--color-ink); }
+@media (hover: hover) and (pointer: fine) { .nav__links a:hover { color: var(--color-ink); border-bottom-color: var(--color-rule); } }
+.nav__cta { margin-left: 0; }
+.nav__menu { display: none; }
+@media (max-width: 52rem) {
+  .nav__in { height: 3.75rem; }
+  .nav__links { position: absolute; left: 0; right: 0; top: 100%; margin: 0; padding: 0.75rem var(--gutter) 1.25rem; flex-direction: column; gap: 0.2rem; background: var(--color-paper); border-bottom: 1px solid var(--color-rule); transform-origin: top; transform: translateY(-8px); opacity: 0; visibility: hidden; transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out), visibility 0s linear 160ms; }
+  .nav__links a { padding: 0.7rem 0; font-size: 1.0625rem; }
+  .nav.is-open .nav__links { transform: none; opacity: 1; visibility: visible; transition-delay: 0s; }
+  .nav__cta { margin-left: auto; }
+  .nav__menu { display: inline-grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: var(--r-pill); border: 1px solid var(--color-rule); background: transparent; color: var(--color-ink); cursor: pointer; }
+}
+
+/* ---------- footer ---------- */
+.foot { border-top: 1px solid var(--color-rule); padding-block: 3rem 2.5rem; margin-top: var(--section-gap); }
+.foot__in { display: grid; gap: 2rem; }
+.foot__links { display: flex; flex-wrap: wrap; gap: 0.5rem 1.6rem; font-size: 0.9375rem; color: var(--color-ink-2); }
+.foot__links a { text-decoration: none; }
+.foot__links a:hover { text-decoration: underline; }
+.foot__fine { font-size: 0.8125rem; color: var(--color-muted); max-width: 40rem; }
+@media (min-width: 52rem) { .foot__in { grid-template-columns: auto 1fr; align-items: start; gap: 4rem; } }
+
+/* ---------- prototype chrome: the pill that moves between A and B (not part of the site) ---------- */
+.proto-switch { position: fixed; z-index: 60; left: 50%; bottom: 0.9rem; transform: translateX(-50%); display: flex; align-items: center; gap: 0.2rem; padding: 0.25rem 0.3rem 0.25rem 0.9rem; border-radius: var(--r-pill); background: var(--color-ink); color: #f4eee3; font-size: 0.8125rem; box-shadow: 0 10px 30px -10px rgb(31 26 20 / 0.6); }
+.proto-switch span { opacity: 0.7; margin-right: 0.3rem; }
+.proto-switch a { text-decoration: none; padding: 0.35rem 0.8rem; border-radius: var(--r-pill); }
+.proto-switch a[aria-current="true"] { background: var(--color-accent); color: var(--color-ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}
