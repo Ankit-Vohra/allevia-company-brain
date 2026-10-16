@@ -141,6 +141,92 @@ Evidence is `file:line` as read on 17 October 2026 (before the fixes unless a fi
 - **Writes / reads.** `show_path` checks the ids exist, joins consecutive ids by a direct current edge or `algo.SPpaths` (up to 4 hops), re-runs on business relationships only if the shortest path ran through the team's own cards, and excludes memory plumbing (`src/agent/tools/paths.ts:60-122`, `common.ts:32`). Every edge drawn is a real current edge; a path is never made up. Without a `show_path` call the orchestrator falls back to the cited, touched ids (`orchestrator.ts:1199`).
 - **Weak points.** The ids are the model's choice (the prompt, not code, keeps them to what a tool returned this turn); pairs with no connection within 4 hops were returned as nodes with no edge and drawn anyway; `checks.ts` has no path check; **the path lived only in `Turn.events`**, so "which answers walked through this node" could not be asked. (G1)
 
+## The brain keeps growing: real numbers (`graph:story`)
+
+`npm run cli -- graph:story <business>` (and the Brain page's "It keeps growing", `GET /api/:t/graph/story`) counts the nodes and edges of a
+business's own graph per day or week and by kind. It reads two clocks that every write stamps (`createdAt` / `recordedAt`: when the team
+learned it; `asOf`: the date of the source), so the figures are the graph's own and nothing is drawn by hand
+([queries: How the brain grew](falkordb-queries.md)). The real business (`aamdani`), counted by when the team learned it, on 17 October:
+
+| Day | New nodes | New edges | Total nodes | Total edges | Of which, new nodes by kind |
+|---|---|---|---|---|---|
+| 15 Oct (first ingest) | 3,799 | 11,897 | 3,799 | 11,897 | facts and sources 2,535, company 498, work and decisions 423, memory 231, ideas and approvals 32, pictures and posts 70, changes kept 10 |
+| 16 Oct (a day of use) | 283 | 4,911 | 4,082 | 16,808 | facts 67, company 48, work 1, memory 127, ideas and approvals 27, pictures 3 |
+
+After the first big load, one day of use added **283 nodes (+7.4%) and 4,911 edges (+41.3%)**: conversations and the findings behind them,
+the cards the team drafted and what the owner did with them, and the links from each answer to what it touched (most of the edges are
+`TOUCHED` and `CITED`: the brain's memory of its own work). 235 facts that stopped being true are closed with a date, never deleted.
+
+By the date of the source, the same graph shows its history building up week by week (3,833 dated nodes and 10,527 dated edges): 41 nodes
+in the week of 7 Sept, 84 in the next, then 198, 309, 1,233 and 1,968 in the week of 12 Oct, as documents, decisions, readings and
+tasks from the founder's vault, the ops snapshots and GitHub were read in. The demo business (`demo_growth`) holds 713 nodes and 2,602
+edges: its first load on 15 Oct (368 nodes, 703 edges) plus 271 nodes and 1,759 edges from the audit's own runs.
+
+What this does not show, said plainly: the real business has two days of record time, so "it keeps growing" is a day-over-day measurement,
+not months of one; and `demo_growth`'s use since the seed is largely this audit's own test runs. The website's claim should be worded
+as what a graph can honestly say: it grows with every question, decision and approval, and the count is one command.
+
+## An answer follows a few hops, not a reread: tokens and time per answer
+
+Measured on 17 October 2026 with `scripts/bench-efficiency.ts`, on the Claude subscription (no API key), the same model (Sonnet) and answer
+rules in every arm. Three ways to answer the same question:
+
+- **stuff**: one model call whose prompt holds all of the business's documents and nothing else (no tools, no graph). For the real
+  business that is the vault's 114 markdown files (the documents the brain was built from); for Shiftly, every document, chunk, record and
+  reading in its graph written out as text (it has no files outside the graph).
+- **solo**: one agent with the graph tools (`search`, `get_entity`, `neighbors`, `find_paths`, `trace_decision`, `who_owns`, `who_knows`,
+  `impact_of`, `important`, `topics`, `metric_trend`, `history`, `recall`, `cypher`) and no documents in the prompt.
+- **team**: the product as it ships: `ask()` with nothing saved and the tools read-only (Meera plans, desks work, reviewers check, Meera
+  answers, the server checks every citation and number).
+
+"Read" is every token the model had in front of it, from the Agent SDK's own usage numbers for each run (fresh, cached and stored prompt
+tokens: a multi-call answer re-reads its cached prefix each call, so it is counted each time); "evidence" is what the tools handed the model
+(the compact JSON the runtime sends, 4 characters a token) or, for the stuffed arm, the corpus (the same estimate). Time is the wall clock of
+the whole answer. "Says" counts the expected facts found by one regex per question (the same ones the eval sets use); a crude check on
+purpose.
+
+| Business | Question | stuff: read, time | solo: read, time, tool calls, evidence | team: read, time, tool calls |
+|---|---|---|---|---|
+| Real (private) | What breaks if the Instagram token expires? | 300,006, 22.0 s | 38,520, 12.9 s, 2, 2,059 | 106,118, 43.8 s, 7 (a rerun: 93,885, 36.4 s, 5) |
+| Real (private) | Why did we pause daily stories and image posts? | 303,659, 22.0 s | 36,523, 12.6 s, 4, 1,234 | 68,383, 25.9 s, 3 |
+| Shiftly | Why did sign-ups drop this week, and what should we do? | 15,770, 11.1 s (3 of 4 facts) | 57,521, 17.0 s, 7, 3,849 | 250,403, 38.8 s, 19 |
+| Shiftly | What else breaks if the sign-up screen keeps crashing? | 15,771, 10.5 s | 35,450, 14.2 s, 3, 1,761 | 115,032, 47.7 s, 3 |
+| Shiftly | Did pausing the Meta ads cause the sign-up drop? | 15,772, 10.5 s | 40,781, 14.2 s, 7, 2,392 | 138,296, 50.9 s, 9 |
+
+Totals: real business, two questions: stuff 603,665 read in 44 s; solo 75,043 read in 25 s (**8x fewer tokens, 43% less time**); team 174,501
+in 70 s (3.5x fewer tokens, 59% more time). Shiftly, three questions: stuff 47,313 in 32 s; solo 133,752 in 45 s; team 503,731 in 137 s.
+The vault is about 173,000 tokens at four characters a token; the model's own count for the stuffed call was 300,000 read each time.
+
+What it says, honestly:
+
+1. **The graph wins on scale, not on a tiny corpus.** Stuffing costs the whole corpus for every question and grows with the business
+   (6,000 tokens for the demo, 173,000 for a real business that has run for a month); a few hops read one to four thousand tokens of the
+   business's own records whatever its size. On the real business one agent used 8 times fewer tokens and about 40% less time. On a business
+   small enough to fit in a prompt, stuffing is the cheaper way to answer, and the audit says so.
+2. **The 13-person team is not the cheap path.** It plans, delegates, reviews and fact-checks, so it reads 2 to 7 times what one agent does
+   and is slower than stuffing on a single question. What it buys is the part stuffing cannot give: every claim cites a node, each number is
+   checked against a tool's data, a simulated number is called simulated, the path is drawn from the graph, and an approval card comes out.
+3. **Quality, crudely.** Every solo answer contained every expected fact; the stuffed prompt missed one of four on the hero question (it
+   never named the sign-up screen; its answer was otherwise good: on a corpus that small, a stuffed prompt answers well); four of five team answers passed. The fifth was a real defect that only this benchmark found: on the real
+   business the team wrote the answer, looked one more thing up (which turns the earlier text into a "working note"), and then wrote only "I've
+   written the answer above and have nothing to add". The owner would have seen that line. Fixed in `AnswerStream.finish` with a test; the
+   rerun of that question passed (36 s, 93,885 read, 5 tool calls).
+4. **Five questions on two businesses is a measurement, not a benchmark suite.** The stuffed baseline is the vault's documents; the graph also
+   holds the ops snapshots, the registry and GitHub, so a fairer baseline for a real operator would be larger still. `Turn.tokensIn`,
+   `tokensOut`, `modelCalls` and `toolCalls` are now saved on every turn, so a business's own cost per answer is a Cypher query from here on.
+
+## Photo to premium ad: lineage and cost as a graph read
+
+The Studio now turns a rough product photo into a premium, UGC-style ad picture and a 5 second vertical clip (`src/studio/premium.ts`,
+`clip.ts`), both options on the same approval card, and writes the chain into the business's graph (`src/studio/lineage.ts`): the clip
+`DERIVED_FROM` the picture `DERIVED_FROM` the owner's photo, each Higgsfield job a `Document{kind:'generation'}` the asset is
+`SOURCED_FROM`, each cost an `Observation{studio_credits_spent}` that `MEASURES` the asset, the brand and fidelity rules it was built from
+`GUIDED_BY` edges, Nisha's verdict a `REVIEWED` edge, the card and the post read back through `EVIDENCED_BY` and `USES_ASSET`.
+`npm run cli -- graph:lineage <tenant> <assetId>` and `GET /api/:t/assets/:id/lineage` read it. The live check on `demo_growth` (a degraded real
+photograph of an espresso cup): the premium picture 6.5 credits (`gpt_image_2` through `higgsfield product-photoshoot`, mode
+`lifestyle_scene`), Nisha: "Product unchanged", the clip 5 credits (`seedance_2_0_mini`, 720x1280, 5.04 s), 11.5 of the 20 credits agreed;
+files in `docs/creative-live/premium-ad/`, the spend in `docs/higgsfield-spend.md`.
+
 ## Gap register, ranked by hackathon impact
 
 Status is filled in as each fix lands (commit hashes in the progress comments on issue #38).

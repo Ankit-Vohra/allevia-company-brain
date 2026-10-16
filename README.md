@@ -81,6 +81,37 @@ path is checked against the graph before it is drawn. Take FalkorDB away and no 
   `Rule -LEARNED_FROM-> Approval` ([§11](docs/falkordb-queries.md)).
 - **One graph per business** (`allevia_<slug>`), vector and full-text indexes fused in `search`, graph algorithms
   (`pageRank`, `labelPropagation`, `WCC`) on cached projections, and a read-only Cypher escape hatch behind its own guard.
+- **What the team does is in the graph too.** The path under an answer is stored on the turn and can be asked back ("which answers
+  walked through this node?"), a connection owns the facts each read produced, a post and a message advance the goal they were for,
+  and a Studio ad is a chain from the owner's photo through each Higgsfield job and its cost to the card and the post
+  (`graph:lineage`). Every write stamps two clocks, so the brain's growth is a count of its own facts, not a drawing:
+  `npm run cli -- graph:story <business>` and the Brain page's "It keeps growing". [The audit of every feature](docs/graph-audit.md).
+- **An answer follows a few hops instead of rereading the documents** (measured, below).
+
+### Hops, not rereading: tokens and time per answer (measured 17 October 2026)
+
+The same questions, the same model (Sonnet) and the same answer rules, on the Claude subscription, three ways: **stuff** (one model call
+whose prompt holds all of the business's documents), **one agent** (the graph tools, no documents in the prompt) and the **team** (the
+product: Meera plans, desks work, reviewers check, Meera answers). "Read" is everything the model read, in the Agent SDK's own usage
+numbers (the cached prompt prefix counts every call, so a multi-call answer reads more than its context); "evidence" is what the tools
+handed the model. Script: [`scripts/bench-efficiency.ts`](scripts/bench-efficiency.ts), every turn now saves its tokens and tool calls on
+the Turn node.
+
+| Business and corpus | Questions | Stuff the documents | One agent on the graph | The team (as shipped) |
+|---|---|---|---|---|
+| A real business (private): 114 vault files, about 173,000 tokens | 2: what breaks if the Instagram token expires; why we paused daily stories | 604,000 tokens read, 22 s each, 173,000 tokens of "evidence" every time | **75,000 read (8x fewer), 13 s each**, 2 to 4 tool calls, 1,200 to 2,100 tokens of its records | 175,000 read (3.5x fewer), 26 to 44 s, 3 to 7 calls |
+| Shiftly (the synthetic demo): about 6,300 tokens | 3: the hero question, what else breaks, did the ads cause it | 47,000 read, 11 s each | 134,000 read, 14 to 17 s, 3 to 7 calls, 1,800 to 3,800 tokens of evidence | 504,000 read, 39 to 51 s, 3 to 19 calls |
+
+What it says, honestly: the graph wins on **scale**. Handing a model the whole of a real business costs the same 170,000 tokens for every
+question, and the cost grows with the business; an agent that follows a few hops reads one to two thousand tokens of the business's own
+records, 8 times fewer tokens and about 40% less time (the vault is about 173,000 tokens at four characters a token; the model's own
+count for the stuffed call was 300,000 read, cached prefix included). On a business small enough to fit in a prompt (Shiftly,
+6,000 tokens), stuffing is **cheaper** than the agents: the fixed cost of the tools' prompt and of every extra model call outweighs a
+corpus that small. The 13-person team costs more than one agent (it plans, delegates, reviews and fact-checks) and is slower than stuffing
+on a single question; what it buys is the checked answer with its citations and path, which a stuffed prompt cannot give. Every
+one-agent answer contained the expected facts (a regex per question); the stuffed prompt missed one of four on the hero question, and four of
+the five team answers passed: the fifth was a real bug the benchmark found ("I've written the answer above..." replaced the answer on
+the real business), fixed with a test. Five questions on two businesses is a measurement, not a benchmark suite.
 
 The queries and algorithms the product depends on, each with its file and line, parameters, why a table would not do, and a plan
 or timing note: **[`docs/falkordb-queries.md`](docs/falkordb-queries.md)**. A test holds that page to the code. Two FalkorDB 6.0.2
@@ -232,7 +263,12 @@ running), give the owner a team instead of a tool, and make every answer carry i
   the per-edit and daily caps. Nisha's fidelity check compares each against the original, marks any structural change
   and picks "our pick"; a held-back AI edit gets one tighter retry. Under the options the owner asks for changes in plain
   words: light and colour are free, "make it festive", "a different background", "remove the pole" and "make this into an ad
-  saying ..." use the AI editor, and a 5 second 9:16 clip is an explicit, priced extra. People in a photo are kept as they
+  saying ..." use the AI editor, and a 5 second 9:16 clip is an explicit, priced extra. **"Make this a premium UGC ad"** turns a rough product
+  photo into a premium, UGC-style ad picture with Higgsfield's product-photoshoot backend (a lifestyle scene, quoted first at about 6.5
+  credits and capped; the owner's photo goes in as the reference), Nisha checks that the *product* is unchanged, and a 5 second vertical clip
+  from it (about 5 credits) waits on the same card, web and Discord. The job, its cost, the rules it was built from and the chain from the
+  photo are in the graph ([`src/studio/premium.ts`](src/studio/premium.ts), [`lineage.ts`](src/studio/lineage.ts); live check on 17 October:
+  [`docs/creative-live/premium-ad/`](docs/creative-live/premium-ad), 11.5 credits). People in a photo are kept as they
   are unless the business turns on "Blur people's faces in my content"; a photo with a child gets the free clean-up only.
   Dev writes the caption and the owner approves ([`src/studio/`](src/studio)). Spend and the live check are in
   [`docs/higgsfield-spend.md`](docs/higgsfield-spend.md).
@@ -584,6 +620,8 @@ edges nothing refers to; the suite holds both rules (see Tests).
 | `db:telemetry [--dry-run]` | Remove FalkorDB's own `telemetry{<graph>}` streams, which once broke a restart ([#29](docs/notes/falkordb-reply-compact-panic.md)); the server also does it every 10 minutes (`ALLEVIA_TELEMETRY_SWEEP=off` stops that) |
 | `db:export` / `db:import` / `db:busy` | Copy a graph between FalkorDB servers as a verified JSON-lines file, and see what a server is running ([moving to FalkorDB Cloud](docs/falkordb-cloud.md)) |
 | `privacy-scan <tenant>` | Scan every string in a tenant's graph for secrets and personal data (must report 0) |
+| `graph:story <tenant> [--by recorded\|happened] [--bucket day\|week]` | How the business's brain grew: nodes and edges per day or week by kind, from the graph itself (two clocks: when the team learned it, and the date of its source); read-only |
+| `graph:lineage <tenant> <assetId>` | How a Studio picture or clip was made: the photo it came from, each step, the Higgsfield jobs and their cost, the rules, Nisha's check, the card and the post; read-only |
 | `checkup [<url>] --tenant <slug> [--weekly on\|off]` | The free website check-up: top five fixes by likely enquiries; with `--tenant` the site and kind come from onboarding and the run is stored. The web button, `/checkup` and the weekly schedule run it in the background |
 
 ## Tests and evals
