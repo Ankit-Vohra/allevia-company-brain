@@ -116,6 +116,8 @@ export interface ServerDeps {
   studio?: () => Promise<StudioWiring | null>;      // the Studio's assets, vision and engine; absent: 501
   google?: () => Promise<GoogleWiring | null>;      // the Google connectors (Search Console): settings, token store, client; absent: "not switched on yet"
   checkupJobs?: CheckupJobs;                        // the background check-ups ("Check my website"); default: one queue per process
+  // The daily team stand-up run now (src/proactive/wiring.ts runDaily: stand-up, goals, Today's note); absent: 501.
+  standup?: (slug: string, g: GraphHandle, businessId: string) => Promise<{ standup: unknown; brief: unknown }>;
   now?: () => number;
   heartbeatMs?: number;     // SSE keepalive comment interval; 0 turns it off (default 15 s)
   replaySpeed?: number;     // public-mode replay pacing; 1 = about real time, 0 = instant (default 1)
@@ -578,7 +580,7 @@ export function createApp(deps: ServerDeps): Hono {
   registerNumbersRoutes(app, routeCtx);
   registerActionRoutes(app, routeCtx);
   registerConnectorRoutes(app, routeCtx, { ...(deps.google ? { google: deps.google } : {}) });
-  registerWorkRoutes(app, routeCtx);
+  registerWorkRoutes(app, routeCtx, deps.standup);
   registerGraphWorkRoutes(app, routeCtx);
   registerCheckupRoutes(app, routeCtx, { jobs: () => deps.checkupJobs ?? checkupJobs() });
   registerUsageRoutes(app, routeCtx, { actionsLive: () => deps.actions?.live ?? loadConfig().actionsLive });
