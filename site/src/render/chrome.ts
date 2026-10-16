@@ -35,14 +35,14 @@ export function footer(current: string): string {
   <div class="wrap foot__in">
     <div class="foot__intro">
       <p class="foot__sign" aria-hidden="true">allevia</p>
-      <p class="foot__letter">Built in India. Aamdani and AVS Atelier were the first two businesses.</p>
+      <p class="foot__letter">Allevia is built and supported by a small team in India, with Aamdani and AVS Atelier as its first two businesses. We set your team up; you steer it.</p>
     </div>
     <nav class="foot__cols" aria-label="Footer">
       ${col("Product")}
       ${col("Company")}
       ${col("Legal")}
     </nav>
-    <p class="foot__fine">Prices in US dollars, before tax. Screens show sample numbers where labelled.</p>
+    <p class="foot__fine">Prices exclude VAT and GST. Product screens are from the working product in October 2026, with sample numbers where they say so. Illustrations are drawn, not photographs.</p>
   </div>
 </footer>`;
 }

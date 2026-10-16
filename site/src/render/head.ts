@@ -135,7 +135,7 @@ export function head(page: PageDef): string {
   ].filter(Boolean).join("\n    ");
 }
 
-/** The page whose source file Vite is transforming: ctx.path is "/pricing/index.html" (or "/index.html"). */
+/** The page whose source file Vite is transforming: ctx.path is "/how-it-works/index.html" (or "/index.html"). */
 export function pageForRequest(requestPath: string): PageDef | undefined {
   const clean = requestPath.replace(/index\.html$/, "").split("?")[0]!;
   return PAGES.find((p) => p.path === clean);

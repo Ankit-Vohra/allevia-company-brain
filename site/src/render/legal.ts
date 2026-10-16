@@ -453,7 +453,7 @@ export function cookies(): string {
       html: `<ul class="ticks">
 <li><strong>No cookies.</strong> This site does not set any cookies.</li>
 <li><strong>No analytics, no ads, no trackers.</strong> There is no analytics service, advertising network, social-media button or tracking pixel on this site, and nothing is loaded from other companies' servers. The fonts are served from this site.</li>
-<li><strong>Nothing saved in your browser.</strong> This site does not store any setting or item in your browser.</li>
+<li><strong>One small setting, only if you ask.</strong> If you change the price currency on the Pricing page, your browser remembers your choice (a single item named <code>allevia.currency</code>) so the prices stay in that currency. It never leaves your browser. Clear your browser's site data to remove it.</li>
 <li><strong>Server logs.</strong> Like every website, our server records the address, time and page of each request, and your browser's name. We use it to keep the site working and to spot abuse, and keep it for ${COMMITMENTS.logRetentionDays} days.</li>
 </ul>`,
     },
