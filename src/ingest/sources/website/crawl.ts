@@ -464,6 +464,8 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
         // site whose words are in its HTML is still read.
         log(`[crawl] ${site}: render failed (${msg(e).split("\n")[0]}); reading its HTML`);
         try {
+          // a page that hung the browser stays an error page (its script is the problem); only a browser that never started is worked around
+          if (!browserError) throw e;
           const dom = fromCapture(staticCapture(doc.body.toString("utf8"), site), origin);
           const xrt = doc.headers["x-robots-tag"];
           page = {
