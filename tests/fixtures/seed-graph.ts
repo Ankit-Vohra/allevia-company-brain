@@ -11,20 +11,8 @@ import { addObservation, closeEdge, upsertEdge, upsertNode, type ObservationInpu
 export const D = (iso: string): number => Date.parse(iso.length === 10 ? `${iso}T00:00:00Z` : iso);
 export const SEED_NOW = D("2026-10-15T00:00:00Z"); // the ToolContext.now tests use
 
-// Deterministic stand-in for e5 embeddings: hashed bag of (crudely stemmed) words, L2-normalised. Texts that share
-// words are close; texts that share none are orthogonal.
-export function fakeEmbed(text: string): number[] {
-  const v = new Array<number>(VECTOR_DIM).fill(0);
-  for (const raw of text.toLowerCase().split(/[^\p{L}\p{N}]+/u)) {
-    if (raw.length < 3) continue;
-    const w = raw.replace(/(ies|es|s)$/, (m) => (m === "ies" ? "y" : ""));
-    let h = 2166136261;
-    for (const ch of w) h = Math.imul(h ^ ch.codePointAt(0)!, 16777619) >>> 0;
-    v[h % VECTOR_DIM]! += 1;
-  }
-  const norm = Math.hypot(...v) || 1;
-  return v.map((x) => x / norm);
-}
+import { fakeEmbed } from "../../src/demo/embed.js";
+export { fakeEmbed };
 
 interface N { type: EntityType; id: string; name: string; summary?: string; props?: Record<string, Prim>; src?: string; asOf?: string; simulated?: boolean }
 
