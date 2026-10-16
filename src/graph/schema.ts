@@ -98,6 +98,9 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   ...pat("Capability", "DEPENDS_ON", ["Channel", "System"]),
   ...pat("Task", "DEPENDS_ON", ["Task", "System", "Decision"]),
   ...pat(["Product", "Feature"], "DEPENDS_ON", ["System", "Feature"]),
+  // a step of a user flow (Feature kind funnel_step) happens on a screen (Page kind app_screen) in the app (Channel): a
+  // broken screen breaks the step, and every step after it
+  ...pat("Feature", "DEPENDS_ON", ["Page", "Channel"]),
   ...pat("Campaign", "DEPENDS_ON", ["Channel", "Page", "Content"]),
   ...pat(["Task", "System", "Event", "Decision"], "BLOCKS", "Task"),
   ...pat("Task", "BLOCKS", "Decision"),
