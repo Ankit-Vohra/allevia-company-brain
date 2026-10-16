@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import type { OnboardEvent } from "../../shared/contracts.js";
 import { closeAll, openGraphByName, type GraphHandle } from "../../src/graph/client.js";
 import { getTenant } from "../../src/graph/tenants.js";
-import { onboard, startUrl, type OnboardDeps, type OnboardResult } from "../../src/onboard/onboard.js";
+import { onboard, softMessage, startUrl, type OnboardDeps, type OnboardResult } from "../../src/onboard/onboard.js";
 import { localRuleId } from "../../src/ingest/sources/website/seo.js";
 import { scanGraph } from "../../src/ingest/privacy.js";
 import { testGraph } from "../helpers/graph.js";
@@ -184,7 +184,9 @@ describe("onboard (fixture site, fake LLM, test graph)", () => {
       const failing = new FakeLlm({ failPaths: ["/about"] });
       const evs: OnboardEvent[] = [];
       const r = await onboard(input(), (e) => evs.push(e), deps(failing, other));
-      expect(evs.filter((e) => e.type === "error").map((e) => (e as { message: string }).message)).toEqual([expect.stringMatching(/^understand: \/about: extraction failed/)]);
+      // the owner reads a plain sentence and the set-up goes on (the raw reason stays in the run report)
+      expect(evs.filter((e) => e.type === "error")).toEqual([{ type: "error", message: softMessage("understand"), soft: true }]);
+      expect(r.errors).toEqual([expect.stringMatching(/^understand: \/about: extraction failed/)]);
       expect(evs.at(-1)!.type).toBe("done");
       expect(r.counts.Page).toBe(first.counts.Page);
     } finally {

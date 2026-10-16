@@ -264,7 +264,7 @@ function ApprovalCard({ a, advanced, recTitle, onDecide, tz, locale }: { a: Appr
               )}
               <p className="detail-k">The draft</p>
               <p className="doc-title">{a.payload.title}</p>
-              <p className="doc-body">{a.payload.body}</p>
+              <p className="doc-body">{a.payload.body.replace(/^Evidence: .*$/gm, "").replace(/\n{3,}/g, "\n\n").trim()}</p>
               {recTitle && <p className="detail-why">Why: <Link to="/insights">{withoutSim(recTitle)}</Link></p>}
             </div>
           </Reveal>
@@ -285,10 +285,10 @@ function ApprovalCard({ a, advanced, recTitle, onDecide, tz, locale }: { a: Appr
               <Icon name="check" size={16} /> {busy === "approve" ? "Approving…" : "Approve"}
             </button>
             <button type="button" className="btn btn-ghost" onClick={() => setEditing(true)} disabled={busy !== null}>
-              <Icon name="pen" size={15} /> Edit
+              <Icon name="pen" size={15} /> Change
             </button>
             <button type="button" className="btn btn-quiet" onClick={() => go("reject")} disabled={busy !== null}>
-              {busy === "reject" ? "Rejecting…" : "Reject"}
+              {busy === "reject" ? "Saying no…" : "No thanks"}
             </button>
           </>
         )}

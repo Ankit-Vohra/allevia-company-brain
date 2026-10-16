@@ -155,10 +155,15 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
       log(`[onboard] event listener threw: ${msg(err)}`);
     }
   };
+  // A stage that could not finish. The run goes on and ends with `done` unless the stage is one nothing can go on without
+  // (the input, the business itself): then it is the end, and says so. Otherwise the owner is told in plain words what is
+  // missing, never the stage's own error text, and the set-up still finishes (the log and the run report keep the real one).
+  const FATAL = new Set(["input", "tenant"]);
   const fail = (stage: string, e: unknown) => {
     const m = `${stage}: ${msg(e)}`;
     errors.push(m);
-    send({ type: "error", message: m });
+    if (FATAL.has(stage)) send({ type: "error", message: m });
+    else send({ type: "error", message: softMessage(stage), soft: true });
   };
 
   // ---------- input and tenant ----------
@@ -630,3 +635,21 @@ export async function countGraph(g: GraphHandle): Promise<Record<string, number>
   out.edges = edges;
   return out;
 }
+
+// What the owner reads when one step of the set-up could not finish but the rest could (the raw reason stays in the log).
+const SOFT: Record<string, string> = {
+  crawl: "One page of your website could not be read, so it is left out.",
+  brand: "We could not read your colours or fonts yet. Your team will use plain defaults until you add a logo.",
+  "brand files": "We could not read one of your brand files.",
+  seo: "The website check did not finish. Use \"Check my website\" in a minute.",
+  understand: "We read most of your website but not all of it. Your team will learn the rest as you talk to it.",
+  profile: "We could not write down your business details yet. Your team will ask you when it needs them.",
+  playbooks: "The ready-made playbooks for your kind of business did not load. Your team works without them for now.",
+  goals: "We could not suggest your goals yet. They will show on your growth plan once they are ready.",
+  baseline: "We could not write down where you start yet. It will be filled in after your first full week.",
+  index: "We could not finish filing what we read for search, so some answers may miss things until it is done again.",
+  capabilities: "We could not check which of your accounts the team can see yet.",
+  done: "The final tally did not finish. Nothing was lost.",
+  stopped: "The set-up was stopped.",
+};
+export const softMessage = (stage: string): string => SOFT[stage] ?? "One step of the set-up did not finish. Your team can still work; ask us to redo it.";
