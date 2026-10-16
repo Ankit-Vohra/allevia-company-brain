@@ -62,7 +62,7 @@ html { scroll-behavior: auto; }
 .card__name { font-size: clamp(1.9rem, 1.6rem + 0.9vw, 2.35rem); line-height: 1.05; font-weight: 400; letter-spacing: -0.02em; color: var(--color-ink); }
 .card__role { margin-top: -0.45rem; font-size: 0.9375rem; color: var(--color-muted); }
 .card__best { font-size: 1.0625rem; line-height: 1.45; color: var(--color-ink-2); text-wrap: pretty; }
-.card__label { font-weight: 600; color: var(--color-ink); margin-right: 0.15rem; }
+.card__label { display: block; margin-bottom: 0.15rem; font-size: 0.875rem; font-weight: 600; color: var(--color-muted); }
 .card__asks { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0.2rem 0 0.1rem; }
 .card__asks li { padding: 0.42rem 0.8rem; background: var(--color-accent-soft); border-radius: var(--r-card); font-size: 0.9375rem; line-height: 1.3; color: var(--color-ink); }
 .tools { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.3rem 0 0; }
@@ -127,6 +127,9 @@ html.can-animate .hop.is-seen .hop__heart { animation: heart 1000ms var(--ease-o
 
 /* the trail and the walking dog exist only on wide screens that welcome motion */
 .trail__line, .trail__dog { display: none; }
+/* the scrollcraft act is an empty box over the whole trail: the engine writes the reader's progress on it, and an empty box keeps
+   that write from restyling every card (a custom property is inherited by everything under the element it is set on) */
+.trail__act { position: absolute; inset: 0; pointer-events: none; visibility: hidden; }
 
 /* ================================================================== the trail (wide screens, motion welcome) ======== */
 

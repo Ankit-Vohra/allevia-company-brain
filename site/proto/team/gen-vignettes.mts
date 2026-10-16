@@ -143,7 +143,7 @@ for (const a of AGENTS) {
   }
   const rug = { x: 6, y: 16, w: 52, h: 38 };
   if (a.department === "leadership") rugGold(back as any, rug); else rugTinted(back as any, rug, dept.hue);
-  if (!kind) drawFloorItem(back as any, { kind: "bookshelf", rect: { x: 8, y: 5, w: 26, h: 26 } }, pal);
+  if (!kind) drawFloorItem(back as any, { kind: "bookshelf", rect: { x: 3, y: 3, w: 26, h: 26 } }, pal);
   drawFloorItem(back as any, { kind: "plant", rect: { x: 49, y: 32, w: 10, h: 14 } }, pal);
   drawChair(back as any, d, pal);
   drawDesk(front as any, d, pal, { working: true, t: 0, lamp: true });

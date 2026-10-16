@@ -47,6 +47,9 @@ const SAY: Record<string, Say> = {
 const TEAM_NAME: Record<string, string> = { coe: "Numbers" };
 const teamName = (dept: string) => TEAM_NAME[dept] ?? DEPARTMENTS.find((d) => d.id === dept)?.name ?? dept;
 const agent = (id: string): AgentDef => AGENTS.find((a) => a.id === id)!;
+/** The order of the walk (the founder's): Chief of Staff, Numbers, Analytics, Marketing, Content Studio, Sales, Tech, Ops, Library. */
+const ORDER = ["leadership", "coe", "analytics", "marketing", "content", "sales", "tech", "ops", "knowledge"];
+const WALK = [...PEOPLE].sort((a, b) => ORDER.indexOf(a.dept) - ORDER.indexOf(b.dept));
 
 // ---------- the dogs, as one set of symbols the page re-uses ----------
 
@@ -147,15 +150,16 @@ function gang(n: number): string {
 
 function story(): string {
   const n = numberWord(STAFF_COUNT);
-  const cards = PEOPLE.map((p, i) => card(p, i) + hop(i)).join("") + gang(PEOPLE.length);
+  const cards = WALK.map((p, i) => card(p, i) + hop(i)).join("") + gang(WALK.length);
   return `${symbols()}
 <main id="main" class="team">
   <header class="team__head wrap">
     <h1 class="h2 h2--wide"><span class="t1">Meet the people</span> <span class="t2">who run on your brain.</span></h1>
     <p class="lede">${esc(n.charAt(0).toUpperCase() + n.slice(1))} people, each with a name, a job and a way of working. Fluffy walks you over to meet each one.</p>
   </header>
-  <section class="trail" id="walk" data-sc-act="flow" aria-labelledby="walk-h">
+  <section class="trail" id="walk" aria-labelledby="walk-h">
     <h2 class="visually-hidden" id="walk-h">The team, one person at a time</h2>
+    <div class="trail__act" data-sc-act="flow" aria-hidden="true"></div>
     <svg class="trail__line" data-line aria-hidden="true" focusable="false"><path d=""/></svg>
     <div class="trail__dog" data-dog data-pose="sit" data-facing="right" data-reward="treat" aria-hidden="true">
       <div class="dog__flip">${dogFrames("fluffy", "dog__svg")}${treatSvg("dog__treat")}<svg class="dog__pat" viewBox="0 0 4 8" shape-rendering="crispEdges" aria-hidden="true"><rect class="pat__sleeve" x="0" y="0" width="4" height="5"/><rect class="pat__hand" x="0" y="5" width="4" height="3"/></svg>${heartSvg("dog__heart")}</div>

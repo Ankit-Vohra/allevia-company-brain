@@ -1,10 +1,11 @@
 // "Meet your team": the motion of the page. Two modes, chosen once (the inline script in index.html already set html.is-scroll):
-//   scroll  wide screen, motion welcome. The vendored scrollcraft engine pins the walk and publishes the reader's place in it as
-//           --sc-p (0..1) on the act. This file reads that one number (through a MutationObserver on the act: no scroll listener,
-//           no loop of its own) and sets the camera, the dog, and which person is speaking. Pinning and scrubbing are the
-//           engine's sticky stage; the page scrolls natively and nothing here touches the scroll.
-//   cards   a phone, a tablet, reduced motion, data saver, or the engine failing. An ordinary page; the cards and the dog between
-//           them come in once as you reach them (never with reduced motion), and the page is complete without JavaScript.
+//   scroll  wide screen, motion welcome. The page is an ordinary scrolling page. The vendored scrollcraft engine publishes the reader's
+//           place in the walk as --sc-p on the act; this file reads that through a MutationObserver (no scroll listener, no loop of its
+//           own) and moves Fluffy down the thin trail between the cards, so she is always beside the person you are reading. She
+//           walks from card to card, sits by each, gets a treat or a pat, and trots on. The person she sits by looks up and waves.
+//           Only her transform changes while you scroll; her frames, the treat and the heart are CSS.
+//   cards   a phone, a tablet, reduced motion, data saver, or the engine failing. The same cards stacked, the dog between them.
+//           On a phone the cards and the dog come in once as you reach them; with reduced motion nothing moves.
 // The engine is never edited (site/vendor/scrollcraft/NOTICE.md).
 //
 // The engine's stylesheet is imported before the shared base so the site's own body, focus and type rules win over its defaults;
@@ -24,217 +25,212 @@ const wantScroll = !reduce && !narrow && !saveData;
 for (const q of ["(prefers-reduced-motion: reduce)", "(max-width: 860px)"]) mq(q).addEventListener("change", () => location.reload());
 
 const clamp = (x: number, a = 0, b = 1) => Math.min(b, Math.max(a, x));
-const smooth = (x: number) => { x = clamp(x); return x * x * x * (x * (x * 6 - 15) + 10); };
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const ease = (x: number) => { x = clamp(x); return x * x * x * (x * (x * 6 - 15) + 10); };
 const all = <T extends Element>(sel: string, el: ParentNode = document) => [...el.querySelectorAll<T>(sel)];
 
-if (wantScroll) void mountWalk();
-else mountCards();
+revealCards(wantScroll);
+if (wantScroll) void mountTrail();
+else root.classList.remove("is-scroll");
 
-// ================================================================== cards ==============================================
+// ================================================================== the cards ==========================================
 
-function mountCards() {
-  root.classList.remove("is-scroll");
-  if (reduce) return;                                  // static: every card and the dog are simply there
+/** Cards come in once as you reach them (never with reduced motion); the person waves and their tools hop once on a phone. */
+function revealCards(trail: boolean) {
+  const cards = all<HTMLElement>(".card");
+  const hops = all<HTMLElement>(".hop");
+  if (!("IntersectionObserver" in window)) return;
+  // typing only where someone can see it
+  const typing = new IntersectionObserver((es) => { for (const e of es) (e.target as HTMLElement).classList.toggle("in-view", e.isIntersecting); }, { rootMargin: "60px 0px" });
+  cards.forEach((c) => typing.observe(c));
+  if (reduce) return;
   root.classList.add("can-animate");
-  const targets = all<HTMLElement>(".card, .hop");
-  if (!("IntersectionObserver" in window)) { targets.forEach((t) => t.classList.add("is-seen")); return; }
   const io = new IntersectionObserver((entries) => {
-    for (const e of entries) if (e.isIntersecting) { (e.target as HTMLElement).classList.add("is-seen"); io.unobserve(e.target); }
-  }, { rootMargin: "0px 0px -12% 0px", threshold: 0.12 });
-  targets.forEach((t) => io.observe(t));
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      const el = e.target as HTMLElement;
+      el.classList.add("is-seen");
+      io.unobserve(el);
+    }
+  }, { rootMargin: "0px 0px -10% 0px", threshold: 0.1 });
+  cards.forEach((c) => io.observe(c));
+  hops.forEach((h) => io.observe(h));
+  if (trail) return;                                   // on wide screens the walking dog decides who waves
+  const wave = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { (e.target as HTMLElement).classList.add("is-on"); wave.unobserve(e.target); }
+  }, { threshold: 0.6 });
+  cards.forEach((c) => wave.observe(c));
 }
 
-// ================================================================== the walk ===========================================
+// ================================================================== the trail ==========================================
 
-// where in each person's stretch of the walk (0..1) each thing happens
-const WALK = 0.34;       // the camera moves to the desk (the first person: the dog comes in at the door)
-const BUBBLE = 0.40;     // the person turns, waves and speaks
-const TOOLS = 0.50;      // their tools pop in
-const TREAT = 0.74;      // the treat is thrown
-const LEAVE = 0.95;      // the bubble closes, the dog is ready to go on
-const FINALE = 1.15;     // the game room: the other two dogs, the last word
-// where things sit on screen, as a fraction of the stage's width: the person being introduced, and the dog
-const AGENT_AT = 0.6;
-const DOG_AT = 0.34;
-// in office pixels (the same numbers as team.css): the top of the dog's box, where the treat starts and where her mouth is
-const DOG_TOP = 109, TREAT_Y = 60, MOUTH_Y = 109 + 9;
-
-interface Beat { id: string; agent: HTMLElement; who: HTMLElement[]; cx: number }
-
-async function mountWalk() {
-  const act = document.querySelector<HTMLElement>(".walk");
+async function mountTrail() {
+  const act = document.querySelector<HTMLElement>(".trail");
   if (!act) return;
   try {
     await import("../../vendor/scrollcraft/scrollcraft.js");
     if (!window.ScrollCraft) throw new Error("scrollcraft did not start");
     window.ScrollCraft.mount(document.body);
   } catch {
-    mountCards();                                      // the cards are complete on their own
+    root.classList.remove("is-scroll");                // the cards are complete on their own
     return;
   }
-  new Walk(act).start();
+  new Trail(act).start();
 }
 
-class Walk {
-  private cam: HTMLElement;
-  private rail: HTMLElement;
+interface Stop { el: HTMLElement; card: HTMLElement | null; side: -1 | 0 | 1; a: number; x: number; y: number; reward: "treat" | "pat" }
+
+class Trail {
   private dog: HTMLElement;
-  private bar: HTMLElement;
-  private beats: Beat[] = [];
-  private pets: HTMLElement[];
-  private pieces: HTMLElement[];
-  private T: number[] = [];            // the camera's place (rail pixels) for each person, then the game room
-  private W = 0;
-  private px = 5;
+  private line: SVGPathElement;
+  private signal: HTMLElement;
+  private stops: Stop[] = [];             // the cards in order, then the end of the walk
+  private startPt = { x: 0, y: 0 };
+  private top = 0;
+  private vh = 0;
+  private dw = 1;
   private dogW = 0;
-  private startLeft = 0;
-  private baseLeft = 0;
+  private dogH = 0;
+  private dpx = 5;
   private p = -1;
-  private camX = NaN;
-  private dogX = NaN;
+  private x = NaN;
+  private y = NaN;
   private dist = 0;
   private pose = "";
   private facing = "";
-  private shown = { i: -2, mask: -1 };
+  private reward = "";
+  private happy = "";
+  private active = -2;
   private idle = 0;
 
   constructor(private act: HTMLElement) {
-    this.cam = act.querySelector<HTMLElement>("[data-cam]")!;
-    this.rail = act.querySelector<HTMLElement>("[data-rail]")!;
     this.dog = act.querySelector<HTMLElement>("[data-dog]")!;
-    this.bar = act.querySelector<HTMLElement>("[data-bar]")!;
-    this.pets = all<HTMLElement>(".pet", act);
-    this.pieces = all<HTMLElement>(".piece", act);
-    this.beats = all<HTMLElement>(".agent", act).map((agent) => {
-      const id = agent.dataset.agent!;
-      return { id, agent, who: all<HTMLElement>(`.who[data-for="${id}"]`, act), cx: 0 };
-    });
+    this.line = act.querySelector<SVGPathElement>("[data-line] path")!;
+    this.signal = act.querySelector<HTMLElement>("[data-sc-act]")!;
   }
 
   start() {
     this.measure();
-    // the engine writes --sc-p on the act whenever the reader's place changes; that is the whole input
-    new MutationObserver(() => this.read()).observe(this.act, { attributes: true, attributeFilter: ["style"] });
-    new ResizeObserver(() => { this.measure(); this.apply(this.p < 0 ? 0 : this.p, true); }).observe(this.cam);
-    void document.fonts?.ready.then(() => { this.measure(); this.apply(this.p < 0 ? 0 : this.p, true); });
-    // typing only where someone can see it
-    if ("IntersectionObserver" in window) {
-      const io = new IntersectionObserver((es) => { for (const e of es) (e.target as HTMLElement).classList.toggle("is-seen", e.isIntersecting); }, { rootMargin: "0px 120px" });
-      this.pieces.forEach((pc) => io.observe(pc));
-    }
-    this.read(true);
+    // the engine writes --sc-p on the act whenever the reader's place changes; that is the whole trigger
+    new MutationObserver(() => this.read()).observe(this.signal, { attributes: true, attributeFilter: ["style"] });
+    new ResizeObserver(() => { this.measure(); this.apply(true); }).observe(this.act);
+    void document.fonts?.ready.then(() => { this.measure(); this.apply(true); });
+    this.dog.classList.add("is-ready");
+    this.apply(true);
   }
 
-  private read(force = false) {
-    const p = clamp(parseFloat(this.act.style.getPropertyValue("--sc-p")) || 0);
-    if (force || p !== this.p) this.apply(p);
+  private read() {
+    const p = clamp(parseFloat(this.signal.style.getPropertyValue("--sc-p")) || 0);
+    if (p !== this.p) this.apply(false);
   }
 
-  /** Where everything stands: the camera for each person, the dog's places, the treat's flight. In pixels of this window. */
+  /** Where each card is (page position of its middle), where the dog sits beside it, and the trail that joins them. */
   private measure() {
-    this.W = this.cam.clientWidth;
-    const railLeft = this.rail.getBoundingClientRect().left;
-    const centre = (el: Element) => { const r = el.getBoundingClientRect(); return r.left - railLeft + r.width / 2; };
-    this.beats.forEach((b) => { b.cx = centre(b.who[0]!); });
-    const first = this.beats[0]?.who[0];
-    this.px = first ? first.offsetWidth / 16 || 5 : 5;
+    const box = this.act.getBoundingClientRect();
+    this.top = box.top + scrollY;
+    this.vh = innerHeight;
     this.dogW = this.dog.offsetWidth;
-    this.T = this.beats.map((b) => b.cx - this.W * AGENT_AT);
-    const jj = this.act.querySelector(".pet--jj");
-    this.T.push(jj ? centre(jj) - this.W * 0.66 : (this.T[this.T.length - 1] ?? 0));
-    this.baseLeft = this.W * DOG_AT - this.dogW / 2;
-    const door = this.act.querySelector(".piece--entrance");
-    const doorX = door ? centre(door) - (door as HTMLElement).offsetWidth / 2 + 6 * this.px : 0;
-    this.startLeft = Math.max(-this.dogW, doorX - (this.T[0] ?? 0) - this.dogW / 2);
-    // where JJ and Zoe trot to, on the lane beside Fluffy, once the camera has settled on the game room
-    const finalLeft = this.W * 0.47 - this.dogW / 2;
-    const lastT = this.T[this.T.length - 1] ?? 0;
-    this.pets.forEach((pet) => {
-      const n = pet.dataset.pet === "jj" ? 0 : 1;      // JJ stands next to Fluffy, Zoe beside him
-      const leftNow = centre(pet) - pet.offsetWidth / 2 - lastT;
-      const target = finalLeft + (n + 1) * (this.dogW + 3 * this.px);
-      const sy = parseFloat(pet.style.getPropertyValue("--sy")) || 0;
-      pet.style.setProperty("--mx", `${(target - leftNow).toFixed(1)}px`);
-      pet.style.setProperty("--my", `${((DOG_TOP - sy) * this.px).toFixed(1)}px`);
+    this.dogH = this.dog.offsetHeight;
+    this.dpx = this.dogW / 23 || 5;
+    const cards = all<HTMLElement>(".stop[data-stop]", this.act);
+    const left = cards.find((c) => c.dataset.side === "left")?.querySelector<HTMLElement>(".card");
+    const right = cards.find((c) => c.dataset.side === "right")?.querySelector<HTMLElement>(".card");
+    const l = left?.getBoundingClientRect(), r = right?.getBoundingClientRect();
+    const cx = l && r ? (l.right + r.left) / 2 - box.left : box.width / 2;
+    const gutter = l && r ? r.left - l.right : 120;
+    const amp = clamp(gutter / 2 - this.dogW / 2 - 6, 4, 44);
+    this.stops = cards.map((el, i) => {
+      const card = el.querySelector<HTMLElement>(".card")!;
+      const cr = card.getBoundingClientRect();
+      const side = el.dataset.side === "left" ? -1 : 1;
+      const a = cr.top + cr.height / 2 + scrollY - this.top;
+      return { el, card, side, a, x: cx + side * amp, y: a + cr.height * 0.14, reward: i % 2 === 0 ? "treat" : "pat" } as Stop;
     });
-    // the treat's flight from the desk to the dog's mouth (the same for every person, because every desk stops in the same place)
-    const gx = this.baseLeft + this.dogW * 0.9 - this.W * AGENT_AT;
-    const gy = MOUTH_Y * this.px - TREAT_Y * this.px;
-    this.act.style.setProperty("--gx", `${gx.toFixed(1)}px`);
-    this.act.style.setProperty("--gy", `${gy.toFixed(1)}px`);
+    const gang = this.act.querySelector<HTMLElement>("[data-gang]");
+    const slot = this.act.querySelector<HTMLElement>("[data-slot]");
+    if (gang && slot) {
+      const sr = slot.getBoundingClientRect();
+      const gr = gang.getBoundingClientRect();
+      this.stops.push({ el: gang, card: null, side: 0, a: gr.top + gr.height / 2 + scrollY - this.top, x: sr.left + sr.width / 2 - box.left, y: sr.bottom + scrollY - this.top, reward: "treat" });
+    }
+    const first = this.stops[0];
+    this.startPt = { x: cx, y: first ? Math.max(30, first.y - 0.55 * this.vh) : 30 };
+    // the dwell: how much scroll the dog stays put beside each card
+    const gaps = this.stops.slice(1).map((s, i) => s.a - this.stops[i]!.a);
+    this.dw = clamp(this.vh * 0.1, 30, 0.3 * Math.min(...gaps, 1e6));
+    // the trail, drawn through the same points the dog walks
+    const pts = [this.startPt, ...this.stops];
+    let d = `M${pts[0]!.x.toFixed(1)} ${pts[0]!.y.toFixed(1)}`;
+    for (let j = 0; j < pts.length - 1; j++) {
+      const a = pts[j]!, b = pts[j + 1]!;
+      const h = (b.y - a.y) * 0.5;
+      d += `C${a.x.toFixed(1)} ${(a.y + h).toFixed(1)} ${b.x.toFixed(1)} ${(b.y - h).toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
+    }
+    this.line.setAttribute("d", d);
   }
 
-  private apply(p: number, force = false) {
-    const N = this.beats.length;
-    const total = N + FINALE;
-    const pos = clamp(p, 0, 1) * total;
-    const i = Math.min(Math.floor(pos), N);
-    const u = pos - i;
-    const dir = p - this.p;
-    this.p = p;
+  private bez(a: { x: number; y: number }, b: { x: number; y: number }, s: number) {
+    const h = (b.y - a.y) * 0.5, u = 1 - s;
+    const x = u * u * u * a.x + 3 * u * u * s * a.x + 3 * u * s * s * b.x + s * s * s * b.x;
+    const y = u * u * u * a.y + 3 * u * u * s * (a.y + h) + 3 * u * s * s * (b.y - h) + s * s * s * b.y;
+    return { x, y };
+  }
 
-    // the camera: it settles on each desk, and moves between them in the first third of each person's stretch
-    const k = i === 0 ? 1 : smooth(u / WALK);
-    const camX = i === 0 ? (this.T[0] ?? 0) : lerp(this.T[i - 1] ?? 0, this.T[i] ?? 0, k);
-    // the dog: she comes in through the door for the first person, stands where she is for the rest, and moves up for the finale
-    const dogX = i === 0 ? lerp(this.startLeft, this.baseLeft, smooth(u / (WALK * 0.9)))
-      : i === N ? lerp(this.baseLeft, this.W * 0.47 - this.dogW / 2, smooth(u / WALK)) : this.baseLeft;
+  private apply(force: boolean) {
+    this.p = clamp(parseFloat(this.signal.style.getPropertyValue("--sc-p")) || 0);
+    if (!this.stops.length) return;
+    // where the reader is looking: the middle of the window, in the act's own coordinates
+    const a = scrollY + this.vh * 0.5 - this.top;
+    const pts = [{ a: this.startPt.y - 1e6, ...this.startPt, dw: 0 }, ...this.stops.map((s) => ({ a: s.a, x: s.x, y: s.y, dw: this.dw }))];
+    pts[0]!.a = this.startPt.y;                         // she waits at the start until the reader is level with it
+    let pos = { x: pts[pts.length - 1]!.x, y: pts[pts.length - 1]!.y };
+    let near = -1;
+    for (let j = 0; j < pts.length - 1; j++) {
+      const p0 = pts[j]!, p1 = pts[j + 1]!;
+      const a0 = p0.a + p0.dw, a1 = p1.a - p1.dw;
+      if (a < a0) { pos = { x: p0.x, y: p0.y }; break; }
+      if (a <= a1) { pos = this.bez(p0, p1, ease((a - a0) / Math.max(1, a1 - a0))); break; }
+    }
+    // who she is sitting beside: the card the reader is level with (a little more room on the way out than the way in)
+    let best = 1e9;
+    this.stops.forEach((s, i) => { const dd = Math.abs(a - s.a); if (dd < best) { best = dd; near = i; } });
+    const into = this.active === near ? 1.25 : 1;
+    const beside = best < this.dw * into ? near : -1;
 
-    if (force || camX !== this.camX) this.rail.style.transform = `translate3d(${(-camX).toFixed(1)}px,0,0)`;
-    if (force || dogX !== this.dogX) this.dog.style.transform = `translate3d(${dogX.toFixed(1)}px,0,0)`;
-    this.bar.style.transform = `scaleX(${clamp(p).toFixed(4)})`;
-
-    // walking: her frame follows the distance the office has slid, and she sits when it stops
-    const moved = (Number.isNaN(this.camX) ? 0 : Math.abs(camX - this.camX)) + (Number.isNaN(this.dogX) ? 0 : Math.abs(dogX - this.dogX));
-    this.camX = camX;
-    this.dogX = dogX;
+    if (force || pos.x !== this.x || pos.y !== this.y) this.dog.style.transform = `translate3d(${Math.round(pos.x - this.dogW / 2)}px,${Math.round(pos.y - this.dogH)}px,0)`;   // whole pixels keep the pixel art crisp
+    const moved = (Number.isNaN(this.x) ? 0 : Math.hypot(pos.x - this.x, pos.y - this.y));
+    const dx = Number.isNaN(this.x) ? 0 : pos.x - this.x;
+    this.x = pos.x;
+    this.y = pos.y;
     window.clearTimeout(this.idle);
-    if (moved > 0.01) {
+    if (beside < 0 && moved > 0.05) {
       this.dist += moved;
-      this.setPose(Math.floor(this.dist / (7 * this.px)) % 2 ? "b" : "a");
-      if (Math.abs(dir) > 1e-5) this.setFacing(dir < 0 ? "left" : "right");
-      this.idle = window.setTimeout(() => this.setPose("sit"), 220);
-    } else this.setPose("sit");
-
-    this.speak(i, u, force);
-  }
-
-  private setPose(v: string) { if (v !== this.pose) { this.pose = v; this.dog.dataset.pose = v; } }
-  private setFacing(v: string) { if (v !== this.facing) { this.facing = v; this.dog.dataset.facing = v; } }
-
-  /** Who is speaking, and how far along they are (bubble, tools, treat). Touches the page only when something changes. */
-  private speak(i: number, u: number, force: boolean) {
-    const N = this.beats.length;
-    let mask = 0;
-    if (i < N) {
-      if (u >= BUBBLE && u < LEAVE) mask |= 1;
-      if (u >= TOOLS && u < LEAVE) mask |= 2;
-      if (u >= TREAT && u < LEAVE) mask |= 4;
+      this.set("pose", Math.floor(this.dist / (5 * this.dpx)) % 2 ? "b" : "a");
+      if (Math.abs(dx) > 0.05) this.set("facing", dx < 0 ? "left" : "right");
+      this.idle = window.setTimeout(() => this.set("pose", "sit"), 220);
     } else {
-      if (u >= 0.4) mask |= 8;       // JJ and Zoe sit up
-      if (u >= 0.55) mask |= 16;     // hearts all round
-      if (u >= 0.7) mask |= 32;      // Fluffy has the last word
+      this.set("pose", "sit");
+      if (beside >= 0) this.set("facing", this.stops[beside]!.side < 0 ? "left" : "right");
     }
-    if (!force && this.shown.i === i && this.shown.mask === mask) return;
-    const before = this.shown.i;
-    this.shown = { i, mask };
-    if (before !== i) this.beats.forEach((b, n) => { if (n !== i) this.set(b, 0); });
-    if (i < N) this.set(this.beats[i]!, mask);
-    for (const pet of this.pets) {
-      pet.classList.toggle("is-up", (mask & 8) !== 0);
-      pet.classList.toggle("is-happy", (mask & 16) !== 0);
-      pet.setAttribute("aria-label", `${pet.dataset.pet === "jj" ? "JJ the chow chow" : "Zoe the poodle"}, ${(mask & 8) !== 0 ? "awake" : "asleep"}`);
-    }
-    this.dog.dataset.happy = mask & (4 | 16) ? "1" : "0";
-    this.dog.dataset.says = mask & 32 ? "1" : "0";
+    this.sit(beside, force);
   }
 
-  private set(b: Beat, mask: number) {
-    const on = (mask & 1) !== 0;
-    b.agent.classList.toggle("is-on", on);
-    b.agent.classList.toggle("is-tools", (mask & 2) !== 0);
-    b.agent.classList.toggle("is-treat", (mask & 4) !== 0);
-    b.who.forEach((w) => w.classList.toggle("is-on", on));
+  /** The card the dog is beside wakes up (the person waves, the tools hop) and she gets a treat or a pat. */
+  private sit(i: number, force: boolean) {
+    if (!force && i === this.active) return;
+    const was = this.stops[this.active];
+    was?.el.classList.remove("is-on");
+    was?.card?.classList.remove("is-on");
+    this.active = i;
+    const s = this.stops[i];
+    this.setData("happy", s ? "1" : "0");
+    if (!s) return;
+    s.el.classList.add("is-on");
+    s.card?.classList.add("is-on");
+    this.setData("reward", s.reward);
+    if (s.card) { this.dog.style.setProperty("--skin", s.card.style.getPropertyValue("--skin")); this.dog.style.setProperty("--shirt", s.card.style.getPropertyValue("--shirt")); }
   }
+
+  private set(k: "pose" | "facing", v: string) { if (this[k] !== v) { this[k] = v; this.dog.dataset[k] = v; } }
+  private setData(k: "reward" | "happy", v: string) { if (this[k] !== v) { this[k] = v; this.dog.dataset[k] = v; } }
 }
