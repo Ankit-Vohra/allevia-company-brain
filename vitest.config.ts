@@ -18,6 +18,9 @@ export default defineConfig({
     pool: "forks",
     // Keep the machine light: at most 4 test processes at once.
     maxWorkers: 4,
+    // Node 24.18 on this Mac dies now and then with SIGTRAP inside V8's incremental-marking GC task (crash reports in
+    // ~/Library/Logs/DiagnosticReports). The GC is not what the tests exercise: collect in one stop-the-world pass instead.
+    execArgv: ["--no-incremental-marking", "--no-concurrent-marking"],
     // The query-shape check: setupFiles record what src/ sends, globalSetup plans it all with EXPLAIN when the run ends.
     globalSetup: ["tests/setup/query-shapes.global.ts", "tests/setup/templates.global.ts"],
     setupFiles: ["tests/setup/query-shapes.ts", "tests/setup/native.ts"],

@@ -33,7 +33,7 @@ describe("makePoster (integration)", () => {
     dir = mkdtempSync(join(tmpdir(), "allevia-poster-"));
     store = new AssetStore(dir);
     await seedKit(g, store);
-  }, 60_000);
+  }, 180_000); // font and logo rendering plus graph writes; slow only when the machine is
   afterAll(async () => {
     await closeSharedRenderer();
     await cleanup();
