@@ -7,6 +7,8 @@ import { TEAM_SECTIONS } from "./team-sections.ts";
 
 import { esc } from "./util.ts";
 import { heroA } from "./hero-sections.ts";
+import { HOME_SECTIONS } from "./home-sections.ts";
+import { PAGE_SECTIONS } from "./page-sections.ts";
 export { esc };
 
 /** The pages of the site, in the order of the top bar. */
@@ -63,6 +65,8 @@ export { hasLogo, CHIP_ROWS };
 
 export const SECTIONS: Record<string, (page: string) => string> = {
   ...TEAM_SECTIONS,
+  ...HOME_SECTIONS,
+  ...PAGE_SECTIONS,
   "hero-a": () => heroA(),
   nav: (page) => nav(NAV.some((n) => n.id === page) ? page : "", page === "b" ? "/b/" : "/a/"),
   footer: () => footer(),

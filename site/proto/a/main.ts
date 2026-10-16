@@ -1,6 +1,7 @@
 // Prototype A: the home page with the 3D brain. The scene is a separate chunk loaded once the page is parsed and the browser is idle,
 // so the headline, the buttons and the still picture of the brain paint first.
 import "../shared/entry.ts";
+import "../shared/home.css";
 import "./a.css";
 import { initHome } from "../shared/home-client.ts";
 

@@ -133,7 +133,7 @@ function makePiece(id: string, kind: PieceOut["kind"], roomIn: any | null, width
   const dx = roomIn ? WALL - roomIn.rect.x : 0;
   const dy = roomIn ? FLOOR_TOP - roomIn.rect.y : 0;
   const W = WALL + zw + WALL;
-  const inZone = (it: any) => it.rect.x >= roomIn.rect.x - 1 && it.rect.x + it.rect.w <= roomIn.rect.x + roomIn.rect.w + 1;
+  const inZone = (it: any) => it.rect.x >= roomIn.rect.x - 4 && it.rect.x + it.rect.w <= roomIn.rect.x + roomIn.rect.w + 1;
   const room = roomIn && {
     ...roomIn,
     rect: moveRect(roomIn.rect, dx, dy), inner: moveRect(roomIn.inner, dx, dy),

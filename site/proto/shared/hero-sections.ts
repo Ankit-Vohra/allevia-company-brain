@@ -50,7 +50,7 @@ export function heroA(): string {
   <div class="hero__stage" data-stage aria-hidden="true">
     <div class="hero__glow" data-glow></div>
     <div class="hero__floor" data-floor></div>
-    <img class="hero__still" data-still src="/shared/img/brain-core-1100.webp" srcset="/shared/img/brain-core-640.webp 640w, /shared/img/brain-core-1100.webp 1100w" sizes="520px" width="1100" height="1100" alt="" decoding="async" fetchpriority="high">
+    <img class="hero__still" data-still src="/shared/img/brain-still-900.webp" srcset="/shared/img/brain-still-480.webp 480w, /shared/img/brain-still-900.webp 900w" sizes="380px" width="900" height="900" alt="" decoding="async" fetchpriority="high">
     <canvas class="hero__canvas" data-canvas></canvas>
     <div class="hero__chips" data-chips>${chips}</div>
     <div class="hero__bubble" data-bubble><span class="hero__bubble-name" data-bubble-name></span><span class="hero__bubble-text" data-bubble-text></span></div>

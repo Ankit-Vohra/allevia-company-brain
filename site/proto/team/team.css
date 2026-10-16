@@ -1,0 +1,231 @@
+/* "Meet your team" (issue #37). Loaded after base.css and the vendored scrollcraft devices.
+ *
+ * Two versions of one page, chosen before the first paint by the inline script in index.html (html.is-scroll):
+ *   .walk   wide screen, motion welcome: a pinned stage. The office is one long strip the camera slides along; team.ts reads the
+ *           act's progress (--sc-p, published by the engine) and moves the strip, the dog and the speech bubbles.
+ *   .cards  phones, tablets, reduced motion, data saver, no JavaScript: one card per person, the dog trotting in between.
+ * One logical office pixel is --px on screen (a whole number of CSS pixels, so the pixel art stays crisp). Everything in the
+ * office is placed in logical pixels with calc(var(--x) * var(--px)); nothing is measured in CSS.
+ * Motion rules: transform and opacity only, ease-out, 140 to 300 ms for the interface; the treat's flight is the one longer beat.
+ * One accent: the gold, as a fill with ink on it. */
+
+:root {
+  /* the engine's six colour roles and two faces, set from the site's tokens (as the live home page does) */
+  --sc-canvas: var(--color-paper);
+  --sc-surface: var(--color-card);
+  --sc-ink: var(--color-ink);
+  --sc-ink-soft: var(--color-muted);
+  --sc-accent: var(--color-accent);
+  --sc-accent-ink: var(--color-ink);
+  --sc-font-display: var(--font-display);
+  --sc-font-text: var(--font-body);
+  --sc-shadow-color: 32 35% 18%;
+  --nav-h: 4.25rem;
+}
+html { scroll-behavior: auto; }
+
+/* ---------- the top of the page ---------- */
+.team__head { padding-block: clamp(2.5rem, 1.5rem + 4vw, 5rem) clamp(1.5rem, 1rem + 2vw, 3rem); }
+.team__head .h2 { font-size: var(--fs-h1); max-width: 18ch; }
+.team__head .lede { margin-top: 1.25rem; max-width: 34rem; }
+
+.team__close { padding-block: clamp(3.5rem, 2rem + 6vw, 8rem) 0; }
+.team__close .lede { margin-top: 1.25rem; }
+.team__cta { margin-top: 2rem; }
+
+.symbols { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* ---------- which version is on ---------- */
+.walk { display: none; }
+.cards { display: block; }
+html.is-scroll .walk { display: block; }
+html.is-scroll .cards { display: none; }
+
+/* ================================================================== the pieces both versions share ================== */
+
+.fig, .hands, .pet__svg, .dog__svg { overflow: visible; }
+.fig, .hands { width: 100%; height: 100%; }
+.who { position: absolute; z-index: 1; left: calc(var(--sx) * var(--px)); top: calc(var(--sy) * var(--px)); width: calc(16 * var(--px)); height: calc(20 * var(--px)); }
+.who--hands { z-index: 3; }
+.piece__back, .piece__front { position: absolute; left: 0; top: 0; width: 100%; height: 100%; max-width: none; }
+.piece__back { z-index: 0; }
+.piece__front { z-index: 2; }
+
+/* the desk card: name and the roster's title */
+.tagpos { position: absolute; z-index: 4; left: calc(var(--tx) * var(--px)); top: calc(var(--ty) * var(--px)); transform: translateX(-50%); }
+.tag { display: grid; justify-items: center; gap: 0.1rem; padding: 0.22rem 0.6rem 0.28rem; background: #fff; border: 1px solid var(--color-rule); border-radius: var(--r-card); box-shadow: var(--shadow-whisper); white-space: nowrap; line-height: 1.15; }
+.tag b { font-size: 0.8125rem; font-weight: 600; color: var(--color-ink); }
+.tag span { font-size: 0.6875rem; color: var(--color-muted); }
+
+/* the hanging sign of a team: a white chip edged in the team's rug colour, on two cords */
+.sign { position: absolute; z-index: 4; left: calc(var(--x) * var(--px)); top: calc(var(--y) * var(--px)); transform: translate(-50%, -50%); margin: 0; font-family: var(--font-body); }
+.sign span { position: relative; display: block; padding: 0.3rem 0.85rem; background: #fff; border: 2px solid oklch(0.74 0.09 var(--hue)); border-radius: var(--r-pill); font-size: 0.8125rem; font-weight: 600; line-height: 1; color: var(--color-ink); white-space: nowrap; box-shadow: var(--shadow-whisper); }
+.sign::before, .sign::after { content: ""; position: absolute; bottom: 100%; width: 2px; height: calc(4 * var(--px)); background: var(--color-muted); opacity: 0.55; }
+.sign::before { left: 22%; }
+.sign::after { right: 22%; }
+
+/* the people: typing until someone speaks */
+.hands__tap--b, .hands__rest, .hands__wave { opacity: 0; }
+.hands__wave { transform-origin: 14px 13px; transform-box: view-box; }
+.fig { transform-origin: 8px 20px; transform-box: view-box; }
+
+/* tools: logos on small white tiles */
+.tools { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0; }
+.tool { display: grid; justify-items: center; align-content: start; gap: 0.3rem; width: 4.6rem; padding: 0.55rem 0.25rem 0.45rem; background: #fff; border: 1px solid var(--color-rule-2); border-radius: var(--r-card); box-shadow: var(--shadow-lift); font-size: 0.75rem; line-height: 1.15; color: var(--color-ink-2); text-align: center; }
+.tool .logo { width: 30px; height: 30px; border-radius: 6px; }
+.tool span { overflow-wrap: anywhere; }
+
+/* the bubble: white, 12px, a tail toward the person; the question is the founder's message in soft gold */
+.bubble { display: grid; gap: 0.55rem; padding: 1rem 1.1rem 1.05rem; background: #fff; border: 1px solid var(--color-rule); border-radius: var(--r-card); box-shadow: var(--shadow-lift); }
+.bubble__name, .card__name { font-family: var(--font-display); font-weight: 400; font-size: 1.5rem; line-height: 1.08; letter-spacing: -0.015em; color: var(--color-ink); text-wrap: balance; }
+.bubble__does, .card__does { font-size: 1rem; line-height: 1.45; color: var(--color-ink-2); text-wrap: pretty; }
+.bubble__ask, .card__ask { justify-self: start; padding: 0.45rem 0.8rem; background: var(--color-accent-soft); border-radius: var(--r-card); font-size: 0.9375rem; line-height: 1.35; color: var(--color-ink); }
+
+/* ================================================================== the walk (wide) ================================= */
+
+.walk { --px: 5px; position: relative; }
+@supports (width: round(down, 5.4px, 1px)) {
+  .walk { --px: round(down, clamp(3px, calc((100svh - 6.5rem) / 152), 7px), 1px); }
+}
+.skip { position: absolute; z-index: 45; left: var(--gutter); top: calc(var(--nav-h) + 0.75rem); }
+.skip:not(:focus-visible) { clip: rect(0 0 0 0); clip-path: inset(50%); width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; border: 0; white-space: nowrap; }
+
+.walk__stage { display: grid; align-items: center; padding-top: var(--nav-h); background: var(--color-paper); }
+.walk__cam { position: relative; width: 100%; height: calc(152 * var(--px)); overflow-x: clip; }
+.walk__rail { position: absolute; left: 0; top: 0; height: 100%; display: flex; will-change: transform; }
+
+.piece { position: relative; flex: none; width: calc(var(--w) * var(--px)); height: calc(152 * var(--px)); }
+.piece__stage { position: absolute; inset: 0; }
+.says { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+
+/* a person's words sit above their head; the tools pop in front of the desk; the treat starts at the desk */
+.walk .agent { position: absolute; left: calc(var(--ax) * var(--px)); top: calc(var(--ay) * var(--px)); width: 0; height: 0; }
+.walk .bubble {
+  position: absolute; left: 0; bottom: calc(5 * var(--px)); width: min(21rem, 78vw);
+  transform-origin: 50% 100%; opacity: 0; transform: translate(-50%, 10px) scale(0.95);
+  transition: opacity 140ms var(--ease-out), transform 140ms var(--ease-out);
+}
+.walk .bubble::after { content: ""; position: absolute; left: 50%; bottom: -7px; width: 12px; height: 12px; background: #fff; border-right: 1px solid var(--color-rule); border-bottom: 1px solid var(--color-rule); transform: translateX(-50%) rotate(45deg); }
+.walk .agent.is-on .bubble { opacity: 1; transform: translate(-50%, 0) scale(1); transition-duration: 240ms; }
+
+.walk .tools { position: absolute; left: calc((var(--tx) - var(--ax)) * var(--px)); top: calc((var(--ty) - var(--ay)) * var(--px)); transform: translateX(-50%); flex-wrap: nowrap; justify-content: center; }
+.walk .tool { opacity: 0; transform: translateY(12px) scale(0.9); transition: opacity 140ms var(--ease-out), transform 140ms var(--ease-out); }
+.walk .agent.is-tools .tool { opacity: 1; transform: none; transition-duration: 240ms; transition-delay: calc(var(--i) * 70ms); }
+
+.walk .treat { position: absolute; left: calc((var(--dx) - var(--ax)) * var(--px)); top: calc((var(--dy) - var(--ay)) * var(--px)); width: calc(5 * var(--px) * 0.8); height: calc(3 * var(--px) * 0.8); margin: -0.2rem 0 0 -0.5rem; opacity: 0; z-index: 2; }
+.walk .agent.is-treat .treat { animation: toss-x 360ms linear forwards, toss-y 360ms linear forwards, toss-fade 360ms linear forwards; }
+@keyframes toss-x { to { translate: var(--gx, -300px) 0; } }
+@keyframes toss-y {
+  0% { transform: translateY(0); animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); }
+  42% { transform: translateY(-5.5rem); animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.5); }
+  100% { transform: translateY(var(--gy, 220px)); }
+}
+@keyframes toss-fade { 0%, 88% { opacity: 1; } 100% { opacity: 0; } }
+
+/* the figure notices the dog: a hop and a lean toward her, then three waves */
+.who.is-on .fig { animation: notice 260ms var(--ease-out) forwards; }
+@keyframes notice { 0% { transform: none; } 40% { transform: translateY(-0.3rem); } 100% { transform: rotate(-3deg); } }
+.who.is-on .hands__tap { opacity: 0 !important; animation: none !important; }
+.who.is-on .hands__arm-r { opacity: 0; }
+.who.is-on .hands__rest { opacity: 1; }
+.who.is-on .hands__wave { opacity: 1; animation: wave 560ms ease-in-out 3 120ms; }
+@keyframes wave { 0%, 100% { transform: rotate(-14deg); } 50% { transform: rotate(16deg); } }
+
+/* typing: only in the pieces on screen, one frame each half second */
+.piece.is-seen .hands__tap--a { animation: tap-a 640ms steps(1, end) infinite; }
+.piece.is-seen .hands__tap--b { animation: tap-b 640ms steps(1, end) infinite; }
+@keyframes tap-a { 0% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes tap-b { 0% { opacity: 0; } 50% { opacity: 1; } }
+
+/* the dog stays on screen at a set place; the office slides past her. team.ts moves her in and out and picks her frame */
+.dog { position: absolute; left: 0; top: calc(109 * var(--px)); width: calc(23 * var(--px)); height: calc(17 * var(--px)); z-index: 5; will-change: transform; }
+.dog__flip { position: relative; width: 100%; height: 100%; }
+.dog[data-facing="left"] .dog__flip { transform: scaleX(-1); }
+.dog__svg { width: 100%; height: 100%; }
+.df { opacity: 0; }
+.dog[data-pose="a"] .df--a, .dog[data-pose="b"] .df--b, .dog[data-pose="sit"] .df--sit { opacity: 1; }
+.dog__treat { position: absolute; opacity: 0; }
+.dog__heart { position: absolute; left: 56%; top: -22%; width: calc(5 * var(--px) * 1.3); height: calc(5 * var(--px) * 1.3); opacity: 0; }
+.dog[data-happy="1"] .dog__heart { animation: heart 1000ms var(--ease-out) 300ms both; }
+.dog[data-happy="1"] .dog__svg { animation: hop 260ms var(--ease-out) 300ms 2; }
+@keyframes heart { 0% { opacity: 0; transform: translateY(0) scale(0.85); } 22% { opacity: 1; transform: translateY(-0.4rem) scale(1); } 100% { opacity: 0; transform: translateY(-2.2rem) scale(1); } }
+@keyframes hop { 0%, 100% { transform: none; } 45% { transform: translateY(-0.45rem); } }
+
+.dog__says { position: absolute; left: 50%; bottom: calc(100% + 0.9rem); width: 13rem; margin: 0; padding: 0.7rem 0.9rem; background: #fff; border: 1px solid var(--color-rule); border-radius: var(--r-card); box-shadow: var(--shadow-lift); font-size: 1rem; line-height: 1.35; color: var(--color-ink); text-align: center; opacity: 0; transform: translate(-50%, 8px) scale(0.95); transform-origin: 50% 100%; transition: opacity 140ms var(--ease-out), transform 140ms var(--ease-out); }
+.dog__says::after { content: ""; position: absolute; left: 50%; bottom: -7px; width: 12px; height: 12px; background: #fff; border-right: 1px solid var(--color-rule); border-bottom: 1px solid var(--color-rule); transform: translateX(-50%) rotate(45deg); }
+.dog[data-says="1"] .dog__says { opacity: 1; transform: translate(-50%, 0) scale(1); transition-duration: 240ms; }
+.dog[data-facing="left"] .dog__says { transform: translate(-50%, 8px) scale(0.95); }
+
+/* JJ and Zoe nap in the game room and sit up when Fluffy arrives */
+.pet { position: absolute; z-index: 1; left: calc(var(--sx) * var(--px)); top: calc(var(--sy) * var(--px)); width: calc(23 * var(--px)); height: calc(17 * var(--px)); }
+.pet__svg { width: 100%; height: 100%; }
+.pet .df--lie { opacity: 1; }
+.pet .df--sit { opacity: 0; }
+.pet.is-up .df--lie { opacity: 0; }
+.pet.is-up .df--sit { opacity: 1; }
+.pet.is-up .pet__svg { animation: hop 260ms var(--ease-out); }
+.pet--jj, .pet--zoe { --flip: -1; }
+.pet.is-up .pet__svg { transform-origin: 50% 100%; }
+.pet__heart { position: absolute; left: 40%; top: -26%; width: calc(5 * var(--px) * 1.3); height: calc(5 * var(--px) * 1.3); opacity: 0; }
+.pet.is-happy .pet__heart { animation: heart 1000ms var(--ease-out) both; }
+
+.walk__bar { position: absolute; left: var(--gutter); right: var(--gutter); bottom: 1.1rem; height: 3px; border-radius: 2px; background: var(--color-rule); overflow: hidden; }
+.walk__bar i { display: block; width: 100%; height: 100%; background: var(--color-accent); transform-origin: 0 50%; transform: scaleX(0); }
+
+/* ================================================================== the cards (phones, tablets, reduced motion) ===== */
+
+.cards { --px: 4px; --pad: 1rem; padding-inline: var(--gutter); display: grid; justify-items: center; }
+@supports (width: round(down, 5.4px, 1px)) {
+  .cards { --px: round(down, clamp(3px, calc((100vw - 2 * var(--gutter) - 2 * var(--pad)) / 74), 6px), 1px); }
+}
+.card { width: calc(74 * var(--px) + 2 * var(--pad)); max-width: 100%; padding: var(--pad); background: var(--color-card); border: 1px solid var(--color-rule-2); border-radius: var(--r-frame); box-shadow: var(--shadow-frame); }
+.card__scene { position: relative; width: calc(74 * var(--px)); max-width: 100%; height: calc(73 * var(--px)); margin-inline: auto; overflow: hidden; border-radius: var(--r-card); background: var(--color-paper-2); }
+.card__in { position: absolute; left: calc(var(--x0) * var(--px) * -1); top: calc(-12 * var(--px)); width: calc(var(--w) * var(--px)); height: calc(152 * var(--px)); }
+.card__scene .sign { left: 50%; top: calc(10 * var(--px)); }
+.card__body { display: grid; gap: 0.6rem; padding: 1rem 0.25rem 0.25rem; }
+.tools--card { gap: 0.4rem; margin-top: 0.4rem; }
+.tools--card .tool { flex-direction: row; display: flex; align-items: center; gap: 0.45rem; width: auto; padding: 0.3rem 0.7rem 0.3rem 0.35rem; border-radius: var(--r-pill); box-shadow: none; font-size: 0.8125rem; }
+.tools--card .tool .logo { width: 22px; height: 22px; }
+
+/* the dog between the cards: she trots in with a page, sits, gets her treat and a heart */
+.hop { position: relative; width: calc(74 * var(--px) + 2 * var(--pad)); max-width: 100%; height: 6rem; }
+.hop__dog { position: absolute; bottom: 0.4rem; width: 6.2rem; height: 4.6rem; }
+.hop--right .hop__dog { left: 14%; }
+.hop--left .hop__dog { right: 14%; transform: scaleX(-1); }
+.hop__svg { width: 100%; height: 100%; overflow: visible; }
+.hop .df--sit { opacity: 1; }
+.hop__treat { position: absolute; right: 0.35rem; top: 1.45rem; width: 1.1rem; height: 0.66rem; opacity: 0; }
+.hop__heart { position: absolute; right: 0.9rem; top: -0.4rem; width: 1.3rem; height: 1.3rem; opacity: 0; }
+.gang { display: grid; justify-items: center; gap: 0.6rem; margin-top: 0.5rem; width: calc(74 * var(--px) + 2 * var(--pad)); max-width: 100%; }
+.gang__row { display: flex; align-items: flex-end; gap: 0.6rem; }
+.gang__dog { width: 5.6rem; height: 4.15rem; overflow: visible; }
+.gang figcaption { font-size: 1rem; color: var(--color-ink-2); text-align: center; text-wrap: balance; }
+
+/* a card and its dog are in the page already; on a phone they arrive as you reach them (JavaScript adds .can-animate) */
+html.can-animate .card { opacity: 0; transform: translateY(14px); transition: opacity 240ms var(--ease-out), transform 240ms var(--ease-out); }
+html.can-animate .card.is-seen { opacity: 1; transform: none; }
+html.can-animate .hop:not(.is-seen) .hop__dog { opacity: 0; }
+html.can-animate .hop .df--sit { opacity: 0; }
+html.can-animate .hop.is-seen .hop__dog { animation: hop-in 1100ms var(--ease-out) both; }
+html.can-animate .hop.is-seen .df--a { animation: hop-a 1100ms steps(1, end) both; }
+html.can-animate .hop.is-seen .df--b { animation: hop-b 1100ms steps(1, end) both; }
+html.can-animate .hop.is-seen .df--sit { animation: hop-sit 1100ms steps(1, end) both; }
+html.can-animate .hop.is-seen .hop__treat { animation: hop-treat 420ms var(--ease-out) 1000ms both; }
+html.can-animate .hop.is-seen .hop__heart { animation: heart 1000ms var(--ease-out) 1380ms both; }
+@keyframes hop-in { 0% { opacity: 0; transform: translateX(-2.2rem); } 20% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+.hop--left .hop__dog { --mirror: -1; }
+html.can-animate .hop--left.is-seen .hop__dog { animation-name: hop-in-left; }
+@keyframes hop-in-left { 0% { opacity: 0; transform: scaleX(-1) translateX(-2.2rem); } 20% { opacity: 1; } 100% { opacity: 1; transform: scaleX(-1); } }
+@keyframes hop-a { 0% { opacity: 1; } 18% { opacity: 0; } 36% { opacity: 1; } 54% { opacity: 0; } 72% { opacity: 1; } 90%, 100% { opacity: 0; } }
+@keyframes hop-b { 0% { opacity: 0; } 18% { opacity: 1; } 36% { opacity: 0; } 54% { opacity: 1; } 72% { opacity: 0; } 90%, 100% { opacity: 0; } }
+@keyframes hop-sit { 0%, 89% { opacity: 0; } 90%, 100% { opacity: 1; } }
+@keyframes hop-treat { 0% { opacity: 0; transform: translateY(-1.6rem); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(0.9rem); } }
+
+/* reduced motion: the cards are still cards, the dog sits, nothing moves */
+@media (prefers-reduced-motion: reduce) {
+  .hop .df--a, .hop .df--b { opacity: 0 !important; animation: none !important; }
+  .hop .df--sit { opacity: 1 !important; animation: none !important; }
+  .hop__heart { opacity: 1; animation: none !important; }
+  .hop__treat { display: none; }
+  .hands__tap--b { animation: none !important; }
+}

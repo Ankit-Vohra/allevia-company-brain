@@ -41,8 +41,8 @@
   --fs-body: 1.0625rem;
   --fs-lede: clamp(1.125rem, 1.05rem + 0.35vw, 1.3125rem);
   --fs-small: 0.875rem;
-  --fs-h1: clamp(2.4rem, 1.2rem + 3.9vw, 4.5rem);
-  --fs-h2: clamp(1.95rem, 1.2rem + 2.7vw, 3.5rem);
+  --fs-h1: clamp(2.3rem, 1.1rem + 3.3vw, 4rem);
+  --fs-h2: clamp(1.9rem, 1.15rem + 2.4vw, 3.1rem);
   --fs-h3: clamp(1.25rem, 1.15rem + 0.4vw, 1.5rem);
 }
 

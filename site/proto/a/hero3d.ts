@@ -573,7 +573,7 @@ export async function startHero(root: HTMLElement): Promise<void> {
   if (stillMode || reduced) {
     // one calm frame: everything in place, the first answer showing
     advance(3.2);
-    if (stillMode) { startCycle(qi); let guard = 0; while (waiting && guard++ < 600) frame(1 / 30); advance(Number(params.get("t") ?? 6)); }
+    if (stillMode && params.get("bare") !== "1") { startCycle(qi); let guard = 0; while (waiting && guard++ < 600) frame(1 / 30); advance(Number(params.get("t") ?? 6)); }
     if (reduced && !stillMode) {
       cycleOn = false; speaker = null;
       const q = data.questions[qi]!; showBubble(q); showAnswer(q, true);
