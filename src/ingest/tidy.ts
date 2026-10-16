@@ -157,6 +157,27 @@ export async function tidyGraph(g: GraphHandle, deps: TidyDeps): Promise<TidyRep
     retyped: 0, byKind: {}, unclear: [], retired: 0, examples: [], skipped: [], touched: [], errors: [],
   };
   const touched = new Set<string>();
+
+  // ---- 0. what a re-run of extraction put back on a node merged or retired earlier (same id, new edges) ----
+  if (!deps.dryRun) {
+    const stray = await g.roQuery<{ id: string; c: string | null; retired: boolean | null; why: string | null }>(
+      `MATCH (d:Entity)-[r]-(:Entity) WHERE (d.mergedInto IS NOT NULL OR d.retired = true) AND r.until IS NULL AND NOT type(r) IN $history
+       RETURN DISTINCT d.id AS id, d.mergedInto AS c, d.retired AS retired, d.retiredReason AS why ORDER BY id`,
+      { history: [...HISTORY_RELS] });
+    for (const s of stray) {
+      try {
+        if (s.c) {
+          const r = await applyMergePlan(g, { groups: [{ type: "Business", canonical: s.c, members: [{ id: s.id, key: "", basis: "merged earlier" }] }], links: [], skipped: [] }, now, { by: "onboarding", credentials: false });
+          report.edgesMoved += r.edgesMoved;
+          report.errors.push(...r.errors);
+        } else if (s.retired) await retire(g, s.id, s.why?.replace(/^retired: /, "") ?? "retired earlier", now);
+        touched.add(s.id);
+      } catch (e) {
+        report.errors.push(`${s.id}: ${msg(e)}`);
+      }
+    }
+  }
+
   const state = await readGraphState(g, deps.owner.id, { embeddings: true });
   const byId = new Map(state.nodes.map((n) => [n.id, n] as const));
 

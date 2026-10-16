@@ -3,6 +3,9 @@
 //   crawl (a `page` event per page) → brand → seo → understand → profile (country, currency, locale, time zone,
 //   industry template) → playbooks → goals (Allevia 90 and its goals) → baseline (Day-0 baselines from real data, the
 //   Day-0 checkpoint) → index (embeddings) → capabilities (the ladder) → done (counts).
+// Issue #24, so day one is clean and useful: the understand stage ends with the day-one facts (hours, address, prices,
+// catalogue; src/ingest/sources/website/facts.ts), and the index stage with the tidy pass (src/ingest/tidy.ts:
+// near-duplicates merged, other businesses retyped, first names retired, each undoable with db:unmerge).
 // Without a website (`website: false`, or no URL) the website stages, playbooks and index are skipped: that is how a
 // business already in the graph is enrolled in Allevia 90 (`npm run cli -- enroll <tenant>`), with no crawl and no model.
 // Every write is followed by a `nodes` event with what it touched. A failing stage emits an `error` event and the
@@ -36,6 +39,9 @@ import type { AssetStore } from "../studio/store.js";
 import type { VisionRunner } from "../studio/vision.js";
 import type { PublicDataPort } from "../publicdata/service.js";
 import { enrichOwnListing, readBlockedSite } from "../publicdata/enrich.js";
+import { factsWrite, readDayOneFacts } from "../ingest/sources/website/facts.js";
+import type { Ask } from "../ingest/sources/website/ask.js";
+import { tidyGraph } from "../ingest/tidy.js";
 
 export interface OnboardInput {
   name: string;
@@ -227,6 +233,7 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
   let crawlFailure: string | undefined;    // why crawlSite itself threw, if it did
   let siteProfile: Profile | undefined;  // what the website says the business is: its kind and industry pick the template
   let pages: PageData[] = [];
+  let modelCheck: Ask | undefined;       // the cached model questions, for the tidy pass after the index
   if (website) {
   // ---------- crawl ----------
   stage("crawl", `Reading ${domain}`);
@@ -293,6 +300,7 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
   const homeDoc = home ? pageDocId(home.finalUrl) : undefined;
   const legacyOnboard = legacyCacheDir(dataDir, "onboard", input.slug);
   const ask = makeAsk(runner, { model, cacheDir: tenantCacheDir(dataDir, "onboard", input.slug), ...(legacyOnboard ? { legacyCacheDir: legacyOnboard } : {}) });
+  modelCheck = ask;
 
   // ---------- brand ----------
   stage("brand", home ? "Reading colours, fonts, logo and tone" : "Skipped: no page to read");
@@ -426,6 +434,26 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
     }
   }
 
+  // ---------- day-one facts: hours, address, prices and catalogue, as typed props with their page ----------
+  // (after the listing: what the Google Maps listing already says is not written again from the website)
+  if (home && !stopped()) {
+    try {
+      const [listing] = await retrying(() => g.roQuery<{ h: unknown; a: unknown }>("MATCH (c:Entity {id:'channel:google-maps'}) RETURN c.hours AS h, c.address AS a"));
+      const has = { hours: Array.isArray(listing?.h) && listing.h.length > 0, address: typeof listing?.a === "string" && !!listing.a };
+      const facts = await readDayOneFacts(pages, { ask, business: name, listing: has });
+      const products = (await retrying(() => g.roQuery<{ id: string; name: string | null; aliases: unknown; merged: string | null }>(
+        "MATCH (p:Product) RETURN p.id AS id, p.name AS name, p.aliases AS aliases, p.mergedInto AS merged ORDER BY id LIMIT 5000")))
+        .filter((p) => p.name && !p.merged)
+        .map((p) => ({ id: p.id, name: p.name!, ...(Array.isArray(p.aliases) ? { aliases: p.aliases.filter((a): a is string => typeof a === "string") } : {}) }));
+      const { write: w, written } = factsWrite(facts, { businessId, businessName: name, asOf, products, listing: has });
+      await write("understand", w);
+      log(`[onboard] facts: ${written.length ? written.slice(0, 12).join(", ") : "none stated"}${written.length > 12 ? ` and ${written.length - 12} more` : ""}` +
+        `${has.hours || has.address ? " (what the Google Maps listing has is not written again)" : ""}`);
+    } catch (e) {
+      log(`[onboard] facts not read: ${msg(e)}`);
+    }
+  }
+
   } // website
 
   // ---------- profile, playbooks, goals, baseline, index, capabilities ----------
@@ -486,6 +514,26 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
     } catch (e) {
       fail("index", e);
     }
+    // the tidy pass (src/ingest/tidy.ts): near-duplicates merged, other businesses retyped, first names retired, each
+    // undoable with db:unmerge; then the nodes it made (a Supplier, a Partner…) get their vectors too
+    if (!stopped()) {
+      try {
+        const t = await tidyGraph(g, {
+          owner: { id: businessId, name, ...(domain ? { domain } : {}) }, ...(modelCheck ? { ask: modelCheck } : {}),
+          embed: deps.embed ?? embedPassages, now: now(), log,
+        });
+        if (t.touched.length) {
+          const rows = await retrying(() => g.roQuery<{ id: string; labels: string[]; name: string | null }>(
+            "UNWIND $ids AS id MATCH (n:Entity {id:id}) RETURN n.id AS id, labels(n) AS labels, n.name AS name", { ids: t.touched }));
+          const nodes: NodeRef[] = rows.flatMap((r) => { const label = typeOfLabels(r.labels); return label ? [{ id: r.id, label, name: r.name ?? r.id }] : []; });
+          for (let i = 0; i < nodes.length; i += MAX_REFS) send({ type: "nodes", nodes: nodes.slice(i, i + MAX_REFS), edges: [] });
+          await embedMissing(g, deps.embed ?? embedPassages, now);
+        }
+        for (const e of t.errors.slice(0, 3)) log(`[onboard] tidy: ${e}`);
+      } catch (e) {
+        fail("index", `tidy: ${msg(e)}`);
+      }
+    }
   }
 
   if (!stopped()) {
@@ -535,11 +583,13 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
 
 // Entities extraction may resolve to: the business and everything of an extractable type already in the graph.
 async function knownEntities(g: GraphHandle): Promise<Map<string, KnownEntity>> {
-  const rows = await g.query<{ id: string; labels: string[]; name: string; aliases: string[] | null }>(
-    "MATCH (n:Entity) WHERE any(l IN labels(n) WHERE l IN $types) RETURN n.id AS id, labels(n) AS labels, n.name AS name, n.aliases AS aliases LIMIT 5000",
+  const rows = await g.query<{ id: string; labels: string[]; name: string; aliases: string[] | null; merged: string | null; retired: boolean | null }>(
+    "MATCH (n:Entity) WHERE any(l IN labels(n) WHERE l IN $types) RETURN n.id AS id, labels(n) AS labels, n.name AS name, n.aliases AS aliases, n.mergedInto AS merged, n.retired AS retired LIMIT 5000",
     { types: [...EXTRACTABLE_TYPES] });
   const out = new Map<string, KnownEntity>();
   for (const r of rows) {
+    // a node the tidy pass (or the librarian) merged or retired is not offered: its names are the canonical node's now
+    if (r.merged || r.retired === true) continue;
     const type = typeOfLabels(r.labels);
     if (type && r.name) out.set(r.id, { id: r.id, type, name: r.name, ...(Array.isArray(r.aliases) ? { aliases: r.aliases } : {}) });
   }

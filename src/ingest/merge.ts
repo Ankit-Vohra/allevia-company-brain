@@ -269,9 +269,9 @@ export async function applyMergePlan(g: GraphHandle, plan: MergePlan, now: numbe
     for (const m of grp.members) {
       try {
         // the canonical node learns the duplicate's names (what was added is kept on SAME_AS, for unmerge)
-        const [row] = await g.roQuery<{ cn: string; ca: unknown; dn: string; da: unknown; added: unknown }>(
+        const [row] = await g.roQuery<{ cn: string; ca: unknown; dn: string; da: unknown; added: unknown; basis: string | null; by: string | null }>(
           `MATCH (c:Entity {id:$c}), (d:Entity {id:$d}) OPTIONAL MATCH (d)-[s:SAME_AS]->(c) WHERE s.until IS NULL
-           RETURN c.name AS cn, c.aliases AS ca, d.name AS dn, d.aliases AS da, s.aliasesAdded AS added`, { c: grp.canonical, d: m.id });
+           RETURN c.name AS cn, c.aliases AS ca, d.name AS dn, d.aliases AS da, s.aliasesAdded AS added, s.basis AS basis, s.derivedBy AS by`, { c: grp.canonical, d: m.id });
         if (!row) continue;
         const strs = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
         const have = [row.cn, ...strs(row.ca)];
@@ -285,7 +285,7 @@ export async function applyMergePlan(g: GraphHandle, plan: MergePlan, now: numbe
         const added = [...new Set([...strs(row.added), ...fresh])];
         await upsertEdge(g, {
           from: m.id, type: "SAME_AS", to: grp.canonical,
-          props: { derivedBy: opts.by ?? "librarian", basis: m.basis ?? (m.key ? `same name: ${m.key}` : "same name"), ...(added.length ? { aliasesAdded: added } : {}) },
+          props: { derivedBy: row.by ?? opts.by ?? "librarian", basis: row.basis ?? m.basis ?? (m.key ? `same name: ${m.key}` : "same name"), ...(added.length ? { aliasesAdded: added } : {}) },
         }, now);
         await g.query("MATCH (d:Entity {id:$d}) SET d.mergedInto = $c", { d: m.id, c: grp.canonical });
         const mv = await moveEdges(g, m.id, grp.canonical, ids, now);

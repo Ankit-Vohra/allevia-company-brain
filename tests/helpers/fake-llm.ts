@@ -63,9 +63,14 @@ export const FIXTURE_PROFILE = {
   city: "Bristol", country: "United Kingdom",
 };
 
+export const FIXTURE_FACTS = {
+  hours: [], priceRange: { text: "", evidence: "" }, items: [],
+  address: { text: "12 Harbour Lane, Bristol, United Kingdom", evidence: "Kestrel & Oak Studio, 12 Harbour Lane, Bristol, United Kingdom." },
+};
+
 export class FakeLlm implements LlmRunner {
   calls: StructuredInput[] = [];
-  constructor(private readonly opts: { failPaths?: string[]; profile?: Obj } = {}) {}
+  constructor(private readonly opts: { failPaths?: string[]; profile?: Obj; facts?: Obj } = {}) {}
   async structured(input: StructuredInput): Promise<unknown> {
     this.calls.push(input);
     const keys = props(input.schema);
@@ -77,6 +82,11 @@ export class FakeLlm implements LlmRunner {
     }
     if (keys.includes("tone")) return FIXTURE_BRAND;
     if (keys.includes("city")) return this.opts.profile ?? FIXTURE_PROFILE;
+    // day-one facts (src/ingest/sources/website/facts.ts): the address in the footer, quoted; no hours or prices stated
+    if (keys.includes("hours") && keys.includes("items")) return this.opts.facts ?? FIXTURE_FACTS;
+    // the tidy pass's model checks (src/ingest/tidy.ts): nothing is the same, nobody can be placed
+    if (keys.includes("verdicts")) return { verdicts: [] };
+    if (keys.includes("businesses")) return { businesses: [] };
     throw new Error(`fake LLM: unexpected schema ${keys.join(",")}`);
   }
   count(kind: "extract" | "brand" | "profile"): number {
