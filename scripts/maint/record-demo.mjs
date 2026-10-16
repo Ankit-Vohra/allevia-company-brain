@@ -5,12 +5,14 @@
 //
 // It uses the Claude subscription (no API key) and spends no credits; point it at a THROWAWAY FalkorDB, never a real one:
 //   export ALLEVIA_FALKORDB_URL=redis://127.0.0.1:<free port> ALLEVIA_ENV_FILE=/dev/null ALLEVIA_STUDIO_ENGINE=recorded
+//   export ALLEVIA_STANDUP=off ALLEVIA_CHECKUP_SCHEDULE=0   # the server's own morning jobs must not add notes and cards to the recording
 //   npm run cli -- seed-demo                      # the plain business, no recorded answers
 //   npm run cli -- serve &                        # live mode, http://127.0.0.1:8787 (or set PORT)
 //   node scripts/maint/record-demo.mjs [baseUrl]  # about 4 minutes; stops at the first answer whose checks fail
 // Then take new screenshots (web/scripts/screenshots-demo.mjs) and update the thread link in README.md and in
 // tests/demo/recorded.test.ts (the hero thread's id is printed at the end).
 import { spawnSync } from "node:child_process";
+import { readFileSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const base = (process.argv[2] ?? "http://127.0.0.1:8787").replace(/\/+$/, "");
@@ -75,4 +77,7 @@ for (const q of QUESTIONS) {
 }
 for (const id of turns) cli(["showcase", TENANT, id]);
 console.log(cli(["db:export", TENANT, OUT]).trim().split("\n").pop());
+// Nothing but the seed and these four answers belongs in the copy: the server's own jobs (stand-up, weekly check-up) must be off.
+const extra = readFileSync(OUT, "utf8").split("\n").filter((l) => /"id":"(document:standup-|document:brief-|document:website-checkup-)/.test(l));
+if (extra.length) { unlinkSync(OUT); throw new Error(`the recording picked up ${extra.length} note(s) from the server's own morning jobs: start the server with ALLEVIA_STANDUP=off ALLEVIA_CHECKUP_SCHEDULE=0, reseed and record again (the file was removed)`); }
 console.log(`\nShowcase turns: ${turns.join(", ")}\nHero thread: ${heroSession}\n  README link: /ask/${encodeURIComponent(heroSession)}?tenant=${TENANT}\nNext: node web/scripts/screenshots-demo.mjs <public server> docs/demo-screens, then update the thread id in README.md and tests/demo/recorded.test.ts.`);

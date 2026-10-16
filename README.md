@@ -519,6 +519,18 @@ its website needs Chromium for the crawler: `npx playwright install chromium`.
 If `npm install` prints "install scripts not yet covered by allowScripts" (npm 11.16 and later), it is a notice: esbuild,
 sharp, onnxruntime and the Agent SDK all load without those scripts.
 
+### If something does not start
+
+- **`docker compose: unknown command`**: the Compose plugin is missing (Colima and some Linux installs do not ship it). Start
+  FalkorDB alone with `docker run -d -p 127.0.0.1:6390:6379 falkordb/falkordb:6.0.2` and use the Node setup above.
+- **A port is taken** (6390, 3090, 8787): `FALKORDB_PORT=6395 FALKORDB_BROWSER_PORT=3095 ALLEVIA_PORT=8795 docker compose up -d`,
+  and for the Node setup `ALLEVIA_FALKORDB_URL=redis://127.0.0.1:6395 PORT=8795 npm run cli -- serve`.
+- **FalkorDB crashed and will not restart** (6.0.2 can crash under heavy repeated writes, and then fails to replay its
+  append-only file): `docker compose down -v`, `docker compose up -d`, then seed again. The synthetic business is rebuilt in
+  seconds; nothing else in the demo needs the old data.
+- **A live question ends with "Not logged in"**: run `claude` once and `/login` with a claude.ai account (not a Console API key), or use `serve --public` for the replay.
+- **The web page is blank or says "API only"**: build it once with `cd web && npm run build`.
+
 ### Keeping it running
 
 `scripts/ops/run-server.sh` and `scripts/ops/run-bot.sh` start the server or the Discord bot and start it again whenever

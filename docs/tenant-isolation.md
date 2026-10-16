@@ -205,4 +205,4 @@ ALLEVIA_AUTH=1 npm run cli -- serve
 > server, no tool or message can pick another, and a new business starts from code, never from another's data.
 > With `ALLEVIA_AUTH=1` every business needs its private owner link (random, hashed, revocable); only marked demo
 > businesses open without one, read-only.
-> The proof is in `tests/security/`; the open items, ranked, are in [`docs/tenant-isolation.md`](docs/tenant-isolation.md).
+> The proof is in `tests/security/`; the open items, ranked, are in this page.
