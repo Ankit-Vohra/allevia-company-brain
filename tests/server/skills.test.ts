@@ -69,4 +69,16 @@ describe("server: skills on the team (integration)", () => {
     expect(list.find((a) => a.id === "content-strategist")!.skills.find((s) => s.id === "festival-post")).toMatchObject({ name: "Festival post", source: "business" });
     expect(list.filter((a) => a.skills.some((s) => s.id === "festival-post")).map((a) => a.id)).toEqual(["content-strategist"]);
   });
+  it("a skill can be switched off for one person (and back on), and a switched-off skill is not offered to their turns", async () => {
+    const patch = (skillsOff: string[]) => req(h.app, "PATCH", "/api/mini/agents/content-strategist", { skillsOff });
+    expect((await patch(["instagram-post"])).status).toBe(200);
+    const tara = (await team()).find((a) => a.id === "content-strategist")!;
+    expect(tara.skillsOff).toEqual(["instagram-post"]);
+    expect(tara.skills.find((s) => s.id === "instagram-post")).toMatchObject({ on: false }); // still listed, so it can be switched back on
+    expect(tara.skills.find((s) => s.id === "reel-script")!.on).toBeUndefined();
+    expect((await team()).find((a) => a.id === "copy-editor")!.skillsOff).toBeUndefined();
+    expect((await req(h.app, "PATCH", "/api/mini/agents/content-strategist", { skillsOff: ["Not A Skill!"] })).status).toBe(400);
+    expect((await patch([])).status).toBe(200);
+    expect((await team()).find((a) => a.id === "content-strategist")!.skillsOff).toBeUndefined();
+  });
 });

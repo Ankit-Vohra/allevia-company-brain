@@ -20,9 +20,9 @@ export async function learnedBySkill(g: Read): Promise<Map<string, string[]>> {
   return out;
 }
 
-export function skillViewsFor(catalog: SkillCatalog, agentId: string, learned: ReadonlyMap<string, string[]>): SkillView[] {
-  return catalog.forAgent(agentId).map((s) => ({
-    id: s.id, name: s.name, when: s.when, ...(s.makes ? { makes: s.makes } : {}), needsOk: s.needsOk, source: s.source,
+export function skillViewsFor(catalog: SkillCatalog, agentId: string, learned: ReadonlyMap<string, string[]>, off: readonly string[] = []): SkillView[] {
+  return catalog.allFor(agentId).map((s) => ({
+    id: s.id, name: s.name, when: s.when, ...(s.makes ? { makes: s.makes } : {}), needsOk: s.needsOk, ...(off.includes(s.id) ? { on: false } : {}), source: s.source,
     rules: catalog.rulesFor(agentId, s.id).map((r) => ({ id: r.id, text: r.text, ...(r.channel ? { channel: r.channel.name } : {}) })),
     learned: learned.get(s.id) ?? [],
   }));

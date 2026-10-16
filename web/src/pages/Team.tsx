@@ -400,7 +400,7 @@ function TellYourTeam({ tenantId, prefill, onApplied }: { tenantId: string; pref
   );
 }
 
-function DiffCard({ preview, changes, busy, onApply, onDiscard }: { preview: DirectivePreview; changes: number; busy: boolean; onApply: () => void; onDiscard: () => void }) {
+export function DiffCard({ preview, changes, busy, onApply, onDiscard }: { preview: DirectivePreview; changes: number; busy: boolean; onApply: () => void; onDiscard: () => void }) {
   return (
     <div className="diff-card" aria-labelledby="diff-title">
       <h3 id="diff-title" className="diff-title">{changes ? `${plural(changes, "change", "changes")} to check` : "Nothing would change"}</h3>

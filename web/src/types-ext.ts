@@ -26,7 +26,7 @@ export interface Overview {
 }
 
 /** `running`: a turn in this thread is still working on the server (set only then). */
-export interface SessionSummary { id: string; title: string; startedAt: string; lastAt: string; turns: number; channel: "web" | "discord" | "cli"; running?: boolean }
+export interface SessionSummary { id: string; title: string; startedAt: string; lastAt: string; turns: number; channel: "web" | "discord" | "cli"; running?: boolean; /** A direct chat with this one person; absent: the whole team. */ agent?: AgentId }
 
 export interface TurnRecord {
   id: string;
@@ -36,6 +36,8 @@ export interface TurnRecord {
   ms: number;
   /** The door it came through. A thread can be continued from the web or from Discord. */
   source?: "web" | "discord" | "cli";
+  /** A direct chat: the person the owner asked. Absent: the whole team. */
+  target?: AgentId;
   agents: AgentId[];
   citations: string[];
   checks: TurnChecks;
@@ -45,11 +47,11 @@ export interface TurnRecord {
 }
 
 /** `running`: the thread's turn still working on the server (not yet among `turns`); re-attach with turnEvents. */
-export interface SessionDetail { id: string; title: string; turns: TurnRecord[]; running?: LiveTurn }
+export interface SessionDetail { id: string; title: string; agent?: AgentId; turns: TurnRecord[]; running?: LiveTurn }
 
 /** A turn running on the server: it goes on when the tab closes, and only an explicit stop cancels it. */
 export type LiveStatus = "running" | "done" | "failed" | "stopped";
-export interface LiveTurn { turnId: string; sessionId: string; question: string; startedAt: string; status: LiveStatus }
+export interface LiveTurn { turnId: string; sessionId: string; question: string; startedAt: string; status: LiveStatus; agent?: AgentId }
 
 /** GET /api/:t/turns/:id/events?after=N: events from index N, `next` to ask from, `done` once ended and all sent. */
 export interface TurnEventsPage { turnId: string; sessionId: string; question: string; status: LiveStatus; events: AgentEvent[]; next: number; done: boolean }

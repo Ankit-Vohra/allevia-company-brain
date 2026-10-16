@@ -32,6 +32,7 @@ export interface InstructionNote {
 export interface TeamSettings {
   disabled: AgentId[];                          // never planned, never review (the Chief of Staff can't be off)
   light?: AgentId[];                            // run on the cheapest model
+  skillsOff?: Record<AgentId, string[]>;        // skill ids the owner switched off, by agent: they are not listed and use_skill refuses them
   instructions: InstructionNote[];
 }
 

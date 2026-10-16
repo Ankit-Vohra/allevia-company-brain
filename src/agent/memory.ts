@@ -103,6 +103,14 @@ async function ensurePerson(g: GraphHandle, id: string, now: number): Promise<bo
 export function compactEvents(events: AgentEvent[]): AgentEvent[] {
   const out: AgentEvent[] = [];
   for (const e of events) {
+    // A reset replaces the answer shown so far (a working note taken back, or the answer re-written plainer): what the
+    // agent streamed before it is dropped, and what is kept is the replacement alone.
+    if (e.type === "text" && e.reset) {
+      for (let i = out.length - 1; i >= 0; i--) if (out[i]!.type === "text" && (out[i] as { agent: string }).agent === e.agent) out.splice(i, 1);
+      const { reset: _reset, ...replaced } = e;
+      if (replaced.delta) out.push(replaced);
+      continue;
+    }
     const last = out.at(-1);
     if (e.type === "text" && last?.type === "text" && last.agent === e.agent) out[out.length - 1] = { ...last, delta: last.delta + e.delta };
     else out.push(e);
@@ -115,13 +123,13 @@ export function compactEvents(events: AgentEvent[]): AgentEvent[] {
 export interface SessionInfo { id: string; channel: string; asker: string; startedAt: number; title: string }
 
 export async function startSession(
-  g: GraphHandle, o: { channel: string; asker: string; title?: string; id?: string }, now: number = Date.now(),
+  g: GraphHandle, o: { channel: string; asker: string; title?: string; id?: string; agent?: string }, now: number = Date.now(),
 ): Promise<SessionInfo> {
   const id = o.id ?? newSessionId(now);
   const title = clip(oneLine(o.title ?? "") || "New thread", 120);
   await ensurePerson(g, o.asker, now);
   const s = await writeBatch(g, {
-    nodes: [{ type: "Session", id, name: title, props: { channel: o.channel, asker: o.asker, startedAt: now } }],
+    nodes: [{ type: "Session", id, name: title, props: { channel: o.channel, asker: o.asker, startedAt: now, ...(o.agent ? { agent: o.agent } : {}) } }],
   }, now);
   if (s.errors.length) throw new Error(`startSession: ${s.errors.map((e) => e.error).join("; ")}`);
   return { id, channel: o.channel, asker: o.asker, startedAt: now, title };
@@ -211,6 +219,7 @@ export interface SaveTurnInput {
   findings: FindingRecord[];
   reviews: ReviewRecord[];
   guidedBy?: string[];              // the owner's instructions (Memory, Rule, BrandRule ids) the turn worked under
+  target?: string;                  // a direct chat: the roster agent the owner talked to (saved as Turn.target)
   skills?: Array<{ agent: string; skillId: string }>; // the skills agents opened (saved as Turn.skills: "agent/skill-id")
 }
 
@@ -223,7 +232,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   const now = t.at;
   await rosterOnce(g, now);
   const session = await g.roQuery<{ c: number }>("MATCH (s:Entity:Session {id:$id}) RETURN count(s) AS c", { id: t.sessionId });
-  if (!session[0]?.c) await startSession(g, { channel: "unknown", asker: t.asker, title: t.question, id: t.sessionId }, now);
+  if (!session[0]?.c) await startSession(g, { channel: "unknown", asker: t.asker, title: t.question, id: t.sessionId, ...(t.target ? { agent: t.target } : {}) }, now);
   const askerOk = await ensurePerson(g, t.asker, now);
 
   const touchedIds = t.touched instanceof TouchedSet ? [...t.touched.nodes().map((n) => n.id), ...t.touched.sources().map((s) => s.id)] : t.touched;
@@ -240,6 +249,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
     agents: t.agents, citations: t.citations, checks: JSON.stringify(t.checks ?? null), events: JSON.stringify(compactEvents(t.events)),
   };
   if (t.source) turnProps.source = t.source;
+  if (t.target) turnProps.target = t.target;
   if (t.ms !== undefined) turnProps.ms = t.ms;
   if (t.error) turnProps.error = t.error;
   if (t.skills?.length) turnProps.skills = unique(t.skills.map((s) => `${s.agent}/${s.skillId}`));
@@ -292,7 +302,7 @@ async function growKnowsAbout(g: GraphHandle, t: SaveTurnInput, cited: (id: stri
     for (const x of ids) if (cited(x)) pairs.set(`${agent}|${x}`, { a: agentNodeId(agent), x });
   };
   for (const f of t.findings) if (!f.rejected) add(f.agent, f.citations);
-  if (!t.findings.length && (t.status ?? "ok") === "ok") add("chief-of-staff", t.citations);
+  if (!t.findings.length && (t.status ?? "ok") === "ok") add(t.target ?? "chief-of-staff", t.citations);
   if (!pairs.size) return;
   await rawWrite(g,
     `UNWIND $pairs AS p

@@ -55,8 +55,8 @@ const channelOf = (r: InstructionRow): { id: string; name: string } | undefined 
 // Every roster agent with its settings (defaults where none are stored) and its active instructions.
 export async function listAgentsWithSettings(g: GraphHandle): Promise<AgentSettings[]> {
   const [rows, notes] = await Promise.all([
-    g.roQuery<{ id: string; enabled: boolean | null; mode: string | null; autonomy: number | null; note: string | null }>(
-      "UNWIND $ids AS id MATCH (a:Entity:Agent {id:id}) RETURN a.id AS id, a.enabled AS enabled, a.mode AS mode, a.autonomy AS autonomy, a.statusNote AS note",
+    g.roQuery<{ id: string; enabled: boolean | null; mode: string | null; autonomy: number | null; note: string | null; skillsOff: string[] | null }>(
+      "UNWIND $ids AS id MATCH (a:Entity:Agent {id:id}) RETURN a.id AS id, a.enabled AS enabled, a.mode AS mode, a.autonomy AS autonomy, a.statusNote AS note, a.skillsOff AS skillsOff",
       { ids: AGENTS.map((a) => agentNodeId(a.id)) }),
     readInstructions(g),
   ]);
@@ -70,6 +70,7 @@ export async function listAgentsWithSettings(g: GraphHandle): Promise<AgentSetti
       enabled, mode: enabled && mode === "off" ? "full" : mode,
       autonomy: typeof r?.autonomy === "number" ? r.autonomy : AGENT_DEFAULTS.autonomy,
       ...(r?.note ? { statusNote: r.note } : {}),
+      ...(Array.isArray(r?.skillsOff) && r.skillsOff.length ? { skillsOff: r.skillsOff.filter((x): x is string => typeof x === "string") } : {}),
       instructions: notes.filter((n) => rosterIdOf(n.agent) === a.id && n.text).map((n) => {
         const ch = channelOf(n);
         return { id: n.id, text: n.text!, ...(ch ? { channel: ch.name } : {}), ...(typeof n.at === "number" ? { at: n.at } : {}) };
@@ -93,11 +94,12 @@ export async function loadTeamSettings(g: GraphHandle): Promise<TeamSettings> {
   return {
     disabled: agents.filter((a) => !a.enabled && a.id !== CHIEF).map((a) => a.id),
     light: agents.filter((a) => a.enabled && a.mode === "light").map((a) => a.id),
+    ...(agents.some((a) => a.skillsOff?.length) ? { skillsOff: Object.fromEntries(agents.filter((a) => a.skillsOff?.length).map((a) => [a.id, a.skillsOff!])) } : {}),
     instructions: [...instructions.values()],
   };
 }
 
-export interface AgentChange { enabled?: boolean; mode?: AgentMode; autonomy?: number; statusNote?: string | null }
+export interface AgentChange { enabled?: boolean; mode?: AgentMode; autonomy?: number; statusNote?: string | null; skillsOff?: string[] }
 
 // Why a change can't be made, or undefined.
 export function agentChangeRefusal(agentId: string, c: AgentChange): string | undefined {
@@ -139,6 +141,7 @@ export async function setAgentSettings(g: GraphHandle, agentId: string, change: 
   }
   const props: Record<string, Prim> = { enabled, mode };
   if (change.autonomy !== undefined) props.autonomy = change.autonomy;
+  if (change.skillsOff !== undefined) props.skillsOff = [...new Set(change.skillsOff)];
   if (change.statusNote !== undefined) props.statusNote = change.statusNote;
   else if (change.enabled === true || (change.mode !== undefined && change.mode !== "off")) props.statusNote = null; // back on: the "till …" no longer holds
   await upsertNode(g, { type: "Agent", id, name: a.name, props, ...(opts.src ? { src: opts.src } : {}) }, now);

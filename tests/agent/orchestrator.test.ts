@@ -1094,3 +1094,46 @@ describe("runTurn: usage", () => {
     expect(b.runtime.runs.every((r) => r.model === "sonnet")).toBe(true);
   });
 });
+
+describe("runTurn: a direct chat with one agent", () => {
+  const ANSWER = "Reels with a question hook did 2.4 times the average [[content:reel-1]]. Next: reuse that hook on Friday.";
+  const target = (over: Partial<TurnInput> = {}) => {
+    const s = setup({
+      "content-strategist:direct": { calls: [{ name: "content_performance", args: {} }], text: ANSWER },
+    });
+    return { ...s, run: () => runTurn({ ...INPUT, question: "Which hook works best?", target: "content-strategist", ...over }, s.deps, s.emit) };
+  };
+
+  it("skips planning: the named agent answers with its own tools, and no other desk runs", async () => {
+    const { run, runtime, events } = target();
+    const out = await run();
+    expect(out.fastPath).toBe(true);
+    expect(out.agents).toEqual(["content-strategist"]);
+    expect(runtime.runs.some((r) => r.phase === "plan")).toBe(false);
+    expect(runtime.runs.some((r) => r.agentId === "chief-of-staff")).toBe(false);
+    const direct = runtime.runs.find((r) => r.phase === "direct")!;
+    expect(direct.agentId).toBe("content-strategist");
+    // its own roster tools, plus show_path to draw how the answer was reached
+    expect(direct.tools.map((t) => t.name)).toEqual(expect.arrayContaining(["content_performance", "show_path"]));
+    expect(direct.tools.map((t) => t.name)).not.toContain("metric_trend");
+    expect(direct.system).toContain("You are Tara");
+    // the streamed answer is attributed to the agent the owner asked, not the Chief
+    const text = events.filter((e): e is Extract<AgentEvent, { type: "text" }> => e.type === "text" && !e.reset);
+    expect(text.length).toBeGreaterThan(0);
+    expect(text.every((e) => e.agent === "content-strategist")).toBe(true);
+    expect(events.some((e) => e.type === "plan")).toBe(false);
+    expect(out.answer).toContain("question hook");
+  });
+
+  it("draws the path itself when the agent didn't, as the Chief does", async () => {
+    const { run, tools } = target();
+    await run();
+    expect(tools.show_path!.calls).toEqual([{ args: { ids: ["content:reel-1"] }, agentId: "content-strategist" }]);
+  });
+
+  it("asking the Chief is asking the whole team: it still plans", async () => {
+    const s = setup({ "chief-of-staff:plan": plan([{ agent: "chief-of-staff", task: "Answer" }]), "chief-of-staff:direct": { text: "Fine, thanks [[decision:pause-stories]]." } });
+    await runTurn({ ...INPUT, target: "chief-of-staff" }, s.deps, s.emit);
+    expect(s.runtime.runs.some((r) => r.phase === "plan")).toBe(true);
+  });
+});

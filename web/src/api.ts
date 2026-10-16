@@ -27,7 +27,7 @@ import type {
 } from "./types-ext";
 
 /** PATCH /api/:t/agents/:id */
-export interface AgentPatch { enabled?: boolean; mode?: AgentMode; autonomy?: number; statusNote?: string | null }
+export interface AgentPatch { enabled?: boolean; mode?: AgentMode; autonomy?: number; statusNote?: string | null; skillsOff?: string[] }
 
 export type ApiMode = "live" | "mock";
 
@@ -265,7 +265,7 @@ export const api = {
   },
 
   /** POST /api/:t/ask, an SSE stream of AgentEvent. `seekMs` (mock only) fast-forwards a scripted run. */
-  async ask(t: string, body: { question: string; sessionId?: string }, onEvent: (e: AgentEvent) => void, opts: { signal?: AbortSignal; seekMs?: number } = {}): Promise<void> {
+  async ask(t: string, body: { question: string; sessionId?: string; target?: AgentId }, onEvent: (e: AgentEvent) => void, opts: { signal?: AbortSignal; seekMs?: number } = {}): Promise<void> {
     if (mode === "mock") return (await mock()).ask(t, body, onEvent, { speed: getSpeed, signal: opts.signal, seekMs: opts.seekMs });
     return postSse<AgentEvent>(`/api/${enc(t)}/ask`, body, onEvent, opts.signal);
   },

@@ -198,3 +198,18 @@ describe("a turn that opens a skill", () => {
     expect(out.skills.map((u) => u.skillId)).toContain("plan-across-desks");
   });
 });
+
+describe("skills the owner switched off", () => {
+  it("are left out of the agent's list and cannot be opened, while the others stay", () => {
+    const two = new SkillCatalog([mk("instagram-post", ["content-strategist"]), mk("reel-script", ["content-strategist"]), mk("voice-check", ["copy-editor"])]);
+    const off = two.restrict({ "content-strategist": ["instagram-post"] });
+    expect(off.forAgent("content-strategist").map((s) => s.id)).toEqual(["reel-script"]);
+    expect(off.get("content-strategist", "instagram-post")).toBeUndefined();
+    expect(off.forAgent("copy-editor").map((s) => s.id)).toEqual(["voice-check"]);
+    expect(off.allFor("content-strategist").map((s) => s.id)).toEqual(["instagram-post", "reel-script"]); // the header still lists it
+    expect(two.restrict({}) === two).toBe(true);
+    // a business's own skills laid over a restricted catalog keep the restriction
+    expect(off.withBusiness({ skills: [], rules: [] }).forAgent("content-strategist").map((s) => s.id)).toEqual(["reel-script"]);
+  });
+});
+

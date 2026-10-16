@@ -22,13 +22,25 @@ export interface SkillRule {
 export interface BusinessSkills { skills: Skill[]; rules: SkillRule[] }
 
 export class SkillCatalog {
-  constructor(readonly skills: readonly Skill[] = [], readonly rules: readonly SkillRule[] = []) {}
+  constructor(readonly skills: readonly Skill[] = [], readonly rules: readonly SkillRule[] = [], readonly off: Readonly<Record<string, readonly string[]>> = {}) {}
 
-  /** The skills an agent has, in the order they were written: code first, then the business's own additions. */
+  /** The skills an agent has, in the order they were written: code first, then the business's own additions. The ones the
+   *  owner switched off for this agent are left out. */
   forAgent(agentId: string): Skill[] {
+    const off = this.off[agentId] ?? [];
     const byId = new Map<string, Skill>();
-    for (const s of this.skills) if (s.agents.includes(agentId)) byId.set(s.id, s);
+    for (const s of this.skills) if (s.agents.includes(agentId) && !off.includes(s.id)) byId.set(s.id, s);
     return [...byId.values()];
+  }
+
+  /** Every skill an agent has, switched off or not (what the chat header lists, so one can be switched back on). */
+  allFor(agentId: string): Skill[] {
+    return new SkillCatalog(this.skills, this.rules).forAgent(agentId);
+  }
+
+  /** This catalog without the skills the owner switched off, by agent. */
+  restrict(off: Readonly<Record<string, readonly string[]>> | undefined): SkillCatalog {
+    return off && Object.values(off).some((l) => l.length) ? new SkillCatalog(this.skills, this.rules, off) : this;
   }
 
   get(agentId: string, id: string): Skill | undefined {
@@ -58,7 +70,7 @@ export class SkillCatalog {
       const left = s.agents.filter((a) => !o.agents.includes(a));
       if (left.length) out.push({ ...s, agents: left });
     }
-    return new SkillCatalog([...out, ...mine], [...this.rules, ...b.rules]);
+    return new SkillCatalog([...out, ...mine], [...this.rules, ...b.rules], this.off);
   }
 }
 

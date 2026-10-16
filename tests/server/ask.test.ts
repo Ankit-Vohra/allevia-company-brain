@@ -222,3 +222,80 @@ describe("server: ask over SSE (integration)", () => {
     expect(await res.json()).toEqual({ error: expect.stringMatching(/already working/) });
   });
 });
+
+describe("server: a direct chat with one agent (integration)", () => {
+  let h: Harness;
+  beforeAll(async () => { h = await harness(); }, 90_000);
+  afterAll(async () => h.cleanup());
+  afterEach(() => resetRuntime());
+
+  const SCRIPT = {
+    ...SCRIPTS,
+    "librarian:direct": {
+      calls: [{ name: "trace_decision", args: { id: "decision:007-pause-daily-stories" } }],
+      text: "We paused daily stories on 20 Sep 2026 [[decision:007-pause-daily-stories]], as of 20 Sep 2026.",
+    },
+  };
+
+  it("sends the request to that agent only, saves the thread against it and lists it with its agent", async () => {
+    useRuntime(() => new FakeRuntime(SCRIPT));
+    const res = await post(h.app, "/api/mini/ask", { question: QUESTION, target: "librarian" });
+    expect(res.status).toBe(200);
+    const events = sseEvents(await res.text());
+    const final = events.at(-1) as Extract<AgentEvent, { type: "final" }>;
+    expect(final.type).toBe("final");
+    expect(final.agents).toEqual(["librarian"]);
+    expect(events.some((e) => e.type === "plan")).toBe(false);
+    expect(events.filter((e) => e.type === "text").every((e) => (e as { agent: string }).agent === "librarian")).toBe(true);
+    // the Chief's checks still ran on the answer
+    expect(final.checks.citationsValid).toBe(true);
+
+    const session = events[0] as Extract<AgentEvent, { type: "session" }>;
+    const threads = await (await h.app.request("/api/mini/sessions")).json() as SessionSummaryDto[];
+    expect(threads.find((t) => t.id === session.sessionId)).toMatchObject({ agent: "librarian", turns: 1 });
+    const detail = await (await h.app.request(`/api/mini/sessions/${encodeURIComponent(session.sessionId)}`)).json() as SessionDetailDto;
+    expect(detail.agent).toBe("librarian");
+    expect(detail.turns[0]).toMatchObject({ target: "librarian", source: "web" });
+  });
+
+  it("refuses somebody who is not on the team, and a thread with the whole team has no agent", async () => {
+    const bad = await post(h.app, "/api/mini/ask", { question: "Hi", target: "nobody" });
+    expect(bad.status).toBe(400);
+    const res = await post(h.app, "/api/mini/ask", { question: QUESTION, target: "chief-of-staff" });
+    const events = sseEvents(await res.text());
+    const session = events[0] as Extract<AgentEvent, { type: "session" }>;
+    const threads = await (await h.app.request("/api/mini/sessions")).json() as SessionSummaryDto[];
+    expect(threads.find((t) => t.id === session.sessionId)?.agent).toBeUndefined();
+  });
+
+  it("says plainly when the agent is switched off", async () => {
+    const patch = (enabled: boolean) => h.app.request("/api/mini/agents/librarian", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled }) });
+    await patch(false);
+    const res = await post(h.app, "/api/mini/ask", { question: "Who knows about the sitemap?", target: "librarian" });
+    const events = sseEvents(await res.text());
+    const err = events.find((e) => e.type === "error") as Extract<AgentEvent, { type: "error" }> | undefined;
+    expect(err?.message).toMatch(/Sara is switched off/);
+    expect(events.at(-1)?.type).toBe("final");
+    await patch(true);
+  });
+});
+
+describe("tone (chat support)", () => {
+  it("each tone the chat offers reads as one standing instruction for that person, nothing left unread", async () => {
+    const h = await harness();
+    try {
+      const { TONES, toneDirective } = await import("../../web/src/lib/chat.js");
+      for (const tone of TONES) {
+        const res = await post(h.app, "/api/mini/directives", { text: toneDirective("Tara", tone) });
+        expect(res.status, tone.id).toBe(200);
+        const pv = await res.json() as { diff: Array<{ op: string; label: string }>; unparsed: string[] };
+        expect(pv.unparsed, tone.id).toEqual([]);
+        const added = pv.diff.filter((d) => d.op === "add").map((d) => d.label);
+        expect(added.length, tone.id).toBeGreaterThan(0);
+        expect(added.every((l) => /Tara/.test(l)), `${tone.id}: ${added.join("; ")}`).toBe(true); // only ever about the person asked
+      }
+    } finally {
+      await h.cleanup();
+    }
+  }, 60_000);
+});
