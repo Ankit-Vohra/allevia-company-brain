@@ -454,3 +454,58 @@ RETURN v.props AS was, v.until AS until ORDER BY v.until, v.id
 
 Plan note: every one of these anchors on an id or scans one label on purpose (the first, the second and the third are surveys of leads,
 goals and their edges, a handful per business); `tests/graph/explain.test.ts` holds the id-anchored ones to an index lookup.
+
+## 16. How the brain grew: nodes and edges per day, by kind (`graph:story`)
+
+| | |
+|---|---|
+| Code | `src/graph/story.ts:83` (nodes), `src/graph/story.ts:96` (edges), `src/graph/story.ts:109` (facts that ended), `src/graph/story.ts:135` (`graphStory`), the CLI `src/cli/graph.ts:46`, the API `src/server/routes/graph-work.ts:80` |
+| Answers | "How many things did the team learn each day or week, of what kind, and how much of that came after the first big load?" Two clocks: when the team recorded it (`createdAt` on nodes, `recordedAt` on edges) and when it happened (`asOf`, the date of the source). |
+| Why a graph | Every write in the product goes through `upsertNode` and `upsertEdge`, which stamp both clocks, so the count is read from the facts themselves: nothing is drawn by hand. A fact that ended keeps its edge with `retiredAt`, so "learned" and "retired" are two reads of the same edges. |
+
+The day is computed without float math (`t - t % 86400000`, then the date in TypeScript); the rows are grouped on the grouping keys, so no sort can tie.
+
+```cypher
+MATCH (n:Entity) WHERE n.createdAt IS NOT NULL
+WITH n.createdAt - n.createdAt % 86400000 AS d, [x IN labels(n) WHERE x <> 'Entity' AND x <> 'Searchable'][0] AS k
+RETURN d, k, count(*) AS c ORDER BY d, k
+```
+
+```cypher
+MATCH ()-[r]->() WHERE ID(r) >= 0 AND r.recordedAt IS NOT NULL
+WITH r.recordedAt - r.recordedAt % 86400000 AS d, type(r) AS k
+RETURN d, k, count(*) AS c ORDER BY d, k
+```
+
+On 17 October 2026 the real business's graph read: 3,799 nodes and 11,897 edges recorded on 15 October (the first ingest), then 283 nodes and
+4,911 edges on 16 October from use alone (conversations, findings, approvals, what the team learned): `npm run cli -- graph:story <tenant>`.
+
+## 17. How a Studio picture was made: the lineage (`graph:lineage`)
+
+| | |
+|---|---|
+| Code | `src/studio/lineage.ts:80` (one hop up or down `DERIVED_FROM`), `src/studio/lineage.ts:91` (`assetLineage`), the writes `src/studio/lineage.ts:31` (`recordGeneration`), the CLI `src/cli/graph.ts:65`, the API `src/server/studio.ts:207` |
+| Answers | For a premium ad picture or a clip: the owner's photo it came from and each step (`relight`, `premium-ad`, `clip`), the Higgsfield job behind each with its model, mode and cost, the brand and fidelity rules the prompt was built from, Nisha's verdict, the card it is on and the post that uses it. |
+| Why a graph | The chain has no fixed length (a clip comes from a picture that comes from a photo, and a retry or a re-compose adds a link), and the questions run both ways: "what was made from this photo?" is the same edge read the other way. The cost is not a column on a row: it is an `Observation` that `MEASURES` the asset and is `SOURCED_FROM` the job's `Document`, like every other number. |
+
+One hop (the code asks per hop, so each starts from the id index and walks only the frontier):
+
+```cypher
+UNWIND $ids AS fid MATCH (a:Entity:Asset {id:fid})-[r:DERIVED_FROM]->(p:Entity:Asset) WHERE ID(r) >= 0 AND r.until IS NULL
+RETURN a.id AS from, p.id AS to, r.step AS step ORDER BY a.id, p.id
+```
+
+The jobs and their cost, and the review:
+
+```cypher
+MATCH (x:Entity:Asset)-[r:SOURCED_FROM]->(d:Entity:Document) WHERE x.id IN $ids AND ID(r) >= 0 AND d.kind = 'generation'
+RETURN x.id AS assetId, d.jobId AS jobId, d.model AS model, d.credits AS credits, d.mode AS mode, d.id AS doc ORDER BY x.id, d.id
+```
+
+```cypher
+MATCH (o:Observation {metric:'studio_credits_spent'})-[:MEASURES]->(a:Asset {id:$id})
+MATCH (o)-[:SOURCED_FROM]->(d:Document {kind:'generation'}) RETURN o.value AS credits, d.id AS job ORDER BY d.id
+```
+
+Checked live on 17 October (`demo_growth`, 11.5 credits): clip `DERIVED_FROM` the premium picture `DERIVED_FROM` the owner's photo; two jobs
+(`gpt_image_2` 6.5, `seedance_2_0_mini` 5); Nisha: "Product unchanged"; one card waiting; `npm run cli -- graph:lineage demo_growth asset:clip-4f59984a34a5-c7774dde`.
