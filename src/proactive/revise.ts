@@ -22,8 +22,11 @@ export async function reviseDraft(g: GraphHandle, approvalId: string, instructio
   if (a.status !== "pending") return { ok: false, why: "That one was already decided." };
   const [row] = await g.roQuery<{ kind: string | null; n: number | null; name: string }>(
     "MATCH (x:Entity:Approval {id:$id}) RETURN x.standupKind AS kind, x.changeRequests AS n, x.name AS name", { id: approvalId });
-  if (!row?.kind) return { ok: false, why: "Only your team's drafts from today's note can be changed here. Edit this one in the web app." };
-  const kind = KIND[row.kind] ?? "post";
+  // A draft from today's note knows what it is; any other waiting draft (a post, a fix to hand over) is redrafted by whoever
+  // made it the same way. Only something with no words to change (an ad pause) is left to the web app.
+  const own = row?.kind ? KIND[row.kind] : undefined;
+  const kind: TextKind | undefined = own ?? (a.kind === "content_draft" ? "post" : a.kind === "github_issue" ? "website_text" : undefined);
+  if (!row || !kind) return { ok: false, why: "There are no words in this one to change here. Look at it in the web app." };
   const t = await d.text({
     agent: a.by ?? "content-strategist", kind,
     brief: `Purpose: redraft this the way the owner asked, keeping what they did not ask to change. The owner asked: ${JSON.stringify(ask)}. The draft: ${JSON.stringify(clip(a.payload.body, 1500))}`,

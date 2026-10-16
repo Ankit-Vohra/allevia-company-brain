@@ -18,7 +18,7 @@ describe("the fix card on Discord", () => {
     expect(content).toContain("If you say OK, it becomes a to-do in your tasks. Nothing on your site changes yet.");
     expect(content).toContain("About: https://kestrel.example/");
     expect(content).not.toMatch(/GitHub issue|Target:/);
-    expect(buttons.map((b) => b.label)).toEqual(["Approve", "Reject"]);
+    expect(buttons.map((b) => b.label)).toEqual(["Approve", "Change", "No thanks"]);
   });
 
   it("names the business's own repo when it chose one", () => {

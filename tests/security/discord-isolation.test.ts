@@ -103,7 +103,7 @@ describe("Discord: one business per bot", () => {
     const list = command({ command: "approvals" });
     await b1.onCommand(list);
     const shown = list.out.join("\n");
-    expect(shown).toContain("approval:a-only-1");
+    expect(shown).toContain("Alpha card"); // the owner reads titles now, not ids
     expect(shown).not.toContain("approval:b-only-1");
     expect(shown).not.toContain("Bravo");
   });

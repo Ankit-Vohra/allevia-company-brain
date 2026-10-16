@@ -192,11 +192,13 @@ export async function changesSince(g: Read, since: number, now: number): Promise
   return { count: c?.n ?? 0, changes };
 }
 
+// Bookkeeping edges (where a fact was read from, which page links where) end and begin on every re-read of the website; they
+// are not changes in the business and never reach the owner's note.
 async function closedSince(g: Read, since: number): Promise<{ count: number; examples: ClosedFact[] }> {
   const [c] = await g.roQuery<{ n: number }>(
-    "MATCH ()-[r]->() WHERE r.retiredAt >= $since AND NOT type(r) IN ['HAD_VERSION', 'EVIDENCED_BY', 'MENTIONS'] RETURN count(r) AS n", { since });
+    "MATCH ()-[r]->() WHERE r.retiredAt >= $since AND NOT type(r) IN ['HAD_VERSION', 'EVIDENCED_BY', 'MENTIONS', 'SOURCED_FROM', 'HAS_CHUNK', 'LINKS_TO', 'LINKS_TO_PAGE', 'CITED', 'TOUCHED'] RETURN count(r) AS n", { since });
   const ex = await g.roQuery<ClosedFact>(
-    `MATCH (a:Entity)-[r]->(b:Entity) WHERE r.retiredAt >= $since AND NOT type(r) IN ['HAD_VERSION', 'EVIDENCED_BY', 'MENTIONS']
+    `MATCH (a:Entity)-[r]->(b:Entity) WHERE r.retiredAt >= $since AND NOT type(r) IN ['HAD_VERSION', 'EVIDENCED_BY', 'MENTIONS', 'SOURCED_FROM', 'HAS_CHUNK', 'LINKS_TO', 'LINKS_TO_PAGE', 'CITED', 'TOUCHED']
      RETURN a.id AS from, type(r) AS type, b.id AS to, coalesce(a.name, a.id) AS fromName, coalesce(b.name, b.id) AS toName
      ORDER BY r.retiredAt DESC, from LIMIT 2`, { since });
   return { count: c?.n ?? 0, examples: ex };

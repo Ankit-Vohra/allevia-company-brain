@@ -470,7 +470,7 @@ describe.each(["memory", "graph"] as const)("cards and the daily note go to the 
     expect(first).toEqual({ cards: 2, note: true, closed: 0 });
     const posted = [...r.hub.messages.values()].filter((m) => m.channelId === approvals);
     expect(posted).toHaveLength(2);
-    expect(posted[0]!.buttons).toEqual(["allevia:approve:approval:a1", "allevia:reject:approval:a1"]);
+    expect(posted[0]!.buttons).toEqual(["allevia:approve:approval:a1", "allevia:change:approval:a1", "allevia:reject:approval:a1"]);
     const noteMsgs = [...r.hub.messages.values()].filter((m) => m.channelId === prov.area.channels["todays-note"]);
     expect(noteMsgs).toHaveLength(1);
     expect(noteMsgs[0]!.content).toContain("Signups held steady.");
@@ -482,7 +482,7 @@ describe.each(["memory", "graph"] as const)("cards and the daily note go to the 
     expect(third.closed).toBe(1);
     expect(posted[0]!.buttons).toEqual([]);
     expect(posted[0]!.content).toMatch(/Approved/);
-    expect(posted[1]!.buttons).toHaveLength(2);
+    expect(posted[1]!.buttons).toHaveLength(3);
 
     state.note = { id: "document:brief-2", title: "Today's note", asOf: "2026-10-16", text: "A new day." };
     expect((await syncArea("aamdani", r.deps, src)).note).toBe(true);

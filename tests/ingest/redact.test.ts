@@ -143,6 +143,8 @@ describe("redact: each pattern from spec 6.3 is replaced and counted", () => {
 describe("redact: things that must survive", () => {
   const keep = [
     "2026-10-05",
+    // a JSON field called "key" that names a check-up fix is a label, not a credential (audit #39: every check-up tripped privacy-scan)
+    `[{"key":"site-down","title":"Your website does not open"},{"key":"sitemap"},{"key":"season-diwali-2026"},{"key":"website-rule-opening-hours-62cfb1"}]`,
     "Updated 2026-10-09 18:30 BST, built ~18:30 BST",
     "40 orders in 21 days",
     "v1.0 build 11",

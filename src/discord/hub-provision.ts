@@ -2,7 +2,7 @@
 //   role      customer-<slug>        no permissions of its own; it only unlocks the area
 //   category  <Business name>        private: only that role, the Allevia staff role and the bot can see it
 //   #your-team    ask the team anything; each question opens a thread
-//   #approvals    waiting-for-OK cards with Approve / Reject buttons (the customer can read it, not type in it)
+//   #approvals    waiting-for-OK cards with the thing itself and Approve / Change / No thanks buttons (the customer can read it, not type in it)
 //   #todays-note  the daily note (read-only for the customer)
 //   #support      humans only: the agents never answer it; the bot copies it to the staff-only #support-inbox
 //   a welcome message in plain words, and a single-use join link (1 use, 7 days) on #your-team
@@ -12,7 +12,7 @@
 // Permissions are managed here: a hand-added overwrite on a customer channel is removed by the next run, on purpose
 // (isolation first); use the roles.
 import { graphName } from "../graph/client.js";
-import { approvalCard, standupCard } from "./bot.js";
+import { oneLineWhy, renderApproval, verdictLine, type CardExtras, type CardOpts } from "./approval-card.js";
 import type { ActionTarget } from "../actions/target.js";
 import { renderCitations, splitMessage } from "./format.js";
 import {
@@ -92,7 +92,7 @@ const CHANNEL_NAME: Record<ChannelKind, string> = { "your-team": "your-team", st
 const CHANNEL_TOPIC: Record<ChannelKind, string> = {
   "your-team": "Ask your team anything, in your own words. Each question opens a thread and your team answers there.",
   studio: "Drop photos and videos here. Your team turns a photo into post options for your OK.",
-  approvals: "Things waiting for your OK. Tap Approve or Reject. Nothing goes out until you say so.",
+  approvals: "Things waiting for your OK. Tap Approve, Change or No thanks. Nothing goes out until you say so.",
   "todays-note": "One short note each morning on how the business is doing.",
   support: "Talk to a real person at Allevia. Your team of assistants does not read this channel.",
 };
@@ -104,7 +104,7 @@ export function welcomeText(businessName: string, ids: Record<ChannelKind, strin
     "",
     `<#${ids["your-team"]}> Ask anything in your own words. Each question gets its own thread, and your team answers there.`,
     `<#${ids.studio}> Drop a photo or a video. Your team makes post options from a photo, and you pick one.`,
-    `<#${ids.approvals}> Things waiting for your OK. Tap Approve or Reject. Nothing goes out until you say so.`,
+    `<#${ids.approvals}> Things waiting for your OK. Tap Approve, Change or No thanks. Nothing goes out until you say so.`,
     `<#${ids["todays-note"]}> One short note each morning on how the business is doing.`,
     `<#${ids.support}> Talk to a real person at Allevia. Your team of assistants does not read this channel.`,
     "",
@@ -375,37 +375,92 @@ export interface TenantSource {
   actionTarget?(): Promise<ActionTarget | undefined>;
   // Today's stand-up drafts still waiting for the owner, with the one-line reason for each (src/proactive). Absent: none.
   standupCards?(): Promise<Array<{ approval: ApprovalDto; why: string }>>;
+  // What goes on a card besides its text: the one-line reason, the pictures or clips, what the page says now, who a message
+  // goes to (approval-extras.ts). Absent: the card is the text alone.
+  extras?(a: ApprovalDto, standupWhy?: string): Promise<CardExtras>;
 }
 
-const MAX_CARDS = 10;
+// A backlog is posted over a few syncs rather than all at once (Discord limits how fast a bot may post).
+export const MAX_CARDS_PER_SYNC = 20;
 const cardOpts = async (t: Promise<ActionTarget | undefined>): Promise<{ target?: ActionTarget }> => { const x = await t; return x ? { target: x } : {}; };
+const SYNC_LOCK_MS = 3 * 60_000;
 
-// Posts what is new, once: pending approval cards (with buttons) into #approvals, the newest note into #todays-note,
-// then today's stand-up drafts under it with Approve, Change and No thanks; and takes the buttons off a card that was
-// decided somewhere else (the web). A note that gained the stand-up after it was first posted is posted once more.
-export async function syncArea(slug: string, d: Pick<ProvisionDeps, "hub" | "store" | "now" | "log">, src: TenantSource): Promise<{ cards: number; note: boolean; closed: number; today?: number }> {
-  const { hub, store } = d;
+export interface SyncResult { cards: number; note: boolean; closed: number; today?: number; more?: number }
+
+// Posts what is new, once: every pending approval into #approvals as a card with the thing itself (the full text, the
+// picture or clip attached, who a message goes to, what the page says now), the reason in a line, and Approve, Change and
+// No thanks; the newest note into #todays-note, then today's stand-up drafts under it the same way; and, for a card that was
+// decided (here or on the web), takes the buttons off and shows the result. A note that gained the stand-up after it was first
+// posted is posted once more. One poster per business at a time, across processes (the web server posts a new card at once,
+// the bot syncs every minute).
+export async function syncArea(slug: string, d: Pick<ProvisionDeps, "hub" | "store" | "now" | "log">, src: TenantSource): Promise<SyncResult> {
   const now = (d.now ?? Date.now)();
+  const token = await d.store.claimSync?.(slug, now, SYNC_LOCK_MS);
+  if (d.store.claimSync && !token) return { cards: 0, note: false, closed: 0 }; // someone else is posting for this business right now
+  try {
+    return await syncAreaLocked(slug, d, src, now);
+  } finally {
+    if (token) await d.store.releaseSync?.(slug, token).catch(() => undefined);
+  }
+}
+
+async function syncAreaLocked(slug: string, d: Pick<ProvisionDeps, "hub" | "store" | "now" | "log">, src: TenantSource, now: number): Promise<SyncResult> {
+  const { hub, store } = d;
   const area = await store.getArea(slug);
   const approvals = area?.channels.approvals;
   const noteChannel = area?.channels["todays-note"];
-  const out: { cards: number; note: boolean; closed: number; today?: number } = { cards: 0, note: false, closed: 0 };
+  const out: SyncResult = { cards: 0, note: false, closed: 0 };
   if (!area || area.status !== "ready" || !approvals || !noteChannel) return out;
 
+  // One card: the first message carries the attachments and the buttons, a long text follows in plain messages. A card whose
+  // pictures Discord refuses is posted again without them (and says so) rather than not at all.
+  const post = async (channelId: string, a: ApprovalDto, extras: CardExtras, opts: CardOpts): Promise<string> => {
+    const card = renderApproval(a, extras, opts);
+    let m: { id: string };
+    try {
+      m = await hub.sendMessage(channelId, { content: card.first.content, buttons: card.first.buttons, ...(card.first.files ? { files: card.first.files } : {}) });
+    } catch (e) {
+      if (!card.first.files) throw e;
+      d.log?.(`[hub] ${slug}: could not attach files to ${a.id} (${e instanceof Error ? e.message : String(e)}); posting it without them`);
+      const plain = renderApproval(a, { ...extras, files: undefined, notAttached: (extras.notAttached ?? 0) + card.first.files.length }, opts);
+      m = await hub.sendMessage(channelId, { content: plain.first.content, buttons: plain.first.buttons });
+    }
+    for (const part of card.rest) await hub.sendMessage(channelId, part);
+    return m.id;
+  };
+  const extrasOf = async (a: ApprovalDto, why?: string): Promise<CardExtras> => (await src.extras?.(a, why).catch((e) => {
+    d.log?.(`[hub] ${slug}: could not look up the extras for ${a.id}: ${e instanceof Error ? e.message : String(e)}`);
+    return undefined;
+  })) ?? {};
+
   let target: Promise<ActionTarget | undefined> | undefined; // read once, only when a card is posted
-  for (const a of (await src.pendingApprovals()).slice(0, MAX_CARDS)) {
+  const pending = (await src.pendingApprovals()).slice().sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1));
+  // a stand-up draft is posted once, under Today's note, not again in #approvals
+  const standup = (await src.standupCards?.()) ?? [];
+  const underNote = new Set(standup.map((x) => x.approval.id));
+  const fresh: ApprovalDto[] = [];
+  for (const a of pending) {
+    if (underNote.has(a.id)) continue;
+    const prior = await store.getPost(`${slug}|approval|${a.id}`);
+    if (!prior?.messageId) fresh.push(a);
+  }
+  for (const a of fresh.slice(0, MAX_CARDS_PER_SYNC)) {
     const key = `${slug}|approval|${a.id}`;
-    if (await store.getPost(key)) continue;
-    const m = await hub.sendMessage(approvals, approvalCard(a, await cardOpts((target ??= src.actionTarget?.().catch(() => undefined) ?? Promise.resolve(undefined)))));
-    await store.savePost({ key, slug, kind: "approval", refId: a.id, channelId: approvals, messageId: m.id, closed: false, postedAt: now });
+    const opts = await cardOpts((target ??= src.actionTarget?.().catch(() => undefined) ?? Promise.resolve(undefined)));
+    const id = await post(approvals, a, await extrasOf(a), opts);
+    await store.savePost({ key, slug, kind: "approval", refId: a.id, channelId: approvals, messageId: id, closed: false, postedAt: now });
     out.cards++;
   }
+  if (fresh.length > MAX_CARDS_PER_SYNC) out.more = fresh.length - MAX_CARDS_PER_SYNC;
+
   for (const p of await store.openApprovalPosts(slug)) {
+    if (!p.messageId) continue;
     const a = await src.approval(p.refId);
     if (a && a.status === "pending") continue;
     if (a) {
-      const verdict = a.status === "rejected" ? "❌ Rejected" : "✅ Approved";
-      await hub.editMessage(p.channelId, p.messageId, { content: `${approvalCard(a, { buttons: false }).content}\n${verdict}`, buttons: [] }).catch(() => undefined);
+      const x = await extrasOf(a);
+      const card = renderApproval(a, { ...x, files: undefined }, { buttons: false, standup: p.key.includes("|today|") });
+      await hub.editMessage(p.channelId, p.messageId, { content: `${card.first.content}\n${verdictLine(a)}`, buttons: [] }).catch(() => undefined);
     }
     await store.savePost({ ...p, closed: true });
     out.closed++;
@@ -424,13 +479,14 @@ export async function syncArea(slug: string, d: Pick<ProvisionDeps, "hub" | "sto
       out.note = true;
     }
   }
-  for (const { approval: a, why } of (await src.standupCards?.()) ?? []) {
+  for (const { approval: a, why } of standup) {
     if (a.status !== "pending") continue;
     const key = `${slug}|today|${a.id}`;
-    if (await store.getPost(key)) continue;
-    const m = await hub.sendMessage(noteChannel, standupCard(a, why));
+    if ((await store.getPost(key))?.messageId) continue;
+    const x = await extrasOf(a, why);
+    const id = await post(noteChannel, a, { ...x, ...(oneLineWhy(why) ? { why: oneLineWhy(why)! } : {}) }, { standup: true });
     // kept as an approval post, so its buttons come off when it is decided anywhere
-    await store.savePost({ key, slug, kind: "approval", refId: a.id, channelId: noteChannel, messageId: m.id, closed: false, postedAt: now });
+    await store.savePost({ key, slug, kind: "approval", refId: a.id, channelId: noteChannel, messageId: id, closed: false, postedAt: now });
     out.today = (out.today ?? 0) + 1;
   }
   return out;

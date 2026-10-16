@@ -4,7 +4,7 @@
 import { describe, it, expect } from "vitest";
 import { blankLiterals, nanRisks, nullableGroupKeys, unsafeSorts } from "../../src/graph/safety.js";
 import { readSource, sourceFiles, stringLiterals } from "../helpers/ts-strings.js";
-import { idAnchorsWithoutEntity, unguardedEdgeAggregates } from "../helpers/cypher-lint.js";
+import { entityCreateWithoutId, idAnchorsWithoutEntity, unguardedEdgeAggregates } from "../helpers/cypher-lint.js";
 
 // Strings that mention ORDER BY but are not queries (prompts, error text). Keep this empty unless one really is not.
 const NOT_CYPHER = new Set<string>([]);
@@ -63,6 +63,11 @@ describe("every Cypher string in src/", () => {
 
   it("never returns an aggregate beside a key that can be null (FalkorDB 6.0.2 panics in reply_compact)", () => {
     const bad = allCypher().flatMap((f) => nullableGroupKeys(f.text).map((r) => `${f.where}  ${r}`));
+    expect(bad).toEqual([]);
+  });
+
+  it("creates every Entity node with its id in the CREATE pattern (FalkorDB Cloud checks the constraint before any SET)", () => {
+    const bad = allCypher().flatMap((f) => entityCreateWithoutId(f.text).map((r) => `${f.where}  ${r}`));
     expect(bad).toEqual([]);
   });
 

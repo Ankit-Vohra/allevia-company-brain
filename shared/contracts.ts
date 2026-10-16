@@ -100,7 +100,7 @@ export type OnboardEvent =
   | { type: "page"; url: string; title: string }
   | { type: "nodes"; nodes: NodeRef[]; edges: EdgeRef[] }                             // graph grows live
   | { type: "done"; tenant: string; counts: Record<string, number>; discord?: DiscordInfo }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string; soft?: boolean };   // soft: one step did not finish but the set-up goes on and ends with `done`
 
 // ---------- capability ladder and team settings (product design §2.3, §2.4, §8) ----------
 

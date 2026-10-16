@@ -1,7 +1,7 @@
 // The two source checks in tests/helpers/cypher-lint.ts, on small examples: they flag the shapes that cost an index or
 // a parallel edge, and let the right ones through.
 import { describe, it, expect } from "vitest";
-import { idAnchorsWithoutEntity, unguardedEdgeAggregates } from "../helpers/cypher-lint.js";
+import { entityCreateWithoutId, idAnchorsWithoutEntity, unguardedEdgeAggregates } from "../helpers/cypher-lint.js";
 
 describe("idAnchorsWithoutEntity", () => {
   it("flags an id lookup without the Entity label", () => {
@@ -52,5 +52,17 @@ describe("unguardedEdgeAggregates", () => {
     // a pattern matched after the last count is not counted by it
     expect(unguardedEdgeAggregates("MATCH (t:Turn)-[r:TOUCHED]->(x) WHERE ID(r) >= 0 WITH t, count(x) AS n OPTIONAL MATCH (t)-[:IN_SESSION]->(s) RETURN t.id, s.id, n")).toEqual([]);
     expect(unguardedEdgeAggregates("MATCH (t:Turn) OPTIONAL MATCH (t)-[:IN_SESSION]->(s) WITH t, count(s) AS n RETURN t.id, n")).toHaveLength(1);
+  });
+});
+
+describe("entityCreateWithoutId", () => {
+  it("flags a CREATE of an Entity node whose id is set only afterwards (a mandatory constraint fails on FalkorDB Cloud)", () => {
+    expect(entityCreateWithoutId("MATCH (n:Entity {id:$id}) CREATE (n)-[h:HAD_VERSION]->(v:Entity:Version) SET v += $version")).toHaveLength(1);
+    expect(entityCreateWithoutId("CREATE (v:Entity:Version) SET v.id = $id")).toHaveLength(1);
+  });
+  it("passes a CREATE that carries the id, and the migration probe", () => {
+    expect(entityCreateWithoutId("MATCH (n:Entity {id:$id}) CREATE (n)-[h:HAD_VERSION]->(v:Entity:Version {id: $vid}) SET v += $version")).toEqual([]);
+    expect(entityCreateWithoutId("CREATE (n:Entity:Task) DELETE n")).toEqual([]);
+    expect(entityCreateWithoutId("MATCH (a:Entity {id:$a}), (b:Entity {id:$b}) CREATE (a)-[:R]->(b)")).toEqual([]);
   });
 });

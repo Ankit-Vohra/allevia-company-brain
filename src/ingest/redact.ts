@@ -144,6 +144,8 @@ const SECRET_NAME = /(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|PWD)$|(?:^|_)(?:ke
 const BARE_NAME = /^(?:key|token|secret|password|passwd|pass|pwd)$/i; // "Password: …" and "KEY=…" in any case; "bypass" and "monkey" are not names
 const WEAK_NAME = /^(?:key|pass)$/i;
 const ENV_VAR_NAME = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
+const SLUG_VALUE = /^[a-z]{3,}(?:[-:_.][a-z0-9.]+)+$/;
+const UUID_VALUE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const FILLER = /^(?:none|n\/?a|na|tbd|todo|unknown|empty|blank|the|an?|is|are|in|on|at|to|run|see|use|set|via|from|same|stored|kept|lives|expires|rotate|rotated|never|not|needed|required|yes|no)$/i;
 const PLACEHOLDER_VALUE = /^(?:\*+|[xX]+|\.{2,}|…|<[^<>]*>|\[[^[\]]*\]|\{[^{}]*\})$/; // KEY=***, KEY=<token>, KEY=[YOUR-KEY]
 const envAssignment: Rule = (text, report) =>
@@ -155,6 +157,10 @@ const envAssignment: Rule = (text, report) =>
       const inner = quoted ? value.slice(1, -1) : value.slice(0, value.length - tail.length);
       if (inner === "" || inner.startsWith("$") || inner.startsWith("<") || inner.startsWith(PLACEHOLDER_START) || PLACEHOLDER_VALUE.test(inner)) return m; // empty, a shell reference, already redacted, or a doc placeholder
       if (sep === ":" && ENV_VAR_NAME.test(inner)) return m;
+      // a JSON field that is just called "key" or "pass" ({"key":"site-down"} in a check-up) is a label, not a secret: a
+      // quoted value after a colon counts for those two names only when it looks like a credential (6+ characters with a digit)
+      // and a slug ("season-diwali-2026", "website-rule-opening-hours-62cfb1") is a label even with digits in it; a UUID is not
+      if (sep === ":" && quoted && WEAK_NAME.test(name) && (!(inner.length >= 6 && /\d/.test(inner)) || (SLUG_VALUE.test(inner) && !UUID_VALUE.test(inner)))) return m;
       if (sep === ":" && !quoted) {
         if (!/^[A-Za-z0-9]/.test(inner) || FILLER.test(inner)) return m;
         if (WEAK_NAME.test(name) && !(inner.length >= 6 && /\d/.test(inner))) return m;

@@ -109,7 +109,9 @@ async function runTopics(args: { limit?: number }, ctx: ToolContext) {
   const out = multi.map(({ cid, size, ids }) => {
     const members = ids.map((id) => info.get(id)).filter((d): d is { n: NodeRow; deg: number } => !!d && typeOf(d.n) !== "Chunk")
       .sort((a, b) => b.deg - a.deg || String(a.n.name).localeCompare(String(b.n.name)));
-    const named = [...members.filter((m) => typeOf(m.n) !== "Document"), ...members.filter((m) => typeOf(m.n) === "Document")];
+    // a group is named by the things in it, not by a reading ("signups_phone of Shiftly app (2026-10-07)") or a file
+    const isThing = (m: { n: NodeRow }) => typeOf(m.n) !== "Document" && typeOf(m.n) !== "Observation";
+    const named = [...members.filter(isThing), ...members.filter((m) => !isThing(m))];
     return { cid, size, members, label: named.slice(0, 3).map((m) => m.n.name ?? m.n.id).join(", ") };
   }).filter((c) => c.members.length).sort((a, b) => b.size - a.size || a.label.localeCompare(b.label)).slice(0, limit).map((c, i) => {
     const top = c.members.slice(0, 6);

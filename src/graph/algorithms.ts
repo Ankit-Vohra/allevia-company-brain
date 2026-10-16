@@ -107,12 +107,32 @@ export function finiteRows(rows: Array<[string, number]>): Array<[string, number
   return rows.filter(([, v]) => typeof v === "number" && Number.isFinite(v));
 }
 
+// `params` with its `rels` and `labels` cut to what the projection has; null when it has none of a requested kind.
+async function presentIn(h: GraphHandle, params: Record<string, unknown>, timeoutMs: number): Promise<Record<string, unknown> | null> {
+  const out = { ...params };
+  for (const [key, proc, col] of [["rels", "db.relationshipTypes", "relationshipType"], ["labels", "db.labels", "label"]] as const) {
+    const asked = params[key];
+    if (!Array.isArray(asked) || !asked.length) continue;
+    const have = new Set((await h.roQuery<Record<string, string>>(`CALL ${proc}() YIELD ${col} RETURN ${col} AS v`, {}, { timeoutMs })).map((r) => r.v));
+    const keep = (asked as string[]).filter((x) => have.has(x));
+    if (!keep.length) return null;
+    out[key] = keep;
+  }
+  return out;
+}
+
 // Runs a per-node algorithm once and returns every [id, value] row it yields (projected nodes without an id are
 // skipped), packed MAX_PAGE to a result row so no row is lost to RESULTSET_SIZE. Sorted by `order`.
 async function perNode(
   h: GraphHandle, call: string, col: string, params: Record<string, unknown>, timeoutMs: number,
   order: (a: [string, number], b: [string, number]) => number,
 ): Promise<Array<[string, number]>> {
+  // The projection holds only the relationship types and labels the business really has, and an algorithm that is
+  // handed one that is missing fails ("unknown relationship-type LINKS_TO") instead of finding nothing. A business with
+  // no MENTIONS or LINKS_TO edges is a graph with nothing to group, not an error: ask only for what is there.
+  const present = await presentIn(h, params, timeoutMs);
+  if (!present) return [];
+  params = present;
   const rows = await h.roQuery<{ part: Array<[string, number]> }>(
     `${call} YIELD node, ${col} WITH node.id AS id, ${col} AS v WHERE id IS NOT NULL
      WITH collect([id, v]) AS xs UNWIND range(0, size(xs) - 1, $page) AS i RETURN xs[i..i + $page] AS part`,
@@ -128,7 +148,7 @@ export async function pageRank(g: GraphHandle, label: EntityType | "Entity", rel
   checkLabels([label]);
   if (rel) checkRels([rel]);
   return onEdgesValidAt(g, undefined, rel ? [rel] : [], async (h, left, info) => rowsOf(
-    (await perNode(h, `CALL algo.pageRank('${projLabel(label)}', ${rel ? `'${rel}'` : "null"})`, "score", {}, left(), scoreDesc))
+    (await perNode(h, `CALL algo.pageRank('${projLabel(label)}', ${rel ? `'${rel}'` : "null"})`, "score", { rels: rel ? [rel] : [], labels: [projLabel(label)] }, left(), scoreDesc))
       .map(([id, score]) => ({ id, score })), info), opts);
 }
 

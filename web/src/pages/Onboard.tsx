@@ -85,6 +85,7 @@ interface RunState {
   nodes: NodeRef[];
   edges: EdgeRef[];
   done?: { tenant: string; counts: Record<string, number>; discord?: DiscordInfo };
+  notes?: string[]; // plain sentences about steps that did not finish
   error?: string;
   startedAt: number;
   endedAt?: number;
@@ -137,7 +138,11 @@ export default function OnboardPage() {
         state.nodes = [...state.nodes, ...fresh];
         state.edges = [...state.edges, ...e.edges];
       } else if (e.type === "done") { state.done = { tenant: e.tenant, counts: e.counts, ...(e.discord ? { discord: e.discord } : {}) }; state.endedAt = Date.now(); }
-      else if (e.type === "error") { state.error = e.message; state.endedAt = Date.now(); }
+      else if (e.type === "error") {
+        // a step that did not finish is a note for the end, not the end: the set-up goes on and finishes
+        if (e.soft) state.notes = [...(state.notes ?? []).filter((n) => n !== e.message), e.message];
+        else { state.error = e.message; state.endedAt = Date.now(); }
+      }
       setRun({ ...state });
     };
     try {
@@ -215,7 +220,7 @@ export default function OnboardPage() {
               </p>
             </div>
           </Reveal>
-          {run?.error && <p className="notice notice-bad" role="alert">{run.error} Check the address and try again.</p>}
+          {run?.error && <p className="notice notice-bad" role="alert">{run.error} {/^We could not read /.test(run.error) ? "Check the address and try again." : "Try again in a minute."}</p>}
           <button type="submit" className="btn btn-gold ob-go" disabled={!url.trim()}>
             Set up my team <Icon name="send" size={16} />
           </button>
@@ -244,6 +249,12 @@ export default function OnboardPage() {
         </section>
       )}
 
+      {run?.done && run.notes?.length ? (
+        <div className="notice" role="status">
+          <p><b>Your team is ready, with a few loose ends.</b></p>
+          <ul>{run.notes.map((n) => <li key={n}>{n}</li>)}</ul>
+        </div>
+      ) : null}
       {run?.done && (
         <Ready
           host={hostOf(url)}

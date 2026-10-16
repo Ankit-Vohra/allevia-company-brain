@@ -98,6 +98,20 @@ describe("Sentry: new errors and the one hitting the most people (Zoya)", () => 
     expect(cs.map((c) => c.evidence[0])).not.toContain("event:sentry-issue-app-9");
   });
 
+  it("an error that touches two apps is one card, not two (audit #39)", async () => {
+    const one = snapshot({ sentry_issues: {
+      period: "14d", stability: { crashFreeSessionsPct: 99.9, crashFreeUsersPct: 99.9, sessions: 500, users: 17, series: [] }, newIssues: { count: 0, items: [] },
+      topUnresolved: [{ id: "S-1", title: "SyntheticFatal", where: "x", level: "fatal", priority: "high", unhandled: true, eventsInPeriod: 400, users: 120, firstSeen: "2026-10-08", lastSeen: "2026-10-14" }], latestRelease: [] } });
+    const { g: g2, cleanup: c2 } = await testGraph();
+    try {
+      await load(g2, one);
+      await upsertNode(g2, { type: "Channel", id: "channel:android-app", name: "Android app" }, NOW);
+      await g2.query("MATCH (e:Entity {id:'event:sentry-issue-s-1'}), (c:Entity {id:'channel:android-app'}) CREATE (e)-[:AFFECTS {since:$t, recordedAt:$t, src:'test', asOf:'2026-10-15'}]->(c)", { t: NOW });
+      const cs = await DETECTORS["tech.sentry_hot_issue"].run(g2, { now: NOW });
+      expect(cs.map((c) => c.key)).toEqual(["tech.sentry_hot_issue:event:sentry-issue-s-1"]);
+    } finally { await c2(); }
+  });
+
   it("people count against the app's own audience: 2 of 17 is a lot, 2 of 1,462 is not", async () => {
     const small = snapshot({ sentry_issues: {
       period: "14d", stability: { crashFreeSessionsPct: 99.9, crashFreeUsersPct: 99.9, sessions: 500, users: 17, series: [] }, newIssues: { count: 0, items: [] },

@@ -6,6 +6,7 @@ import { AGENTS } from "../../shared/roster.js";
 import { ownerJargon } from "../../src/agent/style.js";
 import { codeCatalog } from "../../src/agent/skills/catalog.js";
 import { STARTERS } from "../../web/src/lib/starters.js";
+import { humanDates } from "../../web/src/lib/words.js";
 import {
   TEAM, TONES, checkLines, checksPass, chatPath, contributions, dotOf, dotWords, doorWords, howWeGotThis, starterFor, startersFor, teamTalk,
   threadsFor, toneDirective, whoFrom, whoOfThread, workingNow,
@@ -44,6 +45,7 @@ describe("addresses and who a thread belongs to", () => {
   it("the team is the default; a roster id is a person; the Chief is the team", () => {
     expect(whoFrom(undefined)).toBe(TEAM);
     expect(whoFrom("team")).toBe(TEAM);
+    expect(whoFrom("Rohan")).toBe("growth-marketer"); // a first name in the address works too
     expect(whoFrom("chief-of-staff")).toBe(TEAM);
     expect(whoFrom("content-strategist")).toBe("content-strategist");
     expect(whoFrom("ghost")).toBe(TEAM);
@@ -108,6 +110,20 @@ describe("what each person contributed", () => {
       { agent: "data-analyst", text: "Salary reveals got 3.4 times our median reach.", checks: [{ by: "coe-lead", verdict: "fix" }] },
       { agent: "content-strategist", text: "Three briefs.", checks: [{ by: "fact-checker", verdict: "ok" }] },
     ]);
+  });
+});
+
+describe("a note read by an owner (audit #39)", () => {
+  const events = (text: string): AgentEvent[] => [{ type: "finding", agent: "data-analyst", findingId: "f9", text, citations: [] }];
+  it("has no bold marks, no label, no run-on bullets and no machine dates", () => {
+    const [n] = contributions(events("Findings: **Sign-ups broke on 2026-10-07.** - Views held at 397. - People got stuck [[obs:x:2026-10-07]]."));
+    expect(n!.text).toBe(`Sign-ups broke on 7 Oct${new Date().getFullYear() === 2026 ? "" : " 2026"}. Views held at 397. People got stuck.`);
+    expect(n!.text).not.toMatch(/\*\*|Findings|2026-10/);
+  });
+  it("humanDates leaves the ids inside [[source]] markers alone", () => {
+    expect(humanDates("fell on 2026-10-07 [[obs:a:2026-10-07]]", new Date("2026-11-01"))).toBe("fell on 7 Oct [[obs:a:2026-10-07]]");
+    expect(humanDates("on 2025-12-31", new Date("2026-11-01"))).toBe("on 31 Dec 2025");
+    expect(humanDates("not a date 2026-13-45")).toBe("not a date 2026-13-45");
   });
 });
 

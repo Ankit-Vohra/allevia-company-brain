@@ -3,8 +3,9 @@
 // Words follow docs/owner-words.md: the owner reads "your team", a person's name and job, "sources", never "agent" or "graph".
 import type { AgentEvent, AgentId, AgentMode, SkillView, SourceRef, TurnChecks } from "../../../shared/contracts.js";
 import { PLAIN_TOOLS } from "../../../shared/plain-tools.js";
-import { agentById } from "../../../shared/roster.js";
+import { AGENTS, agentById } from "../../../shared/roster.js";
 import { STARTERS } from "./starters.js";
+import { humanDates } from "./words.js";
 
 export const CHIEF: AgentId = "chief-of-staff";
 /** "team" is the whole team (the Chief routes); anything else is a roster id. */
@@ -22,7 +23,9 @@ export function chatPath(who: Who, sessionId?: string): string {
 /** The entry an address names: a roster id, or the team. Anything else (a typo, an old link) is the team. */
 export function whoFrom(param: string | undefined): Who {
   if (!param || param === TEAM || param === CHIEF) return TEAM;
-  return agentById(param) ? param : TEAM;
+  if (agentById(param)) return param;
+  const byName = AGENTS.find((a) => a.name.toLowerCase() === param.toLowerCase()); // /chat/rohan reads as well as /chat/growth-marketer
+  return byName ? byName.id : TEAM;
 }
 
 /** Which entry a thread belongs to: the person it was a direct chat with, else the whole team. */
@@ -75,6 +78,13 @@ const clip = (s: string, n: number): string => {
 };
 /** A working line without the [[id]] markers: the thread is read by an owner, not by the graph. */
 const noCites = (s: string): string => s.replace(/\s*\[\[[^\]]*\]\]/g, "").replace(/\s+([.,;:])/g, "$1");
+/** What a person added, as one plain sentence: no bold marks, no "Findings:" label, bullets run on, days in words. */
+export const noteText = (s: string): string => humanDates(noCites(s)
+  .replace(/\*\*|__|`/g, "")
+  .replace(/^\s*(?:key\s+)?(?:findings?|notes?)\s*:\s*/i, "")
+  .replace(/([.!?])\s+[-•]\s+/g, "$1 ")
+  .replace(/^\s*[-•]\s+/, "")
+  .replace(/\s+/g, " ").trim());
 
 /**
  * The messages the team sent each other in one turn, in order, as a readable thread: the Chief's plan, who handed what to
@@ -145,7 +155,7 @@ export function contributions(events: readonly AgentEvent[]): Contribution[] {
   for (const e of events) {
     if (e.type === "finding") {
       if (!by.has(e.findingId)) order.push(e.findingId);
-      by.set(e.findingId, { agent: e.agent, text: noCites(e.text), checks: by.get(e.findingId)?.checks ?? [] });
+      by.set(e.findingId, { agent: e.agent, text: noteText(e.text), checks: by.get(e.findingId)?.checks ?? [] });
     } else if (e.type === "review") {
       by.get(e.findingId)?.checks.push({ by: e.agent, verdict: e.verdict });
     }

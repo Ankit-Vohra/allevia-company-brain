@@ -107,6 +107,16 @@ describe("algorithms (integration, 6-node fixture)", () => {
     expect(new Set(cs.map((c) => c.communityId)).size).toBe(1);
   });
 
+  it("finds nothing, and does not fail, for a relationship type or label the graph does not have (audit #39)", async () => {
+    // the fixture has no MENTIONS or LINKS_TO edges and no Document nodes: a business with no documents is not an error
+    expect(await communities(g, [], ["MENTIONS", "LINKS_TO"])).toEqual([]);
+    expect(await components(g, ["Document"], ["MENTIONS"])).toEqual([]);
+    expect(await betweenness(g, ["Task"], ["MENTIONS"])).toEqual([]);
+    expect(await pageRank(g, "Document")).toEqual([]);
+    // a type that is there still counts when another is missing
+    expect((await communities(g, ["Task"], ["BLOCKS", "LINKS_TO"])).length).toBe(2);
+  });
+
   it("scores betweenness on current edges only", async () => {
     const bc = await betweenness(g, ["Person", "Task", "Decision", "System"], ["OWNS", "BLOCKS", "DECIDED", "AFFECTS", "DEPENDS_ON"]);
     const s = (id: string) => bc.find((r) => r.id === id)!.score;

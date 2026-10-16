@@ -171,6 +171,10 @@ export interface HubStore {
   // One writer per business at a time, across processes. Returns a token, or null when someone else holds it.
   claim(slug: string, now: number, ttlMs: number): Promise<string | null>;
   release(slug: string, token: string): Promise<void>;
+  // One poster of cards per business at a time (the web server posts a new card at once, the bot syncs every minute): a
+  // separate lock from `claim`, so posting never makes provisioning busy. Absent in a store that has one process.
+  claimSync?(slug: string, now: number, ttlMs: number): Promise<string | null>;
+  releaseSync?(slug: string, token: string): Promise<void>;
   saveInvite(rec: InviteRecord): Promise<void>;
   invites(slug: string): Promise<InviteRecord[]>;
   openInvites(guildId: string): Promise<InviteRecord[]>;

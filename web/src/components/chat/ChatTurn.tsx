@@ -12,7 +12,7 @@ import { MadeCard, QuickReplies } from "../MadeCard";
 import { Reveal } from "../Reveal";
 import { APPROVALS_CHANGED } from "../TopBar";
 import { CHIEF, TEAM, type Who, checksPass, contributions, doorWords, howWeGotThis, teamTalk, workingNow } from "../../lib/chat";
-import { plain } from "../../lib/words";
+import { humanDates, plain } from "../../lib/words";
 import type { RunView } from "../../state/derive";
 import type { Approval } from "../../types-ext";
 import type { TurnItem } from "./useThread";
@@ -102,7 +102,7 @@ export function ChatTurn(p: TurnProps) {
                 <AgentAvatar id={answerBy} size={26} ring={!view.final} />
                 <span><b>{nameOf(answerBy)}</b><span className="ct-role">{jobOf(answerBy)}</span></span>
               </header>
-              <Markdown text={view.answer} nodes={view.nodes} onCite={cite} className="ct-md" />
+              <Markdown text={humanDates(view.answer)} nodes={view.nodes} onCite={cite} className="ct-md" />
               {view.final && (
                 <p className={`ct-assure${ok ? "" : " is-warn"}`}>
                   <Icon name={ok ? "check" : "warn"} size={14} />

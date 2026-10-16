@@ -173,13 +173,13 @@ export function approvalCard(a: ApprovalDto, opts: { buttons?: boolean; target?:
     ...(a.payload.body.trim() ? [quote(clip(a.payload.body.trim(), 900))] : []),
     ...(about ? [`About: ${clip(about, 200)}`] : []),
     ...(a.kind === "github_issue" && opts.buttons !== false ? [fixDestinationWords(opts.target)] : []),
-    `\`${a.id}\``,
   ];
-  const ids = [buttonId("approve", a.id), buttonId("reject", a.id)];
+  const ids = [buttonId("approve", a.id), changeButtonId(a.id), buttonId("reject", a.id)];
   const fits = ids.every((id) => id.length <= 100); // Discord's custom_id limit
   const buttons: ButtonSpec[] = opts.buttons === false || !fits ? [] : [
     { customId: ids[0]!, label: "Approve", style: "success" },
-    { customId: ids[1]!, label: "Reject", style: "danger" },
+    { customId: ids[1]!, label: "Change", style: "secondary" },
+    { customId: ids[2]!, label: "No thanks", style: "danger" },
   ];
   if (opts.buttons !== false && !fits) lines.push("_Decide this one in the web app._");
   return { content: clip(lines.join("\n"), 1900), buttons };
