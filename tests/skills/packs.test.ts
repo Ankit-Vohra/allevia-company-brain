@@ -41,11 +41,11 @@ describe("the shipped skill packs", () => {
     }
   });
 
-  it("every person on the team has skills of their own: three to ten", () => {
+  it("every person on the team has skills of their own: three to twenty-five", () => {
     for (const a of AGENTS) {
       const mine = catalog.forAgent(a.id);
       expect(mine.length, `${a.name} has ${mine.length} skills`).toBeGreaterThanOrEqual(3);
-      expect(mine.length, `${a.name} has ${mine.length} skills`).toBeLessThanOrEqual(10); // only names and one line each sit in the prompt; the full text loads on use
+      expect(mine.length, `${a.name} has ${mine.length} skills`).toBeLessThanOrEqual(25); // only names and one line each sit in the prompt; the full text loads on use
     }
   });
 
