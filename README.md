@@ -79,6 +79,53 @@ running), give the owner a team instead of a tool, and make every answer carry i
 - **Other surfaces.** A Discord bot (a thread per conversation, live work log, approval buttons), a read-only MCP server
   for other agents, a CLI for everything, and a static marketing site with pricing in four currencies (`site/`).
 
+## Hero use case: "Why did sign-ups drop this week, and what should we do?"
+
+The question the demo is built around, and the clearest place to see the graph doing work. It runs live on the Claude subscription,
+on two businesses: **Shiftly** (`demo_growth`, a synthetic shift-jobs app, seeded by `npm run cli -- seed-demo`, no private data) and
+Aamdani (private, real records). On Shiftly the 2.8.0 release (7 Oct) put a new phone-number box on the sign-up screen, it crashes, and new
+accounts fell from about 250 a day to about 50 the same day. Around it, the noise a real week has: Google sign-ups unchanged, an ad campaign
+paused three days *after* the fall began, a search update from September, an older crash on another screen, a hotfix waiting in the App
+Store's review queue, a decision from last week and the thread it came from.
+
+```mermaid
+flowchart LR
+  Q["Why did sign-ups drop,<br/>and what should we do?"] --> M[Meera plans five desks]
+  M --> K["Kabir: which step fell, which day"]
+  M --> Z["Zoya: what crashed on those screens"]
+  M --> I["Imran: what shipped, what waits in review"]
+  M --> S["Sara: what we decided before"]
+  Z --> A["Arjun: what else breaks,<br/>one step against four"]
+  K & Z & I & S & A --> C["Meera: cause, chain, path,<br/>two cards for your OK"]
+```
+
+What comes back, in about two minutes: the cause and how sure it is ("proven" where a record links the release to the crash, "likely" where only the dates
+fit, "not shown" where nothing does); the chain with dates; what else it hits at depth 1 against depth 4; what we decided last time and where it
+stands; what is **not in the records**; the path drawn node by node under the answer; and two approval cards, a fix task with the evidence and a
+two-line message to users. Editing the message before approving teaches a rule; asking again a day later reports where yesterday's cards stand instead of drafting them again.
+
+**The path, as the graph holds it** (written by the ingest mappers from the tracker's own fields, each edge with its source, date and `conf`):
+
+```
+reading (Observation) -MEASURES-> funnel step (Feature) -DEPENDS_ON-> screen (Page)
+        <-AFFECTS{how: crashed_on}- crash (Event) <-AFFECTS{how: introduced}- release (Event);   person -OWNS-> screen
+```
+
+| Part of the answer | FalkorDB at work | Where |
+|---|---|---|
+| Which step fell, and the day | Reads through the `Observation` indexes (subject, metricKey), one query ranks every step; a one-change-point fit returns `shift {at, before, after}` | [`metrics.ts`](src/agent/tools/metrics.ts), [queries §13](docs/falkordb-queries.md) |
+| Screen, crash, release, owner | A 4-hop pattern over current edges; `algo.SPpaths` finds the same chain between any step and any release | `find_paths`, [queries §4 and §13](docs/falkordb-queries.md) |
+| Depth 1 against depth 4 | `impact_of`: one traversal per hop over `DEPENDS_ON`, `AFFECTS`, `BLOCKS`, each item with the edge that pulled it in | [queries §3](docs/falkordb-queries.md) |
+| What was decided and where it stands | Recall: from the nodes in the question to earlier turns, decisions, notes, and now each earlier answer's cards and the task an approved card made | [queries §11 and §13](docs/falkordb-queries.md) |
+| What changed when | Every number is a dated `Observation`; every edge has `since`/`until` and `recordedAt` | [schema](src/graph/schema.ts) |
+| Honest "not in the records" | A crash with no route gets no screen; a crash with no first release gets no release; the answer says what the records do not link | [`app-health.ts`](src/ingest/sources/ops-map/app-health.ts) |
+| Two cards, then a learned rule | `Recommendation -PROPOSES-> Approval`; an edit becomes `Rule -LEARNED_FROM-> Approval` | [`actions/`](src/actions) |
+
+On Aamdani the same question honestly ends in "cause not shown": the records hold the sign-up counts, the funnel steps, crash-free sessions, an iOS build in
+review and a login-screen timeout, but no record links a release to a crash or a crash to the sign-up step, so the answer says so and says what to connect.
+`evals/hero.yaml` (Shiftly) and `evals/hero-aamdani.yaml` assert all of this; pass rates over live runs are in [`docs/evals/`](docs/evals). The demo steps are the
+opening of [`docs/demo-script.md`](docs/demo-script.md).
+
 ## How FalkorDB is central
 
 The agents cannot answer without walking the graph: every tool is a graph query or a graph algorithm, and the answer's
