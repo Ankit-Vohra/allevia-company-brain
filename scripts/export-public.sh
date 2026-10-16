@@ -121,13 +121,24 @@ fi
 
 if [[ "$RUN_TESTS" == 1 ]]; then
   echo "Hygiene test (tests/hygiene.test.ts) on the export…"
-  ln -s "$REPO/node_modules" "$OUT/node_modules"
-  if (cd "$OUT" && npx --no-install vitest run tests/hygiene.test.ts >"$OUT/.hygiene.log" 2>&1); then
-    echo "  passed"
-  else
-    echo "  FAILED (log: $OUT/.hygiene.log)"; fail=1
+  # The test needs the dependencies; borrow them from this checkout, or from the main checkout when this is a git
+  # worktree (a worktree has no node_modules of its own). Never run `npm install` in the export itself.
+  DEPS="$REPO/node_modules"
+  if [[ ! -d "$DEPS" ]]; then
+    MAIN="$(git -C "$REPO" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print substr($0,10); exit}')"
+    if [[ -n "$MAIN" && -d "$MAIN/node_modules" ]]; then DEPS="$MAIN/node_modules"; fi
   fi
-  rm -f "$OUT/node_modules"
+  if [[ ! -d "$DEPS" ]]; then
+    echo "  FAILED: no node_modules to run the test with (run npm install in $REPO, or pass --no-tests)"; fail=1
+  else
+    ln -s "$DEPS" "$OUT/node_modules"
+    if (cd "$OUT" && npx --no-install vitest run tests/hygiene.test.ts >"$OUT/.hygiene.log" 2>&1); then
+      echo "  passed"
+    else
+      echo "  FAILED (log: $OUT/.hygiene.log)"; fail=1
+    fi
+    rm -f "$OUT/node_modules"
+  fi
 fi
 
 if [[ "$fail" == 1 ]]; then
