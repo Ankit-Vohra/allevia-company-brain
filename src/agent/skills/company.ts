@@ -158,7 +158,8 @@ ${bullets(f.channels, "None recorded.")}`,
 2. Line 1 is the conflict and still makes sense to a stranger: who the person is, what they need, and the pain, in one spoken sentence from the first frame. No establishing shot, no walk-in, no silence.
 3. Beat 1 is 3 to 5 seconds, a second shot comes before 5 seconds, the product or the result is on screen by about 12 seconds, and the last line answers the first so the end flows back into the opening.
 4. Proper sentences, not telegrams; every line makes sense to someone who heard only the lines before it; a line about the product has the product on screen while it is said.
-5. Real screens, the logo and every word on screen are put on afterwards, never drawn by a video model.
+5. Real screens, the logo and every word on screen are put on afterwards, never drawn by a video model: the hook words on frame one, each line revealed a few words at a time at reading pace (it must work on mute), everything inside the 14% top, 35% bottom and 6% side safe zone, the end card with the logo and ONE action.
+6. ${n}'s own photos and screens first (the design-standard skill); a generated clip only starts from a real frame and only moves the camera. Music and clips are priced and wait for the owner's OK.
 
 ## Who to speak to
 ${bullets(f.audiences, "Not recorded: ask the owner who the reel is for.")}
@@ -191,6 +192,7 @@ ${f.donts.length ? `\nNever:\n${bullets(f.donts, "", 6)}` : ""}
 2. The headline is the conflict or the benefit in at most 7 words, then the proof, then the action. The offer and its dates come from the owner; never invent a discount.
 3. Make two versions that differ in one thing (the hook, or the picture), and say the number that will decide and when to look.
 4. Every word, price and logo on the image is put on exactly; the picture never changes the product.
+5. Design it to the design-standard skill: one message of at most 7 words, one supporting line, one action, no phrase said twice; ${n}'s own photos or real screens first, a generated scene only when none fits and only of ${n}'s own place and people; a layout that fits the job and differs from the last one.
 
 ## What to sell, to whom
 Products:

@@ -20,6 +20,24 @@ export function sniffType(b: Buffer): FileType {
   return "unknown";
 }
 
+// The weight class a font file declares (OS/2 usWeightClass: 400 regular, 700 bold), or null.
+export function fontWeight(b: Buffer): number | null {
+  try {
+    if (b.length < 12) return null;
+    const count = b.readUInt16BE(4);
+    for (let i = 0; i < count && i < 64; i++) {
+      const at = 12 + i * 16;
+      if (at + 16 > b.length) return null;
+      if (b.toString("latin1", at, at + 4) !== "OS/2") continue;
+      const off = b.readUInt32BE(at + 8);
+      if (off + 6 > b.length) return null;
+      const w = b.readUInt16BE(off + 4);
+      return w >= 100 && w <= 1000 ? w : null;
+    }
+  } catch { /* not a font we can read */ }
+  return null;
+}
+
 // The font's family name (nameID 16, else 1) from a TrueType/OpenType file; null when it cannot be read.
 export function fontFamilyName(b: Buffer): string | null {
   try {

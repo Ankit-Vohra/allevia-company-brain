@@ -91,6 +91,13 @@ describe("brand uploads", () => {
     expect(r.route).toBe("brand");
   });
 
+  it("files a screenshot of the business's own app as an app screen, kept for posters even in a chat channel", async () => {
+    const vision = new FakeVision({ librarian: verdict({ kind: "app_screen", description: "A job feed screen of the app." }) });
+    const r = await put({ ...base, bytes: await photo(), intent: "any" }, { store, vision, now: now() });
+    expect(r).toMatchObject({ route: "brand", kind: "app-screen" });
+    expect(r.message).toMatch(/real screen in a phone/);
+  });
+
   it("sends a photo the owner wants worked on to the Studio instead of filing it as brand material", async () => {
     const vision = new FakeVision({ librarian: verdict({ kind: "product_photo", workOnIt: true }) });
     const before = (await listBrandAssets(g)).length;

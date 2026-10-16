@@ -98,10 +98,10 @@ describe.skipIf(!hasFfmpeg)("reel drafts (ffmpeg)", () => {
     // lineage: it derives from the approved picture and uses the logo file
     expect(await g.roQuery("MATCH (c:Asset {kind:'clip'})-[:DERIVED_FROM]->(:Asset {id:'asset:photo-1'}) RETURN c.id")).not.toHaveLength(0);
     expect(await g.roQuery("MATCH (c:Asset {kind:'clip'})-[:USES_ASSET]->(:BrandAsset {kind:'logo'}) RETURN c.id")).not.toHaveLength(0);
-    // the end card frame is the paper colour with the logo in the middle
+    // the end card frame is the brand's deep colour with the logo in the middle (one confident close, not a pale card)
     const endFrame = await frameAt(video, mp4, 8);
     const stats = await sharp(endFrame).extract({ left: 0, top: 0, width: 200, height: 200 }).stats();
-    expect(Math.abs(stats.channels[0]!.mean - 0xf4)).toBeLessThan(12);
+    expect(stats.channels[0]!.mean).toBeLessThan(60);
     expect(r.notes.join(" ")).toMatch(/no sound/);
   }, 120_000);
 
