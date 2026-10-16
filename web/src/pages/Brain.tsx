@@ -9,6 +9,7 @@ import { api } from "../api";
 import { NodeCard, SearchBox } from "../components/brain-card";
 import { BRAIN_GROUPS, GROUPED_LABELS, NOT_HEADLINES, groupHue, kindName, thingsCount, tidyName, whenWords } from "../components/brain-words";
 import { GraphAtWorkPanel } from "../components/GraphAtWork";
+import { GraphGrowthPanel } from "../components/GraphGrowth";
 import { Icon } from "../components/Icon";
 import { Reveal } from "../components/Reveal";
 import { fmtNum } from "../lib/format";
@@ -201,6 +202,8 @@ function Summary({ tenantId, tenantName, overview, nodes, graphLoading, onPick, 
       )}
 
       <GraphAtWorkPanel tenantId={tenantId} onPick={onPick} />
+
+      <GraphGrowthPanel tenantId={tenantId} />
 
       <section className="bs-section" aria-labelledby="bs-groups">
         <h2 id="bs-groups" className="bs-section-title">Everything, by kind</h2>

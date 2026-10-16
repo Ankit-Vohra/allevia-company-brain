@@ -155,6 +155,10 @@ export const api = {
   async graphAtWork(t: string, focus?: string): Promise<import("./components/GraphAtWork").GraphAtWork | null> {
     return mode === "mock" ? null : getJson(`/api/${enc(t)}/graph/at-work${focus ? `?focus=${enc(focus)}` : ""}`);
   },
+  /** GET /api/:t/graph/story: how the brain grew (the Brain page's "It keeps growing"). Live server only (null in mock mode). */
+  async graphStory(t: string, by: "recorded" | "happened" = "recorded"): Promise<import("./components/GraphGrowth").GraphStoryDto | null> {
+    return mode === "mock" ? null : getJson(`/api/${enc(t)}/graph/story?by=${by}`);
+  },
   async graphOverview(t: string): Promise<GraphData> {
     return mode === "mock" ? (await mock()).graphOverview(t) : getJson(`/api/${enc(t)}/graph/overview`);
   },

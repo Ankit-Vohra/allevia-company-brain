@@ -2,11 +2,14 @@
 // source, day-one facts); read-only, safe on the live database (src/ingest/quality.ts).
 // `graph:tidy <tenant>`: onboarding's tidy pass on demand (src/ingest/tidy.ts): merge near-duplicates, retype other
 // businesses, retire first names, all reversible with db:unmerge. `--dry-run` says what it would do and writes nothing.
+// `graph:story <tenant>`: how the business's brain grew, nodes and edges per day or week by kind (src/graph/story.ts);
+// read-only, the numbers behind the website's "it keeps growing".
 import { listGraphs, openGraph, graphName } from "../graph/client.js";
 import { businessId } from "../graph/tenants.js";
 import { findBusinessId } from "../actions/shared.js";
 import { formatQuality, graphQuality } from "../ingest/quality.js";
 import { tidyGraph } from "../ingest/tidy.js";
+import { formatStory, graphStory, type StoryAxis, type StoryBucket } from "../graph/story.js";
 import { embedPassages } from "../ingest/embed.js";
 import { AgentSdkRunner } from "../ingest/llm.js";
 import { makeAsk } from "../ingest/sources/website/ask.js";
@@ -35,6 +38,25 @@ export const commands: Command[] = [
       if (typeof o === "string") { console.error(o); return 1; }
       const r = await graphQuality(o.g, o.id);
       console.log(args.includes("--json") ? JSON.stringify(r, null, 1) : formatQuality(r));
+      return 0;
+    },
+  },
+  {
+    name: "graph:story",
+    usage: "graph:story <tenant> [--by recorded|happened] [--bucket day|week] [--json]",
+    summary: "How a business's brain grew: nodes and edges per week by kind, from the graph itself (read-only)",
+    async run(args) {
+      const tenant = args.find((a) => !a.startsWith("--") && !["recorded", "happened", "source", "day", "week"].includes(a));
+      if (!tenant) { console.error("Usage: npm run cli -- graph:story <tenant> [--by recorded|happened] [--bucket day|week] [--json]"); return 2; }
+      const flag = (name: string): string | undefined => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
+      const by = flag("by") ?? "recorded";
+      const bucket = flag("bucket") ?? "auto";
+      if (!["recorded", "happened", "source"].includes(by)) { console.error('--by is "recorded" (when the team learned it) or "happened" (the date of the source)'); return 2; }
+      if (!["auto", "day", "week"].includes(bucket)) { console.error('--bucket is "day" or "week"'); return 2; }
+      if (!(await listGraphs()).includes(graphName(tenant))) { console.error(`no graph for ${tenant} (${graphName(tenant)})`); return 1; }
+      const g = await openGraph(tenant);
+      const s = await graphStory(g, { axis: (by === "recorded" ? "recorded" : "source") as StoryAxis, bucket: bucket as StoryBucket | "auto", tenant });
+      console.log(args.includes("--json") ? JSON.stringify(s, null, 1) : formatStory(s));
       return 0;
     },
   },
