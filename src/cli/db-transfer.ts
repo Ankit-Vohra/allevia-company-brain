@@ -65,17 +65,18 @@ export const commands: Command[] = [
   },
   {
     name: "db:import",
-    usage: "db:import <file> --to <url|env:NAME> [--graph <name>] [--replace]",
+    usage: "db:import <file> --to <url|env:NAME> [--graph <name>] [--replace] [--max-memory-mb <n>]",
     summary: "Load a db:export file into a server, rebuild its indexes and constraints, and verify the copy",
     async run(args) {
-      const [file] = positional(args, ["--to", "--graph"]);
+      const [file] = positional(args, ["--to", "--graph", "--max-memory-mb"]);
       const to = flag(args, "--to");
-      if (!file || !to) { console.error("Usage: npm run cli -- db:import <file> --to <url|env:NAME> [--graph <name>] [--replace]"); return 2; }
+      if (!file || !to) { console.error("Usage: npm run cli -- db:import <file> --to <url|env:NAME> [--graph <name>] [--replace] [--max-memory-mb <n>]"); return 2; }
       const url = resolveUrl(to);
       try {
         const dump = readDump(file);
         const r = await importDump(dump, url, {
           graph: flag(args, "--graph"), replace: args.includes("--replace"), log: (m) => console.log(`  ${m}`),
+          ...(flag(args, "--max-memory-mb") ? { maxMemoryMb: Number(flag(args, "--max-memory-mb")) } : {}),
         });
         const v = r.verify;
         console.log(`${r.graph} on ${describeUrl(url)}: ${r.nodes} nodes, ${r.edges} edges, ${r.schema.indexes} indexes, ` +

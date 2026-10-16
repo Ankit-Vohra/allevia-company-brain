@@ -114,6 +114,13 @@ describe("db:export and db:import (integration)", () => {
     expect((await (await connect()).list())).not.toContain(`${dst}x`);
   });
 
+  it("stops and drops what it wrote when the server passes --max-memory-mb", async () => {
+    const r = await run("db:import", [file, "--to", url, "--graph", `${dst}m`, "--max-memory-mb", "1"]);
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/MB used \(limit 1 MB\): stopped and dropped the partial/);
+    expect((await (await connect()).list())).not.toContain(`${dst}m`);
+  });
+
   it("refuses at export a property it cannot carry faithfully", async () => {
     const g = await openGraphByName(testGraphName());
     try {

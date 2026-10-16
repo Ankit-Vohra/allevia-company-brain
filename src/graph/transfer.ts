@@ -127,6 +127,12 @@ async function writeStamp(db: Awaited<ReturnType<typeof connect>>, graph: string
   }
 }
 
+// The server's used_memory (INFO memory), in MB.
+export async function usedMemoryMb(db: Awaited<ReturnType<typeof connect>>): Promise<number> {
+  const info = String(await (await db.connection).info("memory"));
+  return Number(/used_memory:(\d+)/.exec(info)?.[1] ?? NaN) / 1048576;
+}
+
 export async function moduleVersion(db: Awaited<ReturnType<typeof connect>>): Promise<number | null> {
   try {
     const mods = (await (await db.connection).sendCommand(["MODULE", "LIST"])) as unknown[][];
@@ -289,7 +295,9 @@ export interface ImportReport {
 }
 export interface VerifyReport { ok: boolean; problems: string[]; spotChecked: number; summary: Summary }
 
-export interface ImportOpts { graph?: string; replace?: boolean; log?: (msg: string) => void; spotChecks?: number }
+// maxMemoryMb: the server's used_memory is read after every batch (and after the indexes); past it the import stops and drops
+// what it wrote, so a small managed server (FalkorDB Cloud free: 100 MB, no eviction) never fills up.
+export interface ImportOpts { graph?: string; replace?: boolean; log?: (msg: string) => void; spotChecks?: number; maxMemoryMb?: number }
 
 export async function importDump(dump: GraphDump, url: string, opts: ImportOpts = {}): Promise<ImportReport> {
   const t0 = Date.now();
@@ -306,6 +314,14 @@ export async function importDump(dump: GraphDump, url: string, opts: ImportOpts 
     log(`dropping the existing ${name} (${c.nodes} nodes, ${c.edges} edges)`);
     await g.drop();
   }
+  const memoryGuard = async (): Promise<void> => {
+    if (opts.maxMemoryMb === undefined) return;
+    const used = await usedMemoryMb(db);
+    if (used <= opts.maxMemoryMb) return;
+    await g.drop();
+    throw new Error(`the server reached ${used.toFixed(1)} MB used (limit ${opts.maxMemoryMb} MB): stopped and dropped the partial ${name}`);
+  };
+  await memoryGuard();
 
   // labels in the source's order
   for (const l of dump.header.labels) await g.query(`CREATE (n:${l}) DELETE n`);
@@ -328,6 +344,7 @@ export async function importDump(dump: GraphDump, url: string, opts: ImportOpts 
       if (res.length !== b.length) throw new Error(`a batch of ${b.length} ${set} nodes created ${res.length}`);
       for (const r of res) map.set(r.i, r.n);
       done += b.length;
+      await memoryGuard();
     }
   }
   log(`${done} nodes written`);
@@ -351,6 +368,7 @@ export async function importDump(dump: GraphDump, url: string, opts: ImportOpts 
         }) });
       if ((res[0]?.c ?? 0) !== b.length) throw new Error(`a batch of ${b.length} ${t} edges created ${res[0]?.c ?? 0}`);
       done += b.length;
+      await memoryGuard();
     }
   }
   log(`${done} edges written`);
@@ -378,6 +396,7 @@ export async function importDump(dump: GraphDump, url: string, opts: ImportOpts 
   }
   for (const c of cons) status[`${c.type} ${c.label}.${c.props.join(",")}`] = c.status;
   for (const c of cons) if (c.status !== "OPERATIONAL") problems.push(`constraint ${c.type} ${c.label}.${c.props.join(",")} is ${c.status}`);
+  await memoryGuard();
   const idx = await listIndexes(g);
 
   log("verifying");
