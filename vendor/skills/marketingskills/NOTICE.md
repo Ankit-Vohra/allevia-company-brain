@@ -26,6 +26,7 @@ SaaS or e-commerce, and they are **not** loaded by Allevia. Their methods are re
 | `skills/data-analyst/page-that-should-sell/SKILL.md` | Kabir, analytics | `cro` |
 | `skills/data-analyst/which-channel-brings-customers/SKILL.md` | Kabir, analytics | `attribution` |
 | `skills/copy-editor/seven-sweeps-edit/SKILL.md` | Dev, copy | `copy-editing`, and the "no AI tells" lists in `social` and `emails` |
+| `skills/content-strategist/weekly-content-plan/SKILL.md` | Tara, content | `social` (content pillars, hook formulas, repurposing, the calendar) |
 
 Nothing from these files is evidence: a skill tells the team how to work, and every number in an answer still comes from
 the business's own records. Platform facts in `sms/references/whatsapp.md` (WhatsApp pricing, limits, the 24-hour window)

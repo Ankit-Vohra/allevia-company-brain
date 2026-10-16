@@ -17,7 +17,7 @@ Verdicts: **adopt now** (taken in this change, or free and ready the day the fou
 | # | What | Licence | Stars, last push | What it gives Allevia | Status |
 |---|---|---|---|---|---|
 | 1 | [anthropics/knowledge-work-plugins](https://github.com/anthropics/knowledge-work-plugins) `small-business` plugin | Apache-2.0 | 29,764, 2026-10-15 | 44 skills written for a small business owner: cash flow, invoice chasing, answering leads fast, reviews, win-back, Monday brief | **Taken.** 7 files vendored; 6 new skills for Isha, Vikram, Zoya |
-| 2 | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | MIT | 54,869, 2026-10-15 | 50 marketing skills; the best text on email, WhatsApp, referrals, CRO, attribution, copy editing | **Taken.** 10 files vendored; 4 new skills for Vikram, Kabir, Dev |
+| 2 | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | MIT | 54,869, 2026-10-15 | 50 marketing skills; the best text on email, WhatsApp, referrals, CRO, attribution, copy editing | **Taken.** 10 files vendored; 5 new skills for Vikram, Kabir, Dev, Tara |
 | 3 | [garrettjsmith/localseoskills](https://github.com/garrettjsmith/localseoskills) | MIT | 126, 2026-08-15 | ~40 local SEO skills: Google Business Profile, reviews, citations, service areas | **Taken.** 3 files vendored; Rohan's get-found-locally upgraded, Vikram's review replies |
 | 4 | [adr/madr](https://github.com/adr/madr) | MIT or CC0-1.0 | 2,559, 2026-08-28 | The standard short shape for a decision record | **Taken.** Template vendored; Sara's "A decision on one page" |
 | 5 | [googleanalytics/google-analytics-mcp](https://github.com/googleanalytics/google-analytics-mcp) | Apache-2.0 | 3,469, 2026-10-02 | Official, read-only GA4 reports for Kabir (real funnels instead of fixtures) | Free; needs the founder's Google Cloud project (below) |
@@ -42,6 +42,7 @@ Verdicts: **adopt now** (taken in this change, or free and ready the day the fou
 | `skills/ops-manager/review-replies` | Vikram | knowledge-work-plugins `review-reputation`; localseoskills `review-management` |
 | `skills/oncall-engineer/after-the-outage-note` | Zoya | knowledge-work-plugins `engineering/incident-response`; method of PagerDuty's postmortem docs (read, not copied) |
 | `skills/librarian/decision-on-one-page` | Sara | MADR minimal template |
+| `skills/content-strategist/weekly-content-plan` | Tara | marketingskills `social` (themes, hooks, repurposing, the calendar) |
 
 Each source sits in `vendor/skills/<name>/` with its verbatim `LICENSE` and a `NOTICE.md` (pinned commit, files taken,
 where each method is restated). The vendored files are references only; Allevia never loads them. Our skills keep our
@@ -50,8 +51,8 @@ skills lint. Rohan is at the limit of 10 skills after dev added four, so the win
 Vikram, who owns follow-ups; a separate local search skill for Kabir was dropped because dev's `get-found-locally` covers
 it, and its extra rules went into that skill instead.
 
-Not taken yet: marketingskills `social` (content pillars, hook formulas, repurposing) is vendored for Dev's edit but is
-not yet a skill of Tara's; a weekly content plan built from it is the next skill for her.
+Tara's weekly content plan (from marketingskills `social`) fills the "content calendar" job her profile names but no skill
+covered.
 
 ## coreyhaines31/marketingskills, skill by skill
 
@@ -64,7 +65,7 @@ MIT, Copyright (c) 2025 Corey Haines, commit `45f51253` (2026-10-15). 50 skills,
 | cro | Kabir | **Adopted** into page-that-should-sell |
 | attribution | Kabir | **Adopted** into which-channel-brings-customers |
 | copy-editing | Dev | **Adopted** into seven-sweeps-edit |
-| social | Tara (Dev for the tells) | Vendored; Tara's weekly content plan is next |
+| social | Tara (Dev for the tells) | **Adopted** into weekly-content-plan |
 | ad-creative, ads | Rohan | Later: our ad-creative-and-copy and ad-budget-check cover it; borrow the "angle matrix" when real ad data arrives |
 | offers, pricing, marketing-psychology | Rohan | Later: fold into offer-test-plan when it is next revised |
 | ab-testing | Rohan | Later: offer-test-plan already holds the small-sample method |
@@ -104,7 +105,7 @@ MIT, Copyright (c) 2025 Corey Haines, commit `45f51253` (2026-10-15). 50 skills,
 
 | Name | Licence | Stars, last push | What it gives | Cost | Risk | Verdict |
 |---|---|---|---|---|---|---|
-| marketingskills `copy-editing`, `social` | MIT | as above | Seven-sweeps edit; hooks, pillars, the "no AI tells" list | Free | Low | **Adopt now** (Dev's skill taken; Tara's waits for room) |
+| marketingskills `copy-editing`, `social` | MIT | as above | Seven-sweeps edit; hooks, pillars, the "no AI tells" list | Free | Low | **Adopt now** (taken: Dev's edit, Tara's weekly plan) |
 | [anthropics/skills](https://github.com/anthropics/skills) `brand-guidelines`, `canvas-design`, `theme-factory` | Apache-2.0 per folder (docx, pdf, pptx, xlsx are not open source) | 181,341, 2026-10-09 | Brand tokens and poster design method | Free | Take only the Apache folders | Skip: dev's design engine and `design-standard` skill now cover posters |
 | [gitroomhq/postiz-app](https://github.com/gitroomhq/postiz-app) | AGPL-3.0 | 37,227, 2026-10-15 | Self-hosted scheduler for ~20 networks, with an API | Free self-hosted; hosted ~$29 to $99 a month | AGPL: run as a separate service, unmodified | Adopt later: the posting back-end if Buffer's free tier is too small |
 | [inovector/mixpost](https://github.com/inovector/mixpost) | MIT (Lite) | 3,817, 2026-03-16 | Laravel scheduler | Free Lite | Slower development | Adopt later: the MIT alternative to Postiz |
