@@ -142,6 +142,13 @@ export function registerGraphWorkRoutes(app: Hono, rc: RouteCtx): void {
       groups: (topData.topics ?? []).map((t) => ({ label: t.label, size: t.size, members: t.members.slice(0, 5).map((m) => ({ id: m.id, name: m.name, type: m.type })) })),
       errors,
     };
-    return c.json(dto);
+    return c.json(plainNames(dto));
   });
+}
+
+// A project reference the privacy filter replaced reads "Supabase prod ([redacted:supabase-ref])" on the Brain page (found in the
+// audit on the real business): the owner sees the name without the marker.
+const MARKER = /\s*\(\[redacted:[a-z-]+\]\)|\[redacted:[a-z-]+\]/gi;
+export function plainNames<T>(dto: T): T {
+  return JSON.parse(JSON.stringify(dto), (_k, v) => (typeof v === "string" && v.includes("[redacted:") ? v.replace(MARKER, "").trim() : v)) as T;
 }
