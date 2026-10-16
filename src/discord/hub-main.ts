@@ -99,6 +99,9 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
           log(`[hub] ${a.slug}: could not post cards or the note: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
+    } catch (e) {
+      // the list of businesses itself could not be read (the database restarting, issue #28): try again next minute
+      log(`[hub] could not read the list of businesses: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       syncing = false;
     }

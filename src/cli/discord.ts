@@ -1,3 +1,5 @@
+      // a 24/7 bot: a database restart is logged and waited out, never a crash (issue #28)
+      (await import("../util/crash-guard.js")).installCrashGuard();
 // `discord`: the Allevia Discord bot (spec §10) for one tenant, on the demo server only. Runs until Ctrl-C.
 // Needs DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID, DISCORD_GUILD_ID and DISCORD_CHANNEL_ID in
 // ~/.config/allevia/allevia.env; it says which are missing (never their values) and exits.

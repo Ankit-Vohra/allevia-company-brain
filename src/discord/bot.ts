@@ -18,6 +18,7 @@ import { agentById } from "../../shared/roster.js";
 import type { AskInput, AskResult } from "../agent/ask.js";
 import { LANGUAGE_REPLY, parseLanguageSetting, setLanguagePreference } from "../agent/language.js";
 import type { GraphHandle } from "../graph/client.js";
+import { isDbUnavailable, WAKING_UP_MESSAGE } from "../graph/waking.js";
 import { applyDirective, getDirective, parseDirective, previewDirective } from "../settings/directives.js";
 import { quickReplies } from "../../shared/quick-replies.js";
 import { DecisionError, decideAndNotify, type ActionOpts, type OnDecision } from "../server/approvals.js";
@@ -121,6 +122,8 @@ const KIND_LABEL: Record<ApprovalDto["kind"], string> = {
 
 const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+// The plain sentence for a failure: "waking up" while the database restarts, else the handler's own words.
+const sorry = (e: unknown, fallback: string): string => (isDbUnavailable(e) ? WAKING_UP_MESSAGE : fallback);
 const quote = (s: string): string => s.split("\n").map((l) => `> ${l}`).join("\n");
 
 export const buttonId = (decision: "approve" | "reject", approvalId: string): string => `${BUTTON_PREFIX}:${decision}:${approvalId}`;
@@ -174,7 +177,18 @@ export class AlleviaBot {
 
   // ----- messages -----
 
+  // While the database is restarting (issue #28) every handler answers in plain words instead of failing silently.
   async onMessage(m: MessagePort): Promise<void> {
+    try {
+      await this.handleMessage(m);
+    } catch (e) {
+      if (!isDbUnavailable(e)) throw e;
+      this.log(`message ${m.id}: the database is restarting (${message(e)})`);
+      await m.reply(WAKING_UP_MESSAGE).catch(() => undefined);
+    }
+  }
+
+  private async handleMessage(m: MessagePort): Promise<void> {
     if (m.authorIsBot || m.system || m.guildId !== this.d.guildId) return;
     const question = m.content.trim();
     if (!question) return;
@@ -187,7 +201,7 @@ export class AlleviaBot {
         await m.reply(LANGUAGE_REPLY(pref));
       } catch (e) {
         this.log(`language setting failed: ${message(e)}`);
-        await m.reply("I couldn't save that setting. Try again in a moment.");
+        await m.reply(sorry(e, "I couldn't save that setting. Try again in a moment."));
       }
       return;
     }
@@ -239,7 +253,7 @@ export class AlleviaBot {
       await b.update({ content: clip(`Done. Your team will work this way from the next request:\n${lines.join("\n")}${done.errors.length ? "\nSome of it did not save; try again in the web app." : ""}`, 1900), buttons: [] });
     } catch (e) {
       this.log(`rule ${decision} on ${id} failed: ${message(e)}`);
-      return b.reply("I couldn't save that. Try again, or use Your team in the web app.", { ephemeral: true });
+      return b.reply(sorry(e, "I couldn't save that. Try again, or use Your team in the web app."), { ephemeral: true });
     }
   }
 
@@ -257,6 +271,16 @@ export class AlleviaBot {
   // ----- slash commands -----
 
   async onCommand(c: CommandPort): Promise<void> {
+    try {
+      await this.handleCommand(c);
+    } catch (e) {
+      if (!isDbUnavailable(e)) throw e;
+      this.log(`/${c.command}: the database is restarting (${message(e)})`);
+      await c.respond(WAKING_UP_MESSAGE, { ephemeral: true }).catch(() => undefined);
+    }
+  }
+
+  private async handleCommand(c: CommandPort): Promise<void> {
     if (c.guildId !== this.d.guildId) return c.respond(NOT_HERE, { ephemeral: true });
     switch (c.command) {
       case "ask": return this.askCommand(c);
@@ -341,7 +365,7 @@ export class AlleviaBot {
       await b.update({ content: `Carrying on in <#${thread.id}>.`, buttons: [] });
     } catch (e) {
       this.log(`continue ${sessionId} failed: ${message(e)}`);
-      return b.reply("I couldn't open that conversation here. Try again, or carry on in the web app.", { ephemeral: true });
+      return b.reply(sorry(e, "I couldn't open that conversation here. Try again, or carry on in the web app."), { ephemeral: true });
     }
   }
 
@@ -357,6 +381,16 @@ export class AlleviaBot {
   // ----- buttons -----
 
   async onButton(b: ButtonPort): Promise<void> {
+    try {
+      await this.handleButton(b);
+    } catch (e) {
+      if (!isDbUnavailable(e)) throw e;
+      this.log(`button ${b.customId}: the database is restarting (${message(e)})`);
+      await b.reply(WAKING_UP_MESSAGE, { ephemeral: true }).catch(() => undefined);
+    }
+  }
+
+  private async handleButton(b: ButtonPort): Promise<void> {
     const cont = CONTINUE.exec(b.customId);
     if (cont) {
       if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
@@ -384,7 +418,7 @@ export class AlleviaBot {
       if (e instanceof DecisionError && e.status === 409) return b.reply(`This one was already decided: ${e.message}`, { ephemeral: true });
       if (e instanceof DecisionError && e.status === 404) return b.reply("That approval no longer exists.", { ephemeral: true });
       this.log(`decision on ${id} failed: ${message(e)}`);
-      return b.reply("I couldn't record that decision. Try again, or decide it in the web app.", { ephemeral: true });
+      return b.reply(sorry(e, "I couldn't record that decision. Try again, or decide it in the web app."), { ephemeral: true });
     }
   }
 
@@ -447,7 +481,7 @@ export class AlleviaBot {
       try {
         result = await this.d.ask({ tenant: this.d.tenant, question, sessionId, asker, channel: "discord" }, emit);
       } catch (e) {
-        lastError = message(e);
+        lastError = isDbUnavailable(e) ? WAKING_UP_MESSAGE : message(e);
       }
       await editor.flush();
       await this.nameMissing(result?.citations ?? [], names);

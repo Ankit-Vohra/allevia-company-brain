@@ -14,6 +14,7 @@ import { startSchedule } from "../connectors/google/schedule.js";
 import { googleSettings } from "../connectors/google/settings.js";
 import { FileTokenStore } from "../connectors/google/store.js";
 import { createApp, type ServerDeps } from "./app.js";
+import { installCrashGuard } from "../util/crash-guard.js";
 import type { GoogleWiring } from "./routes/connectors.js";
 
 export const WEB_DIST = fileURLToPath(new URL("../../web/dist/", import.meta.url));
@@ -118,6 +119,7 @@ export async function untilStopped(close: () => Promise<void>): Promise<void> {
 
 const invoked = process.argv[1] ? resolve(process.argv[1]) : "";
 if (invoked === fileURLToPath(import.meta.url)) {
+  installCrashGuard();
   const { close } = await startServer();
   await untilStopped(close);
   await closeAll();

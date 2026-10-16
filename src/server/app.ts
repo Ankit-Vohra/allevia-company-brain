@@ -31,6 +31,7 @@ import { ask, STOPPED_MESSAGE, type AskDeps } from "../agent/ask.js";
 import type { ToolContext } from "../agent/tool.js";
 import { loadConfig } from "../config.js";
 import type { GraphHandle } from "../graph/client.js";
+import { isDbUnavailable, WAKING_UP_MESSAGE } from "../graph/waking.js";
 import { MAX_SLUG_LENGTH, isTenantSlug, RESERVED_SLUGS } from "../graph/slug.js";
 import { OPERATOR_SCOPE } from "../auth/tokens.js";
 import type { LlmRunner } from "../ingest/llm.js";
@@ -308,6 +309,11 @@ export function createApp(deps: ServerDeps): Hono {
   app.onError((err, c) => {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status);
     if (err instanceof DecisionError) return c.json({ error: err.message }, err.status);
+    // FalkorDB restarting (issue #28): a plain sentence and 503, so the web app says it and the owner tries again
+    if (isDbUnavailable(err)) {
+      log(`[api] ${c.req.method} ${c.req.path}: the database is restarting (${err instanceof Error ? err.message : String(err)})`);
+      return c.json({ error: WAKING_UP_MESSAGE }, 503);
+    }
     log(`[api] ${c.req.method} ${c.req.path}: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
     return c.json({ error: "Something went wrong on the server. Try again in a moment." }, 500);
   });
@@ -635,7 +641,7 @@ export function createApp(deps: ServerDeps): Hono {
       release();
       throw e;
     }
-    void turn.done.then(release);
+    void turn.done.then(release, release);
     // This stream follows the turn; when the client goes away only the following stops.
     return sse<AgentEvent>(c, { heartbeatMs, log }, (send, signal) => turn.follow(0, send, signal));
   });
