@@ -6,6 +6,13 @@
 // Version holding the old state, so "what moved this week" is a read of Versions (whatMoved), not a log we keep by hand.
 //   new -> contacted -> meeting -> won | lost      (a lost or won lead that writes again goes back to new)
 // Nothing here knows about a tenant: the graph handle is the business's own, so another business can never be reached.
+//
+// Links (graph audit G11):
+//   Message -CAME_VIA{direction}-> Channel     the channel a message went through (a meeting's is channel:calendar)
+//   Lead -CAME_VIA-> Campaign | Content        attribution: only when the enquiry's own source text or UTM campaign names an
+//                                              existing Campaign or Content exactly (id, name or utm_campaign). Never guessed.
+//   Lead | Deal | Meeting | Message -ADVANCES-> Goal   the Goal that counts enquiries, leads or bookings. Best effort: a business
+//                                              with no such goal gets no edge, and a failed link never fails the write.
 import type { GraphHandle } from "../graph/client.js";
 import type { Prim } from "../graph/validate.js";
 import { upsertEdge, upsertNode } from "../graph/upsert.js";
@@ -24,7 +31,7 @@ export const STALLED_DAYS = 14;
 
 export type MeetingStatus = "proposed" | "booked" | "held" | "cancelled";
 
-export interface Src { src: string; now: number; tenant?: string }
+export interface Src { src: string; now: number; tenant?: string; warn?: (what: string) => void }
 type Read = Pick<GraphHandle, "roQuery">;
 
 const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
@@ -59,7 +66,7 @@ async function link(g: GraphHandle, from: string, type: Parameters<typeof upsert
 
 const CHANNEL_NAMES: Record<string, string> = {
   email: "Email", gmail: "Email", whatsapp: "WhatsApp", form: "Website form", website: "Website form", instagram: "Instagram",
-  phone: "Phone", sheet: "Spreadsheet", upload: "Spreadsheet", referral: "Referral",
+  phone: "Phone", sheet: "Spreadsheet", upload: "Spreadsheet", referral: "Referral", calendar: "Calendar",
 };
 export const channelNameFor = (raw: string): string => CHANNEL_NAMES[raw.trim().toLowerCase()] ?? (raw.trim() || "Email");
 
@@ -69,6 +76,66 @@ export async function ensureChannel(g: GraphHandle, raw: string, s: Src): Promis
   const id = entityId("Channel", name);
   if (!(await exists(g, id))) await upsertNode(g, { type: "Channel", id, name, props: { kind: "enquiry" }, src: s.src, asOf: asOfOf(s.now) }, s.now);
   return id;
+}
+
+// ---------- where a lead came from, and what it is for ----------
+
+export interface Attribution { id: string; kind: "Campaign" | "Content"; matchedOn: "id" | "name" | "utm_campaign"; text: string }
+
+const norm = (s: string): string => s.trim().toLowerCase();
+
+// The Campaign or Content a lead came from, when the enquiry's own words name one exactly: the node's id, its name, or its
+// utm_campaign value, in any case. The candidates are tried in order; the first that names exactly one node wins. A text that
+// names two (a Campaign and a Content with the same name) names none: we never guess, so no match is no edge.
+export async function resolveAttribution(g: Read, candidates: ReadonlyArray<string | undefined>): Promise<Attribution | null> {
+  const texts = candidates.map((c) => c?.trim()).filter((c): c is string => !!c && c.length <= 200);
+  if (!texts.length) return null;
+  const rows: Array<{ id: string; kind: Attribution["kind"]; name: string | null; utm: string | null }> = [];
+  for (const kind of ["Campaign", "Content"] as const) {
+    const found = await g.roQuery<{ id: string; name: string | null; utm: string | null }>(
+      `MATCH (n:Entity:${kind}) RETURN n.id AS id, n.name AS name, n.utm_campaign AS utm ORDER BY n.id LIMIT 1000`);
+    rows.push(...found.map((r) => ({ ...r, kind })));
+  }
+  for (const text of texts) {
+    const k = norm(text);
+    const hits = rows.flatMap((r): Attribution[] =>
+      norm(r.id) === k ? [{ id: r.id, kind: r.kind, matchedOn: "id", text }]
+        : r.name && norm(r.name) === k ? [{ id: r.id, kind: r.kind, matchedOn: "name", text }]
+          : r.utm && norm(r.utm) === k ? [{ id: r.id, kind: r.kind, matchedOn: "utm_campaign", text }] : []);
+    if (hits.length === 1) return hits[0]!;
+    if (hits.length > 1) return null;
+  }
+  return null;
+}
+
+// What the business counts leads and bookings by: a goal whose metric is about enquiries, leads or bookings. Failing that, a goal
+// whose name says so. The first by the plan's own priority. Null when the business has no such goal.
+const ENQUIRY_WORDS = /\b(?:enquir(?:y|ies)|inquir(?:y|ies)|leads?|bookings?)\b/i;
+const words = (s: string | null | undefined): string => (s ?? "").replace(/[_-]+/g, " ");
+
+export async function enquiryGoal(g: Read): Promise<string | null> {
+  const rows = await g.roQuery<{ id: string; name: string | null; metric: string | null; key: string | null }>(
+    `MATCH (gl:Entity:Goal) WHERE NOT coalesce(gl.status, '') IN ['retired', 'superseded']
+     OPTIONAL MATCH (gl)-[t:TRACKS]->(m:Metric) WHERE t.until IS NULL
+     RETURN gl.id AS id, gl.name AS name, m.name AS metric, coalesce(m.key, gl.metricKey) AS key ORDER BY coalesce(gl.priority, 99), gl.id LIMIT 200`);
+  const byMetric = rows.find((r) => ENQUIRY_WORDS.test(words(r.key)) || ENQUIRY_WORDS.test(words(r.metric)));
+  return (byMetric ?? rows.find((r) => ENQUIRY_WORDS.test(words(r.name))))?.id ?? null;
+}
+
+// Links a lead, deal, meeting or message to the goal it is for. Best effort: no goal is no edge, and an error here never
+// fails the write that called it (it is said through `s.warn` when the caller listens). `onlyIfMissing` leaves an existing link
+// alone, so a stage move does not rewrite the edge's source.
+async function advanceGoal(g: GraphHandle, from: string, s: Src, o: { goal?: string | null; onlyIfMissing?: boolean } = {}): Promise<void> {
+  try {
+    if (o.onlyIfMissing) {
+      const [have] = await g.roQuery<{ id: string }>("MATCH (n:Entity {id:$id})-[r:ADVANCES]->(x:Goal) WHERE r.until IS NULL RETURN x.id AS id LIMIT 1", { id: from });
+      if (have) return;
+    }
+    const goal = o.goal !== undefined ? o.goal : await enquiryGoal(g);
+    if (goal) await link(g, from, "ADVANCES", goal, s);
+  } catch (e) {
+    s.warn?.(`could not link ${from} to its goal: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 // ---------- writes ----------
@@ -85,6 +152,8 @@ export interface EnquiryInput {
   threadId?: string;
   value?: number;               // what the owner thinks it is worth, when known
   currency?: string;
+  sourceText?: string;          // where they say they heard of us (a form answer, a sheet's source column): names a Campaign or Content, or nothing
+  utmCampaign?: string;         // the utm_campaign (or campaign) the link carried, when there was one
 }
 
 export interface Recorded { leadId: string; personId: string; messageId: string; dealId?: string; isNew: boolean; repeated: boolean }
@@ -136,12 +205,19 @@ export async function recordEnquiry(g: GraphHandle, e: EnquiryInput, s: Src): Pr
 
   await link(g, leadId, "ENQUIRED_BY", personId, s);
   await link(g, leadId, "CAME_VIA", channelId, s);
+  await link(g, messageId, "CAME_VIA", channelId, s, { direction: "in" });
   await link(g, messageId, "MESSAGE_IN", leadId, s);
   await link(g, messageId, "SENT_BY", personId, s);
   if (biz) {
     await link(g, leadId, "PART_OF", biz, s);
     await link(g, messageId, "PART_OF", biz, s);
   }
+  // Where it came from, when the enquiry names a Campaign or Content that exists; what it is for, when the business has a goal for it.
+  const from = await resolveAttribution(g, [e.utmCampaign, e.sourceText]).catch((err: Error) => { s.warn?.(`could not read the campaigns: ${err.message}`); return null; });
+  if (from) await link(g, leadId, "CAME_VIA", from.id, s, { matchedOn: from.matchedOn, text: clip(from.text, 120) });
+  const goal = await enquiryGoal(g).catch((err: Error) => { s.warn?.(`could not read the goals: ${err.message}`); return null; });
+  await advanceGoal(g, leadId, s, { goal });
+  await advanceGoal(g, messageId, s, { goal });
   return { leadId, personId, messageId, isNew: !had, repeated: false };
 }
 
@@ -161,6 +237,7 @@ export async function moveStage(g: GraphHandle, id: string, stage: Stage, o: Mov
     props: { stage, stageNote: o.reason ?? null, lastActivityAt: o.now },
     src: o.src, asOf: asOfOf(o.now),
   }, o.now);
+  await advanceGoal(g, id, o, { onlyIfMissing: true });
   return { from, to: stage, changed: true };
 }
 
@@ -187,6 +264,7 @@ export async function openDeal(g: GraphHandle, d: DealInput, s: Src): Promise<st
   await link(g, id, "DEAL_OF", d.leadId, s);
   const biz = await findBusinessId(g, s.tenant);
   if (biz) await link(g, id, "PART_OF", biz, s);
+  await advanceGoal(g, id, s);
   return id;
 }
 
@@ -198,24 +276,32 @@ export interface MessageInput {
   body: string;
   at: number;
   status: "draft" | "sent" | "received";
-  externalId: string;
+  externalId: string;           // the message's id in its own system (Gmail's message id) when there is one, else the key
+  key?: string;                 // what makes the write repeatable and names the node (default: externalId): an approval's id, say
+  messageId?: string;           // an existing Message to update (a draft that is now sent) instead of making one from the key
+  threadId?: string;
   by?: string;                  // the agent node or person node that wrote it
   toPersonId?: string;
   dealId?: string;
 }
 
 // A message in a lead's story. An outbound one that is sent answers the lead (needsReply off) and moves a new lead to contacted.
+// Writing the same message again updates it: `status` is a tracked property, so a draft that goes out keeps "draft" as a Version.
 export async function logMessage(g: GraphHandle, m: MessageInput, s: Src): Promise<string> {
   const lead = await nameOf(g, m.leadId);
   if (!lead) throw new Error(`${m.leadId} is not in the records`);
-  const id = messageIdFor(`${m.channel}-${m.externalId}`);
+  const id = m.messageId ?? messageIdFor(`${m.channel}-${m.key ?? m.externalId}`);
   const asOf = asOfOf(s.now);
   await upsertNode(g, {
     type: "Message", id, name: clip(`${m.direction === "out" ? "To" : "From"} ${lead.name.split(":")[0]}: ${m.subject ?? m.body}`.replace(/\s+/g, " "), 100),
     summary: clip(m.body.trim(), 1500),
-    props: { direction: m.direction, status: m.status, channel: channelNameFor(m.channel), at: m.at, externalId: m.externalId, ...(m.subject ? { subject: clip(m.subject, 160) } : {}) },
+    props: {
+      direction: m.direction, status: m.status, channel: channelNameFor(m.channel), at: m.at, externalId: m.externalId,
+      ...(m.subject ? { subject: clip(m.subject, 160) } : {}), ...(m.threadId ? { threadId: m.threadId } : {}),
+    },
     src: s.src, asOf,
   }, s.now);
+  await link(g, id, "CAME_VIA", await ensureChannel(g, m.channel, s), s, { direction: m.direction });
   await link(g, id, "MESSAGE_IN", m.leadId, s);
   if (m.dealId) await link(g, id, "MESSAGE_IN", m.dealId, s);
   if (m.by) await link(g, id, "SENT_BY", m.by, s);
@@ -230,6 +316,17 @@ export async function logMessage(g: GraphHandle, m: MessageInput, s: Src): Promi
   return id;
 }
 
+// A draft of this exact email already in the lead's story (saved when the owner approved it with "don't send yet"): the one that is
+// now going out. Same subject and same words; the newest first. Null when there is none, and then the sent email is a new message.
+export async function findDraftMessage(g: Read, leadId: string, o: { subject?: string; body: string }): Promise<string | null> {
+  // The filters on the message are applied here: put on the pattern they make the planner scan every Message instead of starting at the lead.
+  const rows = await g.roQuery<{ id: string; status: string | null; direction: string | null; subject: string | null; body: string | null }>(
+    `MATCH (l:Entity {id:$id})<-[r:MESSAGE_IN]-(m:Entity:Message) WHERE r.until IS NULL
+     RETURN m.id AS id, m.status AS status, m.direction AS direction, m.subject AS subject, m.summary AS body ORDER BY coalesce(m.at, 0) DESC, m.id LIMIT 50`, { id: leadId });
+  const squash = (t: string | null | undefined): string => (t ?? "").replace(/\s+/g, " ").trim().slice(0, 1000);
+  return rows.find((r) => r.status === "draft" && r.direction === "out" && squash(r.body) === squash(o.body) && (r.subject ?? "") === clip(o.subject ?? "", 160))?.id ?? null;
+}
+
 export interface MeetingInput {
   leadId: string;
   dealId?: string;
@@ -239,11 +336,13 @@ export interface MeetingInput {
   status: MeetingStatus;
   where?: string;
   link?: string;
-  calendarEventId?: string;
+  calendarEventId?: string;     // the event's id in Google Calendar, when the executor says it
   attendeeEmail?: string;
+  direction?: "in" | "out";     // who asked for it: "out" (we invited them, the default) or "in" (they booked it)
 }
 
 // A call or visit. Booking one moves the lead (and its deal) to "meeting"; holding it keeps it there; cancelling leaves the stage.
+// It came via channel:calendar. `status` is tracked, so a proposed meeting that is booked keeps "proposed" as a Version.
 export async function recordMeeting(g: GraphHandle, m: MeetingInput, s: Src): Promise<string> {
   const lead = await nameOf(g, m.leadId);
   if (!lead) throw new Error(`${m.leadId} is not in the records`);
@@ -255,10 +354,12 @@ export async function recordMeeting(g: GraphHandle, m: MeetingInput, s: Src): Pr
     src: s.src, asOf,
   }, s.now);
   await link(g, id, "MEETING_FOR", m.dealId ?? m.leadId, s);
+  await link(g, id, "CAME_VIA", await ensureChannel(g, "calendar", s), s, { direction: m.direction ?? "out" });
   const person = (await g.roQuery<{ id: string }>("MATCH (:Entity {id:$id})-[r:ENQUIRED_BY]->(p:Person) WHERE r.until IS NULL RETURN p.id AS id ORDER BY p.id LIMIT 1", { id: m.leadId }))[0];
   if (person) await link(g, id, "MEETING_WITH", person.id, s);
   const biz = await findBusinessId(g, s.tenant);
   if (biz) await link(g, id, "PART_OF", biz, s);
+  await advanceGoal(g, id, s);
   if (m.status === "booked" || m.status === "held") {
     if (isOpen(lead.props.stage) && lead.props.stage !== "meeting") await moveStage(g, m.leadId, "meeting", { ...s, reason: "meeting booked" });
     if (m.dealId) {
@@ -414,4 +515,56 @@ export async function pipeline(g: Read): Promise<Pipeline> {
     else if (r.stage === "won") wonValue += r.value ?? 0;
   }
   return { byStage, openValue, open, wonValue };
+}
+
+// ---------- attribution: where leads came from, and what they are for ----------
+
+export interface ViaGroup { id: string; name: string; kind: "Channel" | "Campaign" | "Content"; leads: string[]; goals: Array<{ id: string; name: string; leads: string[] }> }
+export interface GoalGroup { id: string; name: string; leads: number; deals: number; meetings: number; messages: number }
+export interface Attributed {
+  channels: ViaGroup[]; campaigns: ViaGroup[]; content: ViaGroup[]; goals: GoalGroup[];
+  leads: number;                // leads in the records
+  unattributed: string[];       // leads that came through a channel but name no Campaign or Content
+}
+
+const VIA_KINDS = ["Channel", "Campaign", "Content"] as const;
+
+// Leads grouped by what they came through (a Channel, and the Campaign or Content when the enquiry named one) and by the goal
+// each advances, then every lead, deal, meeting and message that advances each goal. Two traversals: Lead -CAME_VIA-> x with
+// -ADVANCES-> Goal beside it, and anything -ADVANCES-> Goal.
+export async function attributionReport(g: Read): Promise<Attributed> {
+  const via = await g.roQuery<{ viaId: string; viaName: string | null; kinds: string[]; goalId: string | null; goalName: string | null; leads: string[] }>(
+    `MATCH (l:Entity:Lead)-[r:CAME_VIA]->(x:Entity) WHERE ID(r) >= 0 AND r.until IS NULL AND (x:Channel OR x:Campaign OR x:Content)
+     OPTIONAL MATCH (l)-[a:ADVANCES]->(gl:Goal) WHERE ID(a) >= 0 AND a.until IS NULL
+     WITH x, gl, labels(x) AS kinds, collect(DISTINCT l.id) AS leads
+     RETURN x.id AS viaId, x.name AS viaName, kinds, gl.id AS goalId, gl.name AS goalName, leads ORDER BY viaId, goalId`);
+  const groups = new Map<string, ViaGroup>();
+  for (const r of via) {
+    const kind = VIA_KINDS.find((k) => r.kinds.includes(k));
+    if (!kind) continue;
+    const have = groups.get(r.viaId) ?? { id: r.viaId, name: r.viaName ?? r.viaId, kind, leads: [], goals: [] };
+    have.leads = [...new Set([...have.leads, ...r.leads])];
+    if (r.goalId) have.goals.push({ id: r.goalId, name: r.goalName ?? r.goalId, leads: r.leads });
+    groups.set(r.viaId, have);
+  }
+  const all = [...groups.values()].sort((a, b) => b.leads.length - a.leads.length || a.id.localeCompare(b.id));
+  const advancing = await g.roQuery<{ goalId: string; goalName: string | null; nodeId: string }>(
+    `MATCH (n:Entity)-[a:ADVANCES]->(gl:Goal) WHERE a.until IS NULL AND (n:Lead OR n:Deal OR n:Meeting OR n:Message)
+     RETURN gl.id AS goalId, gl.name AS goalName, n.id AS nodeId ORDER BY goalId, nodeId`);
+  const goals = new Map<string, GoalGroup>();
+  for (const r of advancing) {
+    const gg = goals.get(r.goalId) ?? { id: r.goalId, name: r.goalName ?? r.goalId, leads: 0, deals: 0, meetings: 0, messages: 0 };
+    if (r.nodeId.startsWith("lead:")) gg.leads++;
+    else if (r.nodeId.startsWith("deal:")) gg.deals++;
+    else if (r.nodeId.startsWith("meeting:")) gg.meetings++;
+    else if (r.nodeId.startsWith("message:")) gg.messages++;
+    goals.set(r.goalId, gg);
+  }
+  const [total] = await g.roQuery<{ n: number }>("MATCH (l:Entity:Lead) RETURN count(l) AS n");
+  const named = new Set(all.filter((x) => x.kind !== "Channel").flatMap((x) => x.leads));
+  const channelled = [...new Set(all.filter((x) => x.kind === "Channel").flatMap((x) => x.leads))].sort();
+  return {
+    channels: all.filter((x) => x.kind === "Channel"), campaigns: all.filter((x) => x.kind === "Campaign"), content: all.filter((x) => x.kind === "Content"),
+    goals: [...goals.values()], leads: total?.n ?? 0, unattributed: channelled.filter((id) => !named.has(id)),
+  };
 }

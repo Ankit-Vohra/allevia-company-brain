@@ -33,7 +33,7 @@ describe("sales graph", () => {
     const links = await g.roQuery<{ rel: string; to: string }>(
       "MATCH (a:Entity)-[r]->(b:Entity) WHERE a.id IN [$lead, $msg] AND r.until IS NULL RETURN type(r) AS rel, b.id AS to ORDER BY rel, to", { lead: r.leadId, msg: r.messageId });
     expect(links.map((l) => `${l.rel}>${l.to}`)).toEqual([
-      "CAME_VIA>channel:email", "ENQUIRED_BY>person:priya-example-com", "MESSAGE_IN>lead:priya-example-com", "PART_OF>business:kestrel", "PART_OF>business:kestrel", "SENT_BY>person:priya-example-com",
+      "CAME_VIA>channel:email", "CAME_VIA>channel:email", "ENQUIRED_BY>person:priya-example-com", "MESSAGE_IN>lead:priya-example-com", "PART_OF>business:kestrel", "PART_OF>business:kestrel", "SENT_BY>person:priya-example-com",
     ]);
     const [edge] = await g.roQuery<{ src: string; asOf: string }>("MATCH (:Lead {id:$id})-[r:ENQUIRED_BY]->(p:Person) RETURN r.src AS src, r.asOf AS asOf ORDER BY p.id", { id: r.leadId });
     expect(edge).toEqual({ src: "gmail:test", asOf: new Date(T0).toISOString() });
