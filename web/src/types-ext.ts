@@ -134,6 +134,7 @@ export interface ApprovalPreview {
   draftOnly?: boolean;
   when?: { start: string; end?: string; timeZone?: string; guests: string[] };
   media?: { kind: "photo" | "poster" | "image" | "clip"; options: Array<{ id: string; label: string; note: string; pick: boolean; held: boolean }> };
+  post?: { where: string; when?: { at: string; timeZone?: string; words: string }; textOnly?: boolean };
 }
 
 export interface Approval {

@@ -27,6 +27,8 @@ export interface CardOption { label: string; note: string; pick: boolean; held?:
 export interface CardExtras {
   why?: string;                                // the one-line reason
   before?: { label: string; text: string };    // website fixes: what the page says now
+  where?: string;                              // posts: the account it goes to ("Instagram (your account @cafe)")
+  when?: string;                               // posts: when, when it is not straight away
   to?: string;                                 // emails and messages: who it goes to
   subject?: string;
   options?: CardOption[];                      // several versions to choose from (Studio, posters, clips)
@@ -66,6 +68,8 @@ export function renderApproval(a: ApprovalDto, x: CardExtras = {}, o: CardOpts =
     `**${clip(a.title, 200)}** · ${label}`,
     ...(o.standup ? [] : [`Proposed by ${who} · ${a.createdAt.slice(0, 10)}`]),
     ...(x.why ? [`Why: ${x.why}`] : []),
+    ...(x.where ? [`Posts to: ${clip(x.where, 200)}`] : []),
+    ...(x.when ? [`When: ${clip(x.when, 100)}`] : []),
     ...(x.to ? [`To: ${clip(x.to, 200)}`] : []),
     ...(x.subject ? [`Subject: ${clip(x.subject, 200)}`] : []),
     ...(x.before?.text.trim() ? [`${x.before.label}:`, quote(clip(x.before.text.trim(), 600)), "New:"] : []),

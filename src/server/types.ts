@@ -152,6 +152,8 @@ export interface ApprovalPreview {
   when?: { start: string; end?: string; timeZone?: string; guests: string[] };
   /** Posts, posters and clips: the options to show (asset ids, served by /api/:t/assets/:id) and which one approving uses. */
   media?: { kind: "photo" | "poster" | "image" | "clip"; options: Array<{ id: string; label: string; note: string; pick: boolean; held: boolean }> };
+  /** A post to the owner's own account (publish_post): where it goes ("Instagram (your account @cafe)"), and when, when it is not straight away. */
+  post?: { where: string; when?: { at: string; timeZone?: string; words: string }; textOnly?: boolean };
 }
 
 export interface ApprovalDto {

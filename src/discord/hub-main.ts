@@ -2,6 +2,7 @@
 // customer it builds that business's own AlleviaBot lazily (its graph, its ask deps, its time zone), shares one count of
 // running turns across them all, and every minute posts new approval cards and the day's note into the customer's own
 // channels. Provisioning retries run here too (the same claim keeps two processes from doing one business twice).
+import { botPublishPort } from "./publish-notice.js";
 import { loadConfig } from "../config.js";
 import { checkupJobs } from "../checkup/jobs.js";
 import { businessId } from "../graph/tenants.js";
@@ -59,6 +60,7 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
         numbers: { businessId: businessId(area.slug) },
         checkup: checkupJobs(), // /checkup: this business's own site, in the background
         connections: await connectLinks(area.slug), // /connect: this business's tools, with one-time links only the owner sees
+        publish: botPublishPort(graph, area.slug, actions), // Cancel and Try again on a post: this business's own posts and connections
         revise: async (approvalId, instruction) => {
           const { reviseDraft } = await import("../proactive/revise.js");
           const { productionDrafters } = await import("../proactive/wiring.js");
