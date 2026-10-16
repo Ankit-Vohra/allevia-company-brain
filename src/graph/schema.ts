@@ -226,6 +226,7 @@ export const ALLOWED_PATTERNS: Pattern[] = [
 //   - a rival (Competitor) OWNS the channels and ads watched through public data;
 //   - the Discord card an Approval was posted as (Approval PUBLISHED_ON Channel);
 //   - the run that measured a graph-hygiene reading (Observation SOURCED_FROM Event: an onboarding or ingest run).
+//   - the account a post went from, a Channel PART_OF the platform's Channel.
 export const MAPPER_PATTERNS: Pattern[] = [
   ...pat("Feature", "DEPENDS_ON", ["Page", "Channel"]),
   ...pat(["Approval", "Recommendation"], "GUIDED_BY", ["Rule", "BrandRule", "Memory"]),
@@ -237,6 +238,9 @@ export const MAPPER_PATTERNS: Pattern[] = [
   ...pat("Competitor", "OWNS", ["Channel", "Content"]),
   ...pat("Approval", "PUBLISHED_ON", "Channel"),
   ...pat("Observation", "SOURCED_FROM", "Event"),
+  // posting (src/publish): the account a post went from is a Channel of its own (channel:instagram:cafe), PART_OF the platform's
+  // channel (channel:instagram), so two accounts on one platform are two nodes and the platform's numbers stay on one
+  ...pat("Channel", "PART_OF", "Channel"),
 ];
 
 const ALLOWED = new Set([...ALLOWED_PATTERNS, ...MAPPER_PATTERNS].map(([f, r, t]) => `${f}|${r}|${t}`));

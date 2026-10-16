@@ -1,7 +1,8 @@
 // What happens when the owner says OK to a "post it" card (kind publish_post). The rules, in the order they bite:
 //   1. Nothing posts without the OK on THIS content: what was approved (platform, account, caption, the one picture or video, the
 //      time) is hashed when the OK is given and checked again at the moment of posting; a post that changed since is never sent.
-//   2. A dry run (ALLEVIA_ACTIONS_LIVE is not 1) reaches nothing: the card says it "would have posted", and nothing is kept.
+//   2. A dry run (ALLEVIA_ACTIONS_LIVE is not 1) reaches nothing: the card says it "would have posted". The post is still kept, as a
+//      planned post (Content, status dry_run, on its channel and advancing the same goals), so the card has something to show.
 //   3. A business may post `perDay` times in 24 hours (config.publish.perDay), all platforms together.
 //   4. A time later than now means scheduled: the post waits as a Content node (status scheduled) and the scheduler (scheduler.ts)
 //      posts it when its time comes, in the business's own time zone, unless the owner cancels it first.
@@ -22,6 +23,7 @@ import { publicAddressProblem, signMediaUrl, type MediaSigner } from "./media.js
 import { PLATFORMS, accountWords, type PlatformSpec } from "./platforms.js";
 import { PublishFailure, publishPost, readAccount, type PostMedia, type PostOpts, type PostSession } from "./post.js";
 import { actionIdOf, claim, cancelPost, contentIdFor, countedSince, linkPost, readPost, writePost } from "./record.js";
+import { isoDate } from "../util/time.js";
 import { approvedHash, readBlock, type PostRow, type PostStatus, type PublishBlock } from "./types.js";
 import { MIN_LEAD_MS, whenWords } from "./when.js";
 
@@ -177,22 +179,24 @@ export async function publishPostAction(g: GraphHandle, input: PublishInput, env
     return fail(`Nothing was posted: the time you chose (${whenWords(block.at, block.tz ?? "UTC", now)}) has already passed. Ask your team to post it now or set a new time.`);
   }
   const later = block.at !== undefined && block.at > now + MIN_LEAD_MS;
-  if (env.dryRun) return { status: "dry_run", result: dryRunWords(spec, block, caption, now), produced: [] };
 
+  // The post is written whether or not it will really go out: scheduled, or (a dry run) planned. Nothing is sent to the platform here.
   const id = contentIdFor(input.approvalId);
   const publishAt = later ? block.at! : now;
+  const dryWords = dryRunWords(spec, block, caption, now);
   const snapshot: PostRow = {
     id, approval: input.approvalId, platform: spec.id, connection: spec.connection, accountId: block.account.id, accountName: block.account.name,
     ...(block.account.handle ? { accountHandle: block.account.handle } : {}), title: String(p.title ?? spec.name), caption,
-    ...(m.media ? { assetId: m.media.assetId, mediaKind: m.media.kind } : {}), status: "scheduled", publishAt, ...(block.tz ? { tz: block.tz } : {}),
+    ...(m.media ? { assetId: m.media.assetId, mediaKind: m.media.kind } : {}), status: env.dryRun ? "dry_run" : "scheduled", publishAt, ...(block.tz ? { tz: block.tz } : {}),
     approvedHash: hashOf(spec, block, caption, m.media, publishAt), attempts: 0, ...(input.agent ? { by: input.agent } : {}),
   };
-  await writePost(g, id, snapshot.title, { ...snapshot, failure: null, retryable: null, maybePosted: null }, now);
-  await linkPost(g, snapshot, now, { published: false });
+  await writePost(g, id, snapshot.title, { ...snapshot, failure: env.dryRun ? dryWords : null, retryable: env.dryRun ? false : null, maybePosted: null }, now);
+  await linkPost(g, snapshot, now);
   if (input.agent) {
     const agentNode = await ensureAgentNode(g, input.agent, now);
-    await upsertEdge(g, { from: agentNode, type: "PRODUCED", to: id }, now).catch(() => undefined);
+    await upsertEdge(g, { from: agentNode, type: "PRODUCED", to: id, since: now, src: input.approvalId, asOf: isoDate(now) }, now).catch(() => undefined);
   }
+  if (env.dryRun) return { status: "dry_run", result: dryWords, produced: [id] };
   if (later) return { status: "done", result: scheduledWords(snapshot, now), produced: [id] };
 
   const r = await runJob(g, id, env, { from: ["scheduled"], now });
@@ -297,7 +301,7 @@ export async function runJob(g: GraphHandle, id: string, env: PublishEnv, o: { f
     ...(posted.url ? { postUrl: posted.url } : {}), ...(posted.id ? { postId: posted.id } : {}), ...(posted.containerId ? { containerId: posted.containerId } : {}),
   }, now);
   const done = (await readPost(g, id))!;
-  await linkPost(g, done, now, { published: true });
+  await linkPost(g, done, now); // writePost already moved the channel edges to published
   const textOnly = spec.media === "never" && !!row.assetId;
   return { outcome: { status: "done", result: postedWords(done, spec, textOnly), ...(done.postUrl ? { url: done.postUrl } : {}), produced: [id] }, post: done };
 }
@@ -315,9 +319,14 @@ export async function recordOutcome(g: GraphHandle, row: PostRow, outcome: { sta
   await upsertNode(g, {
     type: "Action", id: actionIdOf(row.approval), name: clip(`publish_post: ${row.title}`, 160),
     props: { kind: "publish_post", status: actionStatus, result: outcome.result, at: now, approval: row.approval, ...(outcome.url ? { url: outcome.url } : {}), ...(row.by ? { by: row.by } : {}) },
+    src: row.approval, asOf: isoDate(now),
   }, now);
+  // each status the card goes through (approved, executed, failed) is a Version of the Approval, from this Action, on this day
   const approvalStatus = outcome.status === "done" ? "executed" : outcome.status === "dry_run" ? "approved" : "failed";
-  await upsertNode(g, { type: "Approval", id: row.approval, name: ap.name ?? row.approval, props: { status: approvalStatus, result: outcome.result, actionId: actionIdOf(row.approval) } }, now);
+  await upsertNode(g, {
+    type: "Approval", id: row.approval, name: ap.name ?? row.approval, props: { status: approvalStatus, result: outcome.result, actionId: actionIdOf(row.approval) },
+    src: actionIdOf(row.approval), asOf: isoDate(now),
+  }, now);
 }
 
 export interface Handled { ok: boolean; message: string; post: PostRow | null }
