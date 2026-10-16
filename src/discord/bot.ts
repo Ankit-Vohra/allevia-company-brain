@@ -19,6 +19,8 @@ import type { AskInput, AskResult } from "../agent/ask.js";
 import { LANGUAGE_REPLY, parseLanguageSetting, setLanguagePreference } from "../agent/language.js";
 import type { GraphHandle } from "../graph/client.js";
 import { isDbUnavailable, WAKING_UP_MESSAGE } from "../graph/waking.js";
+import { fixDestinationWords, getActionTarget, validRepo, type ActionTarget } from "../actions/target.js";
+import { usesFoundersAccounts } from "../actions/executors.js";
 import { applyDirective, getDirective, parseDirective, previewDirective } from "../settings/directives.js";
 import { quickReplies } from "../../shared/quick-replies.js";
 import { DecisionError, decideAndNotify, type ActionOpts, type OnDecision } from "../server/approvals.js";
@@ -116,8 +118,9 @@ const BUTTON_PREFIX = "allevia";
 const MAX_CARDS = 10;
 const NOT_HERE = "Allevia only works on its demo server.";
 const ALL_OK: TurnChecks = { citationsValid: true, invalidCitations: [], numbersGrounded: true, ungroundedNumbers: [], simulatedDisclosed: true, freshnessDisclosed: true };
+// What each card is, in the owner's words (docs/owner-words.md; the web app's Approvals page says the same).
 const KIND_LABEL: Record<ApprovalDto["kind"], string> = {
-  github_issue: "GitHub issue", content_draft: "content draft", pause_ad: "pause an ad", discord_post: "Discord post",
+  github_issue: "a fix for your website", content_draft: "a draft post", pause_ad: "pausing an ad", discord_post: "a message to your team chat",
 };
 
 const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
@@ -143,13 +146,17 @@ export function isSkillRule(text: string): boolean {
   return p.patches.length > 0 && p.unparsed.length === 0 && p.patches.every((x) => x.kind === "skill.rule" || x.kind === "skill.add");
 }
 
-export function approvalCard(a: ApprovalDto, opts: { buttons?: boolean } = {}): { content: string; buttons: ButtonSpec[] } {
+// `target`: where this business's approved fixes go (actions/target.ts), said on a fix card in plain words. A repo name in
+// the payload is never shown as what the card is about: the target line says where the fix goes.
+export function approvalCard(a: ApprovalDto, opts: { buttons?: boolean; target?: ActionTarget } = {}): { content: string; buttons: ButtonSpec[] } {
   const who = agentById(a.by)?.name ?? a.by;
+  const about = a.payload.target && !(a.kind === "github_issue" && validRepo(a.payload.target)) ? a.payload.target : undefined;
   const lines = [
-    `**${clip(a.title, 200)}** · ${KIND_LABEL[a.kind] ?? a.kind}${a.simulated ? " (simulated)" : ""}`,
+    `**${clip(a.title, 200)}** · ${KIND_LABEL[a.kind] ?? a.kind}${a.simulated ? " (sample numbers)" : ""}`,
     `Proposed by ${who} · ${a.createdAt.slice(0, 10)}`,
     ...(a.payload.body.trim() ? [quote(clip(a.payload.body.trim(), 900))] : []),
-    ...(a.payload.target ? [`Target: ${clip(a.payload.target, 200)}`] : []),
+    ...(about ? [`About: ${clip(about, 200)}`] : []),
+    ...(a.kind === "github_issue" && opts.buttons !== false ? [fixDestinationWords(opts.target)] : []),
     `\`${a.id}\``,
   ];
   const ids = [buttonId("approve", a.id), buttonId("reject", a.id)];
@@ -325,7 +332,8 @@ export class AlleviaBot {
     if (!pending.length) return c.respond("Nothing is waiting for your approval.");
     const shown = pending.slice(0, MAX_CARDS);
     await c.respond(`${pending.length} pending approval${pending.length === 1 ? "" : "s"}${pending.length > shown.length ? ` (the newest ${shown.length} below)` : ""}. Only the server owner can approve or reject.`);
-    for (const a of shown) await c.followUp(approvalCard(a));
+    const target = await this.fixTarget();
+    for (const a of shown) await c.followUp(approvalCard(a, target ? { target } : {}));
   }
 
   // One conversation, two doors: a thread started in the web app can be carried on here. /continue offers the newest few
@@ -419,6 +427,15 @@ export class AlleviaBot {
       if (e instanceof DecisionError && e.status === 404) return b.reply("That approval no longer exists.", { ephemeral: true });
       this.log(`decision on ${id} failed: ${message(e)}`);
       return b.reply(sorry(e, "I couldn't record that decision. Try again, or decide it in the web app."), { ephemeral: true });
+    }
+  }
+
+  // Where this business's approved fixes go, for the wording on its cards (the same rule the web app's setting shows).
+  private async fixTarget(): Promise<ActionTarget | undefined> {
+    try {
+      return await getActionTarget(this.d.graph, this.d.tenant, { founders: usesFoundersAccounts(this.d.tenant) });
+    } catch {
+      return undefined; // the card then says the fix becomes a to-do, which is the default
     }
   }
 

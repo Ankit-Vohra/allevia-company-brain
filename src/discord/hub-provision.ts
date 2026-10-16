@@ -13,6 +13,7 @@
 // (isolation first); use the roles.
 import { graphName } from "../graph/client.js";
 import { approvalCard } from "./bot.js";
+import type { ActionTarget } from "../actions/target.js";
 import { renderCitations, splitMessage } from "./format.js";
 import {
   CHANNEL_KINDS, INBOX_NAME, INVITE_MAX_AGE_SECONDS, STAFF_CATEGORY_NAME, categoryNameFor, roleNameFor, sameOverwrites,
@@ -370,9 +371,12 @@ export interface TenantSource {
   pendingApprovals(): Promise<ApprovalDto[]>;
   approval(id: string): Promise<ApprovalDto | null>;
   latestBrief(): Promise<{ id: string; title: string; asOf?: string; text: string } | null>;
+  // where the business's approved fixes go, for the plain wording on a fix card (absent: "a to-do in your tasks")
+  actionTarget?(): Promise<ActionTarget | undefined>;
 }
 
 const MAX_CARDS = 10;
+const cardOpts = async (t: Promise<ActionTarget | undefined>): Promise<{ target?: ActionTarget }> => { const x = await t; return x ? { target: x } : {}; };
 
 // Posts what is new, once: pending approval cards (with buttons) into #approvals, the newest note into #todays-note;
 // and takes the buttons off a card that was decided somewhere else (the web).
@@ -385,10 +389,11 @@ export async function syncArea(slug: string, d: Pick<ProvisionDeps, "hub" | "sto
   const out = { cards: 0, note: false, closed: 0 };
   if (!area || area.status !== "ready" || !approvals || !noteChannel) return out;
 
+  let target: Promise<ActionTarget | undefined> | undefined; // read once, only when a card is posted
   for (const a of (await src.pendingApprovals()).slice(0, MAX_CARDS)) {
     const key = `${slug}|approval|${a.id}`;
     if (await store.getPost(key)) continue;
-    const m = await hub.sendMessage(approvals, approvalCard(a));
+    const m = await hub.sendMessage(approvals, approvalCard(a, await cardOpts((target ??= src.actionTarget?.().catch(() => undefined) ?? Promise.resolve(undefined)))));
     await store.savePost({ key, slug, kind: "approval", refId: a.id, channelId: approvals, messageId: m.id, closed: false, postedAt: now });
     out.cards++;
   }

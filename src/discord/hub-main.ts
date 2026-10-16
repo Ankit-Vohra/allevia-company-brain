@@ -3,6 +3,8 @@
 // running turns across them all, and every minute posts new approval cards and the day's note into the customer's own
 // channels. Provisioning retries run here too (the same claim keeps two processes from doing one business twice).
 import { loadConfig } from "../config.js";
+import { getActionTarget } from "../actions/target.js";
+import { usesFoundersAccounts } from "../actions/executors.js";
 import { businessId } from "../graph/tenants.js";
 import { ask } from "../agent/ask.js";
 import type { GraphHandle } from "../graph/client.js";
@@ -18,13 +20,14 @@ import { tenantTimeZone } from "./main.js";
 
 export interface StartedHub { stop: () => Promise<void> }
 
-export const tenantSource = (g: GraphHandle): TenantSource => ({
+export const tenantSource = (g: GraphHandle, slug?: string): TenantSource => ({
   pendingApprovals: async () => (await readApprovals(g)).filter((a) => a.status === "pending"),
   approval: (id) => readApproval(g, id),
   latestBrief: async () => {
     const b = await latestBrief(g);
     return b ? { id: b.id, title: b.title, ...(b.asOf ? { asOf: b.asOf } : {}), text: b.text } : null;
   },
+  ...(slug ? { actionTarget: () => getActionTarget(g, slug, { founders: usesFoundersAccounts(slug) }) } : {}),
 });
 
 export async function startHubBot(o: { model?: string; log?: (line: string) => void; syncEveryMs?: number }): Promise<StartedHub> {
@@ -94,7 +97,7 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
       for (const a of await service.deps.store.listAreas()) {
         if (a.status !== "ready") continue;
         try {
-          await syncArea(a.slug, service.deps, tenantSource(await tenantGraph(a.slug)));
+          await syncArea(a.slug, service.deps, tenantSource(await tenantGraph(a.slug), a.slug));
         } catch (e) {
           log(`[hub] ${a.slug}: could not post cards or the note: ${e instanceof Error ? e.message : String(e)}`);
         }
