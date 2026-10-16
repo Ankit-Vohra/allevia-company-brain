@@ -71,7 +71,7 @@ describe("Hindi on posters", () => {
     expect(await check({ tenant: TENANT, businessId: BIZ, texts: [HINDI], now: NOW })).toBe(false);
     expect(await check({ tenant: TENANT, businessId: BIZ, texts: ["Happy Dussehra"], now: NOW })).toBe(true);
     const d = drafters([HINDI, "Happy Dussehra"], check);
-    const item = await draftPick(g, { ...pick, key: "season:dussehra-test-1" }, ctx(d));
+    const item = await draftPick(g, { ...pick, key: "season:dussehra-first" }, ctx(d));
     expect(d.asked.filter((t) => t.kind === "headline").map((t) => /English/.test(t.brief))).toEqual([false, true]);
     expect(d.posters[0]).toMatchObject({ headline: "Happy Dussehra", paid: true });
     expect(item.status).toBe("drafted");
@@ -86,7 +86,7 @@ describe("Hindi on posters", () => {
     expect(plain.notes.join(" ")).not.toMatch(/Mukta/); // the brand font stays when it has every letter
 
     const d = drafters([HINDI], standupFontCheck(g, { store }));
-    await draftPick(g, { ...pick, key: "season:dussehra-test-2" }, ctx(d));
+    await draftPick(g, { ...pick, key: "season:dussehra-second" }, ctx(d));
     expect(d.asked.filter((t) => t.kind === "headline")).toHaveLength(1);
     expect(d.posters[0]!.headline).toBe(HINDI);
   });
