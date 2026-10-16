@@ -9,6 +9,8 @@ const SPEC_TOOLS = [
   "propose_action", "show_path", "use_skill",
   // the creating tools, the brand library and web research
   "get_brand_asset", "write_copy", "make_poster", "generate_image", "make_reel_script_and_clip", "research",
+  // the website check-up: what to fix, whether AI names the business, and the optional paid keyword ideas
+  "website_checkup", "ai_visibility", "keyword_ideas",
 ];
 
 // The first {...} after "Example:" in a description.
@@ -64,6 +66,6 @@ describe("tool registry", () => {
   });
 
   it("only remember, propose_action and the tools that make things write", () => {
-    expect(ALL_TOOLS.filter((t) => t.writes).map((t) => t.name).sort()).toEqual(["generate_image", "make_poster", "make_reel_script_and_clip", "propose_action", "remember", "write_copy"]);
+    expect(ALL_TOOLS.filter((t) => t.writes).map((t) => t.name).sort()).toEqual(["generate_image", "keyword_ideas", "make_poster", "make_reel_script_and_clip", "propose_action", "remember", "write_copy"]);
   });
 });

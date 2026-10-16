@@ -22,6 +22,7 @@ import { getBrandAsset } from "./brand.js";
 import { researchTool } from "./research.js";
 import { writeCopyTool } from "./copy.js";
 import { generateImageTool, makePosterTool, makeReelTool } from "./creative.js";
+import { aiVisibility, keywordIdeas, websiteCheckup } from "./website.js";
 
 export const ALL_TOOLS: AlleviaTool[] = [
   search, getEntity, neighbors, findPaths, traceDecision, whoOwns, whoKnows, impactOf, important, topics, metricTrend,
@@ -29,6 +30,8 @@ export const ALL_TOOLS: AlleviaTool[] = [
   useSkill,
   // what the team can make and what it can use to make it (the brand library); see shared/toolkits.ts for who holds them
   getBrandAsset, writeCopyTool, makePosterTool, generateImageTool, makeReelTool, researchTool,
+  // the website check-up (src/checkup): what to fix on the site, whether AI names the business, paid keyword ideas
+  websiteCheckup, aiVisibility, keywordIdeas,
 ];
 
 const BY_NAME = new Map(ALL_TOOLS.map((t) => [t.name, t]));

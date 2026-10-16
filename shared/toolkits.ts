@@ -6,7 +6,8 @@
 //   mode    - "read" (looks something up), "create" (makes a file or a draft: a poster, an image, a clip, copy) or
 //             "write" (changes company memory or raises a card)
 //   cost    - "free" (graph reads), "model" (spends the Claude subscription: a model call or a web search),
-//             "credits" (spends image-generator credits, always through the capped engine and quoted first)
+//             "credits" (spends image-generator credits, always through the capped engine and quoted first),
+//             "paid" (spends money at a data provider, within the business's monthly budget, estimated first)
 //   needsOk - whether the owner's OK is needed before the tool's result does anything outside the company: true for
 //             everything that creates or proposes (it waits as a card), false for reads
 // A roster agent is given toolkits plus a few named extras (shared/roster.ts), not a hard-coded array of names. The Chief
@@ -14,7 +15,7 @@
 
 export type ToolDomain = "knowledge" | "analytics" | "marketing" | "content" | "tech" | "ops" | "research" | "brand" | "creative" | "memory" | "answer";
 export type ToolMode = "read" | "create" | "write";
-export type ToolCost = "free" | "model" | "credits";
+export type ToolCost = "free" | "model" | "credits" | "paid";
 
 export interface ToolMeta {
   name: string;
@@ -49,6 +50,9 @@ export const TOOL_META: ToolMeta[] = [
   read("metric_trend", "analytics", "Reads how a number has moved"),
   read("seo_report", "analytics", "Reads the website's search health"),
   read("content_performance", "analytics", "Compares which posts and hooks worked"),
+  read("website_checkup", "tech", "Says what to fix on the website first, ranked by enquiries"),
+  read("ai_visibility", "analytics", "Says whether AI assistants name the business when customers ask"),
+  { name: "keyword_ideas", domain: "analytics", mode: "write", cost: "paid", needsOk: false, summary: "Finds searches the business could rank for (optional, paid, within a monthly budget)" },
   // marketing
   read("ad_report", "marketing", "Reads ad results (sample numbers when simulated)"),
   read("playbook", "content", "Reads the rules for writing and posting in this voice"),
@@ -81,6 +85,8 @@ export const TOOLKITS: Toolkit[] = [
   { id: "numbers", label: "Numbers over time", domain: "analytics", tools: ["metric_trend"] },
   { id: "seo", label: "Search health", domain: "analytics", tools: ["seo_report"] },
   { id: "content-stats", label: "What content worked", domain: "analytics", tools: ["content_performance"] },
+  { id: "website", label: "Website check-up and AI visibility", domain: "tech", tools: ["website_checkup", "ai_visibility"] },
+  { id: "keywords", label: "Keyword research (optional, paid)", domain: "analytics", tools: ["keyword_ideas"] },
   { id: "ads", label: "Ad results", domain: "marketing", tools: ["ad_report"] },
   { id: "playbooks", label: "Voice and posting rules", domain: "content", tools: ["playbook"] },
   { id: "tech", label: "What depends on what", domain: "tech", tools: ["impact_of"] },
