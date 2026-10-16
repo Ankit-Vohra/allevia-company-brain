@@ -55,8 +55,9 @@ COPY src ./src
 COPY scripts ./scripts
 COPY vendor ./vendor
 COPY skills ./skills
-# scripts/seed-demo.ts builds the synthetic demo company from this fixture (no model needed)
-COPY tests/fixtures/seed-graph.ts ./tests/fixtures/seed-graph.ts
+# scripts/seed-demo.ts builds the second synthetic company (demo_seed) from these two fixtures (no model needed);
+# `seed-demo` (src/demo, the Shiftly twin) needs nothing from tests/
+COPY tests/fixtures/seed-graph.ts tests/fixtures/seed-depth.ts ./tests/fixtures/
 COPY --from=web /app/web/dist ./web/dist
 
 # transformers.js keeps a small file cache inside its package; the app runs as `node`, so that folder must be writable

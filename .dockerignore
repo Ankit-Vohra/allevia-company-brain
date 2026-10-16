@@ -36,3 +36,4 @@ docker-compose*.yml
 # tests, except the synthetic demo company that scripts/seed-demo.ts builds
 tests/**
 !tests/fixtures/seed-graph.ts
+!tests/fixtures/seed-depth.ts

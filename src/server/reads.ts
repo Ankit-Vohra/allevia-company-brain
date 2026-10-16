@@ -185,9 +185,10 @@ export async function storedTurn(g: GraphHandle, turnId: string, o: { showcaseOn
   };
 }
 
-// Public mode: the stored showcase turn whose question matches (case and spacing ignored), or the one named by id.
+// Public mode: the stored showcase turn whose question matches (case, spacing, punctuation and hyphens ignored, so "signups" finds
+// "sign-ups"), or the one named by id.
 export async function findShowcaseTurn(g: GraphHandle, o: { question?: string; turnId?: string }): Promise<{ id: string; events: AgentEvent[] } | null> {
-  const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
   const rows = await ro<{ id: string; q: string | null }>(g,
     "MATCH (t:Turn) WHERE t.showcase = true RETURN t.id AS id, t.question AS q ORDER BY t.at DESC, t.id LIMIT 200");
   const hit = rows.find((r) => (o.turnId && r.id === o.turnId) || (o.question && r.q && norm(r.q) === norm(o.question)));
