@@ -39,6 +39,19 @@ describe("reviseDraft", () => {
     expect(JSON.parse(row!.payload)).toMatchObject({ body: "Shorter: Diwali greetings from our Raipur office.\n\n#Raipur", previousBody: "A long Diwali post that goes on and on." });
   });
 
+  it("teaches: the change note becomes a learned rule on the skill that drafted it, and the next draft is given it", async () => {
+    const rules = await g.roQuery<{ text: string; skills: string[]; op: string; conf: number }>(
+      "MATCH (r:Rule {kind:'learned'})-[:LEARNED_FROM]->(a:Approval {id:'approval:standup-diwali-1'}) RETURN r.text AS text, r.skills AS skills, r.op AS op, r.confidence AS conf");
+    expect(rules).toEqual([{ text: "The owner asked for: shorter, and say Raipur.", skills: ["campaign-brief"], op: "instruction", conf: 0.5 }]);
+    const { activeRules } = await import("../../src/actions/learning.js");
+    const { agentNodeId } = await import("../../src/agent/memory.js");
+    expect((await activeRules(g, { agentId: agentNodeId("content-strategist") })).map((r) => r.text)).toContain("The owner asked for: shorter, and say Raipur.");
+    // asking for the same thing again reinforces the rule instead of adding a second
+    await reviseDraft(g, "approval:standup-diwali-1", "Shorter, and say Raipur!", { text, now: SEED_NOW + 2000 });
+    const [again] = await g.roQuery<{ n: number; conf: number }>("MATCH (r:Rule {kind:'learned'}) WHERE r.text STARTS WITH 'The owner asked for' RETURN count(r) AS n, max(r.confidence) AS conf");
+    expect(again).toEqual({ n: 1, conf: 0.6 });
+  });
+
   it("only changes a stand-up draft that is still waiting", async () => {
     expect(await reviseDraft(g, "approval:other", "x", { text })).toMatchObject({ ok: false, why: expect.stringMatching(/web app/) });
     expect(await reviseDraft(g, "approval:nope", "x", { text })).toMatchObject({ ok: false });

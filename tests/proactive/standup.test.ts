@@ -115,7 +115,9 @@ describe("what the stand-up reviews and turns into opportunities", () => {
 
   it("finds the festival, the unanswered review, the website words and the goal that needs a push", () => {
     const by = new Map(opps.map((o) => [o.key, o]));
-    expect(by.get("season:dussehra-2026")).toMatchObject({ kind: "poster", agent: "content-strategist", reason: "Dussehra is in about 5 days (around 2026-10-20).", filler: true, effect: 0 });
+    const festival = opps.find((o) => o.occasion?.name === "Dussehra");
+    expect(festival).toMatchObject({ kind: "poster", agent: "content-strategist", reason: "Dussehra is in about 5 days (around 2026-10-20)." });
+    expect(festival).toMatchObject({ filler: true, effect: 0 });
     expect(by.get("review:document:google-review-r1")).toMatchObject({ kind: "reply", agent: "ops-manager", moves: ["Signups a day"] });
     expect(by.get("website:rule:seo-missing-meta-description")).toMatchObject({ kind: "website_fix", agent: "tech-lead" });
     // a check that costs enquiries moves the sign-up goal; a search check moves no goal this business has
@@ -288,7 +290,8 @@ describe("a festival fills a spare slot", () => {
     try {
       const s = await runStandup("quiet", { graph: t.g, now: SEED_NOW, drafters, paidPerDay: 1 });
       const poster = s.items.find((i) => i.kind === "poster");
-      expect(poster).toMatchObject({ paid: true, approvalId: "approval:made-poster-1", key: "season:dussehra-2026" });
+      expect(poster).toMatchObject({ paid: true, approvalId: "approval:made-poster-1" });
+      expect(poster?.title).toMatch(/Dussehra/);
       expect(drafters.posters[0]).toMatchObject({ paid: true, eyebrow: "Dussehra", cta: "aamdani.ai" });
       expect(s.paidUsed).toBe(1);
       expect(s.waiting).toEqual([]);
