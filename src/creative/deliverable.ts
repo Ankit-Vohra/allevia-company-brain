@@ -141,7 +141,7 @@ export async function saveDeliverable(g: GraphHandle, deps: SaveDeps, r: SaveReq
   const src = `turn:${deps.turnId}`;
   const approvalId = await serial(g.name, async () => {
     const [pending] = await g.roQuery<{ id: string }>(
-      "MATCH (:Entity:Recommendation {id:$rid})-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL AND a.status = 'pending' RETURN a.id AS id ORDER BY a.id LIMIT 1", { rid: recId });
+      "MATCH (rec:Entity:Recommendation {id:$rid}) WITH rec MATCH (rec)-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL AND a.status = 'pending' RETURN a.id AS id ORDER BY a.id LIMIT 1", { rid: recId });
     const id = pending?.id ?? `approval:made-${short}-${deps.now.toString(36)}`;
     await upsertNode(g, { type: "Recommendation", id: recId, name: r.title, summary: why.slice(0, 1000), props: { status: "open", kind: "content_draft", by: deps.agentId, area: "content", confidence: saved.some((s) => s.o.badge === "ok") ? 0.8 : 0.4, score: 0.8 }, src, asOf }, deps.now);
     await upsertNode(g, { type: "Approval", id, name: `content_draft: ${r.title}`, props: { status: "pending", kind: "content_draft", title: r.title, payload: JSON.stringify(payload), recommendation: recId, studio: true, creative: true }, src, asOf }, deps.now);

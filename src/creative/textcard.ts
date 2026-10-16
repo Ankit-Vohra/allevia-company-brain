@@ -17,7 +17,7 @@ export async function saveTextDraft(
   const src = `turn:${o.turnId}`;
   const approvalId = await serial(g.name, async () => {
     const [pending] = await g.roQuery<{ id: string }>(
-      "MATCH (:Entity:Recommendation {id:$rid})-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL AND a.status = 'pending' RETURN a.id AS id ORDER BY a.id LIMIT 1", { rid: recId });
+      "MATCH (rec:Entity:Recommendation {id:$rid}) WITH rec MATCH (rec)-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL AND a.status = 'pending' RETURN a.id AS id ORDER BY a.id LIMIT 1", { rid: recId });
     const id = pending?.id ?? `approval:made-${short}-${o.now.toString(36)}`;
     await upsertNode(g, { type: "Recommendation", id: recId, name: o.title, summary: o.why.slice(0, 1000), props: { status: "open", kind: "content_draft", by: o.agentId, area: "content", confidence: 0.6, score: 0.6 }, src, asOf }, o.now);
     await upsertNode(g, { type: "Approval", id, name: `content_draft: ${o.title}`, props: { status: "pending", kind: "content_draft", title: o.title, payload: JSON.stringify({ title: o.title, body: o.body, target: o.target }), recommendation: recId }, src, asOf }, o.now);

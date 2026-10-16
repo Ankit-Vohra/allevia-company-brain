@@ -45,10 +45,10 @@ async function runTrace(args: { id?: string; query?: string }, ctx: ToolContext)
       `MATCH (:Entity {id:$id})-[r:AFFECTS]->(x:Entity) WHERE r.until IS NULL RETURN ${EDGE("r")} AS e, ${NODE("x")} AS n ORDER BY x.name, x.id LIMIT $cap`, { ...p, cap: LIST_CAP }),
     ro<ChainRow>(ctx,
       `MATCH p = (:Entity {id:$id})-[:SUPERSEDES*1..6]->(o:Entity) WHERE ${cur}
-       RETURN ${NODE("o")} AS n, o.status AS status, o.decidedAt AS decidedAt, [r IN relationships(p) | ${EDGE("r")}] AS es ORDER BY length(p), o.id LIMIT $chain`, { ...p, chain: CHAIN_CAP }),
+       RETURN ${NODE("o")} AS n, o.status AS status, o.decidedAt AS decidedAt, [r IN relationships(p) | ${EDGE("r")}] AS es, length(p) AS hops ORDER BY hops, o.id LIMIT $chain`, { ...p, chain: CHAIN_CAP }),
     ro<ChainRow>(ctx,
       `MATCH p = (nw:Entity)-[:SUPERSEDES*1..6]->(:Entity {id:$id}) WHERE ${cur}
-       RETURN ${NODE("nw")} AS n, nw.status AS status, nw.decidedAt AS decidedAt, [r IN relationships(p) | ${EDGE("r")}] AS es ORDER BY length(p), nw.id LIMIT $chain`, { ...p, chain: CHAIN_CAP }),
+       RETURN ${NODE("nw")} AS n, nw.status AS status, nw.decidedAt AS decidedAt, [r IN relationships(p) | ${EDGE("r")}] AS es, length(p) AS hops ORDER BY hops, nw.id LIMIT $chain`, { ...p, chain: CHAIN_CAP }),
   ]);
 
   const col = new Collector();

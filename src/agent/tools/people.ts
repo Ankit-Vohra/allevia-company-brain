@@ -34,7 +34,7 @@ async function runWhoOwns(args: { id?: string; query?: string; asOf?: string }, 
     ro<{ n: NodeRow; via: NodeRow; es: EdgeRow[] }>(ctx,
       `MATCH (s:Entity {id:$id}) WITH s
        MATCH p = (s)-[:PART_OF*1..3]->(parent:Entity)<-[:OWNS]-(o:Entity) WHERE ALL(x IN relationships(p) WHERE ${edgeAt("x", asOf)})
-       RETURN ${NODE("o")} AS n, ${NODE("parent")} AS via, [x IN relationships(p) | ${EDGE("x")}] AS es ORDER BY length(p), parent.id, o.id LIMIT 5`, p),
+       RETURN ${NODE("o")} AS n, ${NODE("parent")} AS via, [x IN relationships(p) | ${EDGE("x")}] AS es, length(p) AS hops ORDER BY hops, parent.id, o.id LIMIT 5`, p),
   ]);
 
   const col = new Collector();

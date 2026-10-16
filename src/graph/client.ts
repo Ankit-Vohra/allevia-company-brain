@@ -224,6 +224,30 @@ export function readBudget(timeoutMs: number = DEFAULT_READ_TIMEOUT_MS): () => n
   };
 }
 
+// A server URL fit for a log line: never the user or password, and a remote host only as "<remote>". The cloud URL
+// carries its password (docs/falkordb-cloud.md), so nothing prints a URL except through this.
+export function describeUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const local = ["127.0.0.1", "localhost", "[::1]"].includes(u.hostname);
+    return `${u.protocol}//${u.username || u.password ? "***@" : ""}${local ? u.hostname : "<remote>"}:${u.port || "6379"}`;
+  } catch {
+    return "<unparseable url>";
+  }
+}
+
+// `text` (an error message) with the URL's password, user and remote host taken out.
+export function redactUrl(text: string, url: string): string {
+  let out = text.split(url).join(describeUrl(url));
+  try {
+    const u = new URL(url);
+    for (const s of [u.password, decodeURIComponent(u.password), u.username, u.hostname]) {
+      if (s && s.length >= 3 && !["127.0.0.1", "localhost", "[::1]"].includes(s)) out = out.split(s).join("***");
+    }
+  } catch { /* nothing to take out */ }
+  return out;
+}
+
 const pool = new Map<string, Promise<FalkorDB>>();
 let defaultUrl: string | undefined; // read the config (and its env file) once per process
 
@@ -263,8 +287,8 @@ export function pingServer(url: string, timeoutMs = 3_000): Promise<void> {
 
 let lastLogged = { text: "", at: 0 };
 // While the database restarts the client reports every reconnect attempt: each different line at most once a minute.
-function logDbError(err: Error): void {
-  const text = err.message || String((err as { code?: string }).code ?? err.name);
+function logDbError(err: Error, url: string): void {
+  const text = redactUrl(err.message || String((err as { code?: string }).code ?? err.name), url);
   const now = Date.now();
   if (text === lastLogged.text && now - lastLogged.at < 60_000) return;
   lastLogged = { text, at: now };
@@ -277,7 +301,7 @@ export async function connect(url?: string): Promise<FalkorDB> {
   if (!p) {
     p = pingServer(u).then(() => FalkorDB.connect({ url: u })).then((db) => {
       // Without a listener an 'error' event would crash the process; the client reconnects on its own.
-      db.on("error", logDbError);
+      db.on("error", (err: Error) => logDbError(err, u));
       return db;
     });
     pool.set(u, p);
