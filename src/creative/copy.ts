@@ -63,7 +63,7 @@ export async function writeCopy(g: GraphHandle, businessId: string, job: CopyJob
     const bad = groundClaims([{ role: job.kind, text: cleaned.text }], { request: `${job.question}\n${job.brief}`, facts });
     out.push({
       text: cleaned.text, edits: cleaned.edits,
-      hashtags: (Array.isArray(v.hashtags) ? v.hashtags : []).filter((h): h is string => typeof h === "string").map((h) => `#${h.replace(/^#+/, "").replace(/[^\p{L}\p{N}_]/gu, "")}`).filter((h) => h.length > 2).slice(0, 4),
+      hashtags: (Array.isArray(v.hashtags) ? v.hashtags : []).filter((h): h is string => typeof h === "string").map((h) => `#${h.replace(/^#+/, "").replace(/[^\p{L}\p{M}\p{N}_]/gu, "")}`).filter((h) => h.length > 2).slice(0, 4),
       warnings: bad.map((b) => `"${b.claim}" is not in what you told us or in our record: check it before using`),
     });
   }

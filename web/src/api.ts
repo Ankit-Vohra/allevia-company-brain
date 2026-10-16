@@ -23,7 +23,7 @@ export interface StudioLatest {
 import type { AgentMode, CapabilityState, DirectivePreview, DiscordHome, LearnedRuleDto, ProgramScorecard } from "@shared/contracts";
 import type {
   AgentDetail, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, GoalSetup, GraphData, LearningFeed, LiveTurn, NodeDetail,
-  CheckupStatus, ConnectorStatus, NumbersImportResult, NumbersPlan, NumbersPreview, OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Tenant, TurnEventsPage, Usage,
+  CheckupStatus, ConnectorStatus, NumbersImportResult, NumbersPlan, NumbersPreview, OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Standup, Tenant, TurnEventsPage, Usage,
 } from "./types-ext";
 
 /** PATCH /api/:t/agents/:id */
@@ -237,6 +237,10 @@ export const api = {
   /** GET /api/:t/brief: today's morning brief; null when none has been written. */
   async brief(t: string): Promise<Brief | null> {
     return mode === "mock" ? (await mock()).brief(t) : getOrNull(`/api/${enc(t)}/brief`);
+  },
+  /** GET /api/:t/standup: today's team stand-up (what the team noticed and drafted); null before it has run, and in the mock. */
+  async standup(t: string): Promise<Standup | null> {
+    return mode === "mock" ? null : getOrNull(`/api/${enc(t)}/standup`);
   },
   /** POST /api/:t/brief/run: bring the goals' readings up to date and write today's brief (no language model). */
   async runBrief(t: string): Promise<Brief> {

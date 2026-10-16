@@ -298,3 +298,32 @@ export interface NumbersImportResult {
   capabilities: Array<{ key: string; name: string; from: string; to: string }>;
   sentences: string[];
 }
+
+/** One thing the team drafted at the morning stand-up (src/proactive), waiting for the owner's OK. */
+export interface StandupItem {
+  key: string;
+  kind: "post" | "poster" | "reply" | "website_fix" | "follow_up" | "offer";
+  agent: AgentId;
+  title: string;
+  why: string;
+  purpose: string;
+  status: "drafted" | "failed";
+  approvalId?: string;
+  paid?: boolean;
+  notes: string[];
+}
+
+/** GET /api/:t/standup: today's team stand-up; null before it has run. */
+export interface Standup {
+  id: string;
+  date: string;
+  localDate: string;
+  generatedAt: number;
+  quiet: boolean;
+  by: "meera" | "rules";
+  items: StandupItem[];
+  heading: string;
+  lines: string[];
+  lessons: string[];
+  attendees: AgentId[];
+}

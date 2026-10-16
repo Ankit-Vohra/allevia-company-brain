@@ -115,6 +115,10 @@ export interface BotDeps {
   numbers?: { businessId: string; fetch?: FetchFn };
   // /checkup: the background check-ups (src/checkup/jobs.ts). Absent: the command says it isn't switched on.
   checkup?: Pick<CheckupJobs, "start">;
+  // "Change" on a draft from today's stand-up: the owner's words go to the person who drafted it, who redrafts it
+  // (src/proactive/revise.ts). Returns the card as it now stands, or why it could not be changed. Absent: Change says to
+  // edit it in the web app.
+  revise?: (approvalId: string, instruction: string) => Promise<ApprovalDto | { why: string }>;
   log?: (line: string) => void;
 }
 
@@ -143,6 +147,10 @@ const CONTINUE = new RegExp(`^${BUTTON_PREFIX}:continue:(.+)$`);
 const RULE_BUTTON = new RegExp(`^${BUTTON_PREFIX}:rule:(apply|skip):(.+)$`);
 const QUICK_REPLY = new RegExp(`^${BUTTON_PREFIX}:qr:(.+)$`);
 export const quickReplyId = (option: string): string => `${BUTTON_PREFIX}:qr:${option}`.slice(0, 100);
+export const changeButtonId = (approvalId: string): string => `${BUTTON_PREFIX}:change:${approvalId}`;
+const CHANGE_BUTTON = new RegExp(`^${BUTTON_PREFIX}:change:(.+)$`);
+const CHANGE_WORDS = /^change\s*[:\-,]\s*/i;
+const CHANGE_WAIT_MS = 30 * 60_000;
 
 // A plain message that is clearly a standing rule for one of the team's skills ("Tara, our posts always end with a
 // question"): not a question, and the rules (no model) read all of it as skill rules or skills.
@@ -177,6 +185,28 @@ export function approvalCard(a: ApprovalDto, opts: { buttons?: boolean; target?:
   return { content: clip(lines.join("\n"), 1900), buttons };
 }
 
+// A draft from today's stand-up, in #todays-note: what it is, who drafted it and why, the draft itself, and Approve,
+// Change and No thanks. Nothing goes out until the owner says OK.
+export function standupCard(a: ApprovalDto, why?: string, opts: { buttons?: boolean } = {}): { content: string; buttons: ButtonSpec[] } {
+  const who = agentById(a.by)?.name ?? "Your team";
+  const lines = [
+    `**${clip(a.title, 200)}** · drafted by ${who}`,
+    ...(why ? [`Why: ${clip(why, 300)}`] : []),
+    ...(a.payload.body.trim() ? [quote(clip(a.payload.body.trim(), 1200))] : []),
+    ...(a.payload.target ? [`Where it goes: ${clip(a.payload.target, 200)}`] : []),
+    "Nothing goes out until you say OK.",
+  ];
+  const ids = [buttonId("approve", a.id), changeButtonId(a.id), buttonId("reject", a.id)];
+  const fits = ids.every((id) => id.length <= 100);
+  const buttons: ButtonSpec[] = opts.buttons === false || !fits ? [] : [
+    { customId: ids[0]!, label: "Approve", style: "success" },
+    { customId: ids[1]!, label: "Change", style: "secondary" },
+    { customId: ids[2]!, label: "No thanks", style: "danger" },
+  ];
+  if (opts.buttons !== false && !fits) lines.push("_Decide this one in the web app._");
+  return { content: clip(lines.join("\n"), 1900), buttons };
+}
+
 // ---------- the bot ----------
 
 export class AlleviaBot {
@@ -184,6 +214,7 @@ export class AlleviaBot {
   private get gate(): { live: number } { return this.d.shared ?? this.own; }
   private queues = new Map<string, Promise<void>>();
   private sessions = new Map<string, string>();
+  private changes = new Map<string, { id: string; at: number }>(); // who pressed Change on which draft, and when
 
   private numbers: NumbersOnDiscord | undefined;
 
@@ -223,6 +254,7 @@ export class AlleviaBot {
       if (t && await this.numbers.onReply(question, t)) return;
     }
     if (!question) return;
+    if (await this.changeReply(m, question)) return;
     const asker = m.authorIsOwner ? FOUNDER : MEMBER;
     // "always answer in English": the business's language setting, said in plain words (only the owner changes it)
     const lang = m.authorIsOwner && (m.channelId === this.d.channelId || m.threadParentId === this.d.channelId) ? parseLanguageSetting(question) : null;
@@ -247,6 +279,24 @@ export class AlleviaBot {
       if (!thread) return;
       await this.turn(thread, question, asker, () => this.sessionFor(thread.id, question, asker));
     }
+  }
+
+  // "Change: …" after the owner pressed Change on a draft: the person who drafted it redrafts it, and the new card comes back.
+  private async changeReply(m: MessagePort, text: string): Promise<boolean> {
+    if (!CHANGE_WORDS.test(text) || !this.d.revise || !m.authorIsOwner) return false;
+    if (m.channelId !== this.d.channelId && m.threadParentId !== this.d.channelId) return false;
+    const pending = this.changes.get(m.authorId);
+    if (!pending || this.now() - pending.at > CHANGE_WAIT_MS) return false;
+    this.changes.delete(m.authorId);
+    try {
+      const r = await this.d.revise(pending.id, text.replace(CHANGE_WORDS, ""));
+      if ("why" in r) await m.reply(r.why);
+      else await m.reply(standupCard(r, "redrafted the way you asked"));
+    } catch (e) {
+      this.log(`change on ${pending.id} failed: ${message(e)}`);
+      await m.reply("I couldn't redraft that just now. Try again in a minute, or change it in the web app.");
+    }
+    return true;
   }
 
   // A standing rule for a skill, said in plain words: show what would change and let the owner say yes (the same preview
@@ -471,6 +521,14 @@ export class AlleviaBot {
     if (qr) return this.quickReply(b, qr[1]!);
     const rule = RULE_BUTTON.exec(b.customId);
     if (rule) return this.ruleButton(b, rule[1] as "apply" | "skip", rule[2]!);
+    const change = CHANGE_BUTTON.exec(b.customId);
+    if (change) {
+      if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
+      if (!b.isOwner) return b.reply("Only the owner can ask for a change.", { ephemeral: true });
+      if (!this.d.revise) return b.reply("Change this one in the web app (Waiting for your OK).", { ephemeral: true });
+      this.changes.set(b.userId, { id: change[1]!, at: this.now() });
+      return b.reply(`What should change? Write it in <#${this.d.channelId}> starting with "Change:", for example "Change: shorter, and mention our Raipur office". Your team redrafts it and brings it back for your OK.`, { ephemeral: true });
+    }
     const m = BUTTON.exec(b.customId);
     if (!m) return;
     if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });

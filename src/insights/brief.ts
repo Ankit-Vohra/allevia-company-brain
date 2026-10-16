@@ -25,6 +25,7 @@ import { learningMetrics, type LearningMetrics } from "../actions/learning.js";
 import { DAY_MS, cap1, clip, dayMs, dayOf, fmt, longDate, money, pct, plural, round, shortDate } from "./text.js";
 import { polishText } from "./polish.js";
 import { humanPass } from "../agent/humanize.js";
+import { readStandup } from "../proactive/note.js";
 
 type Read = Pick<GraphHandle, "roQuery">;
 
@@ -158,7 +159,7 @@ function goalLine(p: GoalPulse): string {
 
 // ---------- 2. since the last brief ----------
 
-async function changesSince(g: Read, since: number, now: number): Promise<{ count: number; changes: Change[] }> {
+export async function changesSince(g: Read, since: number, now: number): Promise<{ count: number; changes: Change[] }> {
   const today = isoDate(now);
   const [c] = await g.roQuery<{ n: number }>(
     "MATCH (o:Observation) WHERE o.createdAt >= $since AND NOT o.metric STARTS WITH 'allevia.' AND coalesce(o.baseline, false) = false RETURN count(o) AS n", { since });
@@ -239,7 +240,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
     "MATCH (r:Rule) WHERE r.kind = 'learned' AND r.createdAt >= $since RETURN r.id AS id, coalesce(r.text, r.name) AS text ORDER BY r.createdAt, id LIMIT 5", { since });
   const [nr] = await g.roQuery<{ n: number }>("MATCH (r:Recommendation) WHERE r.createdAt >= $since RETURN count(r) AS n", { since });
   const top = await g.roQuery<{ id: string; title: string; by: string | null; score: number; approvalId: string | null }>(
-    `MATCH (r:Recommendation) WHERE r.status = 'open' AND coalesce(r.area, '') <> 'tech'
+    `MATCH (r:Recommendation) WHERE r.status = 'open' AND coalesce(r.area, '') <> 'tech' AND coalesce(r.source, '') <> 'standup'
      OPTIONAL MATCH (r)-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL AND a.status = 'pending'
      WITH r, collect(a.id)[0] AS approvalId
      RETURN r.id AS id, r.name AS title, r.by AS by, coalesce(r.score, 0) AS score, approvalId
@@ -262,6 +263,10 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
 
   // ---- text ----
   const lines: string[] = [`Today's note, ${bizRow?.name ?? tenant}, ${longDate(date)}`, ""];
+  // the day's stand-up leads: what the team noticed and already drafted, or that nothing was worth the owner's time
+  const standup = await readStandup(g, date);
+  const drafted = (standup?.items ?? []).filter((i) => i.status === "drafted" && i.approvalId);
+  if (standup) lines.push(standup.heading, ...standup.lines, "");
   lines.push("Your goals");
   if (goals.length) lines.push(...goals.map(goalLine));
   else lines.push("- No goals set yet. Pick two or three when you set up and they show here.");
@@ -296,6 +301,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   const atRisk = goals.find((x) => x.status === "at_risk" || x.status === "off_track");
   const urgent = onCall.find((r) => r.score >= 0.8);
   const next = urgent ? `Look at this first: ${clip(urgent.title, 80).replace(/[.:]$/, "")}. [[${urgent.id}]]`
+    : drafted[0] ? `Say OK or change what your team drafted: ${clip(drafted[0].title, 80).replace(/[.:]$/, "")}. [[${drafted[0].approvalId}]]`
     : firstCard ? `Say OK or edit: ${clip(firstCard.title, 80).replace(/[.:]$/, "")}. [[${firstCard.id}]]`
     : top[0] ? `Take a look: ${clip(top[0].title, 80).replace(/[.:]$/, "")}. [[${top[0].id}]]`
     : atRisk ? `Ask your team how to get "${atRisk.name}" going again. [[${atRisk.id}]]`
@@ -318,6 +324,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   const mentions = [...new Set([
     ...(biz ? [biz] : []), ...goals.map((x) => x.id), ...goals.flatMap((x) => (x.obsId ? [x.obsId] : [])), ...changes.map((c) => c.obsId),
     ...learned.map((r) => r.id), ...top.map((r) => r.id), ...(onCall.length <= 4 ? onCall : onCall.slice(0, 3)).map((r) => r.id), ...pending.cards.map((c) => c.id),
+    ...(standup ? [standup.id] : []), ...drafted.map((d) => d.approvalId!),
   ])];
   const present = await existingIds(g, mentions);
   const agent = await ensureAgentNode(g, "chief-of-staff", now);

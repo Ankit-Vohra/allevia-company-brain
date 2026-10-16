@@ -103,6 +103,19 @@ export type Fx = FxHeart | FxTreat;
 
 export interface Speech { agent: string; text: string; ms: number }
 
+/** The morning stand-up: who is in it, where each stands, what is said, and who gets a document afterwards. */
+export interface Meeting {
+  attendees: string[];
+  lines: Speech[];
+  handoffs: string[];              // the people Meera hands a brief to (a dog carries each)
+  phase: "gather" | "talk";
+  t0: number;
+  said: number;
+  nextAt: number;
+}
+
+const CHIEF_ID = "chief-of-staff";
+
 export interface LifeEnv {
   busy: ReadonlySet<string>;
   off: ReadonlySet<string>;
@@ -133,6 +146,7 @@ export class Life {
   private lastSleepyCheck = -1e9;
   private lastBusy = new Set<string>();
   private speaking = new Map<string, number>();
+  meeting: Meeting | null = null;
 
   constructor(readonly L: OfficeLayout, seed: number, readonly reduced: boolean) {
     this.rng = mulberry32(seed);
@@ -195,6 +209,7 @@ export class Life {
     }
     this.lastBusy = new Set([...env.busy]);
 
+    if (this.meeting) this.stepMeeting(env);
     if (!this.reduced) {
       if (t - this.lastSleepyCheck > 4000) { this.lastSleepyCheck = t; this.refreshSleepy(env); }
       for (const p of this.people.values()) this.stepPerson(p, dt, env);
@@ -436,6 +451,70 @@ export class Life {
     p.then = () => {
       p.mode = "settle"; p.blendFrom = { ...desk.side }; p.blendTo = { ...desk.seat }; p.blendStart = this.t; p.x = desk.side.x; p.y = desk.side.y;
     };
+  }
+
+  // ------------------------------------------------------------------ the morning stand-up
+
+  /**
+   * The team stand-up: Meera and the people who got work walk to the board table in the game room (or the nearest free
+   * seats), Meera says what the team noticed, each person says what they will draft, then everyone goes back to their desk
+   * and a dog carries Meera's brief to each of them. With reduced motion nobody walks: the briefs are only counted.
+   */
+  standup(attendees: string[], lines: Speech[], handoffs: string[]) {
+    const who = attendees.filter((id) => this.people.has(id) && this.L.desks[id]);
+    if (this.reduced || !who.length) {
+      for (const h of handoffs) this.deliver(CHIEF_ID, h, "handoff", false);
+      for (const l of lines.slice(0, 2)) this.speech.push(l);
+      return;
+    }
+    if (this.meeting) this.endMeeting(false);
+    const table = this.L.rooms.flatMap((r) => r.floor).find((f) => f.kind === "board-table")?.rect;
+    const desk = this.L.desks[CHIEF_ID] ?? this.L.desks[who[0]!]!;
+    const center: Pt = table ? { x: table.x + table.w / 2, y: table.y + table.h / 2 } : desk.side;
+    const kinds: Activity[] = ["boardgame", "table", "chat", "coffee", "tea", "console", "window", "plant"];
+    const free = this.L.spots.filter((sp) => kinds.includes(sp.activity) && this.free(sp)).sort((a, b) => dist(a.at, center) - dist(b.at, center) || a.id.localeCompare(b.id));
+    who.forEach((id, i) => {
+      const p = this.people.get(id)!;
+      if (p.act?.spot) this.occupied.delete(p.act.spot.id);
+      p.act = undefined;
+      const spot = free[i];
+      const to = spot?.at ?? { x: center.x + (i - who.length / 2) * 12, y: center.y + 14 };
+      if (spot) this.occupied.set(spot.id, id);
+      this.beginWalk(p, to, () => this.setAct(p, {
+        kind: "chat", until: this.t + 120_000, ...(spot ? { spot } : {}), seated: spot?.pose === "sit", face: spot?.face ?? "back", prop: "none", nextSay: 0, started: this.t,
+      }, to, spot?.face ?? "back"), BRISK_SPEED, false, false);
+    });
+    this.meeting = { attendees: who, lines, handoffs, phase: "gather", t0: this.t, said: 0, nextAt: 0 };
+  }
+
+  private stepMeeting(env: LifeEnv) {
+    const m = this.meeting!;
+    const t = this.t;
+    if (m.phase === "gather") {
+      const there = m.attendees.every((id) => { const p = this.people.get(id); return !p || env.off.has(id) || (p.mode === "act" && p.act?.kind === "chat"); });
+      if (there || t - m.t0 > 25_000) { m.phase = "talk"; m.nextAt = t + 600; }
+      return;
+    }
+    if (t < m.nextAt) return;
+    const line = m.lines[m.said];
+    if (line) {
+      this.speech.push(line);
+      this.speaking.set(line.agent, t + line.ms);
+      m.said++;
+      m.nextAt = t + Math.max(1800, line.ms * 0.85);
+      return;
+    }
+    this.endMeeting(true);
+  }
+
+  private endMeeting(deliver: boolean) {
+    const m = this.meeting!;
+    this.meeting = null;
+    for (const id of m.attendees) {
+      const p = this.people.get(id);
+      if (p && p.mode !== "desk") this.sendHome(p, true);
+    }
+    if (deliver) for (const h of m.handoffs) this.deliver(CHIEF_ID, h, "handoff", true);
   }
 
   // ------------------------------------------------------------------ pets and couriers

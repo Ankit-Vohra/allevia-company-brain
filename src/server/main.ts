@@ -17,6 +17,8 @@ import { createApp, type ServerDeps } from "./app.js";
 import { checkupJobs } from "../checkup/jobs.js";
 import { startCheckupSchedule } from "../checkup/schedule.js";
 import { installCrashGuard } from "../util/crash-guard.js";
+import { businessProps } from "./reads.js";
+import { standupScheduleOn, startStandupSchedule } from "../proactive/schedule.js";
 import type { GoogleWiring } from "./routes/connectors.js";
 
 export const WEB_DIST = fileURLToPath(new URL("../../web/dist/", import.meta.url));
@@ -63,6 +65,7 @@ export function productionDeps(o: { model?: string; publicMode: boolean; authReq
       return { deps: productionStudioDeps(dataDir), ...(clip ? { clip } : {}), sample: (tenant) => studioSample(dataDir, tenant) };
     },
     google: async () => productionGoogle(),
+    standup: async (slug, g, businessId) => (await import("../proactive/wiring.js")).runDaily(slug, g, businessId, { force: true }),
     ...(o.staticDir ? { staticDir: o.staticDir } : {}),
   };
 }
@@ -109,7 +112,21 @@ export async function startServer(opts: ServeOpts = {}): Promise<{ server: Serve
   const stopCheckups = !publicMode && process.env.ALLEVIA_CHECKUP_SCHEDULE !== "0" && !opts.over?.listTenants
     ? startCheckupSchedule({ tenants: () => deps.listTenants(), openGraph: (slug) => deps.openGraph(slug), jobs: deps.checkupJobs ?? checkupJobs() })
     : () => undefined;
-  return { server, url, close: () => { stopRetry?.(); stopSchedule(); stopCheckups(); return new Promise<void>((r) => server.close(() => r())); } };
+  // the daily team stand-up for every business, on its own morning (never in public mode; ALLEVIA_STANDUP=off stops it)
+  const stopStandups = !publicMode && standupScheduleOn() && !opts.over?.listTenants
+    ? startStandupSchedule({
+      tenants: async () => (await listTenants()).map((t) => ({ slug: t.slug, ...(t.businessId ? { businessId: t.businessId } : {}) })),
+      openGraph: (slug) => openGraph(slug),
+      timeZoneOf: async (t, g) => (t.businessId ? (await businessProps(g, t.businessId)).timeZone : undefined),
+      run: async (t, g) => {
+        const { runDaily } = await import("../proactive/wiring.js");
+        if (!t.businessId) return;
+        await runDaily(t.slug, g, t.businessId, { log: (l) => console.error(l) });
+      },
+      log: (l) => console.error(l),
+    })
+    : () => undefined;
+  return { server, url, close: () => { stopRetry?.(); stopSchedule(); stopCheckups(); stopStandups(); return new Promise<void>((r) => server.close(() => r())); } };
 }
 
 // Resolves on SIGINT/SIGTERM after the server has stopped taking requests.

@@ -556,7 +556,7 @@ const approvalQuery = (where: string) =>
    WITH a, collect(r)[0] AS r
    OPTIONAL MATCH (ag:Agent)-[pr:PRODUCED]->(r) WHERE ID(pr) >= 0
    WITH a, r, collect(ag.id)[0] AS producer
-   RETURN ${APPROVAL_FIELDS}, r.id AS rec, r.by AS by, r.simulated AS recSimulated, producer`;
+   RETURN ${APPROVAL_FIELDS}, r.id AS rec, coalesce(r.by, a.by) AS by, r.simulated AS recSimulated, producer`;
 
 export async function approvals(g: GraphHandle, limit: number = LIMITS.approvals): Promise<ApprovalDto[]> {
   const rows = await ro<Record<string, unknown>>(g, approvalQuery(""), { limit: Math.max(1, Math.min(limit, LIMITS.approvals)) });

@@ -336,6 +336,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 | `ask <tenant> "<question>"` | Ask the agent company and watch every agent's steps in the terminal |
 | `insights <tenant>` | Run the 20 detectors; write recommendations and approval cards |
 | `brief <tenant>` | Write today's note (goals, what changed, what we noticed, on call, waiting for your OK, next step) |
+| `standup <tenant>` | Run today's team stand-up now: Meera picks at most 3 things worth doing, the team drafts them for your OK, and today's note leads with them (the server runs it each business's morning; see docs/proactive-trials.md) |
 | `approvals <tenant> [approve\|reject <id>]` | List or decide approval cards (`--edit <file>` teaches a learned rule) |
 | `program <tenant> [--read-only]` | The Allevia 90 scorecard |
 | `tell <tenant> "<instruction>"` | "Tell your team": preview a plain-language change, `--apply` to make it |

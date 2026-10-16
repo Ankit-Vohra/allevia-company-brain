@@ -60,7 +60,13 @@ export interface OfficeCanvasProps {
   onStatus?: (text: string) => void;
   /** Pinned to the bottom of the office (the quiet "Tara is drafting ideas…" line). */
   overlay?: ReactNode;
+  /** The morning stand-up to act out: the people walk to the board table, talk, and the dogs carry Meera's briefs. */
+  standup?: OfficeStandup | null;
+  /** Bump to play the stand-up (again). */
+  standupPlay?: number;
 }
+
+export interface OfficeStandup { id: string; attendees: AgentId[]; lines: Array<{ agent: AgentId; text: string }>; handoffs: AgentId[] }
 
 export interface ShelfBook { id: string; text: string; hue: number; confidence: number }
 
@@ -92,7 +98,7 @@ const petLine = (id: PetId) => {
   return d.kind === "dog" ? `${d.name} · ${d.breed} · ${n} ${n === 1 ? "delivery" : "deliveries"} today` : `${d.name} · ${d.breed} · office cat, off duty`;
 };
 
-export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed, minutes, compact, maxHeight, selected, onSelect, off, books, onBook, onStatus, overlay }: OfficeCanvasProps) {
+export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed, minutes, compact, maxHeight, selected, onSelect, off, books, onBook, onStatus, overlay, standup, standupPlay }: OfficeCanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -137,6 +143,19 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
 
   // the living office
   const life = useMemo(() => new Life(layout, SESSION_SEED, reducedMotion), [layout, reducedMotion]);
+  // the stand-up, when the page asks for it (once per stand-up on its own, or on "Watch the stand-up")
+  useEffect(() => {
+    if (!standup || !standupPlay) return;
+    const offNow = off ?? new Set<AgentId>();
+    const here = (a: AgentId) => !offNow.has(a);
+    // a moment after the page settles, so the office is drawn before anyone stands up
+    const t = setTimeout(() => {
+      life.standup(standup.attendees.filter(here), standup.lines.filter((l) => here(l.agent)).map((l) => ({ ...l, ms: 3200 })), standup.handoffs.filter(here));
+      onStatus?.("Your team is at the morning stand-up");
+    }, 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [standup?.id, standupPlay, life]);
   const warmed = useRef<Life | null>(null);
   // for the screenshot and video scripts: ?debug=1 exposes the simulation to the page
   useEffect(() => {

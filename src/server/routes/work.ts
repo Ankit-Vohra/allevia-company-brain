@@ -3,13 +3,19 @@
 //   POST /api/:t/brief/run      bring the goals' readings up to date, then write today's morning brief (a
 //                               Document{kind:'brief'} that GET /api/:t/brief serves)
 // Neither calls a language model.
+//   GET  /api/:t/standup        today's team stand-up (src/proactive): what the team noticed and drafted, or that it was quiet;
+//                               404 when it has not run today
+//   POST /api/:t/standup/run    run it now (Meera on the subscription; drafts wait for the owner's OK), then today's note
 import type { Hono } from "hono";
 import { runInsights } from "../../insights/recommend.js";
 import { writeBrief } from "../../insights/brief.js";
 import { refreshGoalReadings } from "../../program/scorecard.js";
 import { HttpError, type RouteCtx } from "../http.js";
+import { readStandup } from "../../proactive/note.js";
+import { isoDate } from "../../util/time.js";
+import type { GraphHandle } from "../../graph/client.js";
 
-export function registerWorkRoutes(app: Hono, ctx: RouteCtx): void {
+export function registerWorkRoutes(app: Hono, ctx: RouteCtx, standup?: (slug: string, g: GraphHandle, businessId: string) => Promise<{ standup: unknown; brief: unknown }>): void {
   const running = new Set<string>();
   const once = async <T>(key: string, fn: () => Promise<T>): Promise<T> => {
     if (running.has(key)) throw new HttpError(429, "That is already running for this business. Try again in a minute.");
@@ -46,4 +52,18 @@ export function registerWorkRoutes(app: Hono, ctx: RouteCtx): void {
     return c.json(b);
   });
 
+  app.get("/api/:t/standup", async (c) => {
+    const { g } = await ctx.tenantOf(c);
+    const s = await readStandup(g, c.req.query("date") ?? isoDate(ctx.now()));
+    if (!s) throw new HttpError(404, "Your team has not met yet today.");
+    return c.json(s);
+  });
+
+  app.post("/api/:t/standup/run", async (c) => {
+    const { reg, g } = await ctx.tenantOf(c);
+    ctx.refuseInPublicMode();
+    if (!standup) throw new HttpError(501, "The daily stand-up is not set up on this server.");
+    const r = await once(`standup:${reg.slug}`, () => standup(reg.slug, g, reg.businessId));
+    return c.json(r);
+  });
 }
