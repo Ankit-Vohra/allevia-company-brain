@@ -1,7 +1,7 @@
 // The office pets, drawn pixel by pixel (no third-party art): three dogs who carry the documents and two cats who nap and
 // wander. Sprites face right and are mirrored for left; every one is a handful of rectangles, so a breed is a palette and
 // a few shape choices.
-import { oklch } from "../lib/color";
+import { oklch } from "../lib/color.ts";
 
 type Ctx = CanvasRenderingContext2D;
 

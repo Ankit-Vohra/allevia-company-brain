@@ -1,3 +1,5 @@
+/// <reference lib="dom" />
+// (The dog painter in web/src/office/pets.ts is typed against the canvas, and the root tsconfig has no DOM types.)
 // The office's pixel staff as static SVG, built from the same 16×20 templates and roster palettes as the web app's canvas
 // sprites (web/src/office/sprites.ts). Those templates are private to the canvas code, so they are mirrored here; keep the
 // two in step when a look changes. Output is crisp at any size and needs no script.
