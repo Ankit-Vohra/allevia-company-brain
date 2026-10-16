@@ -55,6 +55,14 @@ const mk = (o: Omit<Opportunity, "agent" | "skill" | "goals"> & { goals?: string
 // Checks whose fix is a piece of writing (the team can draft the words, not just say what is wrong).
 const WORDY = /title|description|meta|h1|heading|alt|open-graph|og-|thin|content|cta/i;
 
+// "No Facebook post in 10 days" -> "A Facebook post"; a post that did well -> "A post in the style of what worked best".
+function findingPostTitle(f: { detector: string | null; title: string }): string {
+  const gap = /^No (.+?) post in /i.exec(f.title);
+  if (f.detector === "content.posting_gap" && gap) return `A ${gap[1]} post (none in a while)`;
+  if (f.detector === "content.post_outliers" || f.detector === "content.hook_outliers") return "A post in the style of what worked best";
+  return `A post: ${clip(f.title, 70)}`;
+}
+
 export function opportunitiesFrom(s: Signals): Opportunity[] {
   const out: Opportunity[] = [];
   const biz = s.business;
@@ -163,7 +171,7 @@ export function opportunitiesFrom(s: Signals): Opportunity[] {
     if (f.cardKind && f.cardKind !== "content_draft") continue;    // a fix or a pause is already waiting for the owner as it is
     const kind: OpportunityKind = f.area === "content" ? "post" : f.area === "funnel" ? "follow_up" : f.area === "ads" ? "offer" : "website_fix";
     out.push(mk({
-      key: `finding:${f.key}`, kind, source: "finding", title: kind === "post" ? `A post: ${clip(f.title, 70)}` : kind === "follow_up" ? `A follow-up message: ${clip(f.title, 60)}` : kind === "offer" ? `An offer idea: ${clip(f.title, 60)}` : `New words for the website: ${clip(f.title, 60)}`,
+      key: `finding:${f.key}`, kind, source: "finding", title: kind === "post" ? findingPostTitle(f) : kind === "follow_up" ? `A follow-up message: ${clip(f.title, 60)}` : kind === "offer" ? `An offer idea: ${clip(f.title, 60)}` : `New words for the website: ${clip(f.title, 60)}`,
       reason: clip(oneLine(f.why || f.title).split(/(?<=\.)\s/)[0] ?? f.title, 200),
       brief: `Purpose: act on what we noticed: ${clip(oneLine(f.why || f.title), 300)} Draft the actual ${kind === "post" ? "post" : kind === "follow_up" ? "message" : kind === "offer" ? "offer wording" : "text"}, ready to use.`,
       facts: [clip(oneLine(f.why), 400)].filter(Boolean), evidence: [f.id, ...f.evidence.slice(0, 5)], score: Math.min(0.75, f.score * 0.85),

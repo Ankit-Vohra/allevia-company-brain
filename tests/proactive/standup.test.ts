@@ -9,8 +9,8 @@ import { ownerJargon } from "../../src/agent/style.js";
 import { writeBrief } from "../../src/insights/brief.js";
 import type { LlmRunner, StructuredInput } from "../../src/ingest/llm.js";
 import { upcomingDates, whenWords } from "../../src/proactive/calendar.js";
-import { choose, ruleOrder, screen, type PastCard } from "../../src/proactive/choose.js";
-import type { Drafters, PosterJob, TextJob } from "../../src/proactive/draft.js";
+import { choose, ruleOrder, screen, type PastCard, type Picked } from "../../src/proactive/choose.js";
+import { draftPick, type Drafters, type PosterJob, type TextJob } from "../../src/proactive/draft.js";
 import { opportunitiesFrom, type Opportunity } from "../../src/proactive/opportunities.js";
 import { gatherSignals } from "../../src/proactive/signals.js";
 import { QUIET_LINE, readStandup, runStandup } from "../../src/proactive/standup.js";
@@ -197,6 +197,34 @@ describe("Meera's pick", () => {
     const c = await choose(ops(), { runner: fakeMeera(() => { throw new Error("offline"); }), business: biz, today: "2026-10-15" });
     expect(c.by).toBe("rules");
     expect(c.picks.map((p) => p.key)).toEqual(["k1", "k2"]);
+  });
+});
+
+describe("posters", () => {
+  const pick = (key: string): Picked => ({
+    key, kind: "poster", source: "season", agent: "content-strategist", title: "A Holi post with a poster", reason: "Holi is soon.", why: "Holi is soon.",
+    brief: "Purpose: be there.", purpose: "Purpose: be there.", facts: [], skill: { agent: "content-strategist", id: "instagram-post" }, evidence: [], goals: [], score: 0.7,
+    occasion: { name: "Holi", date: "2027-03-22" },
+  });
+  const ctx = (drafters: Drafters) => ({ tenant: "test", businessId: "business:aamdani", businessName: "Aamdani", now: SEED_NOW, turnId: "standup-test", drafters, paidLeft: 1 });
+
+  it("asks for a Latin headline, and skips the poster (paying nothing) when it is not", async () => {
+    const d = fakeDrafters();
+    const hindi: Drafters = { ...d, text: async (job) => (job.kind === "headline" ? { ok: true, text: "होली की शुभकामनाएँ", hashtags: [], warnings: [] } : d.text(job)) };
+    const item = await draftPick(g, pick("poster-test:holi-1"), ctx(hindi));
+    expect(d.posters).toHaveLength(0);
+    expect(item).toMatchObject({ kind: "post", status: "drafted" });
+    expect(item.paidTried).toBeUndefined();
+    expect(item.notes[0]).toMatch(/letters the poster fonts have/);
+    expect(d.texts.some((t) => t.kind === "headline")).toBe(false); // the Hindi headline came from the wrapper
+  });
+
+  it("counts a paid attempt against the day even when the poster then fails", async () => {
+    const d = fakeDrafters();
+    const broken: Drafters = { ...d, poster: async () => { throw new Error("font"); } };
+    const item = await draftPick(g, pick("poster-test:holi-2"), ctx(broken));
+    expect(item).toMatchObject({ kind: "post", status: "drafted", paidTried: true });
+    expect(d.texts.find((t) => t.kind === "headline")!.brief).toMatch(/Latin letters/);
   });
 });
 

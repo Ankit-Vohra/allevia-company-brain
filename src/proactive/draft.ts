@@ -71,6 +71,7 @@ export interface DraftedItem {
   approvalId?: string;
   recommendationId?: string;
   paid?: boolean;
+  paidTried?: boolean;          // a paid picture was asked for, even if the poster then failed (it counts against the day's allowance)
   hfCredits?: number;
   notes: string[];
 }
@@ -97,8 +98,9 @@ export async function draftPick(g: GraphHandle, p: Picked, ctx: DraftCtx): Promi
   try {
     if (p.kind === "poster" && ctx.drafters.poster && ctx.businessId) {
       const made = await draftPoster(g, p, ctx, skill);
-      if (made) return made;
-      base.notes.push("The poster could not be made, so this is the post on its own.");
+      if (made.item) return made.item;
+      if (made.paidTried) base.paidTried = true;
+      base.notes.push(`The poster could not be made${made.why ? ` (${made.why})` : ""}, so this is the post on its own.`);
     }
     const kind: Exclude<OpportunityKind, "poster"> = p.kind === "poster" ? "post" : p.kind;
     const t = await ctx.drafters.text({ agent: p.agent, kind: TEXT_KIND[kind], brief: p.purpose, facts: facts(p), question: question(p), ...(skill ? { skill } : {}) });
@@ -111,10 +113,16 @@ export async function draftPick(g: GraphHandle, p: Picked, ctx: DraftCtx): Promi
   }
 }
 
-async function draftPoster(g: GraphHandle, p: Picked, ctx: DraftCtx, skill: TextJob["skill"]): Promise<DraftedItem | null> {
+// Words the poster fonts can set: the brand fonts the creating tools load are Latin, so the headline is asked for in
+// English (the post's own words stay in the business's language). A headline that still is not Latin skips the poster
+// before anything is paid for.
+const LATIN = /^[\p{Script=Latin}\p{N}\p{P}\p{Zs}\p{S}]+$/u;
+
+async function draftPoster(g: GraphHandle, p: Picked, ctx: DraftCtx, skill: TextJob["skill"]): Promise<{ item: DraftedItem | null; paidTried: boolean; why?: string }> {
   const caption = await ctx.drafters.text({ agent: p.agent, kind: "post", brief: p.purpose, facts: facts(p), question: question(p), ...(skill ? { skill } : {}) });
-  const headline = await ctx.drafters.text({ agent: p.agent, kind: "headline", brief: `${p.purpose} Write the poster's headline only.`, facts: facts(p), question: question(p) });
-  if (!caption.ok || !headline.ok || !headline.text.trim()) return null;
+  const headline = await ctx.drafters.text({ agent: p.agent, kind: "headline", brief: `${p.purpose} Write the poster's headline only, in English with Latin letters (the poster's fonts have only Latin letters).`, facts: facts(p), question: question(p) });
+  if (!caption.ok || !headline.ok || !headline.text.trim()) return { item: null, paidTried: false, why: "the words could not be written" };
+  if (!LATIN.test(headline.text.trim())) return { item: null, paidTried: false, why: "the headline is not in letters the poster fonts have" };
   const paid = ctx.paidLeft > 0;
   try {
     const made = await ctx.drafters.poster!({
@@ -123,13 +131,13 @@ async function draftPoster(g: GraphHandle, p: Picked, ctx: DraftCtx, skill: Text
       ...(ctx.domain ? { cta: ctx.domain } : {}), caption: [caption.text, caption.hashtags.join(" ")].filter(Boolean).join("\n\n"), paid,
     });
     await tagCard(g, p, made, ctx.now);
-    return {
+    return { paidTried: paid, item: {
       key: p.key, kind: "poster", agent: p.agent, title: p.title, why: p.why, purpose: p.purpose, status: "drafted", approvalId: made.approvalId,
-      recommendationId: made.recommendationId, paid: made.hfCredits > 0, hfCredits: made.hfCredits, notes: [...made.notes, ...caption.warnings].slice(0, 4),
-    };
+      recommendationId: made.recommendationId, paid: made.hfCredits > 0, paidTried: paid, hfCredits: made.hfCredits, notes: [...made.notes, ...caption.warnings].slice(0, 4),
+    } };
   } catch (e) {
     ctx.log?.(`stand-up: the poster for "${p.title}" failed: ${e instanceof Error ? e.message : String(e)}`);
-    return null;
+    return { item: null, paidTried: paid, why: "the poster tools could not finish it" };
   }
 }
 

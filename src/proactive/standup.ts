@@ -78,7 +78,7 @@ export async function runStandup(tenant: string, opts: StandupOpts): Promise<Sta
       tenant, businessId, businessName: signals.business.name, ...(signals.business.domain ? { domain: signals.business.domain } : {}), now, turnId: `standup-${tenant}-${date}`,
       drafters: opts.drafters, paidLeft: Math.max(0, paidPerDay - paidUsed), ...(opts.skills ? { skills: opts.skills } : {}), log,
     });
-    if (d.paid) paidUsed++;
+    if (d.paid || d.paidTried) paidUsed++; // an attempt counts: the engine may have charged before the poster failed
     items.push(d);
     log(`stand-up ${tenant}: ${d.status === "drafted" ? "drafted" : "could not draft"} "${d.title}"${d.approvalId ? ` (${d.approvalId})` : ""}${d.notes.length ? ` · ${d.notes.join(" · ")}` : ""}`);
   }

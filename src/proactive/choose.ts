@@ -97,7 +97,8 @@ export function ruleOrder(kept: Opportunity[], max = MAX_PICKS): Opportunity[] {
 function fits(out: Opportunity[], op: Opportunity): boolean {
   if (op.source === "season" && out.some((x) => x.source === "season")) return false;
   if (op.kind === "poster" && out.some((x) => x.kind === "poster")) return false;
-  return out.filter((x) => x.kind === op.kind).length < 2;
+  const family = (k: Opportunity["kind"]) => (k === "poster" ? "post" : k); // a poster is a post with a picture
+  return out.filter((x) => family(x.kind) === family(op.kind)).length < 2;
 }
 
 export interface Picked extends Opportunity { why: string; purpose: string }
