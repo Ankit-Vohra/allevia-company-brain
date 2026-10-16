@@ -1,7 +1,7 @@
 // `discord-hub status`: is everything the hub needs in place? Read-only: it only reads from Discord and from the
 // registry, never creates or changes anything, and it never prints a token. The answer is a plain pass / fail list;
 // each failure says what to do about it.
-import { BOT_PERMISSIONS, CHANNEL_KINDS, PERM, roleNameFor, statusOf, type ChannelKind, type HubPort, type HubStore, type PermName } from "./hub-types.js";
+import { BOT_PERMISSIONS, CHANNEL_KINDS, PERM, roleNameFor, statusOf, type ChannelKind, type HubPort, type HubStore, type PermName, type RoleInfo } from "./hub-types.js";
 
 export interface Check { ok: boolean; label: string; fix?: string }
 
@@ -22,6 +22,32 @@ const PLAIN: Record<PermName, string> = {
 
 const ROLE_LIMIT = 250;
 const CHANNEL_LIMIT = 500;
+
+// Discord lets a bot give out only roles that sit strictly below its own highest role. A role at the same place in the
+// list as the bot's is level with it, not below it, so the bot cannot give it out (seen on the hub on 2026-10-16, issue
+// #42). That happens when roles are made with no order set: they all land at the bottom, at place 1, together with the
+// bot's own. This says which of the two it is (level or above), and what to do, in the words a person reads.
+export function roleOrderCheck(customers: RoleInfo[], botTop: number): [boolean, string, string] {
+  const label = "The bot's role sits above the customer roles";
+  const level = customers.filter((r) => r.position === botTop);
+  const over = customers.filter((r) => r.position > botTop);
+  if (!level.length && !over.length) return [true, label, ""];
+  const names = (rs: RoleInfo[]) => rs.map((r) => r.name).join(", ");
+  const parts: string[] = [];
+  if (level.length) {
+    parts.push(`${names(level)} ${level.length === 1 ? "is" : "are"} level with the bot's role: ${level.length === 1 ? "it shares" : "they share"} place ${botTop} in the role list with it. `
+      + "When two roles share a place Discord counts them as level, not as one above the other, and a bot can only give out roles below its own, so nobody can be given a level role.");
+  }
+  if (over.length) parts.push(`${names(over)} ${over.length === 1 ? "sits" : "sit"} above the bot's role (the bot's is at place ${botTop}).`);
+  if (botTop < 2) {
+    parts.push("The bot's role is at the very bottom of the list, so nothing can sit below it. In Server Settings > Roles, drag it up above the customer roles.");
+  } else {
+    const slugs = [...level, ...over].map((r) => r.name.slice(roleNameFor("").length));
+    parts.push("Fix: in Server Settings > Roles, drag the bot's role above them (dragging also gives every role a place of its own, which ends the tie). "
+      + `Or run: ${slugs.map((s) => `discord-hub provision ${s}`).join(" ; ")} (it puts the role just below the bot's; if Discord refuses that, drag).`);
+  }
+  return [false, label, parts.join(" ")];
+}
 
 export async function checkHub(d: CheckDeps): Promise<Check[]> {
   const out: Check[] = [];
@@ -68,8 +94,7 @@ export async function checkHub(d: CheckDeps): Promise<Check[]> {
       staff === hub.guildId ? "DISCORD_STAFF_ROLE_ID is the @everyone role. Use the staff role's own id." : "That role id is not in the hub server. Check DISCORD_STAFF_ROLE_ID.");
     const customers = roles.filter((r) => r.name.startsWith(roleNameFor("")));
     const top = await hub.botTopRolePosition();
-    const below = customers.filter((r) => r.position >= top);
-    add(below.length === 0, "The bot's role sits above the customer roles", `Drag the bot's role above ${below.map((r) => r.name).join(", ")} in Server Settings > Roles, or it cannot give them out.`);
+    add(...roleOrderCheck(customers, top));
     add(roles.length < ROLE_LIMIT - 10, `There is room for more customers (${roles.length} of ${ROLE_LIMIT} roles used)`, "Discord allows 250 roles in one server. Each customer uses one. Time for a second hub.");
     const channels = await hub.listChannels();
     add(channels.length < CHANNEL_LIMIT - 10, `There is room for more customers (${channels.length} of ${CHANNEL_LIMIT} channels used)`, "Discord allows 500 channels in one server. Each customer uses five. Time for a second hub.");

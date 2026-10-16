@@ -86,6 +86,10 @@ export interface HubPort {
   intents(): Promise<{ serverMembers: boolean; messageContent: boolean }>;
   listRoles(): Promise<RoleInfo[]>;
   createRole(name: string): Promise<RoleInfo>;
+  // Puts a role at this place in the server's role list (0 is @everyone; higher is nearer the top). Discord makes room by
+  // moving other roles, so every role's place is returned as it is afterwards. A bot may only move a role that sits below
+  // its own highest role, and only to a place below it; Discord answers 403 otherwise.
+  setRolePosition(roleId: string, position: number): Promise<RoleInfo[]>;
   listChannels(): Promise<ChannelInfo[]>;
   createChannel(spec: ChannelSpec): Promise<ChannelInfo>;
   editChannel(id: string, patch: { name?: string; topic?: string; parentId?: string; position?: number; overwrites?: Overwrite[] }): Promise<void>;

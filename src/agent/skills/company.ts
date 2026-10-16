@@ -17,7 +17,7 @@ import { contentPerformance } from "../tools/content.js";
 import { TouchedSet, type ToolContext } from "../tool.js";
 import { ensureRoster } from "../memory.js";
 import { skillWrite } from "./business.js";
-import { SKILL_ID } from "./format.js";
+import { MAX_BUSINESS_BODY, SKILL_ID } from "./format.js";
 
 type Read = Pick<GraphHandle, "roQuery">;
 const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
@@ -40,6 +40,22 @@ export interface CompanyFacts {
   worked: string[];          // what performed here, best first
   weakest: string[];
   channels: string[];
+  told?: { dos: number; donts: number; visual: number }; // how many rules at the head of each list are the owner's own (shown whole)
+}
+
+// A rule this long is a full sentence and carries no "name:" label in a skill.
+const LABEL_FREE = 30;
+
+// One post is often several Content nodes (its caption, a note about it, its file name), each carrying the same reading, so
+// a ranking lists it three times. Of a run of posts of one format whose views are within 1% of each other, only the first
+// (the best ranked) is kept: the skill would otherwise say four reels worked when it was one.
+export function distinctPosts<T extends { views?: number | null; format?: string }>(items: T[]): T[] {
+  const kept: T[] = [];
+  for (const i of items) {
+    const v = i.views ?? 0;
+    if (!kept.some((k) => k.format === i.format && Math.abs((k.views ?? 0) - v) <= 0.01 * Math.max(k.views ?? 0, v))) kept.push(i);
+  }
+  return kept;
 }
 
 export const companySlug = (tenant: string): string => tenant.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "company";
@@ -47,8 +63,11 @@ export const companySlug = (tenant: string): string => tenant.toLowerCase().repl
 export async function companyFacts(g: GraphHandle, tenant: string, now: number = Date.now()): Promise<CompanyFacts> {
   const biz = await findBusiness(g);
   const [b] = biz ? await g.roQuery<{ name: string | null; summary: string | null }>("MATCH (b:Entity:Business {id:$id}) RETURN b.name AS name, b.summary AS summary", { id: biz }) : [];
-  const brand = await g.roQuery<{ kind: string | null; name: string | null; text: string | null }>(
-    "MATCH (r:BrandRule) WHERE coalesce(r.status, 'active') = 'active' RETURN r.kind AS kind, r.name AS name, coalesce(r.text, r.summary) AS text ORDER BY r.id LIMIT 60");
+  const brand = await g.roQuery<{ kind: string | null; name: string | null; text: string | null; told: number }>(
+    // What the owner told the team comes first (it is their latest word), then the rest by how well the graph connects them
+    // (its own importance rank), then by id. A skill holds at most 8,000 characters, so when it has to leave rules out it
+    // leaves out the least connected extracted ones, which are mostly repeats of each other.
+    "MATCH (r:BrandRule) WHERE coalesce(r.status, 'active') = 'active' RETURN r.kind AS kind, r.name AS name, coalesce(r.text, r.summary) AS text, CASE WHEN r.origin = 'owner' THEN 0 ELSE 1 END AS told, coalesce(r.rank, 0) AS weight ORDER BY told, weight DESC, r.id LIMIT 120");
   const list = async (label: string, n: number) => (await g.roQuery<{ name: string | null; summary: string | null }>(
     `MATCH (x:${label}) RETURN x.name AS name, x.summary AS summary ORDER BY coalesce(x.createdAt, 0), x.id LIMIT ${n}`))
     .map((r) => one([r.name, r.summary].filter(Boolean).join(": "))).filter(Boolean);
@@ -65,25 +84,48 @@ export async function companyFacts(g: GraphHandle, tenant: string, now: number =
   let weakest: string[] = [];
   try {
     const ctx: ToolContext = { graph: g, tenant, turnId: "skills", agentId: "content-strategist", asker: "person:founder", touched: new TouchedSet(), now, readOnly: true };
-    const r = await contentPerformance.run({ days: 365, limit: 25 }, ctx);
-    const items = ((r.data as { items?: Array<{ name?: string; views?: number | null; multiple?: number | null; hook?: { name?: string } | null; format?: string }> })?.items ?? [])
-      .filter((i) => typeof i.views === "number");
-    const line = (i: (typeof items)[number]) => one(`${i.name ?? "a post"}${i.format ? ` (${i.format})` : ""}: ${i.views} views${i.multiple ? `, ${i.multiple}x the usual` : ""}${i.hook?.name ? `; hook: ${i.hook.name}` : ""}`);
+    type Item = { name?: string; views?: number | null; multiple?: number | null; hook?: { name?: string } | null; format?: string };
+    // The last year first. A post whose date was never recorded is dropped by that window, so when it leaves nothing, ask
+    // again with no window at all (Aamdani: 70 posts, only 32 dated, and the dated ones keep their views under another name).
+    const seen = async (args: { days?: number; limit: number }): Promise<Item[]> => {
+      const r = await contentPerformance.run(args, ctx);
+      // a reading of 0 is the placeholder a post gets before its first numbers arrive, not a result
+      return ((r.data as { items?: Item[] })?.items ?? []).filter((i) => typeof i.views === "number" && i.views > 0);
+    };
+    const found = (await seen({ days: 365, limit: 25 }));
+    const items = distinctPosts(found.length ? found : await seen({ limit: 25 }));
+    const line = (i: Item) => one(`${i.name ?? "a post"}${i.format ? ` (${i.format})` : ""}: ${i.views} views${i.multiple ? `, ${i.multiple}x the usual` : ""}${i.hook?.name ? `; hook: ${i.hook.name}` : ""}`);
     worked = items.slice(0, 4).map(line);
     weakest = items.length > 4 ? items.slice(-2).map(line) : [];
   } catch { /* no content yet */ }
 
-  const text = (r: { name: string | null; text: string | null }) => one(r.text && r.name && !r.text.toLowerCase().startsWith(r.name.toLowerCase()) ? `${r.name}: ${r.text}` : r.text ?? r.name);
+  // A rule is "name: text" for the sorting below (a rule's "Never use X" name is what makes it a don't). A rule's name is often
+  // its own text cut short and ended with "…" (the rules the owner tells the team are named that way): then the text alone says
+  // it. And a rule that is a whole sentence needs no label in a skill, where every character counts (8,000 for the lot).
+  type Row = { kind: string | null; name: string | null; text: string | null; told: number };
+  const full = (r: Row) => {
+    const stem = (r.name ?? "").replace(/…$/, "").trim().toLowerCase();
+    return one(r.text && stem && !r.text.toLowerCase().startsWith(stem) ? `${r.name}: ${r.text}` : r.text ?? r.name);
+  };
+  const shown = (r: Row) => (one(r.text).length >= LABEL_FREE ? one(r.text) : full(r));
   const kind = (k: string | null) => (k ?? "").toLowerCase();
-  const isVisual = (r: { kind: string | null }) => /visual/.test(kind(r.kind));
-  const rules = [...new Set(brand.filter((r) => !isVisual(r)).map(text).filter(Boolean))];
-  const donts = rules.filter((t) => /^(?:don'?t|never|no |avoid)/i.test(t) || /\b(?:never|no invented|don'?t)\b/i.test(t));
+  const isVisual = (r: Row) => /visual/.test(kind(r.kind));
+  const seenFull = new Set<string>();
+  const items = brand.map((r) => ({ r, key: full(r), line: shown(r) })).filter((x) => x.key && !seenFull.has(x.key) && !!seenFull.add(x.key));
+  const isDont = (key: string) => /^(?:don'?t|never|no |avoid)/i.test(key) || /\b(?:never|no invented|don'?t)\b/i.test(key);
+  const plain = items.filter((x) => !isVisual(x.r));
+  const donts = plain.filter((x) => isDont(x.key));
+  const dos = plain.filter((x) => !isDont(x.key) && !/^tone/i.test(x.key));
+  const visual = items.filter((x) => isVisual(x.r));
+  // the owner's own rules lead each list (the query puts them first): how many, so a skill can show them whole
+  const lead = (xs: typeof items) => { let k = 0; while (k < xs.length && xs[k]!.r.told === 0) k++; return k; };
   return {
     slug: companySlug(tenant), name: one(b?.name) || tenant, summary: one(b?.summary),
-    tone: brand.filter((r) => /tone/.test(kind(r.kind))).map(text),
-    dos: rules.filter((t) => !donts.includes(t) && !/^tone/i.test(t)),
-    donts,
-    visual: brand.filter(isVisual).map(text).filter(Boolean),
+    tone: brand.filter((r) => /tone/.test(kind(r.kind))).map(full),
+    dos: dos.map((x) => x.line),
+    donts: donts.map((x) => x.line),
+    visual: visual.map((x) => x.line),
+    told: { dos: lead(dos), donts: lead(donts), visual: lead(visual) },
     sayInstead: learned.filter((t) => /^say /i.test(t)),
     audiences, needs, products, features, hooks, worked, weakest, channels,
   };
@@ -93,9 +135,35 @@ export async function companyFacts(g: GraphHandle, tenant: string, now: number =
 
 export interface GeneratedSkill { id: string; name: string; when: string; agents: string[]; base?: string; text: string }
 
-const bullets = (xs: string[], none: string, n = 8): string => (xs.length ? xs.slice(0, n).map((x) => `- ${clip(x, 170)}`).join("\n") : `- ${none}`);
+// `whole` items at the head of the list (the owner's own rules) are cut at 300 characters, the longest a rule can be; the rest at `width`.
+const bullets = (xs: string[], none: string, n = 8, width = 170, whole = 0): string =>
+  (xs.length ? xs.slice(0, n).map((x, i) => `- ${clip(x, i < whole ? Math.max(width, 300) : width)}`).join("\n") : `- ${none}`);
+
+// A skill holds at most 8,000 characters (MAX_BUSINESS_BODY), which a business with many rules can outgrow. So the rules are
+// shown whole (up to the 300 characters one can have) while the skills fit, and when they do not: first the rules the
+// graph extracted are cut at 170 characters (the owner's own stay whole), then the list of things to do loses its last
+// entries one by one, because the "Never" guardrails (no invented statistics, no promised outcomes) are what a skill must
+// not lose; only when even that is too much are the guardrails cut too. Rules come in the order the records give them.
+interface Fit { width: number; dos: number; donts: number }
+function* fits(): Generator<Fit> {
+  yield { width: 300, dos: 25, donts: 40 };
+  for (let dos = 25; dos >= 6; dos--) yield { width: 170, dos, donts: 40 };
+  for (const donts of [30, 24, 18, 12]) yield { width: 120, dos: 4, donts };
+}
+const ROOM = 300;
 
 export function companySkills(f: CompanyFacts): GeneratedSkill[] {
+  let out: GeneratedSkill[] = [];
+  for (const fit of fits()) {
+    out = buildSkills(f, fit.width, fit.dos, fit.donts);
+    if (out.every((s) => s.text.length <= MAX_BUSINESS_BODY - ROOM)) break;
+  }
+  return out;
+}
+
+/** The four skills at one fit (exported so a test can see what a fit costs). */
+export function buildSkills(f: CompanyFacts, width: number, dos: number, donts: number): GeneratedSkill[] {
+  const rules = (xs: string[], none: string, n = 8, whole = 0): string => bullets(xs, none, n, width, whole);
   const n = f.name;
   const who = f.summary ? clip(f.summary, 500) : `${n}: the profile is thin; ask the owner for one line on what they do.`;
   const voice: GeneratedSkill = {
@@ -105,19 +173,19 @@ export function companySkills(f: CompanyFacts): GeneratedSkill[] {
 ${who}
 
 ## Tone
-${bullets(f.tone, "Not recorded: write plainly and warmly, and ask the owner how they sound.")}
+${rules(f.tone, "Not recorded: write plainly and warmly, and ask the owner how they sound.")}
 
 ## Do
-${bullets(f.dos, "No do-rules recorded yet.", 25)}
+${rules(f.dos, "No do-rules recorded yet.", dos, f.told?.dos)}
 
 ## Never
-${bullets(f.donts, "No don't-rules recorded yet; never invent facts, numbers or promises.", 25)}
+${rules(f.donts, "No don't-rules recorded yet; never invent facts, numbers or promises.", donts, f.told?.donts)}
 
 ## Words the owner corrected (use the right one every time)
-${bullets(f.sayInstead, "None yet: they appear here as the owner edits drafts.")}
+${rules(f.sayInstead, "None yet: they appear here as the owner edits drafts.")}
 
 ## How it looks (anything visual)
-${bullets(f.visual, "No visual rules recorded.")}
+${rules(f.visual, "No visual rules recorded.", 12, f.told?.visual)}
 
 ## Check before it goes out
 - Would a stranger who knows nothing about ${n} understand every line? Name the thing ("the app", "the studio"), never just "it".
@@ -174,8 +242,8 @@ ${bullets(f.weakest, "Not enough posts recorded to say.")}
 ${bullets(f.hooks, "None recorded: use the general reel script skill's hooks.")}
 
 ## Voice for spoken lines and on-screen words
-${bullets([...f.tone, ...f.dos.slice(0, 4)], "Plain, warm, specific.")}
-${f.donts.length ? `\nNever:\n${bullets(f.donts, "", 6)}` : ""}
+${rules([...f.tone, ...f.dos.slice(0, 4)], "Plain, warm, specific.")}
+${f.donts.length ? `\nNever:\n${rules(f.donts, "", 6)}` : ""}
 
 ## Done well
 - [ ] It has a purpose: the one-line brief opens it and every beat serves it.
@@ -207,8 +275,8 @@ ${bullets(f.worked.length ? f.worked : [], "No measured results recorded yet: us
 ${bullets(f.hooks, "Use the general hooks.", 5)}
 
 ## Voice and look
-${bullets([...f.tone, ...f.donts], "Plain and specific; no hard sell.", 8)}
-${f.visual.length ? `\nLook:\n${bullets(f.visual, "", 5)}` : ""}
+${rules([...f.tone, ...f.donts], "Plain and specific; no hard sell.", 8)}
+${f.visual.length ? `\nLook:\n${rules(f.visual, "", 5)}` : ""}
 
 ## Done well
 - [ ] It has a purpose: the one-line brief opens it; a nice-looking ad that sells nothing in particular fails.

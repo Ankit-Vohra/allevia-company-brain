@@ -116,8 +116,12 @@ exactly the permissions above. Open the link, pick the hub server, and press Aut
 `DISCORD_APPLICATION_ID` from step 4.)
 
 Then one Discord detail that matters: in Server Settings, Roles, drag the bot's role **above** the roles it hands out
-(every `customer-...` role). Discord only lets a bot give roles that sit below its own. New customer roles are made at
-the bottom, so once the bot's role is above `@everyone` and the staff role you rarely touch this again.
+(every `customer-...` role). Discord only lets a bot give roles that sit below its own, and a role at the same place in
+the list counts as level, not below. Discord makes new roles at the very bottom (place 1), which on a new server is
+also where the bot's own role is, so provisioning puts each new `customer-...` role **just below the bot's role**
+straight away. If the bot's role itself is at the bottom there is no room under it: drag it up once (above `@everyone`
+and the staff role) and run `discord-hub provision <business>` again. `discord-hub status` tells you when any customer
+role is level with, or above, the bot's role, and which of the two it is.
 
 Recommended hub settings: switch off "Create Invite" for `@everyone` (Server Settings, Roles, Default permissions), so
 nobody but the bot can make links, and keep the hub out of Server Discovery. A person with no role sees no customer
@@ -156,7 +160,8 @@ npm run cli -- discord-hub status
 
 This only reads from Discord. It creates and changes nothing. It prints a PASS / FAIL list in plain words: the settings
 are present, the bot's token is accepted, the bot is in the hub, it has every permission, both switches are on, the
-staff role exists, the bot's role sits above the customer roles, there is room left on the server, and whether ffmpeg is
+staff role exists, the bot's role sits above the customer roles (a tie in the role list is explained in plain words),
+there is room left on the server, and whether ffmpeg is
 installed (optional, never a FAIL). Each FAIL says
 what to do. It exits with an error while anything fails.
 

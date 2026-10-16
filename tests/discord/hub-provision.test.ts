@@ -1,7 +1,7 @@
 // provisionCustomer against a fake Discord guild: what gets created, who can see it, that a re-run repairs instead of
 // duplicating, the join link rules, queued retries, and the card / note sync. Every test runs twice: over an
 // in-memory store and over the real allevia_meta store (a throwaway graph on the local FalkorDB).
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ApprovalDto } from "../../src/server/types.js";
 import { GraphHubStore } from "../../src/discord/hub-store.js";
 import { formatCompanies, listCompanies } from "../../src/discord/hub-check.js";
@@ -411,6 +411,97 @@ describe("what the hub refuses to build on", () => {
     const again = await ensureHubInfra(r.deps);
     expect(again.supportInboxId).not.toBe(rec.supportInboxId);
     expect(r.hub.channels.get(again.supportInboxId!)!.name).toBe("support-inbox");
+  });
+});
+
+// Discord lets a bot give out only roles strictly below its own highest role, and a role at the bot's own place counts as
+// level (issue #42: every hub role was made at place 1, the bot's included, so nobody could be given their role).
+describe("the customer role's place in the role list", () => {
+  const place = (r: Rig, name: string) => [...r.hub.roles.values()].find((x) => x.name === name)!.position;
+
+  it("a new customer role is put just below the bot's role, and each later one too", async () => {
+    const r = rig("memory");
+    r.hub.botPosition = 7;
+    const move = vi.spyOn(r.hub, "setRolePosition");
+    const first = await provisionCustomer("aamdani", r.deps);
+    // asked for place 6, one below the bot's 7; Discord makes room by moving the others up, the bot's role with them
+    expect(move).toHaveBeenLastCalledWith(first.area.roleId, 6);
+    expect(first.actions).toContain("put the role customer-aamdani just below the bot's role");
+    const second = await provisionCustomer("avs_atelier", r.deps);
+    expect(move).toHaveBeenLastCalledWith(second.area.roleId, 7); // the bot's role was at 8 by then (moved up when the first was seated)
+    for (const n of ["customer-aamdani", "customer-avs_atelier"]) expect(place(r, n)).toBeLessThan(r.hub.botPosition);
+    expect(place(r, "customer-aamdani")).not.toBe(place(r, "customer-avs_atelier")); // no tie between customers either
+    expect(r.hub.count("setRolePosition")).toBe(2);
+  });
+
+  it("running again moves nothing while the role is below the bot's role", async () => {
+    const r = rig("memory");
+    r.hub.botPosition = 7;
+    await provisionCustomer("aamdani", r.deps);
+    const before = place(r, "customer-aamdani");
+    const again = await provisionCustomer("aamdani", r.deps);
+    expect(r.hub.count("setRolePosition")).toBe(1);
+    expect(place(r, "customer-aamdani")).toBe(before);
+    expect(again.actions.some((a) => a.startsWith("put the role"))).toBe(false);
+  });
+
+  it("no move is asked for when the new role already landed just below the bot's role", async () => {
+    const r = rig("memory");
+    r.hub.botPosition = 2; // a new role lands at place 1: exactly one below
+    const res = await provisionCustomer("aamdani", r.deps);
+    expect(res.area.status).toBe("ready");
+    expect(r.hub.count("setRolePosition")).toBe(0);
+  });
+
+  it("the bot's role at the very bottom (place 1): stops with the fix in plain words, and a later run finishes once it is dragged up", async () => {
+    const r = rig("memory");
+    r.hub.botPosition = 1;
+    const e = await provisionCustomer("aamdani", r.deps).catch((x: Error) => x);
+    expect((e as Error).message).toMatch(/at the very bottom of the role list/);
+    expect((e as Error).message).toMatch(/drag the bot's role above the customer roles, then run provision again/);
+    const area = (await r.store.getArea("aamdani"))!;
+    expect(area.status).toBe("pending");
+    expect(area.lastError).toMatch(/very bottom/);
+    expect(area.nextAttemptAt).toBeGreaterThan(r.clock.t); // queued: the retry loop picks it up
+    expect(r.hub.byName("Aamdani")).toBeUndefined();        // nothing else was built on a role nobody can be given
+    expect([...r.hub.roles.values()].filter((x) => x.name === "customer-aamdani")).toHaveLength(1);
+
+    r.hub.botPosition = 9;                                   // the owner drags the bot's role up
+    const res = await provisionCustomer("aamdani", r.deps);
+    expect(res.area.status).toBe("ready");
+    expect([...r.hub.roles.values()].filter((x) => x.name === "customer-aamdani")).toHaveLength(1); // the same role, not a second
+    expect(place(r, "customer-aamdani")).toBeLessThan(r.hub.botPosition);
+  });
+
+  it("a role that is level with the bot's role (the tie): tries to move it, and when Discord refuses says what to do", async () => {
+    const r = rig("memory");
+    r.hub.botPosition = 5;
+    r.hub.addRole("customer-aamdani", 5);
+    const e = await provisionCustomer("aamdani", r.deps).catch((x: Error) => x);
+    expect((e as Error).message).toMatch(/would not let the bot move customer-aamdani below its own role/);
+    expect((e as Error).message).toMatch(/drag the bot's role above the customer roles, then run provision again/);
+    expect(r.hub.count("setRolePosition")).toBe(1);
+    expect(((await r.store.getArea("aamdani"))!).status).toBe("pending");
+    expect(r.hub.byName("Aamdani")).toBeUndefined();
+  });
+
+  it("when Discord answers but the role is still not below the bot's, that is said too", async () => {
+    const r = rig("memory");
+    r.hub.botPosition = 7;
+    const hub = r.hub;
+    const move = hub.setRolePosition.bind(hub);
+    hub.setRolePosition = async (id, pos) => { const all = await move(id, pos); hub.botPosition = pos; return all; }; // the bot's role lands level with it
+    const e = await provisionCustomer("aamdani", r.deps).catch((x: Error) => x);
+    expect((e as Error).message).toMatch(/still level with the bot's role \(both at place 6 in the list\)/);
+  });
+
+  it("a token that would be echoed by Discord on the move is hidden like any other error", async () => {
+    const r = rig("memory", { redact: (s) => s.split("SECRET-TOKEN-VALUE").join("[token]") });
+    r.hub.botPosition = 7;
+    r.hub.fail = (op) => (op === "setRolePosition" ? "Bot SECRET-TOKEN-VALUE was refused" : undefined);
+    const e = await provisionCustomer("aamdani", r.deps).catch((x: Error) => x);
+    expect((e as Error).message).toContain("[token]");
+    expect((e as Error).message).not.toContain("SECRET-TOKEN-VALUE");
   });
 });
 

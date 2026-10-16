@@ -13,8 +13,11 @@ called `Option::unwrap()` on a `None` value
   10: falkordb::graph_core::execute_query
 ```
 
-The module panics while it builds the compact reply (the format every client here uses), so the whole server process
-dies, for every graph and every agent, and any write not yet saved is lost.
+The module panics while it builds the reply, so the whole server process dies, for every graph and every agent, and any
+write not yet saved is lost. (Correction, 2026-10-16: it is not specific to the compact format every client here uses.
+Without `--compact` the same line panics in `falkordb::reply::reply_verbose`. It is also upstream issue
+FalkorDB/FalkorDB#3150, with a fix in #3229 that no release carries yet; v4.22.0 is not affected. What to post, and
+what was re-run, is in [falkordb-upstream-report.md](falkordb-upstream-report.md).)
 
 ## Minimal repro (throwaway server only)
 
