@@ -418,7 +418,7 @@ function courierRoute() {
 function keepFocusVisible() {
   document.addEventListener("focusin", (e) => {
     const el = e.target as HTMLElement;
-    const act = el.closest<HTMLElement>('[data-sc-act="pin"], [data-sc-act="scrub"]');
+    const act = el.closest<HTMLElement>('[data-sc-act="pin"], [data-sc-act="scrub"], [data-sc-act="pan"]');
     if (!act) return;
     const r = act.getBoundingClientRect();
     if (r.top > 1 || r.top < -innerHeight * 0.4) scrollTo({ top: scrollY + r.top, behavior: "instant" as ScrollBehavior });

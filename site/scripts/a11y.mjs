@@ -14,12 +14,14 @@ const paths = [...sitemap.matchAll(/<loc>https?:\/\/[^/]+(\/[^<]*)<\/loc>/g)].ma
 
 const server = await preview({ root: SITE, preview: { port: 4182, strictPort: false, open: false } });
 const base = (server.resolvedUrls?.local[0] ?? "http://localhost:4182/").replace(/\/$/, "");
-const browser = await chromium.launch();
+const browser = await chromium.launch({ channel: "chrome" }).catch(() => chromium.launch());
 let violations = 0;
 try {
-  for (const width of [390, 1440]) {
-    const ctx = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce", locale: "en-US" });
-    for (const path of paths) {
+  // every page with motion reduced, and the home page again with motion welcome (the pinned story on a wide screen, the playing pictures on a phone)
+  const runs = [{ width: 390, reduce: true, only: null }, { width: 1440, reduce: true, only: null }, { width: 390, reduce: false, only: "/" }, { width: 1440, reduce: false, only: "/" }];
+  for (const { width, reduce, only } of runs) {
+    const ctx = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: reduce ? "reduce" : "no-preference", locale: "en-US" });
+    for (const path of only ? [only] : paths) {
       const page = await ctx.newPage();
       await page.goto(base + path, { waitUntil: "networkidle" });
       await page.evaluate(() => document.fonts.ready);
@@ -38,5 +40,5 @@ try {
   await browser.close();
   await new Promise((r) => server.httpServer.close(r));
 }
-console.log(`${paths.length} pages x 2 widths checked; ${violations} violation(s)`);
+console.log(`${paths.length} pages x 2 widths with motion reduced, and the home page with motion at 390 and 1440, checked; ${violations} violation(s)`);
 process.exit(violations ? 1 : 0);

@@ -237,7 +237,7 @@ running), give the owner a team instead of a tool, and make every answer carry i
   Dev writes the caption and the owner approves ([`src/studio/`](src/studio)). Spend and the live check are in
   [`docs/higgsfield-spend.md`](docs/higgsfield-spend.md).
 - **Other surfaces.** A Discord bot (a thread per conversation, live work log, approval buttons), a read-only MCP server
-  for other agents, a CLI for everything, and a static marketing site with pricing in four currencies (`site/`).
+  for other agents, a CLI for everything, and a static marketing site (`site/`): one scroll story about the company brain, drawn from the real graph, with prices in US dollars.
 
 ## Hero use case, in detail
 

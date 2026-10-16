@@ -268,7 +268,7 @@ html:not(.is-scroll) .rail__lead { align-self: center; }
   display: none; transition: opacity var(--dur-short) var(--ease-out), translate var(--dur-short) var(--ease-out);
 }
 .route.is-on { display: block; }
-.route.is-away { opacity: 0; translate: -50% 1rem; pointer-events: none; }
+.route.is-away { opacity: 0; translate: -50% 1rem; pointer-events: none; visibility: hidden; transition: opacity var(--dur-short) var(--ease-out), translate var(--dur-short) var(--ease-out), visibility 0s linear var(--dur-short); }
 @media (min-width: 861px) { .route { left: auto; right: 1.25rem; translate: 0 0; } .route.is-away { translate: 0 1rem; } }
 .route__track { position: relative; }
 .route__stops { display: flex; justify-content: space-between; position: relative; }

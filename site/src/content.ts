@@ -17,7 +17,7 @@ export const FAQ: FaqItem[] = [
   },
   {
     q: "Is my data mixed with other businesses'?",
-    a: "No. Each business has its own separate database, and nothing learned from one is used for another.",
+    a: "No. Each business has its own separate database, and nothing learned from one is used for another. Your connected tools are sealed to your business and you can disconnect them any time.",
   },
   {
     q: "What if it does not work for me?",
@@ -29,6 +29,6 @@ export const FAQ: FaqItem[] = [
   },
   {
     q: "What can it not do yet?",
-    a: "It cannot post to Instagram or Google for you, and for now it works from your website and any spreadsheet you drop in. Connections to Instagram and Google are being built.",
+    a: "Connecting your own tools is switched on one business at a time, and anything that sends or posts is saved as a draft until we turn it on for you. There is no login for each person yet.",
   },
 ];

@@ -33,7 +33,9 @@ const PER = Number(arg("per-act", 6));
 const PATH = arg("path", "/");
 mkdirSync(OUT, { recursive: true });
 
-const server = await preview({ root: SITE, preview: { port: 4183, strictPort: true, open: false } });
+// the policy the deploy notes recommend (docs/website-deploy.md): a violation shows up as a console error below
+const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+const server = await preview({ root: SITE, preview: { port: 4183, strictPort: true, open: false, headers: { "Content-Security-Policy": CSP } } });
 const base = "http://localhost:4183";
 let browser;
 try { browser = await chromium.launch({ channel: "chrome" }); } catch { browser = await chromium.launch(); console.error("note: installed Chrome not found; bundled Chromium cannot decode the clip"); }
@@ -45,7 +47,8 @@ page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text(
 page.on("pageerror", (e) => consoleErrors.push(String(e.message)));
 page.on("requestfailed", (r) => { if (!r.url().startsWith("blob:")) failed.push(r.url()); });
 page.on("response", (r) => { if (r.status() >= 400) failed.push(`${r.status()} ${r.url()}`); });
-await page.goto(base + PATH, { waitUntil: "load" });
+const first = await page.goto(base + PATH, { waitUntil: "load" });
+const cspOn = Boolean(first?.headers()["content-security-policy"]);
 await page.evaluate(() => document.fonts.ready);
 await page.waitForTimeout(900);
 const scrollMode = await page.evaluate(() => document.documentElement.classList.contains("is-scroll"));
@@ -143,8 +146,31 @@ for (const [n, pos] of positions.entries()) {
   report.push({ i: n, ...pos, file, ...state, contrast });
 }
 
+// ---------- keyboard: tab through the page; each focused control must be on screen and not inside a faded cue ----------
+await page.evaluate(() => { document.documentElement.style.scrollBehavior = "auto"; scrollTo({ top: 0, behavior: "instant" }); document.body.focus(); });
+await page.waitForTimeout(200);
+const tabbed = [];
+for (let i = 0; i < 60; i++) {
+  await page.keyboard.press("Tab");
+  await page.waitForTimeout(140);
+  const f = await page.evaluate(() => {
+    const el = document.activeElement;
+    if (!el || el === document.body) return null;
+    const r = el.getBoundingClientRect();
+    let o = 1;
+    for (let n = el; n && n !== document.documentElement; n = n.parentElement) o = Math.min(o, Number(getComputedStyle(n).opacity));
+    return { tag: el.tagName.toLowerCase(), text: (el.textContent ?? el.getAttribute("aria-label") ?? "").replace(/\s+/g, " ").trim().slice(0, 40), inView: r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth, opacity: Math.round(o * 100) / 100, href: el.getAttribute("href") };
+  });
+  if (!f) break;
+  tabbed.push(f);
+}
+
 // ---------- findings ----------
 const findings = [];
+for (const f of tabbed) {
+  if (!f.inView) findings.push({ kind: "focus off screen", text: f.text, href: f.href });
+  else if (f.opacity < 0.85) findings.push({ kind: "focus inside a faded cue", text: f.text, opacity: f.opacity });
+}
 const sigOf = (s) => JSON.stringify([s.cues.map((c) => `${c.t}:${Math.round(c.o * 10)}`), s.scenes.map((x) => x.sig), s.videos.map((v) => Math.round(v.t)), s.rails.map(Math.round), s.wipes, s.goals]);
 for (let i = 1; i < report.length; i++) {
   const a = report[i - 1], b = report[i];
@@ -166,10 +192,11 @@ if (scrollMode) for (const r of report) {
   const run = r.scenes.find((s) => s.scene === "ask");
   for (const v of r.videos) if (v.vis && v.live && run && run.runT !== null && Math.abs(v.t - run.runT) > 1.2) findings.push({ kind: "clip out of step with the run", at: r.file, clip: v.t, run: run.runT });
 }
+if (!cspOn) findings.push({ kind: "the policy header was not served, so the policy was not tested" });
 for (const e of consoleErrors) findings.push({ kind: "console error", text: e });
 for (const f of failed) findings.push({ kind: "failed request", url: f });
 
-writeFileSync(join(OUT, "report.json"), JSON.stringify({ doc: { ...doc, scrollMode, width: W, height: H, reduced: REDUCED }, report, findings }, null, 1));
+writeFileSync(join(OUT, "report.json"), JSON.stringify({ doc: { ...doc, scrollMode, width: W, height: H, reduced: REDUCED }, report, keyboard: tabbed, findings }, null, 1));
 const files = readdirSync(OUT).filter((f) => /^\d\d\.png$/.test(f)).sort();
 try {
   execFileSync("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-framerate", "1", "-i", join(OUT, "%02d.png"), "-vf", `scale=${W < 600 ? 260 : 520}:-1,tile=${W < 600 ? 8 : 5}x${Math.ceil(files.length / (W < 600 ? 8 : 5))}:padding=6:color=0x888888`, "-frames:v", "1", join(OUT, "sheet.png")]);

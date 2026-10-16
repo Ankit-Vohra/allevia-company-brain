@@ -30,15 +30,15 @@ export interface PageDef {
 export const PAGES: readonly PageDef[] = [
   {
     path: "/",
-    title: "Allevia · An AI team that grows your business",
-    description: "Paste your website and Allevia sets up a team of AI staff for your business. They make the posts and fixes, and you tap OK before anything goes out.",
+    title: "Allevia · A brain for your business",
+    description: "Your company brain and an AI team that works from it. Paste your website, connect your tools, ask why, and tap OK before anything goes out.",
     footer: "Product", label: "Home",
     priority: 1, changefreq: "weekly", schema: ["organization", "website", "software"],
   },
   {
     path: "/product/",
     title: "Product tour · Allevia",
-    description: "Five real screens from the app: your office, your questions, your OK, your growth plan and your instructions. Numbers are samples and labelled as such.",
+    description: "Six real screens from the app: the office, an answer with its sources, the company brain, your tools, a reply waiting for your OK and your growth plan.",
     nav: "Product tour", footer: "Product",
     priority: 0.9, changefreq: "monthly", schema: ["software", "breadcrumb"],
   },
