@@ -1,11 +1,13 @@
 // Shared pieces of the prototype pages, as HTML built at compile time (vite.config.ts swaps `<!-- @section name -->` for them).
 // `page` says which prototype the page belongs to: "a" (the 3D brain), "b" (the calm diagram) or "team"/"shared" (pages both link to).
-import { logoMarkup, hasLogo } from "./logos.ts";
+import { logoMarkup, hasLogo, usingLogoDev } from "./logos.ts";
 import { AGENTS } from "./assets.generated.ts";
 import { CHIP_ROWS } from "./data.ts";
 import { TEAM_SECTIONS } from "./team-sections.ts";
 
-export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+import { esc } from "./util.ts";
+import { heroA } from "./hero-sections.ts";
+export { esc };
 
 /** The pages of the site, in the order of the top bar. */
 export const NAV: { label: string; href: string; id: string }[] = [
@@ -37,7 +39,7 @@ export function footer(): string {
     <a class="brand" href="/" aria-label="Allevia">allevia</a>
     <div>
       <nav class="foot__links" aria-label="Footer">${pages}<a href="/faq/">Questions</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="/cookies/">Cookies</a></nav>
-      <p class="foot__fine">The business shown on this site is Shiftly, a shift-jobs app. It is a sample: its data is made up.</p>
+      <p class="foot__fine">The business shown on this site is Shiftly, a shift-jobs app. It is a sample: its data is made up.${usingLogoDev() ? ' <a href="https://logo.dev" rel="noopener">Logos provided by Logo.dev</a>.' : ""}</p>
     </div>
   </div>
 </footer>`;
@@ -61,6 +63,7 @@ export { hasLogo, CHIP_ROWS };
 
 export const SECTIONS: Record<string, (page: string) => string> = {
   ...TEAM_SECTIONS,
+  "hero-a": () => heroA(),
   nav: (page) => nav(NAV.some((n) => n.id === page) ? page : "", page === "b" ? "/b/" : "/a/"),
   footer: () => footer(),
   switcher: (page) => switcher(page),

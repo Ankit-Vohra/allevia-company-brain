@@ -1,0 +1,80 @@
+/* Prototype A: the home page with the 3D brain. Warm paper, the brain as warm translucent amber glass, orbits in ink and taupe lines,
+ * tool logos in full colour as the accents, one gold highlight for signals and the OK. Transform and opacity only. */
+.hero { --chip: 46px; position: relative; min-height: min(calc(100svh - 4.25rem), 54rem); overflow: clip; isolation: isolate; }
+.hero__stage { position: absolute; inset: 0; z-index: 0; --bx: 66%; --by: 50%; --br: 150px; }
+.hero__canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; opacity: 0; transition: opacity 500ms ease-out; }
+.is-live .hero__canvas { opacity: 1; }
+.hero__glow {
+  position: absolute; left: var(--bx); top: var(--by); width: calc(var(--br) * 5.6); aspect-ratio: 1; translate: -50% -50%; border-radius: 50%; z-index: 0; pointer-events: none;
+  background: radial-gradient(closest-side, rgb(237 186 82 / 0.5), rgb(237 186 82 / 0.17) 46%, transparent 74%);
+  animation: breathe 6.5s ease-in-out infinite;
+}
+@keyframes breathe { 0%, 100% { opacity: 0.72; scale: 0.97; } 50% { opacity: 1; scale: 1.03; } }
+.hero__floor { position: absolute; left: var(--bx); top: calc(var(--by) + var(--br) * 2.05); width: calc(var(--br) * 3.2); height: calc(var(--br) * 0.5); translate: -50% -50%; z-index: 0; pointer-events: none; background: radial-gradient(closest-side, rgb(70 52 28 / 0.13), transparent); }
+.hero__still { position: absolute; left: var(--bx); top: var(--by); width: calc(var(--br) * 2.3); height: auto; translate: -50% -50%; z-index: 1; transition: opacity 500ms ease-out; }
+.hero__still.is-gone, .hero--nogl .hero__still { opacity: 1; }
+.hero__still.is-gone { opacity: 0; }
+.hero__chips { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+
+/* chips on the orbits */
+.orb-chip { position: absolute; left: 0; top: 0; display: grid; place-items: center; width: var(--chip); height: var(--chip); opacity: 0; will-change: transform, opacity; transform: translate3d(-100px, -100px, 0); }
+.is-ready .orb-chip { }
+.orb-chip--tool { border-radius: 15px; background: #fff; box-shadow: 0 0 0 1px rgb(60 44 24 / 0.08), 0 8px 18px -8px rgb(60 44 24 / 0.38); }
+.orb-chip__logo { display: grid; place-items: center; }
+.orb-chip__logo .logo { width: calc(var(--chip) * 0.56); height: calc(var(--chip) * 0.56); object-fit: contain; border-radius: 4px; }
+.orb-chip--agent { border-radius: 50%; background: var(--color-paper); box-shadow: 0 0 0 2px var(--color-accent), 0 8px 18px -8px rgb(60 44 24 / 0.4); }
+.orb-chip__face { width: 100%; height: 100%; border-radius: 50%; overflow: hidden; display: block; background: var(--color-paper-2); }
+.orb-chip__face svg { width: 100%; height: 100%; }
+.orb-chip__name { position: absolute; top: calc(100% + 6px); left: 50%; translate: -50% 0; padding: 0.2rem 0.55rem; border-radius: var(--r-pill); background: #fff; font-size: 0.75rem; font-weight: 500; line-height: 1.2; white-space: nowrap; color: var(--color-ink); box-shadow: 0 4px 12px -4px rgb(60 44 24 / 0.35); opacity: 0; transition: opacity 160ms ease-out; pointer-events: none; }
+.orb-chip.is-on .orb-chip__name { opacity: 1; }
+.orb-chip.is-on.orb-chip--tool { box-shadow: 0 0 0 2px var(--color-accent), 0 0 0 7px rgb(209 164 58 / 0.28), 0 8px 18px -8px rgb(60 44 24 / 0.38); }
+.orb-chip.is-on.orb-chip--agent { box-shadow: 0 0 0 2px var(--color-accent), 0 0 0 7px rgb(209 164 58 / 0.3), 0 8px 18px -8px rgb(60 44 24 / 0.4); }
+
+/* the question bubble and the answer */
+.hero__bubble { position: absolute; left: 0; top: 0; z-index: 30; display: grid; gap: 0.1rem; max-width: 15.5rem; padding: 0.6rem 0.85rem 0.65rem; background: #fff; border-radius: 14px; box-shadow: 0 0 0 1px rgb(60 44 24 / 0.07), 0 14px 30px -12px rgb(60 44 24 / 0.45); opacity: 0; scale: 0.96; transform-origin: 0 100%; transition: opacity 180ms var(--ease-out), scale 180ms var(--ease-out); pointer-events: none; }
+.hero__bubble.is-left { transform-origin: 100% 100%; }
+.hero__bubble.is-on { opacity: 1; scale: 1; }
+.hero__bubble::after { content: ""; position: absolute; bottom: -5px; left: 14px; width: 12px; height: 12px; background: #fff; transform: rotate(45deg); border-radius: 2px; }
+.hero__bubble.is-left::after { left: auto; right: 14px; }
+.hero__bubble-name { font-size: 0.8125rem; font-weight: 600; color: var(--color-ink); }
+.hero__bubble-text { font-size: 0.9375rem; line-height: 1.35; color: var(--color-ink-2); }
+.hero__answer { position: absolute; z-index: 20; left: clamp(14.5rem, var(--bx), calc(100% - 14.5rem)); bottom: clamp(1rem, 4vh, 2.4rem); translate: -50% 0; width: min(26rem, calc(100% - 1.5rem)); padding: 0.95rem 1.1rem 1rem; background: #fff; border-radius: 16px; box-shadow: 0 0 0 1px rgb(60 44 24 / 0.07), 0 20px 44px -16px rgb(60 44 24 / 0.5); opacity: 0; scale: 0.98; transition: opacity 220ms var(--ease-out), scale 220ms var(--ease-out); pointer-events: none; }
+.hero__answer.is-on { opacity: 1; scale: 1; }
+.hero__answer-head { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.5rem; }
+.hero__answer-face { width: 28px; height: 28px; border-radius: 50%; overflow: hidden; box-shadow: 0 0 0 2px var(--color-accent); background: var(--color-paper-2); flex: none; }
+.hero__answer-face svg { width: 100%; height: 100%; }
+.hero__answer-who { font-size: 0.875rem; font-weight: 600; }
+.hero__answer-ok { margin-left: auto; padding: 0.15rem 0.6rem; border-radius: var(--r-pill); background: var(--color-accent-soft); color: var(--color-accent-ink); font-size: 0.75rem; font-weight: 500; }
+.hero__answer-text { font-size: 0.96875rem; line-height: 1.45; color: var(--color-ink); }
+.hero__answer-text .w { opacity: 0; transition: opacity 220ms ease-out; }
+.hero__answer-text.is-in .w { opacity: 1; }
+.hero__answer-how { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.35rem; margin-top: 0.7rem; font-size: 0.75rem; color: var(--color-muted); }
+.how__lab { margin-right: 0.2rem; }
+.how__pill { padding: 0.12rem 0.55rem; border-radius: var(--r-pill); background: var(--color-paper-2); color: var(--color-ink-2); }
+.how__arrow { width: 5px; height: 5px; border-top: 1px solid var(--color-taupe); border-right: 1px solid var(--color-taupe); transform: rotate(45deg); margin-inline: 0.1rem; }
+
+/* the words */
+.hero__copy { position: relative; z-index: 10; width: min(100% - 2 * var(--gutter), var(--site-max)); margin-inline: auto; min-height: inherit; display: flex; flex-direction: column; justify-content: center; padding-block: 3rem 3.5rem; pointer-events: none; }
+.hero__copy > * { max-width: 34rem; pointer-events: auto; }
+.hero__h1 { font-size: clamp(2.3rem, 1.1rem + 3.1vw, 3.75rem); line-height: 1.04; letter-spacing: -0.024em; }
+.hero__cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 2rem; }
+.hero__fine { margin-top: 1.1rem; font-size: 0.8125rem; color: var(--color-muted); }
+.hero__next { position: absolute; z-index: 25; left: var(--gutter); bottom: 1rem; padding: 0.55rem 1.1rem; border-radius: var(--r-pill); border: 1px solid rgb(31 26 20 / 0.28); background: #fff; font: 500 0.9375rem var(--font-body); cursor: pointer; }
+.hero__next[hidden] { display: none; }
+
+@media (max-width: 52rem) {
+  .hero { --chip: 38px; display: flex; flex-direction: column; min-height: 0; }
+  .hero__copy { order: 1; padding-block: 2.2rem 0.5rem; min-height: 0; }
+  .hero__stage { position: relative; order: 2; inset: auto; height: min(118vw, 36rem); --bx: 50%; --by: 46%; --br: 80px; }
+  .hero__answer { left: 50%; bottom: 0.4rem; width: calc(100% - 1.5rem); }
+  .hero__bubble { max-width: 12.5rem; }
+  .hero__next { bottom: 0.4rem; left: 50%; translate: -50% 0; }
+}
+/* ?bare=1: the brain alone on a transparent page (used to make the first-paint picture) */
+.is-bare, .is-bare body { background: transparent !important; }
+.is-bare .nav, .is-bare .foot, .is-bare .proto-switch, .is-bare .hero__copy, .is-bare .hero__chips, .is-bare .hero__bubble, .is-bare .hero__answer, .is-bare .hero__glow, .is-bare .hero__floor, .is-bare .hero__still { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero__glow { animation: none; }
+  .hero__answer-text .w { transition: none; }
+}

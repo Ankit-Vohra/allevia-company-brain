@@ -6,6 +6,7 @@
 // /security/, /faq/. `<!-- @section name -->` in a page is
 // replaced at build time by the shared section (shared/sections.ts), so every page is complete HTML before any script runs.
 // LOGO_DEV_KEY (environment, never committed): when set, tool logos come from logo.dev instead of Simple Icons (shared/logos.ts).
+import "./env.ts"; // first: it sets LOGO_DEV_KEY before the shared modules read it
 import { defineConfig, type Plugin } from "vite";
 import { fileURLToPath } from "node:url";
 import { SECTIONS } from "./shared/sections.ts";
