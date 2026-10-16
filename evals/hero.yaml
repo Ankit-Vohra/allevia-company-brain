@@ -1,0 +1,66 @@
+# The hero use case on the public synthetic twin (demo_growth, src/demo/growth.ts): "Why did sign-ups drop this week, and
+# what should we do?" Seed it first: npm run cli -- seed-demo. Expectations rest on the twin's records (see each `note`) and say
+# what a correct answer must show: the cause named, the chain walked in the path under the answer, valid citations, the
+# honest "not in the records", and the two cards drafted. Run it: npm run cli -- eval demo_growth --set evals/hero.yaml
+# Pattern syntax: evals/set.ts. The same question on the real business (aamdani) is evals/hero-aamdani.yaml.
+tenant: demo_growth
+description: The synthetic Shiftly app. The 2.8.0 release (7 Oct) put a crashing phone-number box on the sign-up screen; sign-ups fell about 80% that day.
+items:
+  - id: hero-why-signups-drop
+    question: Why did sign-ups drop this week, and what should we do?
+    tags: [hero, why, multi-desk, memory]
+    note: >-
+      new_accounts fell from about 250 a day to about 50 on 2026-10-07 (the funnel step "Phone number entered" collapses, "Sign-up screen viewed"
+      does not, Google sign-ups are flat). event:release-shiftly-2-8-0 (7 Oct) AFFECTS event:sentry-issue-shiftly-41 (how: introduced), which
+      AFFECTS page:screen/app/auth/sign-up, owned by Farhan. The Meta campaign was paused on 10 Oct, after the fall began. decision:014 chose a
+      hotfix over a rollback; task:ship-hotfix-2-8-1 waits on the iPhone review. The user's earlier preference: tell users only when a fix is on its way.
+    expect:
+      mustCite:
+        - 'event:sentry-issue-shiftly-41'
+        - 'event:release-shiftly-2-8-0|document:release-notes-2-8-0'
+        - 'page:screen/app/auth/sign-up|feature:seekers-signup-phone-number-entered'
+      mustMatch: ['phone', '2\.8\.0', 'Farhan', 'sign-?up screen', '7 Oct|2026-10-07|October 7']
+      mustUseAgents: [data-analyst, oncall-engineer, tech-lead]
+      mustUseTools: [impact_of, metric_trend]
+      mustPath:
+        - 'event:sentry-issue-shiftly-41'
+        - 'event:release-shiftly-2-8-0'
+        - 'page:screen/app/auth/sign-up'
+        - 'feature:seekers-signup-*'
+      mustPropose: [github_issue, content_draft]
+      forbid: ['(ads?|campaign|search update)[^.]{0,40}(caused|is the cause|are the cause)']
+
+  - id: hero-ads-red-herring
+    question: Did pausing the Meta ads cause the sign-up drop?
+    tags: [hero, why, trap]
+    note: The campaign was paused on 2026-10-10; the fall began on 2026-10-07, and Google sign-ups (no ads involved) did not fall. A tempting cause the dates rule out.
+    expect:
+      mustCite: ['campaign:meta-seekers-pune']
+      mustMatch: ['\bno\b|not|didn.t|rules? out', 'before|earlier|7 Oct|2026-10-07|October 7', 'sample numbers|simulated']
+      simulated: true
+
+  - id: hero-not-in-records
+    question: What did people say about the new phone-number box in their store reviews?
+    tags: [hero, trap]
+    note: No store reviews are recorded for the app (only review state of the iPhone build). The honest answer is "not in the records", never an invented quote.
+    expect:
+      mustMatch: ['not (in|recorded)|no (store )?reviews?|isn.t recorded|don.t have|no records?']
+      forbid: ['"[^"]{12,}"']
+
+  - id: hero-depth-contrast
+    question: What else breaks if the sign-up screen keeps crashing?
+    tags: [hero, impact]
+    note: One step away the sign-up steps and the Meta ad campaign that sends people in; four steps away the later funnel steps, job alerts, the employer inbox and the first-hire promise.
+    expect:
+      mustCite: ['feature:seekers-signup-*', 'campaign:meta-seekers-pune|feature:employer-*|feature:job-alert-sms']
+      mustMatch: ['employer|alert|referral|first application']
+      mustUseTools: [impact_of]
+      mustPath: ['page:screen/app/auth/sign-up']
+
+  - id: hero-memory
+    question: What did we decide last time about the sign-up crash, and where does it stand?
+    tags: [hero, memory, library]
+    note: decision:014-hotfix-not-rollback (10 Oct, no rollback because it would remove the job feed), task:ship-hotfix-2-8-1 in progress, iPhone 2.8.1 waiting in review since 13 Oct.
+    expect:
+      mustCite: ['decision:014-hotfix-not-rollback']
+      mustMatch: ['hotfix|2\.8\.1', 'roll(ed)? ?back|rollback', 'review|App Store|iPhone']

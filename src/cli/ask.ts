@@ -14,12 +14,12 @@ import { workLog } from "./_worklog.js";
 export const commands: Command[] = [
   {
     name: "ask",
-    usage: 'ask <tenant> "<question>" [--model haiku] [--session <id>] [--json]',
+    usage: 'ask <tenant> "<question>" [--model haiku] [--session <id>] [--now <iso time>] [--json]',
     summary: "Ask the agent company a question and watch every agent's steps",
     async run(args) {
       const { values, positionals } = parseArgs({
         args, allowPositionals: true,
-        options: { model: { type: "string" }, session: { type: "string" }, json: { type: "boolean" } },
+        options: { model: { type: "string" }, session: { type: "string" }, now: { type: "string" }, json: { type: "boolean" } },
       });
       const [tenant, ...words] = positionals;
       const question = words.join(" ").trim();
@@ -27,8 +27,17 @@ export const commands: Command[] = [
         console.error('Usage: npm run cli -- ask <tenant> "<question>" [--model haiku] [--session <id>] [--json]');
         return 2;
       }
+      // --now: the clock the turn runs on ("ask again a day later" without waiting a day; dates in the prompts and in what the
+      // turn saves follow it). Only for a demo business (demo_* or *_seed): a real business's turns are never back- or forward-dated.
+      let now: number | undefined;
+      if (values.now) {
+        now = Date.parse(values.now);
+        if (Number.isNaN(now)) { console.error(`--now: "${values.now}" is not a date and time`); return 2; }
+        if (!/^demo_|_seed$/.test(tenant)) { console.error("--now is only for demo businesses (demo_* or *_seed)"); return 2; }
+      }
       const { wiring } = await import("../agent/wiring.js");
       const deps = await wiring.createAskDeps({ tenant, ...(values.model ? { model: values.model } : {}) });
+      if (now !== undefined) deps.now = () => now!;
       const emit = values.json ? (e: unknown) => { process.stdout.write(`${JSON.stringify(e)}\n`); } : workLog();
       const stop = interruptible();
       try {

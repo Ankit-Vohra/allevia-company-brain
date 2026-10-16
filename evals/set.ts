@@ -5,6 +5,9 @@
 // - mustMatch: regexes the answer's prose (citation ids removed) must match. A plain string is case-insensitive;
 //   "/body/flags" is used as written.
 // - mustUseTools / mustUseAgents: a tool (or roster agent) the turn must have used; "a|b" means either.
+// - mustPath: each entry (an id, an id glob, a node label, "a|b" for either) must be matched by a node of the path drawn under
+//   the answer (the final `path` event): the explanation really walks through it.
+// - mustPropose: an action kind (github_issue, content_draft, pause_ad, discord_post) the turn must have drafted as an approval card.
 // - forbid: regexes the answer must not match (invented numbers, hard-sell words).
 // - simulated: the answer must say the data is simulated.
 import { readFileSync, readdirSync } from "node:fs";
@@ -24,6 +27,8 @@ export const EvalItemSchema = z.object({
     mustMatch: patterns,
     mustUseTools: patterns,
     mustUseAgents: patterns,
+    mustPath: patterns,
+    mustPropose: patterns,
     forbid: patterns,
     simulated: z.boolean().default(false),
   }),

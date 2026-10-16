@@ -29,7 +29,7 @@ const turn = (over: Partial<TurnObservation> = {}): TurnObservation => ({
 
 const item = (expect: Partial<EvalItem["expect"]> = {}): EvalItem => ({
   id: "why-stories", question: "Why did we pause daily stories?", tags: ["why"],
-  expect: { mustCite: [], mustMatch: [], mustUseTools: [], mustUseAgents: [], forbid: [], simulated: false, ...expect },
+  expect: { mustCite: [], mustMatch: [], mustUseTools: [], mustUseAgents: [], mustPath: [], mustPropose: [], forbid: [], simulated: false, ...expect },
 });
 
 describe("patterns", () => {

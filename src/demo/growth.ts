@@ -123,7 +123,10 @@ export async function seedGrowth(g: GraphHandle, opts: { embed?: (text: string) 
   };
   release("event:release-shiftly-2-7-4", "shiftly@2.7.4+90", "2026-09-29", "Routine fixes.", "document:store-status");
   release("event:release-shiftly-2-8-0", "shiftly@2.8.0+91", RELEASE_DAY, "New phone number field on the sign-up screen; new job feed.", "document:release-notes-2-8-0");
-  release("event:release-shiftly-2-8-1", "shiftly@2.8.1+92", "2026-10-13", "Hotfix for the phone number field crash.", "document:release-notes-2-8-1");
+  // the hotfix is built (13 Oct) but not out: Android waits for sign-off, iPhone for the App Store's review
+  node({ type: "Event", id: "event:release-shiftly-2-8-1", name: "Build shiftly@2.8.1+92 (hotfix, not released yet)", summary: "Hotfix for the phone number field crash. Built 13 Oct; Android is waiting for sign-off.", props: { kind: "build", release: "shiftly@2.8.1+92", platform: "android", builtAt: "2026-10-13", state: "built, waiting for sign-off" }, src: "document:release-notes-2-8-1", asOf: "2026-10-13" });
+  edge({ from: "event:release-shiftly-2-8-1", type: "AFFECTS", to: "channel:app", src: "document:release-notes-2-8-1" });
+  edge({ from: "event:release-shiftly-2-8-1", type: "AFFECTS", to: "event:sentry-issue-shiftly-41", props: { how: "fixes" }, src: "document:release-notes-2-8-1" });
   node({ type: "Event", id: "event:ios-version-2-8-1", name: "iPhone app 2.8.1", props: { kind: "release", platform: "ios", version: "2.8.1", state: "WAITING_FOR_REVIEW", submittedAt: "2026-10-13" }, src: "document:store-status", asOf: "2026-10-15" });
   edge({ from: "event:ios-version-2-8-1", type: "AFFECTS", to: "channel:app-ios", src: "document:store-status" });
   obs({ subject: "channel:app-ios", metric: "app_review_days_waiting", value: 2, unit: "days", asOf: "2026-10-15", src: "document:store-status" });

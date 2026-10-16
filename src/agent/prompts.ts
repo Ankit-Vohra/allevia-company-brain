@@ -367,7 +367,7 @@ export const DIAGNOSIS_ANSWER_RULE = `This is a diagnosis. Build the answer from
 - What else it hits: what the on-call or tech findings say is hurt one step away, against what is hurt up to four steps away (name the later ones the owner would not think of).
 - What we decided or learned last time about this, and where it stands now (from the librarian and "what we already know").
 - Say straight what is not in the records (no release date, no step-by-step data, no owner) instead of filling the gap. Do not blame a cause the dates rule out, and say in a few words why a tempting one (a paused ad, a search update) is not it.
-- Call show_path with the ordered ids the chain walks through (the reading or number, the funnel step, the screen, the crash, the release, the owner), using only ids the findings cite.
+- Call show_path with the ordered ids the chain walks through, cause at the end: the funnel step or reading that fell, the screen, the crash, the release, then the person who owns it. Only ids the findings cite, and only things that exist in the business (never a card, recommendation or approval id).
 - When a cause is shown or likely, also call propose_action twice, in the same round as show_path: (1) kind github_issue, the fix task, with title, the numbers and dates as the body, and the crash, screen and release ids as evidence; (2) kind content_draft, a short message to the people affected (at most two sentences, plain, what to do meanwhile, no apology essay), with the message word for word in payload.body; honour the owner's standing preferences about telling users. Say in one line that both wait for the owner's OK. When no cause is shown, propose nothing and say what to look at first.`;
 
 export function synthesisPrompt(o: {
