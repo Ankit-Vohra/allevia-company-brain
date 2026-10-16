@@ -47,7 +47,8 @@ export const CONVERSION_SCRIPT = String.raw`(() => {
     if (/wa\.me\/|api\.whatsapp\.com|whatsapp:\/\/|web\.whatsapp\.com/.test(href) || /\bwhats ?app\b/.test(words)) return "whatsapp";
     if (/calendly\.com|cal\.com\/|booksy|fresha|setmore|acuityscheduling|simplybook|zcal|tidycal|opentable|resy\.com|zomato\.com\/.*book|practo/.test(href)) return "book";
     if (/\b(book|schedule|reserve|appointment|consultation|book a (call|demo|visit)|get a quote|request a quote|free quote|site visit)\b/.test(words)) return "book";
-    if (/\b(sign ?up|get started|start (free|now|your)|try (it )?free|create (an )?account|join (now|free|us)|download (the )?app)\b/.test(words)) return "signup";
+    if (/play\.google\.com\/store\/apps|apps\.apple\.com|itunes\.apple\.com|onelink\.me|app\.link\//.test(href)) return "signup";
+    if (/\b(sign ?up|get started|start (free|now|your)|try (it )?free|create (an )?account|join (now|free|us)|(download|get|open|install) (the |our )?app|get it on)\b/.test(words)) return "signup";
     if (/\b(call( us| now)?|phone)\b/.test(words) && words.length < 40) return "call";
     if (/\b(contact|enquire|enquiry|inquire|inquiry|get in touch|talk to us|message us|let'?s talk|write to us)\b/.test(words) || /\/(contact|enquir|inquir)/.test(href)) return "enquire";
     if (href.startsWith("mailto:")) return "email";

@@ -77,6 +77,15 @@ describe("the conversion capture", () => {
   });
 });
 
+describe("app buttons", () => {
+  it("counts 'Open the app' and a store link as the next step", async () => {
+    const c = await capture(`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body>
+      <header><a href="/app" style="display:inline-block;padding:12px">Open the app</a></header><h1>Say what work you want</h1>
+      <a href="https://play.google.com/store/apps/details?id=x.y" style="display:inline-block;padding:12px">Android</a></body></html>`, true);
+    expect(c.ctas.filter((x) => x.kind === "signup" && x.aboveFold).map((x) => x.text)).toEqual(["Open the app", "Android"]);
+  });
+});
+
 describe("headlines and kinds", () => {
   it("tells a promise from a greeting or a bare name", () => {
     expect(headlineSaysWhat("Welcome to AVS Atelier", "AVS Atelier")).toBe(false);
