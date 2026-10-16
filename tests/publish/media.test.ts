@@ -68,7 +68,7 @@ describe("signed media addresses", () => {
 
   it("says why a local address can't be used", () => {
     expect(publicAddressProblem("https://allevia.example")).toBeNull();
-    expect(publicAddressProblem("http://13.232.139.42:8787")).toBeNull();
+    expect(publicAddressProblem("http://203.0.113.7:8787")).toBeNull();
     for (const local of ["http://127.0.0.1:8787", "http://localhost:8787", "http://192.168.1.4", "http://10.0.0.2", "http://mac.local", "http://172.20.1.1"]) {
       expect(publicAddressProblem(local), local).toMatch(/can only be reached from inside its own network/);
     }

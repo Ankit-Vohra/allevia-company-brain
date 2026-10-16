@@ -237,7 +237,7 @@ describe("checking the actions before posting", () => {
 
 describe("failures in plain words", () => {
   it("says the connection needs reconnecting for an expired login, and never repeats a token", () => {
-    const w = plainWhy(IG, "OAuthException (#190): Error validating access token: Session has expired access_token=EAABsbCS1iHgBO7ZC");
+    const w = plainWhy(IG, "OAuthException (#190): Error validating access token: Session has expired access_token=example-token-not-real");
     expect(w).toMatchObject({ reconnect: true });
     expect(w.words).toBe("Instagram stopped letting us in. Connect Instagram again, then try again.");
   });
