@@ -15,7 +15,7 @@ import { fillInFromSession, isFillItIn } from "./fillin.js";
 import { checkTurn, extractCitations } from "./checks.js";
 import { getSession, newSessionId, newTurnId, recallBrief, saveTurn, startSession } from "./memory.js";
 import { runTurn, type TurnOutcome } from "./orchestrator.js";
-import type { AgentRuntime, Emit } from "./runtime.js";
+import { UsageMeter, type AgentRuntime, type Emit, type Usage } from "./runtime.js";
 import { TouchedSet, type AlleviaTool, type ToolContext } from "./tool.js";
 import { loadBusinessSkills } from "./skills/business.js";
 import type { SkillCatalog } from "./skills/catalog.js";
@@ -70,6 +70,8 @@ export interface AskResult {
   checks: TurnChecks;
   agents: string[];
   ms: number;
+  /** What the model read and wrote for this answer, summed over every agent run, and how many tools were called. */
+  usage?: Usage & { toolCalls: number };
   outcome?: TurnOutcome;
 }
 
@@ -93,6 +95,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
   const out: Emit = (e) => { if (closed) return; log.push(e); deliver(e); };
 
   out({ type: "session", tenant: input.tenant, sessionId, turnId, question });
+  const meter = new UsageMeter();
 
   let g: GraphHandle | undefined = deps.graph;
   let outcome: TurnOutcome | undefined;
@@ -153,7 +156,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
     if (!outcome) outcome = await runTurn(
       { tenant: input.tenant, question, sessionId, turnId, asker, recall, ...(target ? { target } : {}) },
       {
-        runtime: deps.runtime, getTools: deps.getTools, graph: g, now,
+        runtime: meter.wrap(deps.runtime), getTools: deps.getTools, graph: g, now,
         ...(deps.model ? { model: deps.model } : {}), ...(deps.agentTimeoutMs ? { agentTimeoutMs: deps.agentTimeoutMs } : {}),
         ...(deps.embedQuery ? { embedQuery: deps.embedQuery } : {}), ...(deps.readOnly !== undefined ? { readOnly: deps.readOnly } : {}),
         ...(deps.timeZone ? { timeZone: deps.timeZone } : {}), ...(deps.signal ? { signal: deps.signal } : {}),
@@ -177,6 +180,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
   const final: AgentEvent = { type: "final", turnId, answer, citations, checks, agents, ms };
   closed = true;
   log.push(final);
+  const usage = { ...meter.total, toolCalls: log.filter((e) => e.type === "tool_call").length };
 
   if (g) {
     try {
@@ -185,6 +189,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
         ...(target ? { target } : {}), checks, agents, events: log, touched: outcome?.touched ?? [], citations,
         findings: outcome?.findings ?? [], reviews: outcome?.reviews ?? [], guidedBy: outcome?.guidedBy ?? [],
         ...(outcome?.skills?.length ? { skills: outcome.skills } : {}),
+        cost: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, cacheReadTokens: usage.cacheReadTokens, cacheWriteTokens: usage.cacheWriteTokens, modelCalls: usage.modelCalls, toolCalls: usage.toolCalls },
       });
       if (saved.errors.length) deliver({ type: "error", message: `Saved the turn with ${saved.errors.length} skipped write(s): ${saved.errors[0]}` });
     } catch (e) {
@@ -192,5 +197,5 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
     }
   }
   deliver(final);
-  return { ok: !failure, turnId, sessionId, answer, citations, checks, agents, ms, ...(outcome ? { outcome } : {}) };
+  return { ok: !failure, turnId, sessionId, answer, citations, checks, agents, ms, usage, ...(outcome ? { outcome } : {}) };
 }

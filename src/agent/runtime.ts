@@ -45,7 +45,49 @@ export interface RunInput {
 
 // partial: the run ran out of turns after writing something; `text` is what it wrote (the orchestrator decides whether a
 // partial result is usable: a desk's finding is, marked partial; a review, revision, plan or answer is not).
-export interface RunOutput { text: string; structured?: unknown; partial?: true }
+export interface RunOutput { text: string; structured?: unknown; partial?: true; usage?: Usage }
+
+// What one agent run cost the model, as the Agent SDK reports it in its final `result` message (on the subscription there is
+// no bill; the tokens are still real, and they are what "a few hops instead of rereading documents" is measured in).
+// inputTokens are the fresh ones; cacheReadTokens and cacheWriteTokens are the prompt prefix the model reused or stored;
+// together the three are everything the model had to read. modelCalls is the SDK's `num_turns`.
+export interface Usage { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; modelCalls: number; apiMs?: number }
+export const EMPTY_USAGE: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, modelCalls: 0 };
+export const addUsage = (a: Usage, b: Usage | undefined): Usage => !b ? a : ({
+  inputTokens: a.inputTokens + b.inputTokens, outputTokens: a.outputTokens + b.outputTokens,
+  cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens, cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
+  modelCalls: a.modelCalls + b.modelCalls, ...((a.apiMs ?? 0) + (b.apiMs ?? 0) ? { apiMs: (a.apiMs ?? 0) + (b.apiMs ?? 0) } : {}),
+});
+/** Everything the model read for this usage: fresh, reused and stored prompt tokens. */
+export const tokensRead = (u: Usage): number => u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens;
+
+const nz = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0);
+// The SDK's result message -> Usage (undefined when the message carries no usage block, as a fake's does not).
+export function usageFromResult(msg: { usage?: unknown; num_turns?: unknown; duration_api_ms?: unknown }): Usage | undefined {
+  const u = msg.usage as Record<string, unknown> | undefined;
+  if (!u || typeof u !== "object") return undefined;
+  return {
+    inputTokens: nz(u.input_tokens), outputTokens: nz(u.output_tokens), cacheReadTokens: nz(u.cache_read_input_tokens),
+    cacheWriteTokens: nz(u.cache_creation_input_tokens), modelCalls: nz(msg.num_turns) || 1,
+    ...(nz(msg.duration_api_ms) ? { apiMs: nz(msg.duration_api_ms) } : {}),
+  };
+}
+
+/** Wraps a runtime so the usage of every run it makes (plan, desks, reviews, answer) adds up in one meter, for one turn. */
+export class UsageMeter {
+  total: Usage = EMPTY_USAGE;
+  runs = 0;
+  wrap(inner: AgentRuntime): AgentRuntime {
+    return {
+      run: async (input, emit) => {
+        const out = await inner.run(input, emit);
+        this.runs++;
+        this.total = addUsage(this.total, out.usage);
+        return out;
+      },
+    };
+  }
+}
 
 export interface AgentRuntime {
   run(input: RunInput, emit: Emit): Promise<RunOutput>;
@@ -233,6 +275,7 @@ export class SdkMessageFolder {
   private texts: string[] = [];
   private streamed = false;
   result?: { ok: boolean; text?: string; structured?: unknown; error?: string; outOfTurns?: boolean };
+  usage?: Usage;
 
   constructor(private agentId: string, private streamText: boolean, private emit: Emit) {}
 
@@ -254,6 +297,7 @@ export class SdkMessageFolder {
       const text = content.filter((b) => b.type === "text" && b.text).map((b) => b.text!).join("");
       if (text.trim()) this.texts.push(text);
     } else if (msg.type === "result") {
+      this.usage = usageFromResult(msg as { usage?: unknown });
       if (msg.subtype === "success" && !msg.is_error) {
         this.result = { ok: true, text: typeof msg.result === "string" ? msg.result : undefined, structured: msg.structured_output };
       } else {
@@ -270,10 +314,11 @@ export class SdkMessageFolder {
   // though the SDK's `result` only carries the last message.
   output(): RunOutput {
     if (!this.result) throw new Error("agent run ended without a result");
-    if (!this.result.ok && this.result.outOfTurns && this.texts.length) return { text: this.texts.join("\n\n"), partial: true };
+    const usage = this.usage ? { usage: this.usage } : {};
+    if (!this.result.ok && this.result.outOfTurns && this.texts.length) return { text: this.texts.join("\n\n"), partial: true, ...usage };
     if (!this.result.ok) throw new Error(this.result.error ?? "agent run failed");
     const text = this.texts.length ? this.texts.join("\n\n") : this.result.text ?? "";
-    return this.result.structured === undefined ? { text } : { text, structured: this.result.structured };
+    return this.result.structured === undefined ? { text, ...usage } : { text, structured: this.result.structured, ...usage };
   }
 }
 
@@ -349,6 +394,7 @@ export interface FakeStep {
   delayMs?: number;                                // wait before answering (respects the abort signal)
   fail?: string;                                   // throw this error instead of answering
   partial?: boolean;                               // end like a run that ran out of turns (text only, marked partial)
+  usage?: Usage;                                   // what this run "cost" (the SDK reports it; a fake says it)
 }
 export type FakeScript = FakeStep | FakeStep[] | ((input: RunInput, n: number) => FakeStep);
 
@@ -413,7 +459,8 @@ export class FakeRuntime implements AgentRuntime {
     if (st.fail) throw new Error(st.fail);
     block(st.text);
     const text = [st.preText, ...(st.turns ?? []).map((t) => t.text), st.text].filter(Boolean).join("\n\n"); // like the SDK: every text block, in order
-    if (st.partial) return { text, partial: true };
-    return st.structured === undefined ? { text } : { text, structured: st.structured };
+    const usage = st.usage ? { usage: st.usage } : {};
+    if (st.partial) return { text, partial: true, ...usage };
+    return st.structured === undefined ? { text, ...usage } : { text, structured: st.structured, ...usage };
   }
 }

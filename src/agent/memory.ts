@@ -221,6 +221,9 @@ export interface SaveTurnInput {
   guidedBy?: string[];              // the owner's instructions (Memory, Rule, BrandRule ids) the turn worked under
   target?: string;                  // a direct chat: the roster agent the owner talked to (saved as Turn.target)
   skills?: Array<{ agent: string; skillId: string }>; // the skills agents opened (saved as Turn.skills: "agent/skill-id")
+  // What the answer cost the model (src/agent/runtime.ts Usage, summed over every run of the turn) and how many graph tool
+  // calls it made: saved on the Turn, so "a few hops, few tokens" is a question the graph answers (docs/graph-audit.md).
+  cost?: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; modelCalls: number; toolCalls: number };
 }
 
 export interface SaveTurnResult { nodesCreated: number; edgesCreated: number; errors: string[] }
@@ -253,6 +256,13 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   if (t.ms !== undefined) turnProps.ms = t.ms;
   if (t.error) turnProps.error = t.error;
   if (t.skills?.length) turnProps.skills = unique(t.skills.map((s) => `${s.agent}/${s.skillId}`));
+  if (t.cost && (t.cost.modelCalls > 0 || t.cost.toolCalls > 0)) {
+    turnProps.tokensIn = t.cost.inputTokens + t.cost.cacheReadTokens + t.cost.cacheWriteTokens; // everything the model read
+    turnProps.tokensOut = t.cost.outputTokens;
+    turnProps.tokensFresh = t.cost.inputTokens; // not served from the prompt cache
+    turnProps.modelCalls = t.cost.modelCalls;
+    turnProps.toolCalls = t.cost.toolCalls;
+  }
   const nodes: NodeInput[] = [{ type: "Turn", id: t.turnId, name: clip(oneLine(t.question), 120) || t.turnId, summary: clip(t.answer, 600), props: turnProps }];
   const edges: EdgeInput[] = [{ from: t.turnId, type: "IN_SESSION", to: t.sessionId }];
   if (askerOk) edges.push({ from: t.asker, type: "ASKED", to: t.turnId });
