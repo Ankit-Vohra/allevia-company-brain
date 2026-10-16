@@ -1,5 +1,8 @@
 # Connectors: what the founder sets up
 
+> Superseded for setup by `docs/connections-setup.md` (issue #40): Composio is the main path now, Search Console is a normal connection on the
+> Connections page, and `ALLEVIA_SEARCH_CONSOLE=1` is no longer needed. The Google Cloud steps below still apply to our own Google app.
+
 2026-10-15. Three customer data paths were built after the onboarding trials (`docs/onboarding-trials.md`, gaps 1 and 2).
 Two need nothing from you. One needs a Google Cloud project, and this page lists exactly what to create.
 
