@@ -67,6 +67,14 @@ export function productionDeps(o: { model?: string; publicMode: boolean; authReq
     },
     google: async () => productionGoogle(),
     connections: async () => ({ service: (await import("../connections/production.js")).productionConnections(), webBaseUrl: loadConfig().webBaseUrl }),
+    // the signed, expiring addresses Instagram and Facebook fetch a post's picture from (src/publish/media.ts)
+    media: async () => {
+      const cfg = loadConfig();
+      const key = cfg.google.connectorKey ?? "";
+      if (key.length < 32) return null;
+      const { AssetStore } = await import("../studio/store.js");
+      return { key, store: new AssetStore(cfg.dataDir), openGraph: (slug: string) => openGraph(slug), now: () => Date.now() };
+    },
     standup: async (slug, g, businessId) => (await import("../proactive/wiring.js")).runDaily(slug, g, businessId, { force: true }),
     ...(o.staticDir ? { staticDir: o.staticDir } : {}),
   };
@@ -139,7 +147,25 @@ export async function startServer(opts: ServeOpts = {}): Promise<{ server: Serve
   const stopTelemetry = !publicMode && telemetrySweepOn() && !opts.over?.listTenants
     ? startTelemetrySweep({ log: (l) => console.error(redactUrl(l, cfg.falkordbUrl)) })
     : () => undefined;
-  return { server, url, close: () => { stopRetry?.(); stopNudge?.(); stopSchedule(); stopCheckups(); stopStandups(); stopTelemetry(); return new Promise<void>((r) => server.close(() => r())); } };
+  // posts that wait for their time (src/publish/scheduler.ts): every half minute, for businesses that have Instagram, a Facebook Page or
+  // LinkedIn connected; never in public mode; ALLEVIA_PUBLISH_SCHEDULE=0 switches it off. The answer reaches the business's #approvals.
+  const stopPublish = !publicMode && process.env.ALLEVIA_PUBLISH_SCHEDULE !== "0" && !opts.over?.listTenants
+    ? await (async () => {
+      const [{ startPublishSchedule }, { defaultRuntime }, { productionConnections }, { PLATFORMS }, { sendPublishNotice }] = await Promise.all([
+        import("../publish/scheduler.js"), import("../publish/executor.js"), import("../connections/production.js"), import("../publish/platforms.js"), import("../discord/publish-notice.js"),
+      ]);
+      const postingIds = new Set(Object.values(PLATFORMS).map((p) => p.connection));
+      return startPublishSchedule({
+        tenants: async () => (await listTenants()).map((t) => ({ slug: t.slug })),
+        openGraph: (slug) => deps.openGraph(slug),
+        env: (slug) => ({ tenant: slug, connections: productionConnections().port(slug), dryRun: !loadConfig().actionsLive, publish: defaultRuntime() }),
+        hasPostingConnection: async (slug) => (await productionConnections().vault.list(slug).catch(() => [] as string[])).some((n) => postingIds.has(n)),
+        onResult: async (r) => { if (hub && r.post) await sendPublishNotice(hub.deps, r.tenant, r.post, r.outcome.result); },
+        log: (l) => console.error(l),
+      });
+    })()
+    : () => undefined;
+  return { server, url, close: () => { stopRetry?.(); stopNudge?.(); stopSchedule(); stopCheckups(); stopStandups(); stopTelemetry(); stopPublish(); return new Promise<void>((r) => server.close(() => r())); } };
 }
 
 // Resolves on SIGINT/SIGTERM after the server has stopped taking requests.

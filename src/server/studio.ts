@@ -372,12 +372,16 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
 // and the caption as approved. Chained before the server's own onDecision hook.
 export function studioDecisionHook(openGraph: (slug: string) => Promise<GraphHandle>, now: () => number, next?: OnDecision): OnDecision {
   return async (tenant, approval) => {
-    if (approval.kind === "content_draft" && ["approved", "edited", "executed"].includes(approval.status)) {
+    const posts = approval.kind === "publish_post";
+    if ((approval.kind === "content_draft" || posts) && ["approved", "edited", "executed", ...(posts ? ["failed"] : [])].includes(approval.status)) {
       const g = await openGraph(tenant);
       const card = await studioCard(g, approval.id);
-      // the executor may already have written the draft; the Studio's part is missing until it USES_ASSET a variant
-      const [done] = card ? await g.roQuery<{ c: number }>(
-        "MATCH (:Entity:Approval {id:$id})-[r1:RESULTED_IN]->(:Action)-[r2:RESULTED_IN]->(:Content)-[u:USES_ASSET]->(:Asset) WHERE ID(r1) >= 0 AND ID(r2) >= 0 RETURN count(u) AS c", { id: approval.id }) : [];
+      // the executor may already have written the draft; the Studio's part is missing until it USES_ASSET a variant (a post that goes
+      // out writes its own Content, so there the Studio's part is done once the card has been finalized: it remembers its Content)
+      const [done] = card ? (posts
+        ? await g.roQuery<{ c: number }>("MATCH (a:Entity:Approval {id:$id}) WHERE a.contentId IS NOT NULL RETURN count(a) AS c", { id: approval.id })
+        : await g.roQuery<{ c: number }>(
+          "MATCH (:Entity:Approval {id:$id})-[r1:RESULTED_IN]->(:Action)-[r2:RESULTED_IN]->(:Content)-[u:USES_ASSET]->(:Asset) WHERE ID(r1) >= 0 AND ID(r2) >= 0 RETURN count(u) AS c", { id: approval.id })) : [];
       if (card && !done?.c) {
         const v = card.payload.studio.variants.find((x) => x.id === card.payload.studio.recommended);
         if (v?.badge === "unchanged" || (v?.badge === "unchecked" && card.payload.studio.creative?.allowUnchecked)) {

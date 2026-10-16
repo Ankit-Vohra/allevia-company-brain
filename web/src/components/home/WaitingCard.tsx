@@ -9,17 +9,18 @@ import { api, getPublicMode } from "../../api";
 import { ACTION } from "../../lib/actions";
 import { kindWords } from "../../lib/approval-words";
 import { firstFew, meetingWords, plainTitle, type WaitingItem } from "../../lib/home";
-import type { Approval, LearnedEvent } from "../../types-ext";
+import type { Approval, LearnedEvent, PostView } from "../../types-ext";
 import { AgentAvatar, agentDef } from "../bits";
 import { Icon } from "../Icon";
 import { whenWords } from "../insights-words";
 import { LearnedChips } from "../Learning";
+import { PostLine } from "../PostsList";
 import { APPROVALS_CHANGED } from "../TopBar";
 import { CardSkeleton, HomeCard } from "./HomeCard";
 
 type Payload = Approval["payload"];
 /** `failed`: the owner said OK but the tool refused, in the executor's own plain words ("Nothing was done."). */
-interface Done { id: string; title: string; kind: ActionKind; outcome: "approved" | "edited" | "rejected"; learned: LearnedEvent[]; failed?: string; draftOnly?: boolean }
+interface Done { id: string; title: string; kind: ActionKind; outcome: "approved" | "edited" | "rejected"; learned: LearnedEvent[]; failed?: string; draftOnly?: boolean; result?: string; post?: PostView }
 
 const bodyOf = (a: Approval) => a.payload.body.replace(/^Evidence: .*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
 /** A website address or a place ("Instagram post"); never a repo name or a one-word tag, which is plumbing. */
@@ -47,6 +48,7 @@ export function WaitingCard({ tenantId, tz, locale, items, loading, error, onCha
     setDone((d) => [{
       id: a.id, title: plainTitle(a.title), kind: a.kind, outcome: decision === "reject" ? "rejected" as const : edited ? "edited" as const : "approved" as const,
       learned: out.learned ?? [], ...(failed ? { failed } : {}), ...(a.preview?.draftOnly ? { draftOnly: true } : {}),
+      ...(a.kind === "publish_post" && decision === "approve" && out.action?.result && !failed ? { result: out.action.result } : {}), ...(out.post ? { post: out.post } : {}),
     }, ...d].slice(0, 2));
     window.dispatchEvent(new Event(APPROVALS_CHANGED));
     if (out.learned?.length) onLearned();
@@ -74,7 +76,8 @@ export function WaitingCard({ tenantId, tz, locale, items, loading, error, onCha
             <Icon name={d.failed ? "warn" : d.outcome === "rejected" ? "x" : "check"} size={15} />
             <span><b>{d.failed ? "Did not go through" : d.outcome === "rejected" ? "You said no" : d.outcome === "edited" ? "Approved with your edits" : "Approved"}:</b> {d.title}</span>
           </p>
-          <p className="small muted">{d.failed ? d.failed : d.outcome === "rejected" ? "Nothing was changed." : kindWords({ kind: d.kind, title: d.title, preview: { draftOnly: d.draftOnly } }).done}</p>
+          <p className="small muted">{d.failed ? d.failed : d.outcome === "rejected" ? "Nothing was changed." : d.result ?? kindWords({ kind: d.kind, title: d.title, preview: { draftOnly: d.draftOnly } }).done}</p>
+          {d.post && <PostLine tenantId={tenantId} post={d.post} onChanged={(p) => { setDone((xs) => xs.map((x) => (x.id === d.id ? { ...x, post: p } : x))); onChanged(); }} quiet />}
           <LearnedChips events={d.learned} edited={d.outcome === "edited"} />
         </div>
       ))}
@@ -140,7 +143,7 @@ function Draft({ w, tenantId, tz, locale, readOnly, onDecide }: {
         <Content a={a} tenantId={tenantId} tz={tz} locale={locale} />
       )}
 
-      {!editing && <p className="hm-effect">{k.effect(a.payload.target)}</p>}
+      {!editing && <p className="hm-effect">{a.kind === "publish_post" && a.preview?.post ? `If you say OK, this is posted to ${a.preview.post.where}${a.preview.post.when ? ", at the time shown" : " straight away"}. Nothing is posted before.${a.preview.post.textOnly ? " The picture stays out: LinkedIn posts from here are text only." : ""}` : k.effect(a.payload.target)}</p>}
 
       <div className="hm-actions">
         {editing ? (
@@ -181,13 +184,19 @@ function Content({ a, tenantId, tz, locale }: { a: Approval; tenantId: string; t
           {p.subject && <div className="hm-fact"><dt>Subject</dt><dd>{p.subject}</dd></div>}
         </dl>
       )}
+      {a.kind === "publish_post" && p?.post && (
+        <dl className="hm-facts">
+          <div className="hm-fact"><dt>Posts to</dt><dd>{p.post.where}</dd></div>
+          <div className="hm-fact"><dt>When</dt><dd>{p.post.when ? `${p.post.when.words}${p.post.when.timeZone ? ` (${p.post.when.timeZone.replace(/_/g, " ")})` : ""}` : "As soon as you say OK"}</dd></div>
+        </dl>
+      )}
       {a.kind === "calendar_event" && when && (
         <dl className="hm-facts">
           <div className="hm-fact"><dt>When</dt><dd>{when}</dd></div>
           {p?.when && p.when.guests.length > 0 && <div className="hm-fact"><dt>With</dt><dd>{p.when.guests.join(", ")}</dd></div>}
         </dl>
       )}
-      {about && !p?.media && a.kind !== "email_send" && a.kind !== "calendar_event" && (
+      {about && !p?.media && a.kind !== "email_send" && a.kind !== "calendar_event" && a.kind !== "publish_post" && (
         <dl className="hm-facts"><div className="hm-fact"><dt>About</dt><dd className="hm-about">{about}</dd></div></dl>
       )}
       {body && <Words text={body} label={p?.media ? "Caption" : undefined} />}

@@ -1,6 +1,8 @@
 // `connect`: the operator's side of the connections (src/connections, docs/connections-setup.md).
 //   connect status [<tenant>]        what the server still needs from the founder, and how each connection stands for a business
 //   connect toolkits                 asks Composio whether every toolkit Allevia lists exists (finds a wrong slug in a minute)
+//   connect publish-check            asks Composio's own tool lists whether the actions and arguments posting uses still exist (read only:
+//                                    nothing is posted, nothing is connected)
 //   connect pull <tenant> | --all    read the connected numbers now (the server also does it daily on its own)
 //   connect rotate-keys              seal every stored connection with the current ALLEVIA_CONNECTOR_KEY (after setting the old one
 //                                    in ALLEVIA_CONNECTOR_KEY_PREVIOUS); then the old key can be removed
@@ -12,6 +14,7 @@ import { TOOLKIT_CATALOG } from "../../shared/connection-map.js";
 import { loadConfig } from "../config.js";
 import { realComposioClient } from "../connections/composio.js";
 import { productionConnections } from "../connections/production.js";
+import { PLATFORM_IDS, PLATFORMS, slugsOf, verifyPublishTools } from "../publish/platforms.js";
 import { graphName, listGraphs } from "../graph/client.js";
 import { listTenants } from "../graph/tenants.js";
 import type { Command } from "./_command.js";
@@ -22,7 +25,7 @@ async function known(tenant: string | undefined): Promise<boolean> {
   return true;
 }
 
-const USAGE = "connect status [<tenant>] | toolkits | pull <tenant> | pull --all | rotate-keys | revoke <tenant> | audit <tenant>";
+const USAGE = "connect status [<tenant>] | toolkits | publish-check | pull <tenant> | pull --all | rotate-keys | revoke <tenant> | audit <tenant>";
 
 export const commands: Command[] = [
   {
@@ -54,6 +57,20 @@ export const commands: Command[] = [
           const t = await c.toolkit(e.toolkit).catch(() => null);
           console.log(`${t ? "ok     " : "MISSING"} ${e.toolkit.padEnd(22)} ${e.name}`);
           if (!t) bad++;
+        }
+        return bad ? 1 : 0;
+      }
+      if (what === "publish-check") {
+        const key = cfg.connections.composioApiKey;
+        if (!key) { console.error("COMPOSIO_API_KEY is not set."); return 1; }
+        const c = realComposioClient(key);
+        let bad = 0;
+        for (const spec of PLATFORM_IDS.map((id) => PLATFORMS[id])) {
+          const listed = await c.tools(spec.toolkit).catch(() => null);
+          if (!listed) { console.log(`COULD NOT READ ${spec.name}'s tool list`); bad++; continue; }
+          const r = verifyPublishTools(spec, listed);
+          console.log(`${r.ok ? "ok     " : "PROBLEM"} ${spec.name}: ${slugsOf(spec).length} actions${r.ok ? "" : ` (missing: ${r.missing.join(", ") || "none"}; unknown arguments: ${r.badArgs.map((b) => `${b.slug} ${b.arg}`).join(", ") || "none"})`}`);
+          if (!r.ok) bad++;
         }
         return bad ? 1 : 0;
       }

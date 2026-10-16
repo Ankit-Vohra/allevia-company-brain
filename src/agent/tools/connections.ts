@@ -21,6 +21,7 @@ import { RateLimitedError } from "../../connections/service.js";
 import { NeedsAttentionError, NotAllowedError, NotConfiguredError, NotConnectedError } from "../../connections/types.js";
 import { GoogleApiError } from "../../connectors/google/client.js";
 import { isoDate } from "../../util/time.js";
+import { isoIn, zonedToUtc } from "../../util/zones.js";
 import type { ToolContext } from "../tool.js";
 import { runPropose } from "./actions.js";
 import { InputError, clamp, defineTool, ro, refuseIfReadOnly, refuseIfStopped } from "./common.js";
@@ -79,29 +80,9 @@ async function evidence(ctx: ToolContext): Promise<string[]> {
   return [biz];
 }
 
-// ---------- time zones, without a library ----------
+// ---------- time zones, without a library (src/util/zones.ts) ----------
 
-function offsetMs(at: number, tz: string): number {
-  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(at)).map((x) => [x.type, x.value]));
-  return Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), Number(p.second)) - Math.floor(at / 1000) * 1000;
-}
-/** The instant a wall-clock time (YYYY-MM-DD, HH:MM) is in `tz`. */
-export function zonedToUtc(date: string, hhmm: string, tz: string): number {
-  const [y, mo, d] = date.split("-").map(Number);
-  const [h, m] = hhmm.split(":").map(Number);
-  const guess = Date.UTC(y!, mo! - 1, d!, h!, m!);
-  const first = guess - offsetMs(guess, tz);
-  return guess - offsetMs(first, tz);
-}
-const pad = (n: number) => String(n).padStart(2, "0");
-/** ISO date-time with the zone's offset ("2026-10-16T10:00:00+05:30"). */
-export function isoIn(at: number, tz: string): string {
-  const off = offsetMs(at, tz);
-  const local = new Date(at + off);
-  const sign = off < 0 ? "-" : "+";
-  const a = Math.abs(off) / 60_000;
-  return `${local.getUTCFullYear()}-${pad(local.getUTCMonth() + 1)}-${pad(local.getUTCDate())}T${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}:00${sign}${pad(Math.floor(a / 60))}:${pad(a % 60)}`;
-}
+export { isoIn, zonedToUtc };
 const labelIn = (at: number, tz: string): string => new Intl.DateTimeFormat("en-GB", { timeZone: tz, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(at));
 
 async function businessZone(ctx: ToolContext): Promise<string> {

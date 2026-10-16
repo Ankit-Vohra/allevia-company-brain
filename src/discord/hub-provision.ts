@@ -13,6 +13,8 @@
 // (isolation first); use the roles.
 import { graphName } from "../graph/client.js";
 import { oneLineWhy, renderApproval, verdictLine, type CardExtras, type CardOpts } from "./approval-card.js";
+import { publishButtons } from "./publish-notice.js";
+import type { PostRow } from "../publish/types.js";
 import type { ActionTarget } from "../actions/target.js";
 import { renderCitations, splitMessage } from "./format.js";
 import {
@@ -411,6 +413,9 @@ export interface TenantSource {
   // What goes on a card besides its text: the one-line reason, the pictures or clips, what the page says now, who a message
   // goes to (approval-extras.ts). Absent: the card is the text alone.
   extras?(a: ApprovalDto, standupWhy?: string): Promise<CardExtras>;
+  // The post an approved "post it" card made, so its card can offer Cancel (while it waits for its time) or Try again (when it did not
+  // go out). Absent: the card only shows the result.
+  post?(approvalId: string): Promise<Pick<PostRow, "id" | "status" | "retryable" | "maybePosted"> | null>;
 }
 
 // A backlog is posted over a few syncs rather than all at once (Discord limits how fast a bot may post).
@@ -493,7 +498,8 @@ async function syncAreaLocked(slug: string, d: Pick<ProvisionDeps, "hub" | "stor
     if (a) {
       const x = await extrasOf(a);
       const card = renderApproval(a, { ...x, files: undefined }, { buttons: false, standup: p.key.includes("|today|") });
-      await hub.editMessage(p.channelId, p.messageId, { content: `${card.first.content}\n${verdictLine(a)}`, buttons: [] }).catch(() => undefined);
+      const made = a.kind === "publish_post" && src.post ? await src.post(a.id).catch(() => null) : null;
+      await hub.editMessage(p.channelId, p.messageId, { content: `${card.first.content}\n${verdictLine(a)}`, buttons: made ? publishButtons(made) : [] }).catch(() => undefined);
     }
     await store.savePost({ ...p, closed: true });
     out.closed++;

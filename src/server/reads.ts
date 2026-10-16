@@ -530,7 +530,7 @@ export function toPayload(raw: unknown, fallbackTitle: string): ApprovalPayload 
   return { title, body, ...(targetKey ? { target: str(p[targetKey]) } : {}) };
 }
 
-const ACTION_KINDS = ["github_issue", "content_draft", "pause_ad", "discord_post", "calendar_event", "email_send", "connection_action"] as const;
+const ACTION_KINDS = ["github_issue", "content_draft", "pause_ad", "discord_post", "calendar_event", "email_send", "connection_action", "publish_post"] as const;
 const APPROVAL_FIELDS = `a.id AS id, a.name AS name, a.title AS title, a.kind AS kind, a.status AS status, a.payload AS payload,
   a.editedPayload AS editedPayload, a.createdAt AS createdAt, a.decidedAt AS decidedAt, a.result AS result, a.simulated AS simulated,
   a.recommendation AS recProp`;

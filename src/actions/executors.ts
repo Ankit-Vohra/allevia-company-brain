@@ -10,6 +10,8 @@
 //   pause_ad       simulated: the simulated Campaign's status becomes paused (TRACKED, so a Version keeps "active").
 //                  A real campaign is never touched: the action is skipped and says so.
 //   discord_post   posts to config.discord.channelId; skipped when there is no token.
+//   publish_post   posts to the owner's own Instagram, Facebook Page or LinkedIn through their Composio connection (src/publish):
+//                  only the exact content the owner approved, now or at the time chosen, a dry run until ALLEVIA_ACTIONS_LIVE=1.
 // With dryRun, github_issue and discord_post touch nothing outside the graph: the Action records status 'dry_run' and
 // what would have been created. The API and Discord decide cards with dryRun on unless ALLEVIA_ACTIONS_LIVE=1.
 // The outside world (gh, HTTP, the drafting model) is injected. Tests must inject gh and HTTP: the defaults refuse to
@@ -36,6 +38,7 @@ import { NeedsAttentionError, NotAllowedError, NotConfiguredError, NotConnectedE
 import type { GoogleSession } from "../connections/google/product.js";
 import { GoogleApiError } from "../connectors/google/client.js";
 import { recordSalesOutcome } from "../sales/after.js";
+import { publishPostAction, type PublishRuntime } from "../publish/executor.js";
 
 export type GhRunner = (args: string[]) => Promise<string>;
 export interface HttpResponse { ok: boolean; status: number; text(): Promise<string> }
@@ -49,7 +52,8 @@ export interface ExecutorDeps {
   gh?: GhRunner;
   http?: HttpFn;
   drafter?: Drafter;
-  connections?: ConnectionsPort; // this business's connections (calendar_event, email_send); absent: the server's own, built on first use
+  connections?: ConnectionsPort; // this business's connections (calendar_event, email_send, publish_post); absent: the server's own, built on first use
+  publish?: PublishRuntime;   // publish_post: how a picture is made reachable and the daily limit; absent: from the server's config
   dryRun?: boolean;           // github_issue and discord_post record what they would do, and do nothing
 }
 
@@ -399,6 +403,7 @@ export async function executeApproval(g: GraphHandle, input: ExecInput, deps: Ex
       case "calendar_event": out = await calendarEvent(input, deps); break;
       case "email_send": out = await emailSend(input, deps); break;
       case "connection_action": out = await connectionAction(input, deps); break;
+      case "publish_post": out = await publishPostAction(g, { approvalId: input.approvalId, payload: input.payload, ...(input.agent ? { agent: input.agent } : {}), now: input.now }, deps); break;
       default: out = { status: "failed", result: `No executor for ${String(input.kind)}.`, produced: [] };
     }
   } catch (e) {

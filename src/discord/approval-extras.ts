@@ -5,6 +5,9 @@ import type { GraphHandle } from "../graph/client.js";
 import type { AssetStore } from "../studio/store.js";
 import { loadAssetFile } from "../creative/files.js";
 import type { ApprovalDto } from "../server/types.js";
+import { PLATFORMS, accountWords } from "../publish/platforms.js";
+import { readBlock } from "../publish/types.js";
+import { whenWords } from "../publish/when.js";
 import { oneLineWhy, type CardExtras, type CardOption } from "./approval-card.js";
 import type { OutFile } from "./bot.js";
 
@@ -64,6 +67,13 @@ export async function approvalExtras(a: ApprovalDto, d: ExtrasDeps, standupWhy?:
   if (to) out.to = to;
   const subject = str(p.subject);
   if (subject) out.subject = subject;
+
+  const pub = a.kind === "publish_post" ? readBlock((p as { publish?: unknown }).publish) : null;
+  if (pub) {
+    const spec = PLATFORMS[pub.platform];
+    out.where = `${spec.name} (${accountWords(spec, pub.account)})`;
+    if (pub.at) out.when = whenWords(pub.at, pub.tz ?? "UTC");
+  }
 
   if (a.kind === "github_issue") {
     const before = await pageNow(d.graph, a).catch(() => undefined);

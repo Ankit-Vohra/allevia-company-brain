@@ -51,7 +51,7 @@ export const AGENTS: AgentDef[] = ([
     id: "chief-of-staff", name: "Meera", title: "Chief of Staff", department: "leadership", model: "sonnet",
     persona: "Reads the request, checks what we already know, sends work to the right people, then writes one clear answer with sources.",
     handles: ["every request", "morning brief", "final answers"],
-    toolkits: ["lookup", "explore", "memory", "answer", "proposals", "creative", "brand", "copywriting", "research", "calendar", "inbox", "connections"],
+    toolkits: ["lookup", "explore", "memory", "answer", "proposals", "creative", "brand", "copywriting", "posting", "research", "calendar", "inbox", "connections"],
     sprite: { skin: "#C68B59", hair: "#1B1B2F", shirt: "#1F2A6B", accent: "#C8A23D" },
   },
   {
@@ -79,7 +79,7 @@ export const AGENTS: AgentDef[] = ([
     id: "content-strategist", name: "Tara", title: "Content Strategist", department: "content", model: "sonnet",
     persona: "Writes briefs from who the audience is, what they need, and which hooks actually worked for this business.",
     handles: ["reel ideas", "post ideas", "content briefs", "content calendar"],
-    toolkits: ["content-stats", "playbooks", "lookup", "proposals", "copywriting", "brand", "research", "public-profiles", "competitors", "connections"], extras: ["neighbors"],
+    toolkits: ["content-stats", "playbooks", "lookup", "proposals", "copywriting", "posting", "brand", "research", "public-profiles", "competitors", "connections"], extras: ["neighbors"],
     sprite: { skin: "#F1C27D", hair: "#5A3825", shirt: "#A23B72", accent: "#FFFFFF" },
   },
   {

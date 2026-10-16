@@ -40,4 +40,9 @@ export const ACTION: Record<ActionKind, { label: string; icon: IconName; effect:
     effect: () => "Approving sends this email from your Gmail address. Nothing is sent before you approve.",
     done: "Email sent",
   },
+  publish_post: {
+    label: "Post to your account", icon: "send",
+    effect: (t) => `Approving posts this${t ? ` to ${t}` : ""}, or sets it for the time shown. Nothing is posted before you approve.`,
+    done: "Approved",
+  },
 };

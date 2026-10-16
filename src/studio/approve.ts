@@ -13,6 +13,7 @@ import { serial } from "../agent/tools/common.js";
 import { entityId } from "../util/ids.js";
 import { isoDate } from "../util/time.js";
 import { DecisionError } from "../server/approvals.js";
+import type { PublishBlock } from "../publish/types.js";
 import { TARA, type PhotoAssessment } from "./assess.js";
 import { DEV, type Caption } from "./caption.js";
 import type { StudioContext } from "./context.js";
@@ -45,7 +46,8 @@ export interface StudioCard {
   creative?: { kind: "poster" | "image" | "clip"; aspect: string; channel: string; by: string; allowUnchecked: boolean; format?: string };
 }
 
-export interface StudioPayload { title: string; body: string; target: string; studio: StudioCard }
+// `publish`: set when approving POSTS this (a publish_post card, src/publish): where it goes and when.
+export interface StudioPayload { title: string; body: string; target: string; studio: StudioCard; publish?: PublishBlock }
 
 export function recommendVariant(variants: VariantRecord[], fidelity: FidelityResult[]): VariantRecord | undefined {
   const ok = (v: VariantRecord) => fidelity.find((f) => f.assetId === v.id)?.badge === "unchanged";
@@ -139,6 +141,8 @@ export async function approveStudioDraft(g: GraphHandle, input: ApproveInput, de
   const current = { title: card.payload.title, body: card.payload.body, target: card.payload.target };
   const caption = input.caption?.trim();
   const edited = caption && caption !== current.body ? { ...current, body: caption.slice(0, 5000) } : undefined;
+  // a card that posts must know which option the owner picked when its executor runs (the OK is on that picture, not the recommended one)
+  if (card.payload.publish) await g.query("MATCH (a:Entity:Approval {id:$id}) WHERE a.status = 'pending' SET a.chosenVariant = $v", { id: input.approvalId, v: variantId });
   const d = await decide(input.approvalId, edited);
   const contentId = await finalizeStudioDraft(g, input.approvalId, card.payload, variantId, edited?.body ?? current.body, input.now);
   return { contentId, status: d.status, variantId };
@@ -151,8 +155,11 @@ export async function finalizeStudioDraft(g: GraphHandle, approvalId: string, p:
   const src = approvalId;
   const asOf = isoDate(now);
   const v = s.variants.find((x) => x.id === variantId);
-  const [made] = await g.roQuery<{ id: string; name: string }>(
-    "MATCH (:Entity:Approval {id:$id})-[:RESULTED_IN]->(:Action)-[:RESULTED_IN]->(c:Content) RETURN c.id AS id, c.name AS name LIMIT 1", { id: approvalId });
+  const [made] = await g.roQuery<{ id: string; name: string; posted: string | null }>(
+    "MATCH (:Entity:Approval {id:$id})-[:RESULTED_IN]->(:Action)-[:RESULTED_IN]->(c:Content) RETURN c.id AS id, c.name AS name, c.approvedHash AS posted LIMIT 1", { id: approvalId });
+  // A card that posts (src/publish) makes its own Content, whose status is the post's (scheduled, published, failed ...): only its
+  // pictures, guidance and costs are added here. A card that posts and made no post (a dry run, or one that was refused) saves no draft.
+  if (p.publish && !made) return "";
   const [orig] = await g.roQuery<{ sha: string | null }>("MATCH (a:Entity:Asset {id:$id}) RETURN a.sha256 AS sha", { id: s.originalId });
   const short = (orig?.sha ?? s.originalId.replace(/^asset:/, "")).slice(0, 12);
   const contentId = made?.id ?? entityId("Content", `post ${short}`);
@@ -162,7 +169,8 @@ export async function finalizeStudioDraft(g: GraphHandle, approvalId: string, p:
     aiEdited: v?.aiEdited ?? false, createdBy: cr ? "creative" : "studio", ...(cr ? { madeAs: cr.kind } : {}),
   };
   if (made) {
-    await upsertNode(g, { type: "Content", id: contentId, name: made.name, props: studioProps }, now);
+    const { status: _status, format: _format, channel: _channel, ...kept } = studioProps;
+    await upsertNode(g, { type: "Content", id: contentId, name: made.name, props: made.posted ? kept : studioProps }, now);
   } else {
     const actionId = entityId("Action", `studio draft ${short}`);
     await upsertNode(g, {

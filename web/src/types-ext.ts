@@ -134,6 +134,7 @@ export interface ApprovalPreview {
   draftOnly?: boolean;
   when?: { start: string; end?: string; timeZone?: string; guests: string[] };
   media?: { kind: "photo" | "poster" | "image" | "clip"; options: Array<{ id: string; label: string; note: string; pick: boolean; held: boolean }> };
+  post?: { where: string; when?: { at: string; timeZone?: string; words: string }; textOnly?: boolean };
 }
 
 export interface Approval {
@@ -194,7 +195,17 @@ export interface Brief { id: string; title: string; asOf?: string; date?: string
 export type LearnedEvent = Extract<AgentEvent, { type: "learned" }>;
 
 /** POST /api/:t/approvals/:id: the card as it stands, plus the rules the decision taught and the Action it ran. */
+/** A post as the page shows it (src/publish/dto.ts). Change both together. */
+export interface PostView {
+  id: string; approvalId: string; platform: string; where: string; title: string;
+  status: "scheduled" | "publishing" | "published" | "failed" | "cancelled" | "dry_run";
+  at: string; when: string; timeZone?: string; url?: string; failure?: string;
+  canCancel: boolean; canRetry: boolean; checkFirst: boolean; reconnect?: { id: string; name: string };
+}
+
 export interface DecisionResult extends Approval {
+  /** A "post it" card: the post it made, so Cancel or Try again can be offered at once. */
+  post?: PostView;
   learned?: LearnedEvent[];
   action?: { id: string; kind: ActionKind; status: "done" | "failed" | "skipped" | "dry_run"; result: string; url?: string; simulated?: boolean } | null;
 }

@@ -3,6 +3,9 @@
 // Home screen shows it inline so the owner can decide without opening anything; Discord's cards say the same (the web app
 // and Discord read the same payload, src/discord/approval-extras.ts). Pure: no graph, no network.
 import type { ActionKind } from "../../shared/contracts.js";
+import { PLATFORMS, accountWords } from "../publish/platforms.js";
+import { readBlock } from "../publish/types.js";
+import { whenWords } from "../publish/when.js";
 import type { ApprovalPreview } from "./types.js";
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -62,6 +65,18 @@ export function previewOf(raw: unknown, o: { kind: ActionKind; why?: string }): 
       const end = validDate(p.end);
       const tz = text(p.timeZone, 60);
       out.when = { start, ...(end ? { end } : {}), ...(tz ? { timeZone: tz } : {}), guests: list(p.attendees ?? p.guests, 5) };
+    }
+  }
+
+  if (o.kind === "publish_post") {
+    const pub = readBlock(p.publish);
+    if (pub) {
+      const spec = PLATFORMS[pub.platform];
+      out.post = {
+        where: `${spec.name} (${accountWords(spec, pub.account)})`,
+        ...(pub.at ? { when: { at: new Date(pub.at).toISOString(), ...(pub.tz ? { timeZone: pub.tz } : {}), words: whenWords(pub.at, pub.tz ?? "UTC") } } : {}),
+        ...(spec.media === "never" && studio ? { textOnly: true } : {}),
+      };
     }
   }
 

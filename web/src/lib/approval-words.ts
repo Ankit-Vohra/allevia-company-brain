@@ -15,6 +15,7 @@ const BASE: Record<Exclude<ActionKind, "github_issue">, KindWords> = {
   calendar_event: { label: "A meeting on your calendar", effect: () => "If you say OK, the meeting is added to your calendar, and the guest is invited if one is named.", done: "Meeting added." },
   connection_action: { label: "A change in one of your tools", effect: (t) => `If you say OK, this is done${t ? ` in ${t}` : " in your connected tool"}. Nothing happens before.`, done: "Done." },
   email_send: { label: "An email from your address", effect: () => "If you say OK, this email is sent from your address. Nothing is sent before.", done: "Email sent." },
+  publish_post: { label: "A post to your own account", effect: (t) => `If you say OK, this is posted${t ? ` to ${t}` : ""}, or set for the time shown. Nothing is posted before.`, done: "Approved. What happened next is under Recently decided." },
 };
 
 export function kindWords(a: Card): KindWords {

@@ -50,6 +50,9 @@ export const PLAIN_TOOLS: Record<string, string> = {
   connection_tools: "See what a connected tool can do",
   connection_read: "Look something up in a connected tool",
   connection_act: "Prepare a change in a connected tool for your OK",
+  publish_post: "Prepare a post to your Instagram, Facebook or LinkedIn for your OK",
+  publish_status: "See what is scheduled and what has posted",
+  publish_cancel: "Cancel a post that is scheduled",
   keyword_ideas: "Find searches you could show up for (paid, within your budget)",
 };
 

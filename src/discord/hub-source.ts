@@ -8,6 +8,7 @@ import type { ApprovalDto } from "../server/types.js";
 import { readStandup } from "../proactive/note.js";
 import type { AssetStore } from "../studio/store.js";
 import { isoDate } from "../util/time.js";
+import { postOfApproval } from "../publish/record.js";
 import { approvalExtras } from "./approval-extras.js";
 import type { TenantSource } from "./hub-provision.js";
 
@@ -22,6 +23,7 @@ export const tenantSource = (g: GraphHandle, slug?: string, o: { store?: AssetSt
     actionTarget: () => getActionTarget(g, slug, { founders: usesFoundersAccounts(slug) }),
     extras: (a: ApprovalDto, why?: string) => approvalExtras(a, { graph: g, tenant: slug, ...(o.store ? { store: o.store } : {}), ...(o.webBase ? { webBase: o.webBase } : {}) }, why),
   } : {}),
+  post: (approvalId) => postOfApproval(g, approvalId),
   standupCards: async () => {
     const s = await readStandup(g, isoDate(Date.now()));
     const out: Array<{ approval: ApprovalDto; why: string }> = [];

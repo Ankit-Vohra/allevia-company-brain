@@ -42,6 +42,8 @@ import { HttpError, readBody, type RouteCtx } from "./http.js";
 import { registerActionRoutes } from "./routes/actions.js";
 import { registerConnectorRoutes, type GoogleWiring } from "./routes/connectors.js";
 import { registerConnectionRoutes, type ConnectionsWiring } from "./routes/connections.js";
+import { registerPublishRoutes } from "./routes/publish.js";
+import { registerMediaRoute, type MediaWiring } from "../publish/media.js";
 import { registerGoalRoutes } from "./routes/goals.js";
 import { NUMBERS_UPLOAD_PATH, registerNumbersRoutes } from "./routes/numbers.js";
 import { registerProgramRoutes } from "./routes/program.js";
@@ -116,6 +118,7 @@ export interface ServerDeps {
   discordHub?: () => Promise<HubService | null>;
   loadPlans?: () => Promise<PlansModule | null>;    // null: pricing data is not installed (501)
   studio?: () => Promise<StudioWiring | null>;      // the Studio's assets, vision and engine; absent: 501
+  media?: () => Promise<MediaWiring | null>;       // the signed, expiring addresses Instagram and Facebook fetch a post's picture from (src/publish/media.ts); absent: none are served
   connections?: () => Promise<ConnectionsWiring | null>; // the connections framework (src/connections): the page, /c/<code>, the callback; absent: "not switched on yet"
   google?: () => Promise<GoogleWiring | null>;      // the Google connectors (Search Console): settings, token store, client; absent: "not switched on yet"
   checkupJobs?: CheckupJobs;                        // the background check-ups ("Check my website"); default: one queue per process
@@ -585,6 +588,8 @@ export function createApp(deps: ServerDeps): Hono {
   registerActionRoutes(app, routeCtx);
   registerConnectionRoutes(app, routeCtx, { ...(deps.connections ? { connections: deps.connections } : {}) }); // before the older Search Console routes: it finishes the sign-ins it started
   registerConnectorRoutes(app, routeCtx, { ...(deps.google ? { google: deps.google } : {}) });
+  registerPublishRoutes(app, routeCtx, { actions: () => deps.actions });
+  registerMediaRoute(app, async () => (await deps.media?.()) ?? null);
   registerWorkRoutes(app, routeCtx, deps.standup);
   registerGraphWorkRoutes(app, routeCtx);
   registerCheckupRoutes(app, routeCtx, { jobs: () => deps.checkupJobs ?? checkupJobs() });

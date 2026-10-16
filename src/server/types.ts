@@ -152,6 +152,8 @@ export interface ApprovalPreview {
   when?: { start: string; end?: string; timeZone?: string; guests: string[] };
   /** Posts, posters and clips: the options to show (asset ids, served by /api/:t/assets/:id) and which one approving uses. */
   media?: { kind: "photo" | "poster" | "image" | "clip"; options: Array<{ id: string; label: string; note: string; pick: boolean; held: boolean }> };
+  /** A post to the owner's own account (publish_post): where it goes ("Instagram (your account @cafe)"), and when, when it is not straight away. */
+  post?: { where: string; when?: { at: string; timeZone?: string; words: string }; textOnly?: boolean };
 }
 
 export interface ApprovalDto {
@@ -177,6 +179,8 @@ export interface ApprovalDto {
 export interface DecisionDto extends ApprovalDto {
   learned: Array<Extract<AgentEvent, { type: "learned" }>>;
   action: { id: string; kind: ActionKind; status: "done" | "failed" | "skipped" | "dry_run"; result: string; url?: string; simulated?: boolean } | null;
+  /** A "post it" card: the post it made (scheduled, posted or failed), so the page can offer Cancel or Try again at once. */
+  post?: import("../publish/dto.js").PostDto;
 }
 
 export interface BriefDto { id: string; title: string; asOf?: string; text: string }

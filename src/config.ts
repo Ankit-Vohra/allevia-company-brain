@@ -39,6 +39,8 @@ export interface AlleviaConfig {
     googleVia?: "own" | "composio"; // ALLEVIA_GOOGLE_VIA: Google products on our own Google app or through Composio (default: Composio when its key is set, else our own)
     gmailRead: boolean; // ALLEVIA_GMAIL_READ=1: the owner may allow reading the inbox (Google's restricted-scope review must be done first)
   };
+  // Posting to the owner's own channels after their OK (src/publish): at most `perDay` posts a business in 24 hours, all platforms together.
+  publish: { perDay: number };
   // Public-data lookups through Apify store actors (docs/apify-setup.md). No token: the lookups say they are not switched
   // on and nothing else changes. Budgets in US dollars: per business per calendar month, and all businesses per day.
   apify: { token?: string; monthlyUsd?: string; dailyUsd?: string };
@@ -126,6 +128,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
       ...(get("ALLEVIA_GOOGLE_VIA") === "own" || get("ALLEVIA_GOOGLE_VIA") === "composio" ? { googleVia: get("ALLEVIA_GOOGLE_VIA") as "own" | "composio" } : {}),
       gmailRead: (get("ALLEVIA_GMAIL_READ") ?? "") === "1",
     },
+    publish: { perDay: ((raw) => (Number.isInteger(raw) && raw > 0 && raw <= 200 ? raw : 10))(Number(get("ALLEVIA_PUBLISH_PER_DAY"))) },
     apify: { token: get("APIFY_TOKEN"), monthlyUsd: get("ALLEVIA_APIFY_MONTHLY_USD"), dailyUsd: get("ALLEVIA_APIFY_DAILY_USD") },
     dataforseo: {
       credentials: get("DATAFORSEO_LOGIN") && get("DATAFORSEO_PASSWORD") ? { login: get("DATAFORSEO_LOGIN")!, password: get("DATAFORSEO_PASSWORD")! } : null,

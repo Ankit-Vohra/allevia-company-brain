@@ -14,6 +14,7 @@
 // - Who asks: the server owner asks as person:founder; anyone else as a generic person:discord-member, so no Discord
 //   name or id is written into the graph.
 import type { AgentEvent, TurnChecks } from "../../shared/contracts.js";
+import { PUBLISH_BUTTON } from "./publish-notice.js";
 import { agentById } from "../../shared/roster.js";
 import type { AskInput, AskResult } from "../agent/ask.js";
 import { LANGUAGE_REPLY, parseLanguageSetting, setLanguagePreference } from "../agent/language.js";
@@ -130,6 +131,9 @@ export interface BotDeps {
   // (src/proactive/revise.ts). Returns the card as it now stands, or why it could not be changed. Absent: Change says to
   // edit it in the web app.
   revise?: (approvalId: string, instruction: string) => Promise<ApprovalDto | { why: string }>;
+  // The buttons on a post that waits for its time (Cancel) or did not go out (Try again): the same functions the web page calls
+  // (src/publish/executor.ts), for this business only. Absent: the buttons say to use the web app.
+  publish?: { cancel(postId: string): Promise<{ ok: boolean; message: string }>; retry(postId: string, o: { anyway: boolean }): Promise<{ ok: boolean; message: string }> };
   log?: (line: string) => void;
 }
 
@@ -145,6 +149,7 @@ const ALL_OK: TurnChecks = { citationsValid: true, invalidCitations: [], numbers
 const KIND_LABEL: Record<ApprovalDto["kind"], string> = {
   github_issue: "a fix for your website", content_draft: "a draft post", pause_ad: "pausing an ad", discord_post: "a message to your team chat",
   calendar_event: "a meeting on your calendar", email_send: "an email from your address", connection_action: "a change in one of your connected tools",
+  publish_post: "a post to your own account",
 };
 
 // A fix says whether it is for the website or the app (shared/fix-words.ts).
@@ -567,6 +572,15 @@ export class AlleviaBot {
     if (qr) return this.quickReply(b, qr[1]!);
     const rule = RULE_BUTTON.exec(b.customId);
     if (rule) return this.ruleButton(b, rule[1] as "apply" | "skip", rule[2]!);
+    const post = PUBLISH_BUTTON.exec(b.customId);
+    if (post) {
+      if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
+      if (!b.isOwner) return b.reply("Only the owner can change a post.", { ephemeral: true });
+      if (!this.d.publish) return b.reply("Change this one in the web app (Your posts).", { ephemeral: true });
+      await b.defer?.();
+      const r = post[1] === "cancel" ? await this.d.publish.cancel(post[2]!) : await this.d.publish.retry(post[2]!, { anyway: post[1] === "again" });
+      return b.update({ content: `${r.ok ? "✅" : "⚠️"} ${clip(r.message, 1800)}`, buttons: [] });
+    }
     const change = CHANGE_BUTTON.exec(b.customId);
     if (change) {
       if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });

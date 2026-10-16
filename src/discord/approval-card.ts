@@ -14,6 +14,7 @@ import { DISCORD_MAX, splitMessage } from "./format.js";
 export const KIND_LABEL: Record<ApprovalDto["kind"], string> = {
   github_issue: "a fix for your website", content_draft: "a draft post", pause_ad: "pausing an ad", discord_post: "a message to your team chat",
   calendar_event: "a meeting on your calendar", email_send: "an email from your address", connection_action: "a change in one of your connected tools",
+  publish_post: "a post to your own account",
 };
 
 /** What a card is, in the owner's words. A fix says whether it is for the website or the app (shared/fix-words.ts). */
@@ -26,6 +27,8 @@ export interface CardOption { label: string; note: string; pick: boolean; held?:
 export interface CardExtras {
   why?: string;                                // the one-line reason
   before?: { label: string; text: string };    // website fixes: what the page says now
+  where?: string;                              // posts: the account it goes to ("Instagram (your account @cafe)")
+  when?: string;                               // posts: when, when it is not straight away
   to?: string;                                 // emails and messages: who it goes to
   subject?: string;
   options?: CardOption[];                      // several versions to choose from (Studio, posters, clips)
@@ -65,6 +68,8 @@ export function renderApproval(a: ApprovalDto, x: CardExtras = {}, o: CardOpts =
     `**${clip(a.title, 200)}** · ${label}`,
     ...(o.standup ? [] : [`Proposed by ${who} · ${a.createdAt.slice(0, 10)}`]),
     ...(x.why ? [`Why: ${x.why}`] : []),
+    ...(x.where ? [`Posts to: ${clip(x.where, 200)}`] : []),
+    ...(x.when ? [`When: ${clip(x.when, 100)}`] : []),
     ...(x.to ? [`To: ${clip(x.to, 200)}`] : []),
     ...(x.subject ? [`Subject: ${clip(x.subject, 200)}`] : []),
     ...(x.before?.text.trim() ? [`${x.before.label}:`, quote(clip(x.before.text.trim(), 600)), "New:"] : []),

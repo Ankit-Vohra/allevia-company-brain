@@ -26,12 +26,13 @@ const BEFORE: Record<string, string[]> = {
 // What was added: new tools only, to the agents that should have them.
 const PUBLIC_DATA = ["google_listing", "instagram_public", "competitor_watch", "ad_library"];
 const CONN = ["connections_available", "connection_tools", "connection_read", "connection_act"];
+const POSTING = ["publish_post", "publish_status", "publish_cancel"];
 const ADDED: Record<string, string[]> = {
   "data-analyst": ["research", ...PUBLIC_DATA, "website_checkup", "ai_visibility", "keyword_ideas", "ga4_report", "gsc_report", "ads_report", ...CONN],
   "growth-marketer": ["research", ...PUBLIC_DATA, "website_checkup", "ai_visibility", "ga4_report", "gsc_report", "ads_report", ...CONN],
   "tech-lead": ["website_checkup", "ai_visibility", "keyword_ideas"],
-  "chief-of-staff": ["make_poster", "generate_image", "make_reel_script_and_clip", "get_brand_asset", "write_copy", "research", "calendar_free_slots", "calendar_book", "gmail_draft", "gmail_send", "gmail_inbox", ...CONN],
-  "content-strategist": ["write_copy", "get_brand_asset", "research", ...PUBLIC_DATA, ...CONN],
+  "chief-of-staff": ["make_poster", "generate_image", "make_reel_script_and_clip", "get_brand_asset", "write_copy", ...POSTING, "research", "calendar_free_slots", "calendar_book", "gmail_draft", "gmail_send", "gmail_inbox", ...CONN],
+  "content-strategist": ["write_copy", ...POSTING, "get_brand_asset", "research", ...PUBLIC_DATA, ...CONN],
   "coe-lead": ["ga4_report", "gsc_report", ...CONN],
   "ops-manager": ["calendar_free_slots", "calendar_book", "gmail_draft", "gmail_send", "gmail_inbox", ...CONN],
 };

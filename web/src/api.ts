@@ -24,7 +24,7 @@ export interface StudioLatest {
 import type { AgentMode, CapabilityState, DirectivePreview, DiscordHome, LearnedRuleDto, ProgramScorecard } from "@shared/contracts";
 import type {
   ConnectionRow, ConnectionsPage,
-  AgentDetail, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, GoalSetup, GraphData, LearningFeed, LiveTurn, NodeDetail,
+  PostView, AgentDetail, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, GoalSetup, GraphData, LearningFeed, LiveTurn, NodeDetail,
   CheckupStatus, ConnectorStatus, NumbersImportResult, NumbersPlan, NumbersPreview, OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Standup, Tenant, TurnEventsPage, Usage,
 } from "./types-ext";
 
@@ -172,6 +172,22 @@ export const api = {
   async discordNewLink(t: string): Promise<DiscordHome> {
     if (mode === "mock") return { enabled: false };
     return sendJson(`/api/${enc(t)}/discord/invite`, "POST", {});
+  },
+  // ---- posts to the owner's own accounts (src/server/routes/publish.ts) ----
+
+  /** GET /api/:t/publish: what is scheduled and what went out lately. */
+  async publishPosts(t: string): Promise<PostView[]> {
+    if (mode === "mock") return [];
+    return (await getJson<{ posts: PostView[] }>(`/api/${enc(t)}/publish`)).posts;
+  },
+  /** Try again on a post that did not go out (`anyway`: the owner has looked, and a post that may have gone out is not there). */
+  async publishRetry(t: string, id: string, anyway = false): Promise<{ ok: boolean; message: string; post?: PostView }> {
+    if (mode === "mock") throw new ApiError("Posting needs the live server.", 501);
+    return sendJson(`/api/${enc(t)}/publish/${enc(id)}/retry`, "POST", anyway ? { anyway: true } : {});
+  },
+  async publishCancel(t: string, id: string): Promise<{ ok: boolean; message: string; post?: PostView }> {
+    if (mode === "mock") throw new ApiError("Posting needs the live server.", 501);
+    return sendJson(`/api/${enc(t)}/publish/${enc(id)}/cancel`, "POST", {});
   },
   async recommendations(t: string): Promise<Recommendation[]> {
     return mode === "mock" ? (await mock()).recommendations(t) : getJson(`/api/${enc(t)}/recommendations`);
