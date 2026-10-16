@@ -32,7 +32,7 @@ const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isM
 const Q_OFFICE = "What should we post this week?";
 const Q_ASK = "Why did we pause daily stories, and what should we post instead?";
 
-const browser = await chromium.launch();
+const browser = await chromium.launch(process.env.FOOTAGE_CHANNEL ? { channel: process.env.FOOTAGE_CHANNEL } : {});
 
 /** Record `ms` of a page after `before` ran, into <name>.mp4 at 30 fps. */
 async function record(name, path, device, { ms, before, during, settle = 600 }) {
@@ -115,7 +115,7 @@ const SCENES = {
       await page.waitForTimeout(1200);
       await page.getByText("See the path").first().click().catch(() => {});
     };
-    await record("ask", url, DESKTOP, { ms: 34000, settle: 200, during });
+    await record("ask", url, DESKTOP, { ms: 40000, settle: 200, during });
   },
   async approve() {
     await still("approve-before", "/approvals?mock=1&theme=dark", DESKTOP);
