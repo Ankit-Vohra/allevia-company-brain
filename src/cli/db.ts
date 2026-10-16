@@ -103,6 +103,12 @@ export const commands: Command[] = [
           `constraints ${Object.entries(c.status).map(([k, v]) => `${k} ${v}`).join(", ") || "none"} (${Date.now() - t0} ms)`);
         for (const p of c.problems) { console.log(`  needs a person: ${p}`); failed++; }
       }
+      // the registry's own relationships (Tenant -HAS_AREA-> Area, -ISSUED-> Invite, -HAS_TOKEN-> AuthToken, Channel -POSTED-> Post): only those missing are added
+      if (!want.length) {
+        const { linkRegistry } = await import("../graph/tenants.js");
+        const l = await linkRegistry();
+        console.log(`registry: linked ${l.areas} areas, ${l.channels} channels, ${l.invites} invites, ${l.posts} posts, ${l.tokens} tokens`);
+      }
       return failed ? 1 : 0;
     },
   },

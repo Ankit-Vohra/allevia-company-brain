@@ -11,7 +11,8 @@
 // moment it exists, so a run that stops half way is finished by the next run and never duplicates anything.
 // Permissions are managed here: a hand-added overwrite on a customer channel is removed by the next run, on purpose
 // (isolation first); use the roles.
-import { graphName } from "../graph/client.js";
+import { graphName, type GraphHandle } from "../graph/client.js";
+import { ensureDiscordChannel, type PostedCard } from "./hub-graph.js";
 import { oneLineWhy, renderApproval, verdictLine, type CardExtras, type CardOpts } from "./approval-card.js";
 import { publishButtons } from "./publish-notice.js";
 import type { PostRow } from "../publish/types.js";
@@ -31,6 +32,8 @@ export interface ProvisionDeps {
   staffRoleId: string;
   /** The business as the registry knows it (null: no such business). */
   tenant: (slug: string) => Promise<{ name: string } | null>;
+  /** The business's own graph. With it, a ready area is written into that graph as channel:discord (PART_OF the business); absent: not. */
+  graph?: (slug: string) => Promise<GraphHandle>;
   now?: () => number;
   log?: (line: string) => void;
   redact?: (s: string) => string;
@@ -262,7 +265,7 @@ export async function provisionCustomer(slug: string, d: ProvisionDeps, opts: Pr
       mine.forEach((c, i) => { c.position = i; });
       did("put the channels back in order");
     }
-    await store.setChannels(slug, hub.guildId, ids);
+    await store.setChannels(slug, hub.guildId, ids, now());
     const all = ids as Record<ChannelKind, string>;
 
     // 4. the welcome message
@@ -279,6 +282,14 @@ export async function provisionCustomer(slug: string, d: ProvisionDeps, opts: Pr
     const invite = await ensureInvite(d, slug, all["your-team"], !!opts.newInvite, did);
 
     const done = await store.saveArea(slug, base, { status: "ready", attempts: 0, lastError: null, nextAttemptAt: null }, now());
+    // the business's own records learn it has a Discord space (never a reason to fail the set-up)
+    if (d.graph) {
+      try {
+        if (await ensureDiscordChannel(await d.graph(slug), slug, now())) did("noted the Discord space in the business's own records");
+      } catch (e) {
+        log(`[hub] ${slug}: could not note the Discord space in the business's own records (${redact(e instanceof Error ? e.message : String(e)).slice(0, 160)})`);
+      }
+    }
     return { slug, area: done, actions, ...(invite ? { inviteUrl: invite.url } : {}) };
   } catch (e) {
     if (e instanceof ProvisionBusy) throw e;
@@ -416,6 +427,9 @@ export interface TenantSource {
   // The post an approved "post it" card made, so its card can offer Cancel (while it waits for its time) or Try again (when it did not
   // go out). Absent: the card only shows the result.
   post?(approvalId: string): Promise<Pick<PostRow, "id" | "status" | "retryable" | "maybePosted"> | null>;
+  // A card went out as a Discord message: the business's own graph records it (Approval -PUBLISHED_ON-> channel:discord, with the message
+  // and when). Absent: nothing is recorded there. Never a reason to fail a post.
+  posted?(approvalId: string, p: PostedCard): Promise<void>;
 }
 
 // A backlog is posted over a few syncs rather than all at once (Discord limits how fast a bot may post).
@@ -487,6 +501,7 @@ async function syncAreaLocked(slug: string, d: Pick<ProvisionDeps, "hub" | "stor
     const opts = await cardOpts((target ??= src.actionTarget?.().catch(() => undefined) ?? Promise.resolve(undefined)));
     const id = await post(approvals, a, await extrasOf(a), opts);
     await store.savePost({ key, slug, kind: "approval", refId: a.id, channelId: approvals, messageId: id, closed: false, postedAt: now });
+    await src.posted?.(a.id, { channelId: approvals, messageId: id, postedAt: now, surface: "approvals" }).catch((e) => d.log?.(`[hub] ${slug}: could not record the card ${a.id} in the business's own records: ${e instanceof Error ? e.message : String(e)}`));
     out.cards++;
   }
   if (fresh.length > MAX_CARDS_PER_SYNC) out.more = fresh.length - MAX_CARDS_PER_SYNC;
@@ -526,6 +541,7 @@ async function syncAreaLocked(slug: string, d: Pick<ProvisionDeps, "hub" | "stor
     const id = await post(noteChannel, a, { ...x, ...(oneLineWhy(why) ? { why: oneLineWhy(why)! } : {}) }, { standup: true });
     // kept as an approval post, so its buttons come off when it is decided anywhere
     await store.savePost({ key, slug, kind: "approval", refId: a.id, channelId: noteChannel, messageId: id, closed: false, postedAt: now });
+    await src.posted?.(a.id, { channelId: noteChannel, messageId: id, postedAt: now, surface: "todays-note" }).catch((e) => d.log?.(`[hub] ${slug}: could not record the card ${a.id} in the business's own records: ${e instanceof Error ? e.message : String(e)}`));
     out.today = (out.today ?? 0) + 1;
   }
   return out;

@@ -6,10 +6,22 @@
 //   (:DiscordChannel {channelId, guildId, slug, kind})      one per customer channel: THE channel id -> business index
 //   (:DiscordInvite {code, slug, guildId, channelId, uses, status, expiresAt, ...})
 //   (:DiscordPost {key, slug, kind, refId, channelId, messageId, closed})   what was already posted, so a retry is quiet
+//
+// The registry is a graph, so the mapping is relationships, not just a pile of nodes (graph audit G3). Raw Cypher: the product's
+// ALLOWED_PATTERNS belong to the business graphs and do not apply here.
+//   (:Tenant)-[:HAS_AREA]->(:DiscordArea)                         the business's space on the hub
+//   (:DiscordArea)-[:HAS_CHANNEL {kind, since, until}]->(:DiscordChannel)   its channels; closed (until) when a channel is replaced
+//   (:Tenant)-[:ISSUED {since}]->(:DiscordInvite)                 the join links made for it
+//   (:DiscordChannel)-[:POSTED {at}]->(:DiscordPost)              what was posted in which channel (a post lives in a channel; the
+//                                                                  business is two hops up: Tenant -HAS_AREA-> Area -HAS_CHANNEL-> Channel)
+//   (:Tenant)-[:HAS_TOKEN {since}]->(:AuthToken)                  the owner links issued for it (src/auth/tokens.ts)
+// Each is MERGEd when its node is written; linkRegistry() (src/graph/tenants.ts) adds any that are missing on older rows, and is
+// safe to run again. A channel that stops being the business's is never deleted: its mapping is closed (`until`) and channel()
+// no longer answers for it, so who had which channel when stays on record.
 // Every query uses parameters (no Discord text is ever put into a query) and none sorts in the database.
 import { openGraphByName, type GraphHandle } from "../graph/client.js";
 import { ensureIndexes } from "../graph/indexes.js";
-import { META_GRAPH, type TenantOpts } from "../graph/tenants.js";
+import { META_GRAPH, linkRegistry, type RegistryLinks, type TenantOpts } from "../graph/tenants.js";
 import {
   CHANNEL_KINDS, type AreaPatch, type AreaRecord, type ChannelKind, type ChannelRef, type HubRecord, type HubStore,
   type InviteRecord, type InviteStatus, type PostRecord,
@@ -68,11 +80,17 @@ export class GraphHubStore implements HubStore {
         { label: "DiscordInvite", prop: "code", type: "RANGE" },
         { label: "DiscordPost", prop: "key", type: "RANGE" },
         { label: "DiscordHub", prop: "guildId", type: "RANGE" },
+        { label: "Tenant", prop: "slug", type: "RANGE" },
       ]);
       return g;
     })();
     this.g.catch(() => { this.g = undefined; });
     return this.g;
+  }
+
+  /** Adds the registry's missing relationships to rows written before they existed (idempotent; the hub calls it when it starts). */
+  async link(): Promise<RegistryLinks> {
+    return linkRegistry(this.opts);
   }
 
   async getHub(guildId: string): Promise<HubRecord | null> {
@@ -111,22 +129,31 @@ export class GraphHubStore implements HubStore {
     }
     for (const [kind, id] of Object.entries(patch.channels ?? {})) props[CHANNEL_PROP[kind as ChannelKind]] = id;
     await g.query(
-      "MERGE (a:DiscordArea {slug:$slug}) ON CREATE SET a.createdAt = $now, a.status = 'pending', a.attempts = 0 SET a += $props, a.updatedAt = $now",
+      `MERGE (a:DiscordArea {slug:$slug}) ON CREATE SET a.createdAt = $now, a.status = 'pending', a.attempts = 0 SET a += $props, a.updatedAt = $now
+       WITH a MATCH (t:Tenant {slug:$slug}) MERGE (t)-[r:HAS_AREA]->(a) ON CREATE SET r.since = $now`,
       { slug, now, props });
     return (await this.getArea(slug))!;
   }
 
-  async setChannels(slug: string, guildId: string, channels: Partial<Record<ChannelKind, string>>): Promise<void> {
+  async setChannels(slug: string, guildId: string, channels: Partial<Record<ChannelKind, string>>, at: number = Date.now()): Promise<void> {
     const g = await this.graph();
     const rows = Object.entries(channels).map(([kind, channelId]) => ({ kind, channelId: channelId! }));
-    // a channel id that already belongs to another business is never taken over
+    const ids = rows.map((r) => r.channelId);
+    // a channel id that already belongs to another business is never taken over (a mapping that was closed no longer counts)
     const taken = await g.roQuery<{ slug: string }>(
-      "UNWIND $ids AS id MATCH (c:DiscordChannel {channelId:id}) WHERE c.slug <> $slug RETURN DISTINCT c.slug AS slug", { ids: rows.map((r) => r.channelId), slug });
+      "UNWIND $ids AS id MATCH (c:DiscordChannel {channelId:id}) WHERE c.slug <> $slug AND c.until IS NULL RETURN DISTINCT c.slug AS slug", { ids, slug });
     if (taken.length) throw new Error(`a Discord channel is already mapped to another business (${taken[0]!.slug}); refusing to map it to ${slug}`);
-    await g.query("MATCH (c:DiscordChannel {slug:$slug}) WHERE NOT c.channelId IN $ids DETACH DELETE c", { slug, ids: rows.map((r) => r.channelId) });
+    // a channel that is no longer one of this business's is closed, not deleted: channel() stops answering for it and the history stays
+    await g.query("MATCH (c:DiscordChannel {slug:$slug}) WHERE c.until IS NULL AND NOT c.channelId IN $ids SET c.until = $at", { slug, ids, at });
+    await g.query("MATCH (:DiscordArea {slug:$slug})-[r:HAS_CHANNEL]->(c:DiscordChannel) WHERE r.until IS NULL AND NOT c.channelId IN $ids SET r.until = $at", { slug, ids, at });
     if (rows.length) {
-      await g.query("UNWIND $rows AS r MERGE (c:DiscordChannel {channelId: r.channelId}) SET c.guildId = $guildId, c.slug = $slug, c.kind = r.kind",
-        { rows, guildId, slug });
+      await g.query(
+        "UNWIND $rows AS r MERGE (c:DiscordChannel {channelId: r.channelId}) ON CREATE SET c.mappedAt = $at SET c.guildId = $guildId, c.slug = $slug, c.kind = r.kind, c.until = null",
+        { rows, guildId, slug, at });
+      await g.query(
+        `UNWIND $rows AS r MATCH (c:DiscordChannel {channelId: r.channelId}) MATCH (a:DiscordArea {slug:$slug})
+         MERGE (a)-[e:HAS_CHANNEL]->(c) ON CREATE SET e.since = $at SET e.kind = r.kind, e.until = null`,
+        { rows, slug, at });
     }
   }
 
@@ -134,7 +161,7 @@ export class GraphHubStore implements HubStore {
     if (!/^\d{1,25}$/.test(channelId)) return null; // a Discord snowflake, nothing else
     const g = await this.graph();
     const [r] = await g.roQuery<{ slug: string; kind: string }>(
-      "MATCH (c:DiscordChannel {channelId:$channelId, guildId:$guildId}) RETURN c.slug AS slug, c.kind AS kind", { channelId, guildId });
+      "MATCH (c:DiscordChannel {channelId:$channelId, guildId:$guildId}) WHERE c.until IS NULL RETURN c.slug AS slug, c.kind AS kind", { channelId, guildId });
     if (!r || !(CHANNEL_KINDS as readonly string[]).includes(r.kind)) return null;
     return { slug: r.slug, kind: r.kind as ChannelKind, guildId, channelId };
   }
@@ -173,7 +200,10 @@ export class GraphHubStore implements HubStore {
   async saveInvite(rec: InviteRecord): Promise<void> {
     const g = await this.graph();
     const { usedAt, ...rest } = rec;
-    await g.query("MERGE (i:DiscordInvite {code:$code}) SET i += $props, i.usedAt = $usedAt", { code: rec.code, props: rest, usedAt: usedAt ?? null });
+    await g.query(
+      `MERGE (i:DiscordInvite {code:$code}) SET i += $props, i.usedAt = $usedAt
+       WITH i MATCH (t:Tenant {slug:$slug}) MERGE (t)-[r:ISSUED]->(i) ON CREATE SET r.since = $createdAt`,
+      { code: rec.code, props: rest, usedAt: usedAt ?? null, slug: rec.slug, createdAt: rec.createdAt });
   }
 
   async invites(slug: string): Promise<InviteRecord[]> {
@@ -196,7 +226,10 @@ export class GraphHubStore implements HubStore {
 
   async savePost(rec: PostRecord): Promise<void> {
     const g = await this.graph();
-    await g.query("MERGE (p:DiscordPost {key:$key}) SET p += $props", { key: rec.key, props: rec });
+    await g.query(
+      `MERGE (p:DiscordPost {key:$key}) SET p += $props
+       WITH p MATCH (c:DiscordChannel {channelId:$channelId}) MERGE (c)-[r:POSTED]->(p) ON CREATE SET r.at = $postedAt`,
+      { key: rec.key, props: rec, channelId: rec.channelId, postedAt: rec.postedAt });
   }
 
   async openApprovalPosts(slug: string): Promise<PostRecord[]> {
