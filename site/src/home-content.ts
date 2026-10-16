@@ -60,9 +60,9 @@ export const COPY = {
     h2a: "They make things.",
     h2b: "Each one waits for you.",
     items: [
-      { id: "ad", what: "An ad from the studio's own photos", who: "Tara" },
+      { id: "ad", what: "An ad from the studio's photos", who: "Tara" },
       { id: "poster", what: "A launch poster in Hindi", who: "Tara" },
-      { id: "reply", what: "A reply to a new enquiry, with three times", who: "Neel" },
+      { id: "reply", what: "A reply with three times", who: "Neel" },
       { id: "fix", what: "A fix for the website", who: "Zoya" },
     ],
   },
