@@ -11,7 +11,7 @@ import type { GraphHandle } from "../graph/client.js";
 import { loadStudioContext, type StudioContext } from "../studio/context.js";
 import type { AssetStore } from "../studio/store.js";
 import { HEX6, paletteFrom, type Palette } from "./compose/palette.js";
-import { loadFont, type LoadedFont } from "./compose/type.js";
+import { coversText, loadFont, type LoadedFont } from "./compose/type.js";
 import type { BrandForCompose, FontPair } from "./compose/compose.js";
 
 const VENDOR_FONTS = new URL("../../vendor/fonts/", import.meta.url);
@@ -44,7 +44,33 @@ export interface ComposeKit {
   colours: string[];               // every brand colour on record (roles first, then palette and guide swatches), for the design system
 }
 
-export interface KitDeps { store: AssetStore; tenant: string; businessId: string; fetchMissingFonts?: boolean; fetch?: BrandFetch; now: number }
+export interface KitDeps {
+  store: AssetStore; tenant: string; businessId: string; fetchMissingFonts?: boolean; fetch?: BrandFetch; now: number;
+  // The words the poster will print: when the brand's heading or body font has no letters for them (Hindi in a Latin font),
+  // a font file in the business's own brand library that has every letter is used instead, and the note says so.
+  cover?: string[];
+}
+
+/** Does this pair of fonts have every letter of these words (spaces aside)? */
+export function pairCovers(p: FontPair, texts: string[]): boolean {
+  const f = p.bold ?? p.regular;
+  return !!f && texts.filter((t) => t.trim()).every((t) => coversText(f, t) && (!p.regular || coversText(p.regular, t)));
+}
+
+/** A font family from the business's own brand library that has every letter of these words, regular and bold. */
+export async function coveringPair(g: GraphHandle, deps: Pick<KitDeps, "store" | "tenant">, texts: string[]): Promise<{ family: string; pair: FontPair; ids: string[] } | null> {
+  const rows = (await listBrandAssets(g, { kinds: ["font", "font-file"], withFile: true })).filter((r) => r.family);
+  const families = [...new Set(rows.map((r) => r.family!))].sort();
+  for (const family of families) {
+    const mine = rows.filter((r) => r.family === family);
+    const read = (r: BrandAssetRow | undefined): LoadedFont | null => { const b = r ? readAssetFile(deps.store, deps.tenant, r) : null; return b ? loadFont(b) : null; };
+    const regularRow = mine.find((r) => r.weight === 400) ?? mine.find((r) => !r.weight) ?? mine[0];
+    const boldRow = mine.find((r) => r.weight === 700) ?? mine.find((r) => (r.weight ?? 0) >= 600) ?? regularRow;
+    const pair: FontPair = { regular: read(regularRow), bold: read(boldRow) };
+    if (pairCovers(pair, texts)) return { family, pair, ids: [regularRow, boldRow].filter((r): r is BrandAssetRow => !!r).map((r) => r.id) };
+  }
+  return null;
+}
 
 const hostOf = (u: string): string | null => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return null; } };
 
@@ -98,8 +124,18 @@ export async function loadComposeKit(g: GraphHandle, businessId: string, deps: K
   const notes: string[] = [];
   const fontIds: string[] = [];
   const roles = await fontRoles(g);
-  const heading = await pairFor(g, deps, roles.heading, notes, fontIds, "heading");
-  const body = await pairFor(g, deps, roles.body, notes, fontIds, "body");
+  let heading = await pairFor(g, deps, roles.heading, notes, fontIds, "heading");
+  let body = await pairFor(g, deps, roles.body, notes, fontIds, "body");
+  const cover = (deps.cover ?? []).filter((t) => t.trim());
+  if (cover.length && (!pairCovers(heading, cover) || !pairCovers(body, cover))) {
+    const alt = await coveringPair(g, deps, cover);
+    if (alt) {
+      if (!pairCovers(heading, cover)) heading = alt.pair;
+      if (!pairCovers(body, cover)) body = alt.pair;
+      fontIds.push(...alt.ids);
+      notes.push(`Your brand font has no letters for some of these words, so they are set in ${alt.family} from your brand library.`);
+    }
+  }
 
   const logoRow = await activeLogo(g);
   let logoBytes = logoRow ? readAssetFile(deps.store, deps.tenant, logoRow) : null;

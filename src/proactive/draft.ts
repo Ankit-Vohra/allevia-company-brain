@@ -44,6 +44,11 @@ export interface PosterDraft { approvalId: string; recommendationId: string; hfC
 
 export interface Drafters {
   text(job: TextJob): Promise<TextDraft>;
+  /**
+   * Can the poster set these words in the brand's fonts (or a font in its brand library)? Asked before anything is paid
+   * for. Absent: only Latin letters are assumed to be covered.
+   */
+  covers?(job: { tenant: string; businessId: string; texts: string[]; now: number }): Promise<boolean>;
   /** Absent: no creating tools on this server; a poster pick is drafted as a post instead. */
   poster?(job: PosterJob): Promise<PosterDraft>;
 }
@@ -113,21 +118,34 @@ export async function draftPick(g: GraphHandle, p: Picked, ctx: DraftCtx): Promi
   }
 }
 
-// Words the poster fonts can set: the brand fonts the creating tools load are Latin, so the headline is asked for in
-// English (the post's own words stay in the business's language). A headline that still is not Latin skips the poster
-// before anything is paid for.
+// Words the poster fonts can set. The headline is first written in the post's own language; its letters are checked
+// against the brand's fonts and the font files in its brand library (Hindi needs a Devanagari font such as Mukta) before
+// anything is paid for. Not covered: it is written again in English, checked again, and the poster is skipped if that fails
+// too. Without a coverage check only Latin letters are assumed to be covered.
 const LATIN = /^[\p{Script=Latin}\p{N}\p{P}\p{Zs}\p{S}]+$/u;
 
 async function draftPoster(g: GraphHandle, p: Picked, ctx: DraftCtx, skill: TextJob["skill"]): Promise<{ item: DraftedItem | null; paidTried: boolean; why?: string }> {
   const caption = await ctx.drafters.text({ agent: p.agent, kind: "post", brief: p.purpose, facts: facts(p), question: question(p), ...(skill ? { skill } : {}) });
-  const headline = await ctx.drafters.text({ agent: p.agent, kind: "headline", brief: `${p.purpose} Write the poster's headline only, in English with Latin letters (the poster's fonts have only Latin letters).`, facts: facts(p), question: question(p) });
-  if (!caption.ok || !headline.ok || !headline.text.trim()) return { item: null, paidTried: false, why: "the words could not be written" };
-  if (!LATIN.test(headline.text.trim())) return { item: null, paidTried: false, why: "the headline is not in letters the poster fonts have" };
+  if (!caption.ok) return { item: null, paidTried: false, why: "the words could not be written" };
+  const eyebrow = p.occasion ? p.occasion.name.replace(/^the /, "") : undefined;
+  const settable = async (h: string): Promise<boolean> => {
+    const texts = [h, ...(eyebrow ? [eyebrow] : []), ...(ctx.domain ? [ctx.domain] : [])];
+    if (ctx.drafters.covers && ctx.businessId) return ctx.drafters.covers({ tenant: ctx.tenant, businessId: ctx.businessId, texts, now: ctx.now }).catch(() => false);
+    return texts.every((t) => LATIN.test(t.trim()));
+  };
+  const write = (english: boolean) => ctx.drafters.text({
+    agent: p.agent, kind: "headline", facts: facts(p), question: question(p),
+    brief: `${p.purpose} Write the poster's headline only, ${english ? "in English with Latin letters" : "in the same language as the post"}.`,
+  });
+  let headline = await write(!ctx.drafters.covers);
+  if (headline.ok && headline.text.trim() && !(await settable(headline.text.trim()))) headline = await write(true);
+  if (!headline.ok || !headline.text.trim()) return { item: null, paidTried: false, why: "the words could not be written" };
+  if (!(await settable(headline.text.trim()))) return { item: null, paidTried: false, why: "the headline is not in letters the poster fonts have" };
   const paid = ctx.paidLeft > 0;
   try {
     const made = await ctx.drafters.poster!({
       tenant: ctx.tenant, businessId: ctx.businessId!, agentId: p.agent, turnId: ctx.turnId, now: ctx.now, question: question(p),
-      headline: clip(headline.text.replace(/[.\s]+$/, ""), 60), ...(p.occasion ? { eyebrow: p.occasion.name.replace(/^the /, "") } : {}),
+      headline: clip(headline.text.replace(/[.\s।]+$/u, ""), 60), ...(eyebrow ? { eyebrow } : {}),
       ...(ctx.domain ? { cta: ctx.domain } : {}), caption: [caption.text, caption.hashtags.join(" ")].filter(Boolean).join("\n\n"), paid,
     });
     await tagCard(g, p, made, ctx.now);

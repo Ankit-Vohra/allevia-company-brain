@@ -12,6 +12,7 @@ import { loadConfig } from "../config.js";
 import { groundClaims } from "../creative/compose/check.js";
 import { businessFacts } from "../creative/kit.js";
 import { makePoster } from "../creative/poster.js";
+import { loadComposeKit, pairCovers } from "../creative/kit.js";
 import { productionCreativeDeps } from "../creative/wiring.js";
 import type { GraphHandle } from "../graph/client.js";
 import { AgentSdkRunner, type LlmRunner } from "../ingest/llm.js";
@@ -104,9 +105,17 @@ export async function skillsFor(g: GraphHandle): Promise<StandupOpts["skills"]> 
   };
 }
 
+/** Can the poster set these words: the brand's fonts, or a font file in the brand library that has every letter. Free. */
+export function standupFontCheck(g: GraphHandle, creative: Pick<CreativeDeps, "store">): NonNullable<Drafters["covers"]> {
+  return async (job) => {
+    const kit = await loadComposeKit(g, job.businessId, { store: creative.store, tenant: job.tenant, businessId: job.businessId, fetchMissingFonts: false, now: job.now, cover: job.texts });
+    return pairCovers(kit.brand.heading, job.texts);
+  };
+}
+
 export function productionDrafters(g: GraphHandle, tenant: string, businessId: string): Drafters {
   const creative = productionCreativeDeps(loadConfig().dataDir, { tenant });
-  return { text: standupTextDrafter(g, businessId, creative.vision), poster: standupPosterDrafter(g, creative) };
+  return { text: standupTextDrafter(g, businessId, creative.vision), poster: standupPosterDrafter(g, creative), covers: standupFontCheck(g, creative) };
 }
 
 /** The daily job: the stand-up, then the goals' readings, then Today's note (which leads with the stand-up). */
