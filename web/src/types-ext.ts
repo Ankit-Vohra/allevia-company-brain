@@ -338,7 +338,7 @@ export interface NumbersImportResult {
 /** One thing the team drafted at the morning stand-up (src/proactive), waiting for the owner's OK. */
 export interface StandupItem {
   key: string;
-  kind: "post" | "poster" | "reply" | "website_fix" | "follow_up" | "offer";
+  kind: "post" | "poster" | "reply" | "website_fix" | "follow_up" | "offer" | "sales_reply" | "sales_nudge" | "sales_reminder";
   agent: AgentId;
   title: string;
   why: string;

@@ -10,10 +10,13 @@
 //   website      the website check-up: failing checks, how many pages, and which started failing since
 //   dates        festivals, shopping days and seasons in the next weeks (calendar.ts)
 //   findings     open ideas from the existing rule checks (src/insights/detectors.ts), with their card if any
+//   sales        enquiries nobody answered, deals with nothing happening for two weeks, calls tomorrow (src/sales)
 import type { GraphHandle } from "../graph/client.js";
 import { changesSince, goalPulse, type Change, type GoalPulse } from "../insights/brief.js";
 import { DAY_MS } from "../insights/text.js";
 import { localDate, regionOf, regionOfDomain } from "../onboard/region.js";
+import { getLead, meetingsBetween, stalledDeals, unanswered } from "../sales/graph.js";
+import { tomorrowWindow } from "../sales/times.js";
 import { upcomingDates, type Upcoming } from "./calendar.js";
 
 type Read = Pick<GraphHandle, "roQuery">;
@@ -32,6 +35,13 @@ export interface FindingSignal {
 }
 export interface DecisionSignal { id: string; title: string; kind: string; status: string; standupKind: string | null }
 
+/** What Sales has open today. Every field comes from the records: who, how long, how much. */
+export interface SalesSignals {
+  waiting: Array<{ id: string; name: string; email: string | null; subject: string | null; asked: string; source: string | null; waitingHours: number }>;
+  stalled: Array<{ id: string; name: string; leadId: string | null; leadName: string | null; email: string | null; idleDays: number; value: number | null; currency: string | null; nextStep: string | null }>;
+  tomorrow: Array<{ id: string; title: string; start: number; leadId: string | null; guestEmail: string | null; leadName: string | null }>;
+}
+
 export interface Signals {
   tenant: string;
   business: BusinessInfo;
@@ -49,6 +59,7 @@ export interface Signals {
   website: { checked: boolean; fails: WebsiteFail[] };
   dates: Upcoming[];
   findings: FindingSignal[];
+  sales?: SalesSignals;      // absent: this business has nothing open in Sales today
 }
 
 const READ_MS = 20_000;
@@ -135,8 +146,30 @@ export async function gatherSignals(g: Read, o: SignalOpts): Promise<Signals> {
             r.detector AS detector, a.id AS cardId, a.kind AS cardKind, evidence, r.simulated AS simulated, goals
      ORDER BY score DESC, id LIMIT 30`);
 
+  const sales = await salesSignals(g, now, business.timeZone ?? "UTC");
+
   return {
     tenant: o.tenant, business, now, since, today, numbers, uploads, goals, decisions, learned: lr?.n ?? 0, publicData, reviews, competitors,
     website: { checked: (checked?.n ?? 0) > 0, fails }, dates: upcomingDates(business.countryCode, today, o.horizonDays ?? 30), findings,
+    ...(sales ? { sales } : {}),
   };
+}
+
+// New enquiries without a reply (waiting 2 hours or more), deals stuck two weeks, and tomorrow's booked calls: at most five of each.
+async function salesSignals(g: Read, now: number, tz: string): Promise<SalesSignals | undefined> {
+  const waiting = (await unanswered(g, now, { minHours: 2, limit: 5 })).map((l) => ({
+    id: l.id, name: l.name.split(":")[0]!, email: l.email, subject: l.subject, asked: l.summary ?? "", source: l.source, waitingHours: l.waitingHours,
+  }));
+  const stalled: SalesSignals["stalled"] = [];
+  for (const d of (await stalledDeals(g, now)).slice(0, 5)) {
+    const lead = d.leadId ? await getLead(g, d.leadId) : null;
+    stalled.push({ id: d.id, name: d.name, leadId: d.leadId, leadName: lead?.name.split(":")[0] ?? d.leadName?.split(":")[0] ?? null, email: lead?.email ?? null, idleDays: d.idleDays, value: d.value, currency: d.currency, nextStep: d.nextStep });
+  }
+  const win = tomorrowWindow(now, tz);
+  const tomorrow: SalesSignals["tomorrow"] = [];
+  for (const m of (await meetingsBetween(g, win.from, win.to)).slice(0, 5)) {
+    const lead = m.leadId?.startsWith("lead:") ? await getLead(g, m.leadId) : null;
+    tomorrow.push({ id: m.id, title: m.name, start: m.start, leadId: m.leadId, guestEmail: m.personEmail, leadName: lead?.name.split(":")[0] ?? m.leadName?.split(":")[0] ?? null });
+  }
+  return waiting.length || stalled.length || tomorrow.length ? { waiting, stalled, tomorrow } : undefined;
 }

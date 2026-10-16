@@ -25,6 +25,8 @@ import { cleanVoice } from "../studio/caption.js";
 import { loadStudioContext } from "../studio/context.js";
 import { VisionError, visionForGraph, type VisionRunner } from "../studio/vision.js";
 import type { CreativeDeps } from "../creative/ports.js";
+import { demoConnections, isSalesDemo } from "../sales/demo.js";
+import { proposeTimes } from "../sales/times.js";
 import type { Drafters, TextJob, TextKind } from "./draft.js";
 import { runStandup, type Standup, type StandupOpts } from "./standup.js";
 
@@ -40,6 +42,7 @@ const SHAPE: Record<TextKind, string> = {
   follow_up: "A short follow-up message (WhatsApp or email) to people who stopped part way: 3 to 5 sentences, friendly, one clear next step. No hashtags.",
   offer: "An offer idea in three lines: \"Offer: ...\" (the wording a customer would read), \"Who it is for: ...\", \"How we will know it worked: ...\". Leave prices and dates as [you tell us: ...] unless the facts give them. No hashtags.",
   headline: "A poster headline of at most 7 words. No hashtags.",
+  sales_email: "The body of one short email from the owner to a customer or lead: plain words, no subject line, no signature block beyond the owner's first name, no hashtags. Answer what they asked or say what the call is; use exactly the times and facts given and nothing else; one clear next step. Under 100 words.",
 };
 
 /** The words, written by the person who owns the job, in the business's voice, checked against its record. */
@@ -120,7 +123,16 @@ export function standupFontCheck(g: GraphHandle, creative: Pick<CreativeDeps, "s
 
 export function productionDrafters(g: GraphHandle, tenant: string, businessId: string): Drafters {
   const creative = productionCreativeDeps(loadConfig().dataDir, { tenant });
-  return { text: standupTextDrafter(g, businessId, creative.vision), poster: standupPosterDrafter(g, creative), covers: standupFontCheck(g, creative) };
+  return { text: standupTextDrafter(g, businessId, creative.vision), poster: standupPosterDrafter(g, creative), covers: standupFontCheck(g, creative), times: standupTimes(g, tenant) };
+}
+
+/** Three real free times from the business's connected calendar (the sample calendar for the demo business); none when it is not connected. */
+export function standupTimes(g: GraphHandle, tenant: string): NonNullable<Drafters["times"]> {
+  return async (job) => {
+    const [b] = await g.roQuery<{ tz: string | null }>("MATCH (b:Entity:Business) RETURN b.timeZone AS tz ORDER BY b.id LIMIT 1").catch(() => []);
+    const port = isSalesDemo(tenant) ? demoConnections(tenant) : (await import("../connections/production.js")).productionConnections().port(tenant);
+    return proposeTimes(port, job.now, { tz: job.timeZone ?? b?.tz ?? "UTC" });
+  };
 }
 
 /** The daily job: the stand-up, then the goals' readings, then Today's note (which leads with the stand-up). */

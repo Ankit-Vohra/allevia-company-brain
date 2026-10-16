@@ -9,7 +9,7 @@ import { upsertNode } from "../graph/upsert.js";
 import { clip, oneLine } from "../insights/text.js";
 import type { Drafters, TextKind } from "./draft.js";
 
-const KIND: Record<string, TextKind> = { post: "post", poster: "post", reply: "reply", website_fix: "website_text", follow_up: "follow_up", offer: "offer" };
+const KIND: Record<string, TextKind> = { post: "post", poster: "post", reply: "reply", website_fix: "website_text", follow_up: "follow_up", offer: "offer", sales_reply: "sales_email", sales_nudge: "sales_email", sales_reminder: "sales_email" };
 
 export type ReviseResult = { ok: true; approvalId: string } | { ok: false; why: string };
 

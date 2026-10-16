@@ -8,10 +8,11 @@ import type { GoogleSession } from "../connections/google/product.js";
 export interface OfferedTime { start: string; end: string; label: string }
 
 const day = (ms: number, tz: string): string => isoIn(ms, tz).slice(0, 10);
+// "Friday 16 October, 11:00 to 11:30 GMT+5:30": the zone is always named, so a customer in another country is never guessing
 const label = (ms: number, tz: string, minutes: number): string => {
-  const f = new Intl.DateTimeFormat("en-GB", { timeZone: tz, weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-  const end = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(ms + minutes * 60_000));
-  return `${f.format(new Date(ms)).replace(",", "")} to ${end}`;
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: tz, weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+  const e = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" }).formatToParts(new Date(ms + minutes * 60_000)).map((x) => [x.type, x.value]));
+  return `${p.weekday} ${p.day} ${p.month}, ${p.hour}:${p.minute} to ${e.hour}:${e.minute} ${e.timeZoneName}`;
 };
 
 /** The first free time of each of the next days with one, up to `count`, spread between morning and afternoon. [] when the calendar can't be read. */
