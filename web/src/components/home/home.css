@@ -188,7 +188,7 @@
 /* your team: a small office strip */
 .hm-team-line { font-size: var(--text-sm); color: var(--color-ink-2); }
 .hm-floor {
-  list-style: none; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px 4px; padding: 12px 6px 8px; border-radius: var(--radius-md);
+  list-style: none; display: grid; grid-template-columns: repeat(var(--cols, 6), minmax(0, 1fr)); gap: 10px 2px; padding: 12px 4px 8px; border-radius: var(--radius-md);
   background:
     repeating-linear-gradient(90deg, transparent 0 15px, color-mix(in oklch, var(--color-ink) 4%, transparent) 15px 16px),
     linear-gradient(var(--color-paper-2), var(--color-paper));
@@ -207,8 +207,6 @@
 .hm-person.is-working .hm-person-name { color: var(--color-ink); font-weight: 600; }
 @keyframes hm-pulse { 50% { box-shadow: 0 0 0 4px color-mix(in oklch, var(--color-ok) 25%, transparent); } }
 @keyframes hm-bob { 50% { transform: translateY(-2px); } }
-@media (min-width: 420px) and (max-width: 899px) { .hm-floor { grid-template-columns: repeat(12, minmax(0, 1fr)); } }
-@media (min-width: 900px) { .hm-floor { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 @media (prefers-reduced-motion: reduce) {
   .hm-person.is-working .hm-person-face, .hm-person.is-working .hm-person-dot, .hm-done, .hm-note-body { animation: none; }
 }

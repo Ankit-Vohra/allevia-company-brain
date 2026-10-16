@@ -17,7 +17,8 @@ export function TeamCard({ team, working, loading }: { team: AgentView[] | undef
       ) : (
         <>
           <p className="hm-team-line" role="status" aria-live="polite">{strip.line}</p>
-          <ul className="hm-floor" aria-label="Your team">
+          {/* two even rows whatever the size of the team (13 people today: 7 and 6) */}
+          <ul className="hm-floor" aria-label="Your team" style={{ ["--cols" as string]: Math.ceil(strip.people.length / 2) }}>
             {strip.people.map((p) => (
               <li key={p.id} className={`hm-person is-${p.dot}`}>
                 <Link to={chatPath(p.id)} className="hm-person-link" aria-label={`${p.name}, ${p.title}: ${p.dot === "working" ? "working now" : p.dot === "off" ? "resting" : "ready"}. Open a chat.`}>

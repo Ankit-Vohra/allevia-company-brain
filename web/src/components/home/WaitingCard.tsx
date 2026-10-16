@@ -19,7 +19,7 @@ import { CardSkeleton, HomeCard } from "./HomeCard";
 
 type Payload = Approval["payload"];
 /** `failed`: the owner said OK but the tool refused, in the executor's own plain words ("Nothing was done."). */
-interface Done { id: string; title: string; kind: ActionKind; outcome: "approved" | "edited" | "rejected"; learned: LearnedEvent[]; failed?: string }
+interface Done { id: string; title: string; kind: ActionKind; outcome: "approved" | "edited" | "rejected"; learned: LearnedEvent[]; failed?: string; draftOnly?: boolean }
 
 const bodyOf = (a: Approval) => a.payload.body.replace(/^Evidence: .*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
 /** A website address or a place ("Instagram post"); never a repo name or a one-word tag, which is plumbing. */
@@ -46,7 +46,7 @@ export function WaitingCard({ tenantId, tz, locale, items, loading, error, onCha
     const failed = decision === "approve" && out.action?.status === "failed" ? out.action.result : undefined;
     setDone((d) => [{
       id: a.id, title: plainTitle(a.title), kind: a.kind, outcome: decision === "reject" ? "rejected" as const : edited ? "edited" as const : "approved" as const,
-      learned: out.learned ?? [], ...(failed ? { failed } : {}),
+      learned: out.learned ?? [], ...(failed ? { failed } : {}), ...(a.preview?.draftOnly ? { draftOnly: true } : {}),
     }, ...d].slice(0, 2));
     window.dispatchEvent(new Event(APPROVALS_CHANGED));
     if (out.learned?.length) onLearned();
@@ -74,7 +74,7 @@ export function WaitingCard({ tenantId, tz, locale, items, loading, error, onCha
             <Icon name={d.failed ? "warn" : d.outcome === "rejected" ? "x" : "check"} size={15} />
             <span><b>{d.failed ? "Did not go through" : d.outcome === "rejected" ? "You said no" : d.outcome === "edited" ? "Approved with your edits" : "Approved"}:</b> {d.title}</span>
           </p>
-          <p className="small muted">{d.failed ? d.failed : d.outcome === "rejected" ? "Nothing was changed." : kindWords({ kind: d.kind, title: d.title }).done}</p>
+          <p className="small muted">{d.failed ? d.failed : d.outcome === "rejected" ? "Nothing was changed." : kindWords({ kind: d.kind, title: d.title, preview: { draftOnly: d.draftOnly } }).done}</p>
           <LearnedChips events={d.learned} edited={d.outcome === "edited"} />
         </div>
       ))}
@@ -179,7 +179,6 @@ function Content({ a, tenantId, tz, locale }: { a: Approval; tenantId: string; t
           {p.to && <div className="hm-fact"><dt>To</dt><dd>{p.to}</dd></div>}
           {p.cc && <div className="hm-fact"><dt>Copy</dt><dd>{p.cc}</dd></div>}
           {p.subject && <div className="hm-fact"><dt>Subject</dt><dd>{p.subject}</dd></div>}
-          {p.draftOnly && <div className="hm-fact"><dt>Sent</dt><dd>Saved as a draft in your inbox. Not sent.</dd></div>}
         </dl>
       )}
       {a.kind === "calendar_event" && when && (

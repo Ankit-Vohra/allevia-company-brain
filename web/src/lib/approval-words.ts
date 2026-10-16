@@ -6,7 +6,7 @@ import { FIX_BUILDER, FIX_UNCHANGED, fixLabelCap, fixSubject } from "../../../sh
 
 export interface KindWords { label: string; effect: (target?: string) => string; done: string }
 
-type Card = { kind: ActionKind; title?: string; payload?: { target?: string } };
+type Card = { kind: ActionKind; title?: string; payload?: { target?: string }; preview?: { draftOnly?: boolean } };
 
 const BASE: Record<Exclude<ActionKind, "github_issue">, KindWords> = {
   content_draft: { label: "A post draft", effect: () => "If you say OK, the draft is saved for you. Nothing is posted.", done: "Draft saved. Nothing was posted." },
@@ -18,6 +18,10 @@ const BASE: Record<Exclude<ActionKind, "github_issue">, KindWords> = {
 };
 
 export function kindWords(a: Card): KindWords {
+  // an email the team only drafts: it lands in the owner's inbox as a draft and nothing is sent
+  if (a.kind === "email_send" && a.preview?.draftOnly) {
+    return { label: "An email draft for your inbox", effect: () => "If you say OK, this is saved as a draft in your inbox. Nothing is sent.", done: "Draft saved in your inbox. Nothing was sent." };
+  }
   if (a.kind !== "github_issue") return BASE[a.kind];
   const s = fixSubject(a.title, a.payload?.target);
   return {
