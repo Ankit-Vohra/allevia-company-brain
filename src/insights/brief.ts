@@ -17,6 +17,7 @@
 import { openGraph, type GraphHandle } from "../graph/client.js";
 import { closeEdge, upsertEdge, upsertNode } from "../graph/upsert.js";
 import { AgentSdkRunner, type LlmRunner } from "../ingest/llm.js";
+import { FIX_LABEL, fixSubject } from "../../shared/fix-words.js";
 import { plainWho } from "../../shared/roster.js";
 import { entityId } from "../util/ids.js";
 import { isoDate } from "../util/time.js";
@@ -85,9 +86,14 @@ const toMs = (v: unknown): number | undefined => {
   return d ? dayMs(d) : undefined;
 };
 
-export function goalStatus(p: { current: number | null; baseline: number | null; target: number | null; elapsed: number | null }): { status: GoalStatus; progress: number | null } {
-  const { current, baseline, target, elapsed } = p;
+/** The first full week: until then a reading of nothing is "we don't know yet", never "going well". */
+export const FIRST_WEEK_DAYS = 7;
+
+export function goalStatus(p: { current: number | null; baseline: number | null; target: number | null; elapsed: number | null; daysIn?: number | null }): { status: GoalStatus; progress: number | null } {
+  const { current, baseline, target, elapsed, daysIn } = p;
   if (current === null || target === null) return { status: "no_data", progress: null };
+  // A zero in week one is a count that has not started (a connection only just made, a number not yet filled in), not a result.
+  if (current <= 0 && daysIn !== undefined && daysIn !== null && daysIn < FIRST_WEEK_DAYS) return { status: "no_data", progress: null };
   const base = baseline ?? 0;
   if (target === base) return { status: current >= target ? "achieved" : "at_risk", progress: current >= target ? 1 : 0 };
   const progress = (current - base) / (target - base);
@@ -129,7 +135,8 @@ export async function goalPulse(g: Read, now: number, businessId: string | null)
     const start = toMs(gl.startAt) ?? toMs(gl.programStart) ?? gl.createdAt ?? undefined;
     const due = toMs(gl.dueAt);
     const elapsed = start !== undefined && due !== undefined && due > start ? Math.max(0, Math.min(1, (now - start) / (due - start))) : null;
-    const { status, progress } = goalStatus({ current, baseline: baseline ?? null, target: gl.target, elapsed });
+    const daysIn = start !== undefined ? Math.max(0, (now - start) / DAY_MS) : null;
+    const { status, progress } = goalStatus({ current, baseline: baseline ?? null, target: gl.target, elapsed, daysIn });
     out.push({
       id: gl.id, name: gl.name, metricKey: gl.metricKey, unit: gl.unit, baseline: baseline ?? null, target: gl.target, current,
       ...(currentAt ? { currentAt } : {}), ...(obsId ? { obsId } : {}), progress: progress === null ? null : round(progress, 3),
@@ -144,12 +151,12 @@ const value = (n: number, unit: string | null) => (unit && /^(inr|usd|gbp|eur|au
 export const STATUS_TEXT: Record<GoalStatus, string> = { achieved: "Reached", on_track: "Going well", at_risk: "Needs a push", off_track: "Behind", no_data: "We'll know after your first full week" };
 // What an approval is, said as the owner's thing to OK.
 const KIND_TEXT: Record<string, string> = { github_issue: "a fix for your website", content_draft: "a draft post", pause_ad: "pausing an ad", discord_post: "a message to your team chat" };
-const kindText = (k: string): string => KIND_TEXT[k] ?? k.replace(/_/g, " ");
+const kindText = (k: string, title?: string): string => (k === "github_issue" ? FIX_LABEL[fixSubject(title)] : KIND_TEXT[k] ?? k.replace(/_/g, " "));
 
 function goalLine(p: GoalPulse): string {
   const due = p.dueAt && dayOf(p.dueAt) ? ` by ${shortDate(dayOf(p.dueAt)!)}` : "";
   const goal = p.target !== null ? `Goal: ${value(p.target, p.unit)}${due}.` : "No goal number set yet.";
-  if (p.current === null) return `- ${p.name}: ${STATUS_TEXT.no_data}. ${goal} [[${p.id}]]`;
+  if (p.current === null || p.status === "no_data") return `- ${p.name}: ${STATUS_TEXT.no_data}. ${goal} [[${p.id}]]`;
   const from = p.baseline !== null ? `, you started at ${value(p.baseline, p.unit)}` : "";
   const why = p.status === "at_risk" && p.progress !== null && p.elapsed !== null
     ? `: ${pct(Math.max(0, p.progress), 0)} of the way there, ${pct(p.elapsed, 0)} of the time used`
@@ -296,7 +303,7 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   lines.push("", "Waiting for your OK");
   if (pending.count) {
     lines.push(`- ${plural(pending.count, "thing is", "things are")} waiting for your OK${pending.oldestDays ? `; the oldest has waited ${plural(pending.oldestDays, "day")}` : ""}${pending.overdue ? ` (${fmt(pending.overdue)} over 2 days)` : ""}.`);
-    for (const c of pending.cards) lines.push(`- ${clip(c.title, 90)} (${kindText(c.kind)}). [[${c.id}]]`);
+    for (const c of pending.cards) lines.push(`- ${clip(c.title, 90)} (${kindText(c.kind, c.title)}). [[${c.id}]]`);
   } else {
     lines.push("- Nothing.");
   }

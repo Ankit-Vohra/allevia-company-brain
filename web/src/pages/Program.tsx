@@ -9,6 +9,7 @@ import type { CapabilityState, ProgramScorecard } from "@shared/contracts";
 import { api } from "../api";
 import { AgentAvatar } from "../components/bits";
 import { CapabilityLadder } from "../components/Capabilities";
+import { CheckWebsite } from "../components/CheckWebsite";
 import { FirstPassCurve } from "../components/FirstPassCurve";
 import { SuggestedRow } from "../components/SuggestedGoal";
 import { Timeline } from "../components/ProgramCard";
@@ -80,6 +81,11 @@ function Started({ p, caps, suggested, onSet }: { p: ProgramScorecard; caps?: Ca
           )}
         </section>
       )}
+
+      {/* "Check my website" up where it can be found, not at the bottom of a folded section (audit #39); on Discord it is /checkup */}
+      <section className="owner-block" aria-label="Your website">
+        <CheckWebsite tenantId={tenant.id} />
+      </section>
 
       <section className="owner-facts" aria-label="What your team learned, and what comes next">
         <Link to="/team" className="owner-fact">

@@ -3,6 +3,7 @@
 // a message with who it goes to, the website words with what is on the page now, the picture or the clip attached, and the
 // options when there are several. Then Approve, Change and No thanks; after a decision the same message shows the result.
 // Pure: it takes the approval and what was looked up for it (src/discord/approval-extras.ts) and returns messages.
+import { FIX_LABEL, fixSubject } from "../../shared/fix-words.js";
 import { agentById } from "../../shared/roster.js";
 import { fixDestinationWords, validRepo, type ActionTarget } from "../actions/target.js";
 import type { ApprovalDto } from "../server/types.js";
@@ -14,6 +15,10 @@ export const KIND_LABEL: Record<ApprovalDto["kind"], string> = {
   github_issue: "a fix for your website", content_draft: "a draft post", pause_ad: "pausing an ad", discord_post: "a message to your team chat",
   calendar_event: "a meeting on your calendar", email_send: "an email from your address", connection_action: "a change in one of your connected tools",
 };
+
+/** What a card is, in the owner's words. A fix says whether it is for the website or the app (shared/fix-words.ts). */
+export const kindLabel = (a: Pick<ApprovalDto, "kind" | "title" | "payload">): string =>
+  a.kind === "github_issue" ? FIX_LABEL[fixSubject(a.title, a.payload.target)] : (KIND_LABEL[a.kind] ?? a.kind);
 
 export interface CardOption { label: string; note: string; pick: boolean; held?: boolean }
 
@@ -55,7 +60,7 @@ export const oneLineWhy = (s: string | undefined, max = 220): string | undefined
 export function renderApproval(a: ApprovalDto, x: CardExtras = {}, o: CardOpts = {}): CardMessages {
   const who = agentById(a.by)?.name ?? a.by;
   const about = a.payload.target && !(a.kind === "github_issue" && validRepo(a.payload.target)) ? a.payload.target : undefined;
-  const label = o.standup ? `drafted by ${who}` : `${KIND_LABEL[a.kind] ?? a.kind}${a.simulated ? " (sample numbers)" : ""}`;
+  const label = o.standup ? `drafted by ${who}` : `${kindLabel(a)}${a.simulated ? " (sample numbers)" : ""}`;
   const head = [
     `**${clip(a.title, 200)}** · ${label}`,
     ...(o.standup ? [] : [`Proposed by ${who} · ${a.createdAt.slice(0, 10)}`]),
@@ -70,7 +75,7 @@ export function renderApproval(a: ApprovalDto, x: CardExtras = {}, o: CardOpts =
     ...(x.files?.length ? [`Attached: ${x.files.map((f) => f.name).join(", ")}`] : []),
     ...(x.notAttached ? [`${x.notAttached === 1 ? "One file is" : `${x.notAttached} files are`} too big to attach${x.webUrl ? `: ${x.webUrl}` : ""}`] : []),
     ...(!o.standup && about ? [`About: ${clip(about, 200)}`] : []),
-    ...(!o.standup && a.kind === "github_issue" && o.buttons !== false ? [fixDestinationWords(o.target)] : []),
+    ...(!o.standup && a.kind === "github_issue" && o.buttons !== false ? [fixDestinationWords(o.target, fixSubject(a.title, a.payload.target))] : []),
     ...(o.standup ? ["Nothing goes out until you say OK."] : []),
   ];
 

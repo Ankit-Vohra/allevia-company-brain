@@ -38,6 +38,17 @@ describe("goal pulse", () => {
     expect(goalStatus({ current: null, baseline: 5, target: 20, elapsed: 0.5 }).status).toBe("no_data");
   });
 
+  it("does not call a zero in the first week 'going well' (audit #39): we'll know after the first full week", () => {
+    // before the fix this was on_track: 0 against a baseline of nothing, with 3% of the plan gone
+    expect(goalStatus({ current: 0, baseline: null, target: 50, elapsed: 0.03, daysIn: 3 })).toEqual({ status: "no_data", progress: null });
+    expect(goalStatus({ current: 0, baseline: 0, target: 50, elapsed: 0.05, daysIn: 6.9 }).status).toBe("no_data");
+    // from the 7th day, and for any real reading, the usual words apply
+    expect(goalStatus({ current: 0, baseline: null, target: 50, elapsed: 0.08, daysIn: 7 }).status).not.toBe("no_data");
+    expect(goalStatus({ current: 12, baseline: null, target: 50, elapsed: 0.03, daysIn: 3 }).status).toBe("on_track");
+    // callers that do not know the day keep the old behaviour
+    expect(goalStatus({ current: 0, baseline: null, target: 50, elapsed: 0.03 }).status).toBe("on_track");
+  });
+
   it("reads the current value, the Day-0 baseline (prop or baseline Observation) and writes a changed status back", async () => {
     const [signups, followers] = brief.goals;
     expect(signups).toMatchObject({ id: "goal:signups-per-day", current: 14, baseline: 5, target: 20, status: "on_track", progress: 0.6 });

@@ -1,7 +1,7 @@
 // Owner words (docs/owner-words.md): the growth-plan page says what the scorecard means, in the words of a founder
 // who is not a marketer or an analyst. Display strings only, built from the scorecard's own fields: no contract field is
 // renamed, and every number is the server's. Pure functions with the number formatter passed in, so they run anywhere.
-import type { ProgramCheckpoint, ProgramGoal, ProgramScorecard } from "../../../shared/contracts.js";
+import type { GoalState, ProgramCheckpoint, ProgramGoal, ProgramScorecard } from "../../../shared/contracts.js";
 
 const PLAN_DAYS = 90;
 
@@ -36,11 +36,27 @@ function planned(g: ProgramGoal, day: number): number | null {
   return g.baseline + (g.target - g.baseline) * (Math.min(PLAN_DAYS, Math.max(0, day)) / PLAN_DAYS);
 }
 
+/** The first full week of the plan. Mirrors src/insights/brief.ts (FIRST_WEEK_DAYS); change both together. */
+export const FIRST_WEEK_DAYS = 7;
+
+/**
+ * The goal's state as the owner is told it. In the first week a reading of nothing is a count that has not started, not a
+ * result: "Going well" at 0 reads oddly (audit #39), so it is "We'll know after your first full week" until the week is over
+ * or there is something to talk about. The server says the same on its side; this keeps older answers and sample data honest.
+ */
+export function goalState(g: Pick<ProgramGoal, "current" | "status">, day: number): GoalState {
+  return g.current === null || notStartedYet(g, day) ? "no_data" : g.status;
+}
+
+/** A zero in the first week: the count has not started, so there is nothing to say yet. */
+export const notStartedYet = (g: Pick<ProgramGoal, "current">, day: number): boolean => g.current !== null && g.current <= 0 && day < FIRST_WEEK_DAYS;
+
 export function goalView(g: ProgramGoal, day: number, fmt: Fmt): GoalView {
   const unit = g.unit ? ` ${g.unit}` : "";
   const title = g.target === null ? g.name : `Get to ${fmt(g.target)}${unit} ${per(g)}`;
-  const hasReading = g.current !== null;
-  const progress = g.progress === null || g.baseline === null ? null : Math.max(0, Math.min(1, g.progress));
+  const state = goalState(g, day);
+  const hasReading = g.current !== null && !notStartedYet(g, day);
+  const progress = !hasReading || g.progress === null || g.baseline === null ? null : Math.max(0, Math.min(1, g.progress));
   const base: Omit<GoalView, "status" | "why"> = {
     name: g.name, title, start: g.baseline === null ? null : fmt(g.baseline), now: hasReading ? fmt(g.current!) : null,
     progress, known: hasReading, owner: g.owner?.name ?? null,
@@ -51,7 +67,7 @@ export function goalView(g: ProgramGoal, day: number, fmt: Fmt): GoalView {
   const plan = planned(g, day);
   const byNow = plan === null ? "" : ` We planned for about ${fmt(Math.round(plan))} by now.`;
   const who = g.owner ? ` ${g.owner.name} is on it.` : "";
-  switch (g.status) {
+  switch (state) {
     case "achieved":
       return { ...base, status: { word: "Going well", tone: "ok" }, why: `You've reached it: ${fmt(g.current!)}${move ? `, ${move}` : ""}.` };
     case "on_track":
