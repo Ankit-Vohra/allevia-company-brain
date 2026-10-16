@@ -112,7 +112,7 @@ describe("keywordsWrite", () => {
       ranked: [{ keyword: "avs atelier", position: 1, url: "https://www.avsatelier.in/", volume: 30 }] });
     expect(w.nodes.filter((n) => n.type === "Query").map((n) => n.name)).toEqual(["Interior designer Raipur", "avs atelier"]);
     expect(w.edges).toEqual([expect.objectContaining({ type: "RANKS_FOR", props: { position: 1 } })]);
-    expect(w.observations.map((o) => o.value)).toEqual([880, 30]);
+    expect(w.observations.map((o) => [o.metric, o.value])).toEqual([["search_volume_monthly", 880], ["search_volume_monthly", 30], ["serp_position", 1]]);
     expect(JSON.stringify(w)).not.toContain(CREDS.password);
   });
 });

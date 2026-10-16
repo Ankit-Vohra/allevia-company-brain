@@ -14,6 +14,7 @@ import { loadConfig } from "../config.js";
 import type { NodeInput, ObservationInput } from "../graph/upsert.js";
 import type { GraphWrite } from "../ingest/types.js";
 import { entityId } from "../util/ids.js";
+import { pageName } from "../ingest/sources/website/urls.js";
 
 export interface DfsCredentials { login: string; password: string }
 export interface DfsConfig { credentials: DfsCredentials | null; monthlyBudgetUsd: number }
@@ -255,13 +256,21 @@ export function keywordsWrite(o: { ideas?: KeywordIdea[]; ranked?: RankedKeyword
     return id;
   };
   for (const k of o.ideas ?? []) q(k.keyword, k.volume);
+  // RANKS_FOR.position is refreshed in place (the edge is the current ranking), so each run also leaves the best position it
+  // saw for the search as a reading that MEASURES the Query: that is the ranking's history.
+  const best = new Map<string, number>();
   for (const r of o.ranked ?? []) {
     const id = q(r.keyword, r.volume);
     if (r.url) {
       const pid = entityId("Page", r.url);
-      nodes.push({ type: "Page", id: pid, name: new URL(r.url).pathname, props: { url: r.url } });
+      // named by the shared rule (a title it does not have here, so the path); a Page the graph already has keeps its own name (pages.ts)
+      nodes.push({ type: "Page", id: pid, name: pageName(r.url), props: { url: r.url } });
       edges.push({ from: pid, type: "RANKS_FOR", to: id, src: doc, asOf: o.asOf, props: { position: r.position } });
     }
+    if (Number.isFinite(r.position)) best.set(id, Math.min(best.get(id) ?? Number.POSITIVE_INFINITY, r.position));
+  }
+  for (const [id, position] of best) {
+    observations.push({ subject: id, metric: "serp_position", value: position, unit: "position", asOf: o.asOf, src: doc, evidence: "DataForSEO Google ranking: the best position for this search" });
   }
   return { nodes, edges, observations };
 }

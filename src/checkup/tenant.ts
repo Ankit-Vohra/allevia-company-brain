@@ -6,6 +6,7 @@ import type { GraphHandle } from "../graph/client.js";
 import { upsertNode } from "../graph/upsert.js";
 import type { BusinessKind } from "./conversion.js";
 import type { CheckupVerdict, Fix } from "./fixes.js";
+import { checkupHistory, type TrendPoint } from "./history.js";
 import { verdictLine } from "./report.js";
 import { storedCheckups } from "./run.js";
 
@@ -59,23 +60,33 @@ export interface LatestCheckup {
   site: string;
   verdict: string;
   top: Array<{ title: string; what: string; why: string; effort: string }>;
+  fixedSinceLast: string[];          // what the last check-up found and this one no longer does (read from the closed FAILS edges)
+  newSinceLast: string[];            // what is wrong now that was not before
+  trend: Array<{ checkedOn: string; scores: Record<string, number> }>; // the owner's scores, one point per check-up, oldest first
 }
 
+// The findings come from the graph: the open FAILS edges, the ones closed as fixed, the readings on the website channel
+// (history.ts). A check-up stored before the edges carried a whole finding falls back to the report Document's own JSON.
 export async function latestCheckup(g: Read): Promise<LatestCheckup | null> {
-  const [cur] = await storedCheckups(g, 1);
+  const [cur, prev] = await storedCheckups(g, 2);
   if (!cur) return null;
-  const top = (cur.top as Array<Partial<Fix>>).filter((f) => typeof f.title === "string").slice(0, 5);
-  // the stored top five stand in for the full list: the verdict only counts the fixes that lose enquiries, and those rank first
+  const h = await checkupHistory(g, { asOf: cur.asOf, fixCount: cur.fixTitles.length }, !!prev);
+  const top: Array<Partial<Fix>> = h.fromGraph ? h.top : (cur.top as Array<Partial<Fix>>).filter((f) => typeof f.title === "string").slice(0, 5);
+  // the top five stand in for the full list: the verdict only counts the fixes that lose enquiries, and those rank first
   const verdict = verdictLine({ all: top } as unknown as CheckupVerdict);
+  const trend: TrendPoint[] = h.trend;
   return {
     checkedOn: cur.asOf.slice(0, 10), asOf: cur.asOf, site: cur.url, verdict,
     top: top.map((f) => ({ title: f.title!, what: f.what ?? "", why: f.why ?? "", effort: f.effort ?? "" })),
+    fixedSinceLast: h.fromGraph ? h.fixed : [], newSinceLast: h.fromGraph ? h.fresh : [],
+    trend: trend.map((t) => ({ checkedOn: t.checkedOn, scores: t.scores })),
   };
 }
 
 // The top five as one chat message (Discord), in owner words.
 export function topFiveText(c: LatestCheckup): string {
   const lines = [`**Your website check-up** (${c.site.replace(/^https?:\/\//, "")}, ${c.checkedOn})`, c.verdict];
+  if (c.fixedSinceLast.length) lines.push(`Fixed since last time: ${c.fixedSinceLast.slice(0, 5).join("; ")}.`);
   c.top.forEach((f, i) => lines.push("", `**${i + 1}. ${f.title}**`, `What to change: ${f.what}`, `Why: ${f.why}${f.effort ? ` · ${f.effort}` : ""}`));
   return lines.join("\n");
 }

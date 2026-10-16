@@ -9,9 +9,12 @@ import {
 } from "../ingest/sources/website/index.js";
 import type { GraphWrite } from "../ingest/types.js";
 import { guessKind, judgePage, judgeSite, type BusinessKind, type ConversionFinding, type PageConversion } from "./conversion.js";
-import { buildVerdict, type CheckupVerdict } from "./fixes.js";
+import { FIX_BY_KEY, buildVerdict, type CheckupVerdict } from "./fixes.js";
+import { FIXED_REASON } from "./history.js";
 import { runLighthouse, type LighthouseResult, type LighthouseRunner, type Strategy } from "./lighthouse.js";
-import { CHECKUP_METRICS, checkupDocId, checkupRulesWrite, checkupWrite, progress, type CheckupRun, type Progress, type Reading } from "./store.js";
+import { keepPageNames } from "./pages.js";
+import { redact } from "../ingest/privacy.js";
+import { CHECKUP_METRICS, changeLines, checkupDocId, checkupRulesWrite, checkupWrite, readingLines, type CheckupRun, type Progress, type Reading } from "./store.js";
 
 // Crawlers that fetch pages so an AI assistant can cite them in an answer (claude-seo's "search citability" group).
 // Training-only crawlers (GPTBot, ClaudeBot, Google-Extended …) are the owner's choice and are not flagged.
@@ -123,8 +126,10 @@ export async function runCheckup(url: string, opts: CheckupOptions = {}, deps: C
     },
     kind, ...(seo ? { seo } : {}), lighthouse, conversion,
   });
+  // a page is named by its title, as onboarding names it (never by its path: that renamed onboarding's Pages); redacted like any page text
+  const pageTitles = Object.fromEntries(pages.flatMap((p) => { const t = p.title ? redact(p.title.trim()).text : ""; return t ? [[p.finalUrl, t]] : []; }));
   return {
-    origin: crawl.origin, asOf, verdict, lighthouse, pagesChecked: pages.map((p) => p.finalUrl), conversionPages: conv.map((p) => p.url),
+    origin: crawl.origin, asOf, verdict, lighthouse, pagesChecked: pages.map((p) => p.finalUrl), pageTitles, conversionPages: conv.map((p) => p.url),
     notes, crawl, conversion,
   };
 }
@@ -152,23 +157,40 @@ async function write(g: GraphHandle, w: GraphWrite, now: number): Promise<number
 
 export interface SavedCheckup { docId: string; progress: Progress; closed: number }
 
-/** Stores a run in the business's graph (its own graph: tenant isolation is the graph boundary) and says what changed. */
+/**
+ * Stores a run in the business's graph (its own graph: tenant isolation is the graph boundary) and says what changed.
+ * A finding the run no longer has is closed, with the reason, on its FAILS edge: that is what "fixed since last time" reads.
+ * A Page the graph already has keeps the name it has (onboarding's, the page's title), never the path.
+ */
 export async function saveCheckup(g: GraphHandle, run: CheckupRun, now: number = Date.now()): Promise<SavedCheckup> {
   await write(g, checkupRulesWrite(), now); // first: a graph that does not exist yet cannot be read
   const before = await previousCheckup(g, run.origin);
-  const w = checkupWrite(run);
-  // a fix that is gone: close its FAILS edge, so the record shows when it stopped failing
+  const w = await keepPageNames(g, checkupWrite(run));
+  // the findings open before this run, by fix: a fix that is gone gets its FAILS edges closed, so the record shows when it stopped failing
   const wanted = new Set(w.edges.filter((e) => e.type === "FAILS").map((e) => `${e.from}|${e.to}`));
-  const current = await g.query<{ f: string; r: string }>(
-    "MATCH (x:Entity)-[e:FAILS]->(r:Rule) WHERE e.until IS NULL AND r.kind = 'website-check' RETURN x.id AS f, r.id AS r");
+  const current = await g.query<{ f: string; r: string; key: string | null; title: string | null }>(
+    `MATCH (x:Entity)-[e:FAILS]->(r:Entity:Rule) WHERE e.until IS NULL AND r.kind = 'website-check'
+     RETURN x.id AS f, r.id AS r, r.issueType AS key, e.title AS title ORDER BY f, r`);
   let closed = 0;
-  for (const c of current) if (!wanted.has(`${c.f}|${c.r}`)) closed += await closeEdge(g, c.f, "FAILS", c.r, now, "website check-up: fixed");
+  for (const c of current) if (!wanted.has(`${c.f}|${c.r}`)) closed += await closeEdge(g, c.f, "FAILS", c.r, now, FIXED_REASON);
   await write(g, w, now);
   const docId = checkupDocId(new URL(run.origin).hostname, run.asOf);
   const cur = w.observations.filter((o) => o.subject === w.observations[0]?.subject).map((o) => ({ metric: o.metric, value: o.value, asOf: o.asOf }));
-  const p = before
-    ? progress(before.readings, cur, before.fixTitles, run.verdict.all.map((f) => `${f.key}|${f.title}`), before.asOf)
-    : { lines: [], fixed: [], newFixes: [] };
+  if (!before) return { docId, progress: { lines: [], fixed: [], newFixes: [] }, closed };
+
+  // what was open and is not now, and what is open now and was not (by fix, with the owner's title)
+  const had = new Map<string, string>();
+  const catalogTitle = (key: string, n: number) => FIX_BY_KEY.get(key)?.title(n) ?? key;
+  const perKey = new Map<string, number>();
+  for (const c of current) if (c.key) perKey.set(c.key, (perKey.get(c.key) ?? 0) + 1);
+  for (const c of current) if (c.key && !had.has(c.key)) had.set(c.key, c.title ?? catalogTitle(c.key, perKey.get(c.key) ?? 1));
+  const now_ = new Map(run.verdict.all.map((f) => [f.key, f.title]));
+  const fixed = [...had].filter(([k]) => !now_.has(k)).map(([, t]) => t);
+  const newFixes = [...now_].filter(([k]) => !had.has(k)).map(([, t]) => t);
+  const p: Progress = {
+    lines: [...readingLines(before.readings, cur), ...changeLines(fixed, had.size ? newFixes : [])],
+    fixed, newFixes, previousAsOf: before.asOf,
+  };
   return { docId, progress: p, closed };
 }
 
