@@ -220,6 +220,7 @@ export const ALLOWED_PATTERNS: Pattern[] = [
 // The graph audit (docs/graph-audit.md) added the links the deterministic writers need to make the product's own work
 // traversable, kept here for the same reason:
 //   - a card or a rule is GUIDED_BY the rule it applied, and a card, a rule or a memory is SOURCED_FROM the turn it came out of;
+//   - an agent's Finding is GUIDED_BY the skill (a Playbook{kind:'skill'}) its desk opened;
 //   - what a sales message or meeting went through (Channel), where a lead came from (Campaign, Content) and what a lead,
 //     deal, meeting or message is for (Goal);
 //   - a connection (System) PRODUCED the snapshot Documents its facts came from;
@@ -228,6 +229,7 @@ export const ALLOWED_PATTERNS: Pattern[] = [
 export const MAPPER_PATTERNS: Pattern[] = [
   ...pat("Feature", "DEPENDS_ON", ["Page", "Channel"]),
   ...pat(["Approval", "Recommendation"], "GUIDED_BY", ["Rule", "BrandRule", "Memory"]),
+  ...pat("Finding", "GUIDED_BY", "Playbook"),
   ...pat(["Recommendation", "Approval", "Memory", "Rule"], "SOURCED_FROM", "Turn"),
   ...pat(["Message", "Meeting"], "CAME_VIA", "Channel"),
   ...pat("Lead", "CAME_VIA", ["Campaign", "Content"]),

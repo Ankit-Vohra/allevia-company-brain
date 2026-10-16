@@ -5,6 +5,7 @@
 //   (agent:allevia-<owner>)-[:PRODUCED]->(Recommendation)-[:EVIDENCED_BY]->(evidence…)
 //                                          (Recommendation)-[:PROPOSES]->(Approval {status:'pending', kind, payload})
 //                                          (Recommendation)-[:ADVANCES]->(Goal)   when a related goal exists
+//                          (Recommendation|Approval)-[:GUIDED_BY {how, find, replace}]->(Rule)   each learned rule that rewrote the draft
 // Idempotent: a candidate's key fixes its Recommendation and Approval ids, so a re-run updates them in place (numbers,
 // evidence, payload of a still-pending card) instead of adding new ones. A decided card is never reopened, a
 // dismissed recommendation stays dismissed, and an open one whose detector ran clean this time becomes 'resolved'.
@@ -15,9 +16,10 @@ import { closeEdge, upsertEdge, upsertNode } from "../graph/upsert.js";
 import { AgentSdkRunner, type LlmRunner } from "../ingest/llm.js";
 import { sha256, slugify } from "../util/ids.js";
 import { isoDate } from "../util/time.js";
-import { applyLearnedRules } from "../actions/learning.js";
+import { applyLearnedRules, guideCards, type ActiveRule } from "../actions/learning.js";
 import { agentNodeId, ensureAgentNode, existingIds, findBusinessId } from "../actions/shared.js";
 import { runDetectors, type Area, type Candidate, type DetectorName } from "./detectors.js";
+import { loadGoals, relatedGoals, type GoalRef } from "./goals.js";
 import { polishText } from "./polish.js";
 
 export const INSIGHTS_SOURCE = "insights";
@@ -26,31 +28,8 @@ const suffix = (key: string): string => `insight-${slugify(key).slice(0, 60).rep
 export const insightRecId = (key: string): string => `recommendation:${suffix(key)}`;
 export const insightApprovalId = (key: string): string => `approval:${suffix(key)}`;
 
-export interface GoalRef { id: string; name: string; metricKey: string | null }
-
-// Which goals a finding moves: a goal tracking one of its metrics, else one whose metric belongs to the finding's area.
-const AREA_METRICS: Record<Area, RegExp | null> = {
-  seo: /gsc|search|organic|impression|click|ctr|seo|index|traffic|session/i,
-  content: /view|reel|follower|reach|post|content|engagement|subscriber|play|story|short/i,
-  funnel: /signup|setup|activat|conversion|funnel|otp|onboard|account|enquir|lead/i,
-  ads: /cpa|^ads?_|_ads?$|ad_spend|spend|lead|conversion|roas|enquir/i,
-  knowledge: null,
-  tech: null,
-};
-
-export function relatedGoals(c: Pick<Candidate, "area" | "metrics">, goals: GoalRef[]): GoalRef[] {
-  const exact = goals.filter((g) => g.metricKey && (c.metrics ?? []).includes(g.metricKey));
-  if (exact.length) return exact;
-  const re = AREA_METRICS[c.area];
-  return re ? goals.filter((g) => g.metricKey && re.test(g.metricKey)) : [];
-}
-
-export async function loadGoals(g: Pick<GraphHandle, "roQuery">): Promise<GoalRef[]> {
-  return g.roQuery<GoalRef>(
-    `MATCH (gl:Goal) WHERE NOT coalesce(gl.status, '') IN ['retired', 'superseded', 'achieved']
-     OPTIONAL MATCH (gl)-[t:TRACKS]->(m:Metric) WHERE t.until IS NULL
-     RETURN gl.id AS id, gl.name AS name, coalesce(gl.metricKey, m.key) AS metricKey ORDER BY coalesce(gl.priority, 99), id`);
-}
+// The goal lookup lives in goals.ts (propose_action in chat shares it); re-exported here, where it always was.
+export { loadGoals, relatedGoals, type GoalRef } from "./goals.js";
 
 export interface WriteOpts {
   now: number;
@@ -115,10 +94,12 @@ export async function writeRecommendation(g: GraphHandle, c: Candidate, opts: Wr
   if (!action) return out;
 
   let payload = { ...action.payload };
+  let shaped: ActiveRule[] = []; // the rules that rewrote this draft: the card is GUIDED_BY each
   if (action.kind === "content_draft") {
     const applied = await applyLearnedRules(g, payload, {
       agentId: agentNodeId(c.agent), channelId: typeof payload.channelId === "string" ? payload.channelId : undefined, businessId: opts.businessId,
     });
+    shaped = applied.applied;
     payload = { ...payload, title: applied.title, body: applied.body, ...(applied.applied.length ? { rulesApplied: applied.applied.map((r) => r.id) } : {}) };
   }
   const pending = old?.approvals.find((a) => a.status === "pending");
@@ -136,6 +117,7 @@ export async function writeRecommendation(g: GraphHandle, c: Candidate, opts: Wr
   }, now);
   await upsertEdge(g, { from: recId, type: "PROPOSES", to: approvalId }, now);
   for (const gl of goals) await upsertEdge(g, { from: approvalId, type: "ADVANCES", to: gl.id }, now);
+  if (action.kind === "content_draft") await guideCards(g, [recId, approvalId], shaped, now, recId);
   return { ...out, approvalId, approvalCreated: !pending && !card };
 }
 

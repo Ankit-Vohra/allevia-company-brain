@@ -6,6 +6,7 @@ import { ensureIndexes } from "../../src/graph/indexes.js";
 import { writeBatch } from "../../src/graph/upsert.js";
 import { ask, type AskDeps } from "../../src/agent/ask.js";
 import { answersThrough, saveTurn } from "../../src/agent/memory.js";
+import { pathIsGrounded } from "../../src/agent/orchestrator.js";
 import { FakeRuntime, type FakeScript } from "../../src/agent/runtime.js";
 import { TouchedSet, type AlleviaTool } from "../../src/agent/tool.js";
 import { showPath } from "../../src/agent/tools/paths.js";
@@ -13,6 +14,19 @@ import { nodeDetail } from "../../src/server/reads.js";
 import { testGraph } from "../helpers/graph.js";
 import { fakeTool, result, NOW } from "../helpers/agent.js";
 import { call, makeCtx } from "../helpers/tools.js";
+
+describe("pathIsGrounded reads show_path's own result", () => {
+  it("grounded only when something was drawn and nothing was refused, unknown, unlinked or unchecked; unknown for any other tool's data", () => {
+    expect(pathIsGrounded({ ordered: ["a", "b"], links: [], unconnected: [], missing: [] })).toBe(true);
+    expect(pathIsGrounded({ ordered: ["a", "b"], unconnected: [{ from: "b", to: "c" }], missing: [] })).toBe(false);
+    expect(pathIsGrounded({ ordered: ["a"], refused: ["x"], unconnected: [], missing: [] })).toBe(false);
+    expect(pathIsGrounded({ ordered: ["a"], missing: ["nope"] })).toBe(false);
+    expect(pathIsGrounded({ ordered: ["a"], unchecked: [{ from: "a", to: "b" }] })).toBe(false);
+    expect(pathIsGrounded({ ordered: [] })).toBe(false);
+    expect(pathIsGrounded({})).toBeUndefined();
+    expect(pathIsGrounded(null)).toBeUndefined();
+  });
+});
 
 describe("How we know: the path under an answer is in the graph", () => {
   let g: GraphHandle;

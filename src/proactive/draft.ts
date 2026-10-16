@@ -9,7 +9,7 @@
 //        creating tools write; it is tagged with the same standup fields so dedupe and learning see it.
 import type { ActionKind } from "../../shared/contracts.js";
 import { agentById } from "../../shared/roster.js";
-import { applyLearnedRules } from "../actions/learning.js";
+import { applyLearnedRules, guideCards, type ActiveRule } from "../actions/learning.js";
 import { agentNodeId, ensureAgentNode, existingIds } from "../actions/shared.js";
 import type { GraphHandle } from "../graph/client.js";
 import { upsertEdge, upsertNode } from "../graph/upsert.js";
@@ -219,10 +219,12 @@ async function writeCard(g: GraphHandle, p: Picked, kind: Plain, t: TextDraft, c
     ...(kind === "website_fix" ? {} : { format: kind === "post" ? "post" : kind === "reply" ? "reply" : kind === "follow_up" ? "message" : "offer", channelId: kind === "post" ? p.channel?.id ?? "channel:instagram" : "" }),
     standup: true,
   };
+  let shaped: ActiveRule[] = []; // the rules that rewrote this draft: the card is GUIDED_BY each
   if (actionKind === "content_draft") {
     const applied = await applyLearnedRules(g, { title: String(payload.title), body: String(payload.body) }, {
       agentId: agentNodeId(p.agent), ...(kind === "post" ? { channelId: p.channel?.id ?? "channel:instagram" } : {}), businessId: ctx.businessId,
     });
+    shaped = applied.applied;
     payload = { ...payload, title: applied.title, body: applied.body, ...(applied.applied.length ? { rulesApplied: applied.applied.map((r) => r.id) } : {}) };
   }
   if (payload.channelId === "") delete payload.channelId;
@@ -235,6 +237,7 @@ async function writeCard(g: GraphHandle, p: Picked, kind: Plain, t: TextDraft, c
     },
     asOf,
   }, now);
+  if (actionKind === "content_draft") await guideCards(g, [recId, approvalId], shaped, now, recId);
   await upsertEdge(g, { from: recId, type: "PROPOSES", to: approvalId }, now);
   for (const gl of p.goals) await upsertEdge(g, { from: approvalId, type: "ADVANCES", to: gl }, now).catch(() => undefined);
   return { approvalId, recommendationId: recId };
@@ -293,6 +296,7 @@ async function draftSales(g: GraphHandle, p: Picked, ctx: DraftCtx, skill: TextJ
     props: { kind: actionKind, payload: JSON.stringify(payload), title: String(payload.title), recommendation: recId, by: p.agent, area: AREA[kind], standup: true, standupKey: p.key, standupKind: kind, ...(existing ? {} : { status: "pending" }) },
     asOf: date,
   }, now);
+  await guideCards(g, [recId, approvalId], applied.applied, now, recId);
   await upsertEdge(g, { from: recId, type: "PROPOSES", to: approvalId }, now);
   return { ...base, status: "drafted", approvalId, recommendationId: recId, notes: [...notes, ...t.warnings] };
 }
