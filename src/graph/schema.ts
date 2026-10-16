@@ -20,6 +20,9 @@ export const ENTITY_TYPES = [
   // another business the owner competes with, watched through public data only (src/publicdata): its public numbers are
   // Observations that MEASURE it, so trends build over time
   "Competitor",
+  // other businesses the owner's own pages name (onboarding, src/ingest/tidy.ts): who supplies it, whom it works with,
+  // whom it works for. The owner's Business is the one business in its graph; a third party is never typed Business.
+  "Supplier", "Partner", "Client",
 ] as const;
 export type EntityType = (typeof ENTITY_TYPES)[number];
 
@@ -47,6 +50,8 @@ export const REL_TYPES = [
   "SAME_AS",
   // a competitor and the business it competes with
   "COMPETES_WITH",
+  // the owner's suppliers, partners and clients (src/ingest/tidy.ts)
+  "SUPPLIES", "PARTNERS_WITH", "CLIENT_OF",
 ] as const;
 export type RelType = (typeof REL_TYPES)[number];
 
@@ -67,6 +72,13 @@ const OWNABLE: EntityType[] = [
   "BrandAsset", "Content", "Goal",
 ];
 const EVIDENCE: EntityType[] = ["Observation", "Document", "Chunk", "Memory", "Event", "Decision"];
+// Another business, as the owner's pages name it.
+export const OTHER_BUSINESS_TYPES: EntityType[] = ["Supplier", "Partner", "Client", "Competitor"];
+// Types whose duplicates may be merged (SAME_AS, same type only).
+export const SAME_AS_TYPES: EntityType[] = [
+  "System", "Channel", "Product", "Feature", "Audience", "Need", "Content", "Campaign", "Event", "Query", "Person", "Team",
+  "Business", ...OTHER_BUSINESS_TYPES,
+];
 
 export const ALLOWED_PATTERNS: Pattern[] = [
   // company
@@ -166,14 +178,18 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   ...pat("Asset", "PROMOTES", ["Product", "Feature", "Business", "Content", "Page"]),
   ...pat("Asset", "DEPICTS", ["Product", "Page", "Business", "Event"]),
   ...pat(["Turn", "Finding", "Content"], "GUIDED_BY", ["Memory", "Rule", "BrandRule"]),
-  // the librarian's merge pass (src/ingest/merge.ts): same type only, duplicate -> canonical
-  ...pat("System", "SAME_AS", "System"),
-  ...pat("Channel", "SAME_AS", "Channel"),
-  ...pat("Product", "SAME_AS", "Product"),
+  // merges (src/ingest/merge.ts, the librarian's and onboarding's): same type only, duplicate -> canonical
+  ...SAME_AS_TYPES.flatMap((t) => pat(t, "SAME_AS", t)),
+  // a third party extraction typed Business, retyped (src/ingest/tidy.ts): the Business node points at its new node
+  ...pat("Business", "SAME_AS", OTHER_BUSINESS_TYPES),
   // competitors (public data): who they compete with, and their own public channels
   ...pat("Competitor", "COMPETES_WITH", "Business"),
   ...pat("Competitor", "TARGETS", "Audience"),
-  ...pat("Competitor", "SAME_AS", "Competitor"),
+  // suppliers, partners and clients: the relation to the owner's business, and the people who work there
+  ...pat("Supplier", "SUPPLIES", ["Business", "Product"]),
+  ...pat("Partner", "PARTNERS_WITH", "Business"),
+  ...pat("Client", "CLIENT_OF", "Business"),
+  ...pat("Person", "MEMBER_OF", ["Supplier", "Partner", "Client"]),
 ];
 
 const ALLOWED = new Set(ALLOWED_PATTERNS.map(([f, r, t]) => `${f}|${r}|${t}`));
@@ -236,7 +252,7 @@ export const TRACKED_PROPS: Partial<Record<EntityType, string[]>> = {
 export const SEARCHABLE: EntityType[] = [
   "Business", "Person", "Agent", "Team", "Product", "Feature", "Audience", "Need", "BrandRule", "BrandAsset", "Channel",
   "Content", "Campaign", "Page", "Query", "Metric", "Document", "Decision", "Task", "System", "Event", "Playbook", "Rule",
-  "Recommendation", "Memory", "Finding", "Goal", "Competitor",
+  "Recommendation", "Memory", "Finding", "Goal", "Competitor", "Supplier", "Partner", "Client",
 ];
 
 // Nodes of a type search can be asked for by name carry this label (upsertNode adds it on create, ensureIndexes backfills

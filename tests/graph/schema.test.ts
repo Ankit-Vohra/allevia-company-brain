@@ -21,7 +21,7 @@ describe("schema", () => {
     expect(REL_TYPES.filter((r) => !used.has(r))).toEqual([]);
   });
   it("has the spec's types", () => {
-    expect(ENTITY_TYPES).toHaveLength(39);
+    expect(ENTITY_TYPES).toHaveLength(42);
     expect(types.has("Finding")).toBe(true);
     expect(isAllowed("Turn", "HANDLED_BY", "Agent") && isAllowed("Agent", "PRODUCED", "Finding") && isAllowed("Finding", "BASED_ON", "Finding")).toBe(true);
     expect(types.has("Version") && types.has("Chunk") && types.has("Observation")).toBe(true);
@@ -171,5 +171,27 @@ describe("schema v2 (product design §7)", () => {
   it("searches Goals only", () => {
     expect(SEARCHABLE).toContain("Goal");
     for (const t of ["Program", "Checkpoint", "Asset", "Capability"] as const) expect(SEARCHABLE, t).not.toContain(t);
+  });
+});
+
+describe("other businesses (issue #24)", () => {
+  it("types a third party as Supplier, Partner or Client with its relation to the owner, and lets a Business point at its retyped node", () => {
+    for (const t of ["Supplier", "Partner", "Client"] as const) {
+      expect(isEntityType(t), t).toBe(true);
+      expect(SEARCHABLE).toContain(t);
+      expect(isAllowed("Business", "SAME_AS", t), t).toBe(true);
+      expect(isAllowed(t, "SAME_AS", t), t).toBe(true);
+      expect(isAllowed("Person", "MEMBER_OF", t), t).toBe(true);
+    }
+    expect(isAllowed("Supplier", "SUPPLIES", "Business") && isAllowed("Partner", "PARTNERS_WITH", "Business") && isAllowed("Client", "CLIENT_OF", "Business")).toBe(true);
+    expect(isAllowed("Business", "SAME_AS", "Competitor")).toBe(true);
+    expect(isAllowed("Feature", "SAME_AS", "Feature") && isAllowed("Event", "SAME_AS", "Event")).toBe(true);
+    expect(isAllowed("Feature", "SAME_AS", "Product")).toBe(false);
+    expect(typeFromId(entityId("Supplier", "Royal Mail"))).toBe("Supplier");
+  });
+  it("leaves the extraction prompt and schema as they were, so no tenant's extraction cache is invalidated", async () => {
+    const { cacheKey } = await import("../../src/ingest/extract.js");
+    expect(cacheKey({ hash: "h", kind: "webpage" }, { name: "Kestrel & Oak Studio" }, "haiku")).toBe("3ac9338dd83024492d28fb425f82e43b1c65cd1b57bdcd57052386a5391526d7");
+    expect(cacheKey({ hash: "h", kind: "note" }, { name: "Aamdani", industry: "jobs" }, "haiku")).toBe("3c4f5f291e3241bae247a45227f351690e9b9925f93b97ffbaab17b19bd1becd");
   });
 });

@@ -8,6 +8,7 @@ export const LABEL_HUE: Record<string, number> = {
   Observation: 225, Metric: 215,
   Page: 200, Query: 195, Event: 45,
   Task: 55, System: 160, Recommendation: 300, Approval: 300, Action: 300, Finding: 300,
+  Competitor: 285, Supplier: 285, Partner: 285, Client: 285,
 };
 
 export const hueFor = (label: string) => LABEL_HUE[label] ?? 265;
