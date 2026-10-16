@@ -96,3 +96,20 @@ export function unguardedEdgeAggregates(text: string): string[] {
   }
   return found;
 }
+
+// A node created with CREATE must carry its id in the pattern: FalkorDB Cloud (4.22) enforces the mandatory
+// Entity.id constraint when the node is created, before any later `SET n += $props` runs ("mandatory constraint
+// violation: node with label Entity missing property id"). Local 6.0.x checks at the end of the query, so only a text
+// check catches it before it reaches the cloud. `CREATE (n:Entity) DELETE n` (the migration's probe) is not a node
+// that stays, and MERGE with an id is fine.
+export function entityCreateWithoutId(text: string): string[] {
+  const found: string[] = [];
+  for (const m of text.matchAll(/\bCREATE\s+(?:\([^()]*\)\s*(?:<?-\s*\[[^\]]*\]\s*-\s*>?\s*))*(\(\s*[A-Za-z_]\w*?\s*((?::\s*\w+\s*)+)(\{[^{}]*\})?\s*\))/g)) {
+    const labels = m[2] ?? "";
+    if (!/:\s*Entity\b/.test(labels)) continue;
+    if (/(^|[{,])\s*id\s*:/.test(m[3] ?? "")) continue;
+    if (/\bDELETE\b/.test(text.slice(m.index!))) continue;
+    found.push(`CREATE ${m[1]} has no id in its pattern`);
+  }
+  return found;
+}

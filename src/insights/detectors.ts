@@ -828,12 +828,16 @@ async function obsSeries(g: Read, metric: string, label: EntityType, limit = 60)
 interface IssueRow { id: string; name: string | null; level: string | null; unhandled: boolean | null; isNew: boolean | null; unresolved: boolean | null; firstSeen: string | null; lastSeen: string | null; app: string }
 
 // Every Sentry issue Event in the graph, with the Channel it AFFECTS.
+// One row per error: an error that touches both the iPhone and the Android app comes back once per app from the
+// query, and would be proposed twice (one fix, one card) if both rows were kept. The app kept is the first by id.
 async function sentryIssues(g: Read): Promise<IssueRow[]> {
-  return ro<IssueRow>(g,
+  const rows = await ro<IssueRow>(g,
     `MATCH (e:Event)-[a:AFFECTS]->(c:Entity) WHERE e.kind = 'sentry_issue' AND a.until IS NULL
      RETURN e.id AS id, e.name AS name, e.level AS level, e.unhandled AS unhandled, e.isNew AS isNew, e.unresolved AS unresolved,
             e.firstSeen AS firstSeen, e.lastSeen AS lastSeen, c.id AS app
-     ORDER BY id LIMIT 500`);
+     ORDER BY id, app LIMIT 500`);
+  const seen = new Set<string>();
+  return rows.filter((r) => !seen.has(r.id) && !!seen.add(r.id));
 }
 
 const num = (n: number | null | undefined): n is number => typeof n === "number" && Number.isFinite(n);

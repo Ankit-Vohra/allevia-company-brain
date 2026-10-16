@@ -181,7 +181,9 @@ export async function upsertNode(g: GraphHandle, n: NodeInput, now: number = Dat
         updatedAt: now,
       });
       params.hv = defined({ since: now, recordedAt: now, src: n.src, asOf: n.asOf });
-      cypher += " CREATE (n)-[h:HAD_VERSION]->(v:Entity:Version) SET v += $version, h += $hv";
+      // The id goes in the CREATE itself: FalkorDB Cloud checks the mandatory id constraint before any SET runs.
+      params.vid = (params.version as { id: string }).id;
+      cypher += " CREATE (n)-[h:HAD_VERSION]->(v:Entity:Version {id: $vid}) SET v += $version, h += $hv";
     }
     cypher += " SET n += $props, n.rev = $rev + 1";
     if (SEARCHABLE_TYPES.has(n.type)) cypher += `, n:${SEARCHABLE_LABEL}`; // heals a node written before the label existed
