@@ -34,6 +34,8 @@ import type { ResolvedRegion } from "./region.js";
 import { fetchWebsiteBrandFiles, type BrandFetch } from "../brand/website.js";
 import type { AssetStore } from "../studio/store.js";
 import type { VisionRunner } from "../studio/vision.js";
+import type { PublicDataPort } from "../publicdata/service.js";
+import { enrichOwnListing, readBlockedSite } from "../publicdata/enrich.js";
 
 export interface OnboardInput {
   name: string;
@@ -62,6 +64,9 @@ export interface OnboardDeps {
   // Absent (tests, dry runs): the brand kit stays references only.
   brand?: { store: AssetStore; vision?: VisionRunner; fetch?: BrandFetch; googleFonts?: boolean };
   tenantOpts?: TenantOpts;
+  // Public data (Apify, docs/apify-setup.md): when on, a site that turns our reader away is read through Apify instead,
+  // and the business's Google Maps listing is read after the profile. Off or absent: neither happens. Budgeted.
+  publicData?: PublicDataPort;
   maxUnderstandPages?: number;                         // default 12
   now?: () => number;
   log?: (line: string) => void;
@@ -257,6 +262,27 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
   }
   // A site that could not be read is not a business we can set up: say why, in plain words, and stop here rather than
   // write a plan and "Your team is ready" for a business the team knows nothing about.
+  // Turned away (or nothing readable): read the public pages through the public-data reader instead, when it is on.
+  let viaPublicData = false;
+  if (!selectKeyPages(pages, 1).length && deps.publicData?.enabled && !stopped()) {
+    stage("crawl", `Our reader was turned away from ${domain}; reading its public pages another way`);
+    try {
+      const r = await readBlockedSite(deps.publicData, { tenant: input.slug, url: start, ...(deps.signal ? { signal: deps.signal } : {}) });
+      if ("pages" in r) {
+        pages = r.pages.map(redactPage);
+        for (const p of pages) {
+          send({ type: "page", url: p.finalUrl, title: p.title ?? new URL(p.finalUrl).pathname });
+          await write("crawl", pageWrite(p));
+        }
+        await write("crawl", websiteChannelWrite(new URL(start).origin, businessId, asOf));
+        result.pages = pages.length;
+        viaPublicData = true;
+        log(`[onboard] crawl: ${pages.length} pages read through public data (about $${r.usd.toFixed(3)})`);
+      } else log(`[onboard] crawl fallback: ${r.why}`);
+    } catch (e) {
+      log(`[onboard] crawl fallback failed: ${msg(e)}`);
+    }
+  }
   if (!selectKeyPages(pages, 1).length) {
     const m = `We could not read ${domain}: ${crawl ? whyUnreadable(crawl) : crawlFailure ?? "we could not reach it."}`;
     errors.push(m);
@@ -315,7 +341,8 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
 
   // ---------- seo ----------
   stage("seo", pages.length ? `Checking ${pages.length} pages against the SEO rules` : "Skipped: no pages");
-  if (pages.length && crawl) {
+  // (pages read through public data carry no timings, links or markup: the SEO checks would be about the reader, not the site)
+  if (pages.length && crawl && !viaPublicData) {
     try {
       const report = evaluateSeo(pages, crawl.linkStatus);
       result.seoScore = report.score;
@@ -379,6 +406,23 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
       await write("understand", { nodes: [], edges: links, observations: [] });
     } catch (e) {
       fail("understand", e);
+    }
+  }
+
+  // ---------- the Google Maps listing (public data, optional) ----------
+  if (deps.publicData?.enabled && !stopped()) {
+    stage("understand", "Reading your Google Maps listing: address, hours and reviews");
+    try {
+      const r = await enrichOwnListing(g, deps.publicData, {
+        tenant: input.slug, businessId, name, now: now(), ...(siteProfile?.city ? { city: siteProfile.city } : {}), ...(domain ? { domain } : {}),
+        ...(deps.signal ? { signal: deps.signal } : {}),
+      });
+      if ("listing" in r) {
+        stats.nodesCreated += r.nodes;
+        log(`[onboard] listing: ${r.listing.name}, rated ${r.listing.rating ?? "?"} from ${r.listing.reviewCount ?? "?"} reviews; ${r.listing.reviews.length} reviews kept (about $${r.usd.toFixed(3)})`);
+      } else log(`[onboard] listing: not read (${r.why})`);
+    } catch (e) {
+      log(`[onboard] listing: not read (${msg(e)})`);
     }
   }
 
