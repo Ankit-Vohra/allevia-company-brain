@@ -381,10 +381,8 @@ export default function StudioPage() {
                     </span>
                     {card?.request && <span className="variant-treat">You asked: {card.request}</span>}
                     {(review || card?.note) && <span className="variant-note">{(card?.note ?? review?.note ?? "").replace(/^Building unchanged · /, "").replace(/^Changed: /, "")}</span>}
-                    {props.structure !== undefined && (
-                      <span className="variant-nums">edges {Number(props.structure).toFixed(2)} · dHash {String(props.dhashDistance)}/64</span>
-                    )}
-                    {props.treatment !== undefined && <span className="variant-treat">{String(props.treatment)}</span>}
+                    {/* the checker's numbers and the editor's settings are for us, not the owner: a tooltip, not a line */}
+                    {props.treatment !== undefined && <span className="variant-treat" title={`${props.structure !== undefined ? `edges ${Number(props.structure).toFixed(2)} · dHash ${String(props.dhashDistance)}/64 · ` : ""}${String(props.treatment)}`}>{ai ? "Edited for your brand" : "Light and colour fixed"}</span>}
                     {card?.canRetry && !decided && (
                       <button type="button" className="btn btn-ghost btn-sm" disabled={changing || getPublicMode()} onClick={(e) => { e.preventDefault(); void askChange("", label); }}>
                         Try again{credits !== undefined ? ` (${creditWords(credits)})` : ""}
