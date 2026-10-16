@@ -17,8 +17,8 @@ const BEFORE: Record<string, string[]> = {
   "copy-editor": ["playbook", "get_entity", "search"],
   "fact-checker": ["search", "get_entity", "find_paths", "cypher"],
   "tech-lead": ["impact_of", "get_entity", "neighbors", "seo_report", "search", "cypher", "propose_action"],
-  "oncall-engineer": ["metric_trend", "impact_of", "get_entity", "neighbors", "history", "search", "cypher", "propose_action"],
-  "qa-release": ["metric_trend", "history", "get_entity", "search", "cypher", "propose_action"],
+  "oncall-engineer": ["metric_trend", "impact_of", "get_entity", "neighbors", "history", "search", "cypher", "propose_action", "find_paths"],
+  "qa-release": ["metric_trend", "history", "get_entity", "search", "cypher", "propose_action", "neighbors", "find_paths"],
   "ops-manager": ["who_owns", "search", "get_entity", "recall", "cypher", "propose_action"],
   librarian: ["trace_decision", "who_knows", "history", "topics", "important", "find_paths", "search"],
 };

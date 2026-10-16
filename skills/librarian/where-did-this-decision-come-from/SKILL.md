@@ -13,6 +13,7 @@ needs_ok: false
 1. Call `trace_decision` with the decision's id, or a query ("pause daily stories") if you only have words. It returns the decision, its evidence (numbers and documents, each with sources), who decided, what it affects, what it replaced and what replaced it.
 2. If nothing comes back, `search` with other words (the thing, the date, the person) and try again. If there is still no decision recorded, say "this was not written down" and stop; never invent a reason.
 3. Tell it as a story in order: what was seen (the evidence, with its date and source), what was decided, by whom, when, and what it changed.
+3b. If the question is about something happening now (a drop, a crash), also look for what we already decided about it: `search` for it, `trace_decision` on any decision found, and say what that decision set in motion and where it stands (the task and its owner come back with it). That is the "last time" the owner is asking about.
 4. Check it still holds: `history` on the decision for status changes, and whether a later decision replaced it. Say clearly if it was replaced, and by what.
 5. Give how old the evidence was at the time and how sure the record is: a measured number, a note in a document, or a verbal remark.
 6. State what is missing: the reason never written down, the person not recorded, the alternatives not considered.

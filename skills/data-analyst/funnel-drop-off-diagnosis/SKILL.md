@@ -10,6 +10,7 @@ needs_ok: false
 
 ## Method
 
+0. Where the flow is mapped as steps (nodes named like "Seekers: Phone number entered", kind funnel_step), read them all at once: `metric_trend` with metric funnel_users and no subject gives every step's first and last value, change and, when a step's level stepped, the date it did (shift: at, before, after). The first step whose level steps is where the flow breaks; later steps fall with it. Name that step and the date.
 1. Find the steps the record has. `search` for the funnel's metrics (visits, started, finished, or page views of the form) and use `cypher` to list the exact metric names and subjects with their latest dates. If only the first and last step exist, say so: you can see that people are lost, not where.
 2. Get each step as a weekly series with `metric_trend` (groupBy week, last 6 weeks). Use the numbers and ratios the tool returns; never compute a rate yourself. Where you need a step-to-step comparison write "from 310 visits to 22 started".
 3. Separate two different problems. Fewer people arrived (the top fell; the cause is traffic, go to the traffic-source question) versus the same people arrived and fewer finished (a step broke). Compare the first and last steps over the same weeks to tell which.
