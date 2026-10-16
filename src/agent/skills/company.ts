@@ -17,7 +17,7 @@ import { contentPerformance } from "../tools/content.js";
 import { TouchedSet, type ToolContext } from "../tool.js";
 import { ensureRoster } from "../memory.js";
 import { skillWrite } from "./business.js";
-import { SKILL_ID } from "./format.js";
+import { MAX_BUSINESS_BODY, SKILL_ID } from "./format.js";
 
 type Read = Pick<GraphHandle, "roQuery">;
 const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
@@ -92,7 +92,11 @@ export async function companyFacts(g: GraphHandle, tenant: string, now: number =
     weakest = items.length > 4 ? items.slice(-2).map(line) : [];
   } catch { /* no content yet */ }
 
-  const text = (r: { name: string | null; text: string | null }) => one(r.text && r.name && !r.text.toLowerCase().startsWith(r.name.toLowerCase()) ? `${r.name}: ${r.text}` : r.text ?? r.name);
+  // A rule's name is often its own text cut short and ended with "…" (the rules the owner tells the team are named that way): then the text alone says it.
+  const text = (r: { name: string | null; text: string | null }) => {
+    const stem = (r.name ?? "").replace(/…$/, "").trim().toLowerCase();
+    return one(r.text && stem && !r.text.toLowerCase().startsWith(stem) ? `${r.name}: ${r.text}` : r.text ?? r.name);
+  };
   const kind = (k: string | null) => (k ?? "").toLowerCase();
   const isVisual = (r: { kind: string | null }) => /visual/.test(kind(r.kind));
   const rules = [...new Set(brand.filter((r) => !isVisual(r)).map(text).filter(Boolean))];
@@ -112,9 +116,26 @@ export async function companyFacts(g: GraphHandle, tenant: string, now: number =
 
 export interface GeneratedSkill { id: string; name: string; when: string; agents: string[]; base?: string; text: string }
 
-const bullets = (xs: string[], none: string, n = 8): string => (xs.length ? xs.slice(0, n).map((x) => `- ${clip(x, 170)}`).join("\n") : `- ${none}`);
+const bullets = (xs: string[], none: string, n = 8, width = 170): string => (xs.length ? xs.slice(0, n).map((x) => `- ${clip(x, width)}`).join("\n") : `- ${none}`);
+
+// A rule is shown whole (the owner's rules run to 300 characters: the palette's four colours, a list of misspelt words) when
+// the skills stay inside what a business skill may hold (MAX_BUSINESS_BODY, 8,000 characters, with room to spare); when the
+// rules would not fit, each is cut at 170 characters as before, and when even that is too much (two lists of 25 long
+// rules), fewer rules are listed, in the order the records give them.
+const FITS: Array<{ width: number; most: number }> = [{ width: 300, most: 25 }, { width: 170, most: 25 }, { width: 170, most: 14 }, { width: 120, most: 8 }];
+const ROOM = 300;
 
 export function companySkills(f: CompanyFacts): GeneratedSkill[] {
+  let out: GeneratedSkill[] = [];
+  for (const fit of FITS) {
+    out = buildSkills(f, fit.width, fit.most);
+    if (out.every((s) => s.text.length <= MAX_BUSINESS_BODY - ROOM)) break;
+  }
+  return out;
+}
+
+function buildSkills(f: CompanyFacts, width: number, most: number): GeneratedSkill[] {
+  const rules = (xs: string[], none: string, n = 8): string => bullets(xs, none, Math.min(n, most), width);
   const n = f.name;
   const who = f.summary ? clip(f.summary, 500) : `${n}: the profile is thin; ask the owner for one line on what they do.`;
   const voice: GeneratedSkill = {
@@ -124,19 +145,19 @@ export function companySkills(f: CompanyFacts): GeneratedSkill[] {
 ${who}
 
 ## Tone
-${bullets(f.tone, "Not recorded: write plainly and warmly, and ask the owner how they sound.")}
+${rules(f.tone, "Not recorded: write plainly and warmly, and ask the owner how they sound.")}
 
 ## Do
-${bullets(f.dos, "No do-rules recorded yet.", 25)}
+${rules(f.dos, "No do-rules recorded yet.", 25)}
 
 ## Never
-${bullets(f.donts, "No don't-rules recorded yet; never invent facts, numbers or promises.", 25)}
+${rules(f.donts, "No don't-rules recorded yet; never invent facts, numbers or promises.", 25)}
 
 ## Words the owner corrected (use the right one every time)
-${bullets(f.sayInstead, "None yet: they appear here as the owner edits drafts.")}
+${rules(f.sayInstead, "None yet: they appear here as the owner edits drafts.")}
 
 ## How it looks (anything visual)
-${bullets(f.visual, "No visual rules recorded.")}
+${rules(f.visual, "No visual rules recorded.")}
 
 ## Check before it goes out
 - Would a stranger who knows nothing about ${n} understand every line? Name the thing ("the app", "the studio"), never just "it".
@@ -193,8 +214,8 @@ ${bullets(f.weakest, "Not enough posts recorded to say.")}
 ${bullets(f.hooks, "None recorded: use the general reel script skill's hooks.")}
 
 ## Voice for spoken lines and on-screen words
-${bullets([...f.tone, ...f.dos.slice(0, 4)], "Plain, warm, specific.")}
-${f.donts.length ? `\nNever:\n${bullets(f.donts, "", 6)}` : ""}
+${rules([...f.tone, ...f.dos.slice(0, 4)], "Plain, warm, specific.")}
+${f.donts.length ? `\nNever:\n${rules(f.donts, "", 6)}` : ""}
 
 ## Done well
 - [ ] It has a purpose: the one-line brief opens it and every beat serves it.
@@ -226,8 +247,8 @@ ${bullets(f.worked.length ? f.worked : [], "No measured results recorded yet: us
 ${bullets(f.hooks, "Use the general hooks.", 5)}
 
 ## Voice and look
-${bullets([...f.tone, ...f.donts], "Plain and specific; no hard sell.", 8)}
-${f.visual.length ? `\nLook:\n${bullets(f.visual, "", 5)}` : ""}
+${rules([...f.tone, ...f.donts], "Plain and specific; no hard sell.", 8)}
+${f.visual.length ? `\nLook:\n${rules(f.visual, "", 5)}` : ""}
 
 ## Done well
 - [ ] It has a purpose: the one-line brief opens it; a nice-looking ad that sells nothing in particular fails.
