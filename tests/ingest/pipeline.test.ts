@@ -229,7 +229,7 @@ describe("runIngest (integration, fixture vault, fake model)", () => {
       "MATCH (o:Observation {metric:'reels_reach'})-[:MEASURES]->(c:Channel) RETURN o.value AS v, c.id AS c");
     expect(obs).toEqual([{ v: 1250, c: "channel:instagram" }]);
     const src = await g.roQuery<{ src: string; conf: number; versions: number }>(
-      "MATCH (o:Observation {metric:'reels_reach'}) OPTIONAL MATCH (o)-[:HAD_VERSION]->(v) RETURN o.src AS src, o.conf AS conf, count(v) AS versions");
+      "MATCH (o:Observation {metric:'reels_reach'}) OPTIONAL MATCH (o)-[:HAD_VERSION]->(v) WITH o, count(v) AS versions RETURN o.src AS src, o.conf AS conf, versions");
     expect(src).toEqual([{ src: "document:10-company-overview-md", conf: 0.8, versions: 1 }]);
   });
 

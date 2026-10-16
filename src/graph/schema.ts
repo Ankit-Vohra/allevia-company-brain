@@ -17,6 +17,9 @@ export const ENTITY_TYPES = [
   // product design §7.1: what the owner is pursuing, the Allevia 90 program and its day 0/30/60/90 checkpoints, media
   // (originals, variants, finals), and what each connected source lets the agents do (the capability ladder)
   "Goal", "Program", "Checkpoint", "Asset", "Capability",
+  // another business the owner competes with, watched through public data only (src/publicdata): its public numbers are
+  // Observations that MEASURE it, so trends build over time
+  "Competitor",
 ] as const;
 export type EntityType = (typeof ENTITY_TYPES)[number];
 
@@ -42,6 +45,8 @@ export const REL_TYPES = [
   "PURSUES", "TRACKS", "ADVANCES", "ENROLLED_IN", "DERIVED_FROM", "USES_ASSET", "DEPICTS", "GUIDED_BY",
   // the librarian's merge pass: a duplicate System/Channel/Product points at the node it is the same as
   "SAME_AS",
+  // a competitor and the business it competes with
+  "COMPETES_WITH",
 ] as const;
 export type RelType = (typeof REL_TYPES)[number];
 
@@ -165,6 +170,10 @@ export const ALLOWED_PATTERNS: Pattern[] = [
   ...pat("System", "SAME_AS", "System"),
   ...pat("Channel", "SAME_AS", "Channel"),
   ...pat("Product", "SAME_AS", "Product"),
+  // competitors (public data): who they compete with, and their own public channels
+  ...pat("Competitor", "COMPETES_WITH", "Business"),
+  ...pat("Competitor", "TARGETS", "Audience"),
+  ...pat("Competitor", "SAME_AS", "Competitor"),
 ];
 
 const ALLOWED = new Set(ALLOWED_PATTERNS.map(([f, r, t]) => `${f}|${r}|${t}`));
@@ -227,7 +236,7 @@ export const TRACKED_PROPS: Partial<Record<EntityType, string[]>> = {
 export const SEARCHABLE: EntityType[] = [
   "Business", "Person", "Agent", "Team", "Product", "Feature", "Audience", "Need", "BrandRule", "BrandAsset", "Channel",
   "Content", "Campaign", "Page", "Query", "Metric", "Document", "Decision", "Task", "System", "Event", "Playbook", "Rule",
-  "Recommendation", "Memory", "Finding", "Goal",
+  "Recommendation", "Memory", "Finding", "Goal", "Competitor",
 ];
 
 // Nodes of a type search can be asked for by name carry this label (upsertNode adds it on create, ensureIndexes backfills

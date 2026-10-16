@@ -19,6 +19,7 @@ import { TouchedSet, type AlleviaTool, type ToolContext } from "./tool.js";
 import { loadBusinessSkills } from "./skills/business.js";
 import type { SkillCatalog } from "./skills/catalog.js";
 import type { CreativeDeps } from "../creative/ports.js";
+import type { PublicDataPort } from "../publicdata/service.js";
 import type { RecallBrief, TeamSettings } from "./types.js";
 
 export type Channel = "web" | "discord" | "cli" | "mcp";
@@ -45,6 +46,7 @@ export interface AskDeps {
   signal?: AbortSignal;                               // stops the turn: every agent run is aborted, the turn saved as failed
   skills?: SkillCatalog | null;                       // the shipped skill packs; this business's own are laid over them each turn. none/null: no skills
   creative?: CreativeDeps;                            // what the tools that make things may use; absent: they say it isn't set up
+  publicData?: PublicDataPort;                        // public-data lookups (Apify); absent or off: those tools say so
 }
 
 // What src/agent/wiring.ts (written once the graph tools land) must export, so every surface (CLI, server, Discord,
@@ -138,7 +140,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
         ...(deps.embedQuery ? { embedQuery: deps.embedQuery } : {}), ...(deps.readOnly !== undefined ? { readOnly: deps.readOnly } : {}),
         ...(deps.timeZone ? { timeZone: deps.timeZone } : {}), ...(deps.signal ? { signal: deps.signal } : {}),
         ...(capabilities ? { capabilities } : {}), ...(team ? { team } : {}), ...(language ? { language } : {}), ...(skills ? { skills } : {}),
-        ...(deps.creative ? { creative: deps.creative } : {}),
+        ...(deps.creative ? { creative: deps.creative } : {}), ...(deps.publicData ? { publicData: deps.publicData } : {}),
       },
       out);
     if (deps.signal?.aborted) failure = STOPPED_MESSAGE;

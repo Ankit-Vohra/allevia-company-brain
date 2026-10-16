@@ -28,6 +28,9 @@ export interface AlleviaConfig {
   // what is registered in the Google Cloud console; connectorKey seals the stored tokens (>= 32 characters).
   // enabled: ALLEVIA_SEARCH_CONSOLE=1; off by default (the connector is built against a fake and parked for now).
   google: { enabled: boolean; clientId?: string; clientSecret?: string; redirectUri: string; connectorKey?: string };
+  // Public-data lookups through Apify store actors (docs/apify-setup.md). No token: the lookups say they are not switched
+  // on and nothing else changes. Budgets in US dollars: per business per calendar month, and all businesses per day.
+  apify: { token?: string; monthlyUsd?: string; dailyUsd?: string };
 }
 
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -101,5 +104,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
       redirectUri: get("ALLEVIA_GOOGLE_REDIRECT_URI") ?? `${webBaseUrl}/api/connectors/google/callback`,
       connectorKey: get("ALLEVIA_CONNECTOR_KEY"),
     },
+    apify: { token: get("APIFY_TOKEN"), monthlyUsd: get("ALLEVIA_APIFY_MONTHLY_USD"), dailyUsd: get("ALLEVIA_APIFY_DAILY_USD") },
   };
 }

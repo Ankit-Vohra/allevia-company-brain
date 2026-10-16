@@ -187,7 +187,7 @@ describe("videos", () => {
     expect(ff.calls).toEqual([]);
     expect(Buffer.compare(store.get("kestrel_oak", r.asset.storageKey)!, MP4)).toBe(0);
     const [a] = await g.roQuery<{ kind: string; media: string; mime: string; stripped: boolean; key: string; owner: number }>(
-      "MATCH (a:Asset {id:$id}) OPTIONAL MATCH (p:Person)-[:AUTHORED]->(a) RETURN a.kind AS kind, a.mediaType AS media, a.mime AS mime, a.metadataStripped AS stripped, a.storageKey AS key, count(p) AS owner", { id: r.asset.id });
+      "MATCH (a:Asset {id:$id}) OPTIONAL MATCH (p:Person)-[:AUTHORED]->(a) WITH a, count(p) AS owner RETURN a.kind AS kind, a.mediaType AS media, a.mime AS mime, a.metadataStripped AS stripped, a.storageKey AS key, owner", { id: r.asset.id });
     expect(a).toMatchObject({ kind: "original", media: "video", mime: "video/mp4", stripped: false, owner: 1 });
     expect(a!.key).toMatch(/^[0-9a-f]{64}\.mp4$/);
   });

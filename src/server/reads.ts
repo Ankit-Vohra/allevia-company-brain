@@ -415,8 +415,9 @@ async function agentFindings(g: GraphHandle, aid: string, rosterId: string): Pro
      WITH f ORDER BY coalesce(f.createdAt, 0) DESC, f.id DESC LIMIT $limit
      OPTIONAL MATCH (f)-[pt:PART_OF]->(t:Turn) WHERE pt.until IS NULL
      OPTIONAL MATCH (rv:Agent)-[r:REVIEWED]->(f)
+     WITH f, t, collect({by: rv.id, verdict: r.verdict, note: r.note}) AS verdicts
      RETURN f.id AS id, coalesce(f.text, f.summary, '') AS text, f.citations AS citations, coalesce(t.id, f.turnId) AS turnId,
-       t.question AS question, coalesce(t.at, f.createdAt) AS at, collect({by: rv.id, verdict: r.verdict, note: r.note}) AS verdicts
+       t.question AS question, coalesce(t.at, f.createdAt) AS at, verdicts
      ORDER BY at DESC, id`,
     { aid, limit: LIMITS.findings });
   return rows.map((r) => ({
@@ -554,7 +555,8 @@ const approvalQuery = (where: string) =>
    OPTIONAL MATCH (r:Recommendation)-[pp:PROPOSES]->(a) WHERE ID(pp) >= 0
    WITH a, collect(r)[0] AS r
    OPTIONAL MATCH (ag:Agent)-[pr:PRODUCED]->(r) WHERE ID(pr) >= 0
-   RETURN ${APPROVAL_FIELDS}, r.id AS rec, r.by AS by, r.simulated AS recSimulated, collect(ag.id)[0] AS producer`;
+   WITH a, r, collect(ag.id)[0] AS producer
+   RETURN ${APPROVAL_FIELDS}, r.id AS rec, r.by AS by, r.simulated AS recSimulated, producer`;
 
 export async function approvals(g: GraphHandle, limit: number = LIMITS.approvals): Promise<ApprovalDto[]> {
   const rows = await ro<Record<string, unknown>>(g, approvalQuery(""), { limit: Math.max(1, Math.min(limit, LIMITS.approvals)) });

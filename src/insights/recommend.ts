@@ -72,8 +72,8 @@ async function readExisting(g: GraphHandle, recId: string): Promise<Existing | n
     `MATCH (r:Entity:Recommendation {id:$id})
      OPTIONAL MATCH (r)-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL
      WITH r, a ORDER BY coalesce(a.createdAt, 0) DESC, a.id
-     RETURN r.status AS status, r.whyTemplate AS whyTemplate, r.summary AS summary,
-            [x IN collect(a) WHERE x IS NOT NULL | {id: x.id, status: x.status}] AS approvals`, { id: recId });
+     WITH r, [x IN collect(a) WHERE x IS NOT NULL | {id: x.id, status: x.status}] AS approvals
+     RETURN r.status AS status, r.whyTemplate AS whyTemplate, r.summary AS summary, approvals`, { id: recId });
   return r ?? null;
 }
 

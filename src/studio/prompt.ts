@@ -44,7 +44,8 @@ export async function buildEditPrompt(
   audiences.forEach((x) => sources.add(x.id));
   const winners = await g.roQuery<{ id: string; name: string | null; v: number }>(
     `MATCH (o:Observation)-[:MEASURES]->(c:Content) WHERE o.metric IN ['reach', 'saves', 'engagement', 'likes', 'views']
-     RETURN c.id AS id, c.name AS name, max(o.value) AS v ORDER BY v DESC, id LIMIT 3`);
+     WITH c, max(o.value) AS v
+     RETURN c.id AS id, c.name AS name, v ORDER BY v DESC, id LIMIT 3`);
   winners.forEach((w) => sources.add(w.id));
   const format = await g.roQuery<{ id: string }>(
     "MATCH (r:Rule) WHERE r.summary CONTAINS '4:5' RETURN r.id AS id ORDER BY r.id LIMIT 2");

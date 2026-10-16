@@ -45,6 +45,7 @@ import {
   planPrompt, planSystemPrompt, reviewPrompt, revisePrompt, synthesisPrompt, workPrompt, type FindingView, type PromptOpts, type ReviewEvidence,
 } from "./prompts.js";
 import type { CreativeDeps } from "../creative/ports.js";
+import type { PublicDataPort } from "../publicdata/service.js";
 import { invokeTool, isWriteTool, nextCallId, type AgentRuntime, type Emit, type RunInput, type RunOutput, type RunPhase } from "./runtime.js";
 import { TouchedSet, type AlleviaTool, type ToolContext } from "./tool.js";
 import {
@@ -55,6 +56,7 @@ export const AGENT_TIMEOUT_MS = 120_000;
 // A run that can make things (a poster takes an artwork, a check and a model turn) gets longer: the owner is told within two
 // minutes of asking, and the run's own steps are each capped by the engine and the checks.
 export const AGENT_TIMEOUT_CREATIVE_MS = 240_000;
+const PUBLIC_DATA_TOOLS: ReadonlySet<string> = new Set(["google_listing", "instagram_public", "competitor_watch", "ad_library"]);
 export const MAX_REVIEWERS = 2;
 const MAX_PATH_IDS = 12;
 const EVIDENCE_CHARS = 2_400;      // tool data handed to a reviewer, in all
@@ -104,6 +106,7 @@ export interface TurnDeps {
   humanize?: boolean;                       // default true: the standing last pass on the answer (src/agent/humanize.ts)
   skills?: SkillCatalog;                    // the skills agents can open (use_skill): the shipped packs plus this business's own; none = no skills
   creative?: CreativeDeps;                  // what the creating tools may use; absent: creating is not set up (the tools say so)
+  publicData?: PublicDataPort;              // public-data lookups (Apify, budgeted); absent or off: the tools say so
 }
 
 export interface Plan { steps: PlanStep[]; rationale: string; chiefTask?: string }
@@ -607,6 +610,7 @@ class Turn {
       graph, tenant: this.input.tenant, turnId: this.input.turnId, agentId, asker: this.input.asker, touched: this.touched, now,
       ...(embedQuery ? { embedQuery } : {}), ...(readOnly !== undefined ? { readOnly } : {}), ...(skills ? { skills } : {}),
       question: this.input.question, ...(this.creative ? { creative: this.creative } : {}),
+      ...(this.deps.publicData ? { publicData: this.deps.publicData } : {}),
     };
   }
 
@@ -715,7 +719,9 @@ class Turn {
   // it still emits or reports (a tool call that was in flight) is dropped.
   private async runAgent(agent: AgentDef, o: RunOpts, emit: Emit = this.emit): Promise<RunOutput> {
     this.involve(agent.id);
-    const ms = this.deps.agentTimeoutMs ?? (this.creative && (o.phase === "direct" || o.phase === "work") ? AGENT_TIMEOUT_CREATIVE_MS : AGENT_TIMEOUT_MS);
+    // A public-data lookup waits on a run in Apify's cloud (up to a few minutes), so a desk that holds one gets the long limit too.
+    const slowTools = !!this.creative || (this.deps.publicData?.enabled === true && agent.tools.some((t) => PUBLIC_DATA_TOOLS.has(t)));
+    const ms = this.deps.agentTimeoutMs ?? (slowTools && (o.phase === "direct" || o.phase === "work") ? AGENT_TIMEOUT_CREATIVE_MS : AGENT_TIMEOUT_MS);
     const ac = new AbortController();
     const cleanup: Array<() => void> = [];
     const stop = new Promise<never>((_, reject) => {

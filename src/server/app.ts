@@ -680,8 +680,10 @@ export async function loadOnboardModule(): Promise<OnboardFn | null> {
   const { productionStudioDeps } = await import("../studio/wiring.js");
   const { loadConfig } = await import("../config.js");
   const studio = productionStudioDeps(loadConfig().dataDir);
-  return (input, emit, signal) => onboard(input, emit, {
+  return async (input, emit, signal) => onboard(input, emit, {
     runner: new AgentSdkRunner({ concurrency: 3 }), signal, brand: { store: studio.store, vision: studio.vision, googleFonts: true },
+    // public data (Apify): off without APIFY_TOKEN; with it, a blocked site and the Google listing, inside the budget
+    publicData: (await import("../publicdata/service.js")).productionPublicData(loadConfig()),
   });
 }
 

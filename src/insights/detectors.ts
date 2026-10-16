@@ -123,8 +123,8 @@ const seoHighSeverityFails: Detector = {
       `MATCH (p:Page)-[f:FAILS]->(r:Entity)
        WHERE f.until IS NULL AND (r:Rule OR r:BrandRule) AND toLower(coalesce(r.severity, '')) IN ['high', 'critical']
        WITH p, r, f ORDER BY r.id
-       RETURN p.id AS page, p.name AS name, p.path AS path, p.url AS url,
-              collect({id: r.id, name: r.name, fix: coalesce(r.howToFix, r.text), evidence: f.evidence}) AS rules
+       WITH p, collect({id: r.id, name: r.name, fix: coalesce(r.howToFix, r.text), evidence: f.evidence}) AS rules
+       RETURN p.id AS page, p.name AS name, p.path AS path, p.url AS url, rules
        ORDER BY size(rules) DESC, page LIMIT 200`);
     if (!rows.length) return [];
     const traffic = bySubject(await latestObs(g, [...CLICKS, ...IMPRESSIONS], ["Page"]));
@@ -495,7 +495,8 @@ const contentPostingGap: Detector = {
     const rows = await ro<{ id: string; name: string | null; dates: string[]; formats: string[] }>(g,
       `MATCH (c:Content)-[p:PUBLISHED_ON]->(ch:Channel)
        WHERE p.until IS NULL AND c.publishedAt IS NOT NULL AND coalesce(c.status, 'published') <> 'draft'
-       RETURN ch.id AS id, ch.name AS name, collect(c.publishedAt) AS dates, collect(coalesce(c.format, 'post')) AS formats
+       WITH ch, collect(c.publishedAt) AS dates, collect(coalesce(c.format, 'post')) AS formats
+       RETURN ch.id AS id, ch.name AS name, dates, formats
        ORDER BY id`);
     const today = dayOf(opts.now)!;
     const out: Candidate[] = [];

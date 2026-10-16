@@ -9,6 +9,8 @@ const SPEC_TOOLS = [
   "propose_action", "show_path", "use_skill",
   // the creating tools, the brand library and web research
   "get_brand_asset", "write_copy", "make_poster", "generate_image", "make_reel_script_and_clip", "research",
+  // public data (Apify)
+  "google_listing", "instagram_public", "competitor_watch", "ad_library",
 ];
 
 // The first {...} after "Example:" in a description.
@@ -63,7 +65,9 @@ describe("tool registry", () => {
     for (const t of ALL_TOOLS) expect(() => z.toJSONSchema(z.object(t.input)), t.name).not.toThrow();
   });
 
-  it("only remember, propose_action and the tools that make things write", () => {
-    expect(ALL_TOOLS.filter((t) => t.writes).map((t) => t.name).sort()).toEqual(["generate_image", "make_poster", "make_reel_script_and_clip", "propose_action", "remember", "write_copy"]);
+  it("only remember, propose_action, the tools that make things and the public-data lookups write", () => {
+    expect(ALL_TOOLS.filter((t) => t.writes).map((t) => t.name).sort()).toEqual([
+      "ad_library", "competitor_watch", "generate_image", "google_listing", "instagram_public", "make_poster", "make_reel_script_and_clip", "propose_action", "remember", "write_copy",
+    ]);
   });
 });

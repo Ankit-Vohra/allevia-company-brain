@@ -351,7 +351,7 @@ describe("temporal upsert (integration)", () => {
     const id = await addObservation(g, { subject: "channel:instagram", metric: "ad_spend", value: 500.5, asOf: "2026-10-13", src: "document:later", simulated: true }, T0);
     expect(id).toBe("obs:ad_spend:channel:instagram:2026-10-13");
     const [r] = await g.roQuery<Record<string, unknown>>(
-      "MATCH (o:Entity {id:$id}) OPTIONAL MATCH (o)-[s:SOURCED_FROM]->() RETURN o.src AS src, o.simulated AS sim, count(s) AS links", { id });
+      "MATCH (o:Entity {id:$id}) OPTIONAL MATCH (o)-[s:SOURCED_FROM]->() WITH o, count(s) AS links RETURN o.src AS src, o.simulated AS sim, links", { id });
     expect(r).toEqual({ src: "document:later", sim: true, links: 0 });
     await expect(addObservation(g, { subject: "channel:none", metric: "x", value: 1, asOf: "2026-10-13", src: "document:later" })).rejects.toBeInstanceOf(MissingEndpoint);
   });

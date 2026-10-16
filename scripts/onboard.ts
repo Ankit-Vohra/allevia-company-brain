@@ -9,6 +9,7 @@ import { AgentSdkRunner } from "../src/ingest/llm.js";
 import { loadConfig } from "../src/config.js";
 import { onboard } from "../src/onboard/onboard.js";
 import { productionStudioDeps } from "../src/studio/wiring.js";
+import { productionPublicData } from "../src/publicdata/service.js";
 
 const { values: a } = parseArgs({
   options: {
@@ -37,6 +38,7 @@ const res = await onboard(
   {
     runner: new AgentSdkRunner({ concurrency: 3 }),
     brand: { store: studio.store, vision: studio.vision, googleFonts: true },
+    publicData: productionPublicData(loadConfig()),
     ...(a.model ? { model: a.model } : {}),
     crawlOptions: { ...(int(a["max-pages"]) ? { maxPages: int(a["max-pages"]) } : {}) },
     ...(int(a["understand-pages"]) ? { maxUnderstandPages: int(a["understand-pages"]) } : {}),

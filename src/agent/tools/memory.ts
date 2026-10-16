@@ -50,7 +50,8 @@ async function runRecall(args: { ids?: string[]; query?: string }, ctx: ToolCont
        WITH m, collect(DISTINCT x.id) AS about, collect(${EDGE("r")}) AS es
        ${NOT_SUPERSEDED} WITH m, about, es, count(newer) AS superseded WHERE superseded = 0
        OPTIONAL MATCH (who:Entity)-[:STATED]->(m)
-       RETURN ${NODE("m")} AS m, m.kind AS kind, m.text AS text, m.at AS at, about, es, collect(DISTINCT who.id) AS by ORDER BY at DESC, m.id LIMIT 10`, { ids }),
+       WITH m, about, es, collect(DISTINCT who.id) AS by
+       RETURN ${NODE("m")} AS m, m.kind AS kind, m.text AS text, m.at AS at, about, es, by ORDER BY at DESC, m.id LIMIT 10`, { ids }),
     ro<MemRow>(ctx,
       `MATCH (m:Memory) WHERE m.kind = 'preference' ${NOT_SUPERSEDED} WITH m, count(newer) AS superseded WHERE superseded = 0
        RETURN ${NODE("m")} AS m, m.kind AS kind, m.text AS text, m.at AS at, [] AS about, [] AS es, [] AS by ORDER BY at DESC, m.id LIMIT 5`),

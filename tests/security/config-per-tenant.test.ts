@@ -30,7 +30,7 @@ async function snapshot(g: GraphHandle) {
   const labels = await g.roQuery<{ l: string; c: number }>("MATCH (n:Entity) WITH [x IN labels(n) WHERE x <> 'Entity' AND x <> 'Searchable'][0] AS l RETURN l, count(*) AS c ORDER BY l");
   const team = await listAgentsWithSettings(g);
   const goals = await g.roQuery<{ name: string; target: number | null; unit: string | null }>("MATCH (x:Goal) RETURN x.name AS name, x.target AS target, x.unit AS unit ORDER BY name, x.id");
-  const rules = await g.roQuery<{ kind: string | null; c: number }>("MATCH (r:Rule) RETURN r.kind AS kind, count(*) AS c ORDER BY kind");
+  const rules = await g.roQuery<{ kind: string | null; c: number }>("MATCH (r:Rule) WITH r.kind AS kind, count(*) AS c ORDER BY kind RETURN kind, c");
   return { labels, team, goals, rules };
 }
 

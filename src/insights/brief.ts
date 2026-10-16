@@ -248,8 +248,9 @@ export async function writeBrief(tenant: string, opts: BriefOpts = {}): Promise<
   const pendingRows = await g.roQuery<{ id: string; title: string | null; name: string; kind: string; createdAt: number | null; score: number | null }>(
     `MATCH (a:Approval) WHERE a.status = 'pending'
      OPTIONAL MATCH (r:Recommendation)-[p:PROPOSES]->(a) WHERE p.until IS NULL
-     RETURN a.id AS id, a.title AS title, a.name AS name, a.kind AS kind, a.createdAt AS createdAt, max(r.score) AS score
-     ORDER BY coalesce(score, 0) DESC, coalesce(a.createdAt, 0), id LIMIT 500`);
+     WITH a, max(r.score) AS score
+     RETURN a.id AS id, a.title AS title, a.name AS name, a.kind AS kind, a.createdAt AS createdAt, score
+     ORDER BY coalesce(score, 0) DESC, coalesce(createdAt, 0), id LIMIT 500`);
   const age = (ms: number | null) => (ms ? Math.max(0, Math.floor((now - ms) / DAY_MS)) : 0);
   const cards = pendingRows.map((r) => ({ id: r.id, title: r.title ?? r.name.replace(/^[a-z_]+:\s*/, ""), kind: r.kind, ageDays: age(r.createdAt) }));
   const pending = {

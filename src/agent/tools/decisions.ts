@@ -33,7 +33,8 @@ async function runTrace(args: { id?: string; query?: string }, ctx: ToolContext)
       `MATCH (d:Entity {id:$id})
        OPTIONAL MATCH (d)-[b:BASED_ON]->(:Entity) WHERE b.until IS NULL WITH d, count(b) AS evidenceTotal
        OPTIONAL MATCH (d)-[a:AFFECTS]->(:Entity) WHERE a.until IS NULL
-       RETURN d.status AS status, d.decidedAt AS decidedAt, d.summary AS summary, evidenceTotal, count(a) AS affectsTotal`, p),
+       WITH d, evidenceTotal, count(a) AS affectsTotal
+       RETURN d.status AS status, d.decidedAt AS decidedAt, d.summary AS summary, evidenceTotal, affectsTotal`, p),
     ro<EvRow>(ctx,
       `MATCH (:Entity {id:$id})-[r:BASED_ON]->(ev:Entity) WHERE r.until IS NULL
        RETURN ${EDGE("r")} AS e, ${NODE("ev")} AS n, ev.metric AS metric, ev.value AS value, ev.unit AS unit, ev.windowStart AS ws,

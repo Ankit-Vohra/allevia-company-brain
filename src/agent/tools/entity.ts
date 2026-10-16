@@ -45,7 +45,8 @@ async function runGetEntity(args: { id: string; asOf?: string }, ctx: ToolContex
        RETURN dir, rel, c, items`, { ...p, cap: GROUP_CAP }),
     ro<{ type: string; c: number }>(ctx,
       `MATCH (n:Entity {id:$id})-[r]-(m:Entity) WHERE ${edgeAt("r", asOf)} AND any(l IN labels(m) WHERE l IN $hidden)
-       RETURN [l IN labels(m) WHERE NOT l IN ['Entity', 'Searchable']][0] AS type, count(DISTINCT m) AS c`, p),
+       WITH [l IN labels(m) WHERE NOT l IN ['Entity', 'Searchable']][0] AS type, count(DISTINCT m) AS c
+       RETURN type, c`, p),
     ro<{ c: number }>(ctx, "MATCH (:Entity {id:$id})-[e:HAD_VERSION]->(v) WHERE ID(e) >= 0 RETURN count(v) AS c", p),
     ro<ObsRow>(ctx,
       `MATCH (o:Observation {subject: $id})-[r:MEASURES]->(:Entity {id:$id}) WHERE ID(r) >= 0 WITH o, r, coalesce(o.windowEnd, o.asOf) AS at

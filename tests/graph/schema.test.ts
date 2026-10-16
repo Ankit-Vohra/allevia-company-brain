@@ -21,7 +21,7 @@ describe("schema", () => {
     expect(REL_TYPES.filter((r) => !used.has(r))).toEqual([]);
   });
   it("has the spec's types", () => {
-    expect(ENTITY_TYPES).toHaveLength(38);
+    expect(ENTITY_TYPES).toHaveLength(39);
     expect(types.has("Finding")).toBe(true);
     expect(isAllowed("Turn", "HANDLED_BY", "Agent") && isAllowed("Agent", "PRODUCED", "Finding") && isAllowed("Finding", "BASED_ON", "Finding")).toBe(true);
     expect(types.has("Version") && types.has("Chunk") && types.has("Observation")).toBe(true);

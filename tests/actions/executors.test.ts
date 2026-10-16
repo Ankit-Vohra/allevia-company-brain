@@ -92,7 +92,7 @@ describe("content_draft", () => {
     const contentId = a.produced[0]!;
     const [c] = await g.roQuery<{ status: string; format: string; path: string; published: number }>(
       `MATCH (:Agent {id:'agent:allevia-content-strategist'})-[:PRODUCED]->(c:Content {id:$id})
-       OPTIONAL MATCH (c)-[p:PUBLISHED_ON]->() RETURN c.status AS status, c.format AS format, c.draftPath AS path, count(p) AS published`, { id: contentId });
+       OPTIONAL MATCH (c)-[p:PUBLISHED_ON]->() WITH c, count(p) AS published RETURN c.status AS status, c.format AS format, c.draftPath AS path, published`, { id: contentId });
     expect(c).toMatchObject({ status: "draft", format: "reel", published: 0 });
     expect(readFileSync(join(dataDir, c!.path), "utf8")).toContain("Hook: I asked 10 riders what they earn.");
     expect(await count("MATCH (:Content {id:$id})-[:USES_RULE]->(:Rule {id:'rule:hook-curiosity-gap'}) RETURN count(*) AS c", { id: contentId })).toBe(1);
