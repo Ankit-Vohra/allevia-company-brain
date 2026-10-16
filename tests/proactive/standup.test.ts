@@ -151,6 +151,20 @@ describe("no spam", () => {
     expect(three.lessons[0]).toMatch(/stopped drafting them for now/);
   });
 
+  it("drafts one festival at a time: the next waits a few days", () => {
+    const r = screen([op("season:diwali-2026", "poster")], [past("season:dussehra-2026", "poster", "pending", 1)], SEED_NOW);
+    expect(r.kept).toEqual([]);
+    expect(r.skipped[0]!.why).toBe("a festival post was drafted in the last few days");
+    expect(screen([op("season:diwali-2026", "poster")], [past("season:dussehra-2026", "poster", "pending", 6)], SEED_NOW).kept).toHaveLength(1);
+  });
+
+  it("never leads with sample numbers", () => {
+    const base = { tenant: "t", business: { id: null, name: "X" }, now: SEED_NOW, since: SEED_NOW - DAY, today: "2026-10-15", numbers: { count: 0, changes: [] }, uploads: [], goals: [], decisions: [], learned: 0, publicData: false, reviews: [], competitors: [], website: { checked: false, fails: [] }, dates: [] };
+    const finding = { id: "recommendation:x", key: "ads.ctr_drop:c", title: "Ad CTR fell", why: "CTR fell.", area: "ads", by: "growth-marketer", score: 0.9, detector: "ads.ctr_drop", cardId: null, cardKind: null, evidence: [] };
+    expect(opportunitiesFrom({ ...base, findings: [{ ...finding, simulated: true }] })).toEqual([]);
+    expect(opportunitiesFrom({ ...base, findings: [{ ...finding, simulated: null }] })).toHaveLength(1);
+  });
+
   it("stays quiet below the bar", () => {
     expect(screen([op("low", "post", 0.3)], [], SEED_NOW).kept).toEqual([]);
   });

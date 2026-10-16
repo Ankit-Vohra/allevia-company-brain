@@ -27,7 +27,7 @@ export interface CompetitorSignal { id: string; name: string; metric: string; va
 export interface WebsiteFail { ruleId: string; name: string; severity: string; fix: string | null; issueType: string | null; pages: number; newPages: number; page: string | null; pageName: string | null; pageUrl: string | null; evidence: string | null }
 export interface FindingSignal {
   id: string; key: string; title: string; why: string; area: string; by: string | null; score: number; detector: string | null;
-  cardId: string | null; cardKind: string | null; evidence: string[];
+  cardId: string | null; cardKind: string | null; evidence: string[]; simulated: boolean | null;
 }
 export interface DecisionSignal { id: string; title: string; kind: string; status: string; standupKind: string | null }
 
@@ -126,7 +126,7 @@ export async function gatherSignals(g: Read, o: SignalOpts): Promise<Signals> {
      WITH r, a, collect(x.id) AS evidence
      WITH r, collect(a)[0] AS a, evidence
      RETURN r.id AS id, r.key AS key, r.name AS title, coalesce(r.summary, '') AS why, coalesce(r.area, '') AS area, r.by AS by, coalesce(r.score, 0) AS score,
-            r.detector AS detector, a.id AS cardId, a.kind AS cardKind, evidence
+            r.detector AS detector, a.id AS cardId, a.kind AS cardKind, evidence, r.simulated AS simulated
      ORDER BY score DESC, id LIMIT 30`);
 
   return {

@@ -159,6 +159,7 @@ export function opportunitiesFrom(s: Signals): Opportunity[] {
   // ---- open ideas from the rule checks that nobody has drafted yet ----
   for (const f of s.findings) {
     if (f.area === "tech" || f.area === "knowledge") continue;      // on call and the library have their own place in the note
+    if (f.simulated === true || /\(simulated\)/i.test(f.title)) continue; // sample numbers never lead the owner's day
     if (f.cardKind && f.cardKind !== "content_draft") continue;    // a fix or a pause is already waiting for the owner as it is
     const kind: OpportunityKind = f.area === "content" ? "post" : f.area === "funnel" ? "follow_up" : f.area === "ads" ? "offer" : "website_fix";
     out.push(mk({

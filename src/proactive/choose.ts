@@ -23,7 +23,8 @@ export const MIN_SCORE = 0.4;
 export const REJECT_MEMORY_DAYS = 30;
 export const DONE_MEMORY_DAYS = 7;
 export const REJECT_PENALTY = 0.65;   // each recent No to a kind multiplies its score by this
-export const REJECTS_TO_PAUSE = 3;    // this many Nos to a kind and no Yes: that kind is paused
+export const REJECTS_TO_PAUSE = 3;
+export const SEASON_GAP_DAYS = 5;    // after a festival or season draft, the next waits this long    // this many Nos to a kind and no Yes: that kind is paused
 
 export const KIND_WORDS: Record<OpportunityKind, [string, string]> = {
   post: ["post", "posts"], poster: ["poster", "posters"], reply: ["review reply", "review replies"], website_fix: ["website fix", "website fixes"],
@@ -61,6 +62,8 @@ export function screen(opps: Opportunity[], history: PastCard[], now: number, o:
     lessons.push(paused ? `You said no to the last ${plural(n, w[0], w[1])}, so your team stopped drafting them for now.` : `You said no to ${plural(n, w[0], w[1])} lately, so your team brings fewer of them.`);
   }
   const kept: Opportunity[] = [], skipped: Skipped[] = [];
+  // one festival or season draft in five days is enough: the next one waits
+  const seasonDrafted = history.find((h) => h.key.startsWith("season:") && h.status !== "rejected" && now - h.at <= SEASON_GAP_DAYS * DAY_MS);
   for (const op of opps) {
     const mine = history.filter((h) => h.key === op.key);
     const waiting = mine.find((h) => h.status === "pending");
@@ -69,6 +72,7 @@ export function screen(opps: Opportunity[], history: PastCard[], now: number, o:
     if (no) { skipped.push({ key: op.key, title: op.title, why: `you said no to this on ${shortDate(new Date(no.at).toISOString().slice(0, 10))}` }); continue; }
     const done = mine.find((h) => isYes(h.status) && now - h.at <= DONE_MEMORY_DAYS * DAY_MS);
     if (done) { skipped.push({ key: op.key, title: op.title, why: "done in the last week" }); continue; }
+    if (op.source === "season" && seasonDrafted && seasonDrafted.key !== op.key) { skipped.push({ key: op.key, title: op.title, why: "a festival post was drafted in the last few days" }); continue; }
     const n = nos.get(op.kind) ?? 0, y = yeses.get(op.kind) ?? 0;
     if (n >= REJECTS_TO_PAUSE && !y) { skipped.push({ key: op.key, title: op.title, why: `paused: you said no to the last ${plural(n, KIND_WORDS[op.kind][0], KIND_WORDS[op.kind][1])}` }); continue; }
     const score = Math.round(op.score * REJECT_PENALTY ** Math.max(0, n - y) * 100) / 100;
