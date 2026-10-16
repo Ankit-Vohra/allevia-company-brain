@@ -88,7 +88,7 @@ export async function extractPages(pages: PageData[], o: UnderstandOpts): Promis
         entities: extraction.entities.filter((e) => !NOT_FROM_A_WEBSITE.has(e.type)),
         relations: extraction.relations.filter((r) => !NOT_FROM_A_WEBSITE.has(r.fromType) && !NOT_FROM_A_WEBSITE.has(r.toType)) };
       const { write, dropped } = await resolveExtraction(keep, {
-        docId: doc.id, text: doc.text, asOf: doc.asOf, existing: o.existing,
+        docId: doc.id, text: doc.text, asOf: doc.asOf, existing: o.existing, model: o.model,
       });
       const own = remapOwnWebsite(write, { business: o.business.name, host: o.websiteHost ?? new URL(page.finalUrl).hostname });
       rememberWrite(o.existing, own);

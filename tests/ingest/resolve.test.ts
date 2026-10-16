@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { EntityType } from "../../src/graph/schema.js";
+import { ONTOLOGY_VERSION, type EntityType } from "../../src/graph/schema.js";
 import {
   EXTRACTED_OBSERVATION_CONF, FOUNDER_ID, MERGE_SIMILARITY, namesAgree, normName, normQuote, numberProblem, numbersIn, quoteProblem, rememberWrite, resolveExtraction,
   type Extraction, type KnownEntity, type ResolveContext,
@@ -378,6 +378,34 @@ describe("resolveExtraction: relations", () => {
     const affects = write.edges.filter((e) => e.type === "AFFECTS");
     expect(affects.map((e) => e.conf)).toEqual([0.9, 0.8]);
     expect(String(affects[1]!.props!.evidence).length).toBeLessThanOrEqual(200);
+  });
+});
+
+describe("resolveExtraction: who said it", () => {
+  const input = ex({
+    entities: [ent("Decision", "Pause Facebook posts"), ent("Channel", "Facebook")],
+    relations: [{ from: "Pause Facebook posts", fromType: "Decision", type: "AFFECTS", to: "Facebook", toType: "Channel", evidence: "We decided to pause Facebook posts.", conf: 0.93 }],
+  });
+
+  it("with a model, every edge the extraction writes records extractedBy and the ontology version (G17c)", async () => {
+    const { write } = await resolveExtraction(input, ctx({ model: "haiku" }));
+    expect(write.edges.length).toBeGreaterThanOrEqual(5);
+    for (const e of write.edges) expect(e.props, `${e.from} -${e.type}-> ${e.to}`).toMatchObject({ extractedBy: "haiku", ontologyVersion: ONTOLOGY_VERSION });
+    // the relation keeps its evidence beside them
+    expect(write.edges.find((e) => e.type === "AFFECTS")!.props).toEqual({ evidence: "We decided to pause Facebook posts.", extractedBy: "haiku", ontologyVersion: ONTOLOGY_VERSION });
+  });
+
+  it("a maybe-the-same mention keeps its marker next to them", async () => {
+    const similar = async () => ({ id: "channel:facebook", score: 0.95 });
+    const { write } = await resolveExtraction(ex({ entities: [ent("Channel", "Insta")] }), ctx({ model: "haiku", existing: known({ id: "channel:facebook", type: "Channel", name: "Facebook" }), similar }));
+    const m = write.edges.find((e) => e.type === "MENTIONS" && e.props?.maybeSameAs)!;
+    expect(m.props).toMatchObject({ maybeSameAs: "channel:facebook", extractedBy: "haiku", ontologyVersion: ONTOLOGY_VERSION });
+  });
+
+  it("without one (a caller that does not know), the edges are exactly what they were", async () => {
+    const { write } = await resolveExtraction(input, ctx());
+    expect(write.edges.filter((e) => e.props && "extractedBy" in e.props)).toEqual([]);
+    expect(write.edges.find((e) => e.type === "AFFECTS")!.props).toEqual({ evidence: "We decided to pause Facebook posts." });
   });
 });
 
