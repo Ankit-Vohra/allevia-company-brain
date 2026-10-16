@@ -6,6 +6,7 @@ import { ApiError, errorFrom, postSse, postSseForm } from "./lib/sse";
 import { consumeLinkInAddressBar } from "./lib/link";
 
 const CONNECT_LIVE_ONLY = "Connecting Search Console needs the live server.";
+const CHECKUP_LIVE_ONLY = "The website check-up needs the live server.";
 const NUMBERS_LIVE_ONLY = "Adding your numbers needs the live server: your file is read and kept there.";
 const STUDIO_LIVE_ONLY = "The Studio needs the live server: the photos, Tara's and Nisha's checks and the edits all run there.";
 
@@ -22,7 +23,7 @@ export interface StudioLatest {
 import type { AgentMode, CapabilityState, DirectivePreview, DiscordHome, LearnedRuleDto, ProgramScorecard } from "@shared/contracts";
 import type {
   AgentDetail, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, GoalSetup, GraphData, LearningFeed, LiveTurn, NodeDetail,
-  ConnectorStatus, NumbersImportResult, NumbersPlan, NumbersPreview, OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Tenant, TurnEventsPage, Usage,
+  CheckupStatus, ConnectorStatus, NumbersImportResult, NumbersPlan, NumbersPreview, OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Tenant, TurnEventsPage, Usage,
 } from "./types-ext";
 
 /** PATCH /api/:t/agents/:id */
@@ -354,6 +355,24 @@ export const api = {
   async disconnectSearchConsole(t: string): Promise<ConnectorStatus> {
     if (mode === "mock") throw new ApiError(CONNECT_LIVE_ONLY, 501);
     return sendJson(`/api/${enc(t)}/connectors/search-console/disconnect`, "POST", {});
+  },
+
+  // ---- Check my website (live server only) ----
+
+  /** GET /api/:t/checkup: where the free website check-up stands, the weekly setting, and the latest top five. */
+  async checkup(t: string): Promise<CheckupStatus> {
+    if (mode === "mock") throw new ApiError(CHECKUP_LIVE_ONLY, 501);
+    return getJson(`/api/${enc(t)}/checkup`);
+  },
+  /** POST /api/:t/checkup: start one now, in the background (a few minutes). */
+  async startCheckup(t: string): Promise<CheckupStatus> {
+    if (mode === "mock") throw new ApiError(CHECKUP_LIVE_ONLY, 501);
+    return sendJson(`/api/${enc(t)}/checkup`, "POST", {});
+  },
+  /** PUT /api/:t/checkup/schedule: the weekly check-up on or off. */
+  async setCheckupWeekly(t: string, weekly: boolean): Promise<CheckupStatus> {
+    if (mode === "mock") throw new ApiError(CHECKUP_LIVE_ONLY, 501);
+    return sendJson(`/api/${enc(t)}/checkup/schedule`, "PUT", { weekly });
   },
 
   /** The brand library: what the team puts on posters. */

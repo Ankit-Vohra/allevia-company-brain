@@ -14,6 +14,8 @@ import { startSchedule } from "../connectors/google/schedule.js";
 import { googleSettings } from "../connectors/google/settings.js";
 import { FileTokenStore } from "../connectors/google/store.js";
 import { createApp, type ServerDeps } from "./app.js";
+import { checkupJobs } from "../checkup/jobs.js";
+import { startCheckupSchedule } from "../checkup/schedule.js";
 import { installCrashGuard } from "../util/crash-guard.js";
 import type { GoogleWiring } from "./routes/connectors.js";
 
@@ -103,7 +105,11 @@ export async function startServer(opts: ServeOpts = {}): Promise<{ server: Serve
   const stopSchedule = !publicMode && google.deps.settings.configured && !opts.over?.google
     ? startSchedule({ google: google.deps, tenants: () => listTenants(), openGraph: (slug) => openGraph(slug) })
     : () => undefined;
-  return { server, url, close: () => { stopRetry?.(); stopSchedule(); return new Promise<void>((r) => server.close(() => r())); } };
+  // the weekly website check-up per business (src/checkup/schedule.ts): never in public mode; ALLEVIA_CHECKUP_SCHEDULE=0 switches it off
+  const stopCheckups = !publicMode && process.env.ALLEVIA_CHECKUP_SCHEDULE !== "0" && !opts.over?.listTenants
+    ? startCheckupSchedule({ tenants: () => deps.listTenants(), openGraph: (slug) => deps.openGraph(slug), jobs: deps.checkupJobs ?? checkupJobs() })
+    : () => undefined;
+  return { server, url, close: () => { stopRetry?.(); stopSchedule(); stopCheckups(); return new Promise<void>((r) => server.close(() => r())); } };
 }
 
 // Resolves on SIGINT/SIGTERM after the server has stopped taking requests.

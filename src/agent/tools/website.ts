@@ -35,8 +35,8 @@ async function runCheckupTool(args: { all?: boolean }, ctx: ToolContext) {
   const [cur, prev] = runs;
   if (!cur) {
     return {
-      data: { found: false, why: "No website check-up has been run for this business yet.", how: "It runs with `npm run cli -- checkup <url> --tenant <slug>` (about 3 minutes, free) or on the weekly schedule.",
-        say: "Tell the owner plainly that the website has not been checked yet and that it is free and takes a few minutes; do not guess what is wrong with the site." },
+      data: { found: false, why: "No website check-up has been run for this business yet.", how: "The owner starts it with the \"Check my website\" button on the plan page or /checkup on Discord (about 3 minutes, free); it can also run every week.",
+        say: "Tell the owner plainly that the website has not been checked yet, that it is free and takes a few minutes, and that they can press \"Check my website\" or type /checkup; do not guess what is wrong with the site." },
       nodes: [], edges: [], sources: [], note: "No check-up stored yet.",
     };
   }

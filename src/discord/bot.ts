@@ -28,6 +28,8 @@ import { approvals as listApprovals, latestBrief, sessionDetail } from "../serve
 import type { ApprovalDto } from "../server/types.js";
 import type { AttachmentRef, FetchFn } from "./attachments.js";
 import { isNumbersButton, NumbersOnDiscord, pickSpreadsheet } from "./numbers-bot.js";
+import type { CheckupJobs, CheckupOutcome } from "../checkup/jobs.js";
+import { latestCheckup, tenantSite, topFiveText } from "../checkup/tenant.js";
 import { studioButtonId } from "./studio-bot.js";
 import { pathViewUrl, renderAnswer, renderCitations, splitMessage, threadName } from "./format.js";
 import { findThreadSession, linkSessionThread, openThreadSession, recentUnlinkedSessions } from "./sessions.js";
@@ -111,6 +113,8 @@ export interface BotDeps {
   // Hub only: a spreadsheet dropped in #your-team adds the owner's numbers to this business (its own Business node; the hub
   // chose this bot from the channel). Absent: spreadsheets are left alone.
   numbers?: { businessId: string; fetch?: FetchFn };
+  // /checkup: the background check-ups (src/checkup/jobs.ts). Absent: the command says it isn't switched on.
+  checkup?: Pick<CheckupJobs, "start">;
   log?: (line: string) => void;
 }
 
@@ -314,6 +318,7 @@ export class AlleviaBot {
       case "brief": return this.briefCommand(c);
       case "approvals": return this.approvalsCommand(c);
       case "continue": return this.continueCommand(c);
+      case "checkup": return this.checkupCommand(c);
       default: return c.respond("I don't know that command.", { ephemeral: true });
     }
   }
@@ -335,6 +340,38 @@ export class AlleviaBot {
     await c.respond(`Answering in <#${thread.id}>.`);
     await thread.send(`**Question:** ${clip(question, 1900)}`);
     return this.turn(thread, question, asker, async () => sessionId);
+  }
+
+  // /checkup: the free website check-up of this business's own site (`checkup --tenant`, in the background); the top five
+  // fixes are posted in a thread when it is done, a few minutes later.
+  private async checkupCommand(c: CommandPort): Promise<void> {
+    if (!this.d.checkup) return c.respond("The website check-up isn't switched on here yet.", { ephemeral: true });
+    if (!c.isOwner) return c.respond("Only the owner can start a website check-up.", { ephemeral: true });
+    if (c.channelId !== this.d.channelId && c.threadParentId !== this.d.channelId) return c.respond(`Use /checkup in <#${this.d.channelId}>.`, { ephemeral: true });
+    await c.defer();
+    const site = await tenantSite(this.d.graph, this.d.tenant);
+    if (!site?.url) return c.respond("We don't have your website address yet, so there is nothing to check.");
+    const host = site.url.replace(/^https?:\/\//, "");
+    const thread = c.thread() ?? await c.createThread(`Website check-up: ${clip(host, 60)}`);
+    const { started } = this.d.checkup.start(this.d.tenant, "owner", (o) => {
+      void this.postCheckup(thread, o).catch((e) => this.log(`posting the check-up failed: ${message(e)}`));
+    });
+    await c.respond(started
+      ? `Checking ${host} now. It takes about 3 minutes; I'll post the top five fixes in <#${thread.id}> when it's done.`
+      : `A check-up of ${host} is already running. I'll post the top five fixes in <#${thread.id}> when it's done.`);
+  }
+
+  private async postCheckup(thread: ThreadPort, o: CheckupOutcome): Promise<void> {
+    if (!o.ok) {
+      await thread.send(o.error ?? "The check-up couldn't finish this time. Try /checkup again later.");
+      return;
+    }
+    const last = await latestCheckup(this.d.graph);
+    if (!last) {
+      await thread.send("The check-up finished but I couldn't read its results. Ask me \"what should I fix on my website?\" in a minute.");
+      return;
+    }
+    for (const p of splitMessage(topFiveText(last))) await thread.send(p);
   }
 
   private async briefCommand(c: CommandPort): Promise<void> {

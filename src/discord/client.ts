@@ -27,6 +27,7 @@ export const SLASH_COMMANDS = [
     .addStringOption((o) => o.setName("question").setDescription("What do you want to know?").setRequired(true).setMaxLength(1000)),
   new SlashCommandBuilder().setName("brief").setDescription("Today's note: the latest summary"),
   new SlashCommandBuilder().setName("approvals").setDescription("Proposals waiting for the owner's approval"),
+  new SlashCommandBuilder().setName("checkup").setDescription("Check my website: the top five fixes, posted here in a few minutes"),
 ].map((c) => c.toJSON());
 
 // The hub adds /continue: carry a conversation from the web app on here.
@@ -186,7 +187,7 @@ export async function startClient(bot: AlleviaBot, s: DiscordSettings, log: (lin
     throw new Error(`Discord refused the bot token or could not be reached: ${err(e)}`);
   }
   if (inGuild) {
-    await registerCommands(rest, s).then(() => say("Slash commands /ask, /brief, /approvals registered on the demo server."),
+    await registerCommands(rest, s).then(() => say("Slash commands /ask, /brief, /approvals, /checkup registered on the demo server."),
       (e) => say(`Could not register slash commands: ${err(e)}`));
   } else {
     say("The bot is not in the Allevia Demo server yet, so it will not post anything. The server owner can invite it with:");

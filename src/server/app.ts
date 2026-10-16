@@ -17,7 +17,7 @@
 //   use: the real executors, with GitHub issues and Discord posts as a dry run unless ALLEVIA_ACTIONS_LIVE=1. The
 //   answer is the card plus `learned` (the learned-rule AgentEvents, in the JSON) and `action`.
 // Focused route files: routes/program.ts (program, capabilities, learning), routes/team.ts (agents, directives),
-// routes/goals.ts (the owner says OK to the suggested goals), routes/numbers.ts (the owner adds a spreadsheet of their numbers), routes/actions.ts (where an approved fix lands: tasks, or the business's own GitHub repo), routes/connectors.ts (connect Search Console), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/graph-work.ts (the Brain page's "what breaks if something stops").
+// routes/goals.ts (the owner says OK to the suggested goals), routes/numbers.ts (the owner adds a spreadsheet of their numbers), routes/actions.ts (where an approved fix lands: tasks, or the business's own GitHub repo), routes/connectors.ts (connect Search Console), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/graph-work.ts (the Brain page's "what breaks if something stops"), routes/checkup.ts ("Check my website": the free check-up in the background, and its weekly setting).
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
@@ -48,6 +48,8 @@ import { LinkTooSoon, type HubService } from "../discord/hub-service.js";
 import { registerUsageRoutes } from "./routes/usage.js";
 import { registerWorkRoutes } from "./routes/work.js";
 import { registerGraphWorkRoutes } from "./routes/graph-work.js";
+import { registerCheckupRoutes } from "./routes/checkup.js";
+import { checkupJobs, type CheckupJobs } from "../checkup/jobs.js";
 import * as reads from "./reads.js";
 import { sse } from "./sse.js";
 import { LiveTurns, type LiveTurn, type LiveTurnsOpts } from "./turns.js";
@@ -113,6 +115,7 @@ export interface ServerDeps {
   loadPlans?: () => Promise<PlansModule | null>;    // null: pricing data is not installed (501)
   studio?: () => Promise<StudioWiring | null>;      // the Studio's assets, vision and engine; absent: 501
   google?: () => Promise<GoogleWiring | null>;      // the Google connectors (Search Console): settings, token store, client; absent: "not switched on yet"
+  checkupJobs?: CheckupJobs;                        // the background check-ups ("Check my website"); default: one queue per process
   now?: () => number;
   heartbeatMs?: number;     // SSE keepalive comment interval; 0 turns it off (default 15 s)
   replaySpeed?: number;     // public-mode replay pacing; 1 = about real time, 0 = instant (default 1)
@@ -577,6 +580,7 @@ export function createApp(deps: ServerDeps): Hono {
   registerConnectorRoutes(app, routeCtx, { ...(deps.google ? { google: deps.google } : {}) });
   registerWorkRoutes(app, routeCtx);
   registerGraphWorkRoutes(app, routeCtx);
+  registerCheckupRoutes(app, routeCtx, { jobs: () => deps.checkupJobs ?? checkupJobs() });
   registerUsageRoutes(app, routeCtx, { actionsLive: () => deps.actions?.live ?? loadConfig().actionsLive });
 
   app.get("/api/:t/agents/:id", async (c) => {
