@@ -117,7 +117,7 @@ export function parseLhr(lhr: unknown, strategy: Strategy, url: string): Lightho
       const items = (Array.isArray(d.items) ? d.items : []).slice(0, 5).map((it) => {
         if (!isObj(it)) return "";
         const node = isObj(it.node) ? it.node : {};
-        return String(it.url ?? node.nodeLabel ?? node.snippet ?? "").slice(0, 200);
+        return String(it.url ?? node.nodeLabel ?? node.snippet ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
       }).filter(Boolean);
       issues.push({
         id, title: String(a.title ?? id), category: c, score, impactMs: impactMs === null ? null : Math.round(impactMs),

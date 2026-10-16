@@ -88,5 +88,6 @@ describe("helpers", () => {
     expect(out[0]).toBe("https://x.example/");
     expect(out).toContain("https://x.example/contact");
     expect(out.filter((u) => u.includes("/projects/")).length).toBeLessThanOrEqual(1);
+    expect(lighthousePages([p("/"), p("/about"), p("/hi/about")], 4)).toEqual(["https://x.example/", "https://x.example/about"]);
   });
 });

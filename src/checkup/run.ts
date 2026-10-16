@@ -46,11 +46,15 @@ export function lighthousePages(pages: PageData[], n: number): string[] {
   const sections = new Set<string>([sectionOf(new URL(home.finalUrl))]);
   const ranked = good.slice(1).map((p) => ({ p, prio: keyPagePriority(new URL(p.finalUrl)) }))
     .filter((x) => x.prio >= 70).sort((a, b) => b.prio - a.prio || a.p.finalUrl.localeCompare(b.p.finalUrl));
+  // the same page in another language (/about and /hi/about) is one page for a speed test
+  const leaf = (u: string) => new URL(u).pathname.toLowerCase().split("/").filter(Boolean).pop() ?? "";
+  const leaves = new Set<string>();
   for (const { p } of ranked) {
     if (out.length >= n) break;
     const sec = sectionOf(new URL(p.finalUrl)) || new URL(p.finalUrl).pathname;
-    if (sections.has(sec)) continue;
+    if (sections.has(sec) || leaves.has(leaf(p.finalUrl))) continue;
     sections.add(sec);
+    leaves.add(leaf(p.finalUrl));
     out.push(p.finalUrl);
   }
   return out;
