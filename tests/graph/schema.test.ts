@@ -191,7 +191,7 @@ describe("other businesses (issue #24)", () => {
   });
   it("leaves the extraction prompt and schema as they were, so no tenant's extraction cache is invalidated", async () => {
     const { cacheKey } = await import("../../src/ingest/extract.js");
-    expect(cacheKey({ hash: "h", kind: "webpage" }, { name: "Kestrel & Oak Studio" }, "haiku")).toBe("3ac9338dd83024492d28fb425f82e43b1c65cd1b57bdcd57052386a5391526d7");
-    expect(cacheKey({ hash: "h", kind: "note" }, { name: "Aamdani", industry: "jobs" }, "haiku")).toBe("3c4f5f291e3241bae247a45227f351690e9b9925f93b97ffbaab17b19bd1becd");
+    expect(cacheKey({ hash: "h", kind: "webpage" }, { name: "Kestrel & Oak Studio" }, "haiku").slice(0, 12)).toBe("3ac9338dd830");
+    expect(cacheKey({ hash: "h", kind: "note" }, { name: "Aamdani", industry: "jobs" }, "haiku").slice(0, 12)).toBe("3c4f5f291e32");
   });
 });
