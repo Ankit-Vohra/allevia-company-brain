@@ -26,8 +26,18 @@ export interface AlleviaConfig {
   webBaseUrl: string; // where the web app is reached, for links from Discord (default http://127.0.0.1:<port>)
   // The OAuth app a business connects its Google accounts through (docs/connectors-setup.md). redirectUri must be exactly
   // what is registered in the Google Cloud console; connectorKey seals the stored tokens (>= 32 characters).
-  // enabled: ALLEVIA_SEARCH_CONSOLE=1; off by default (the connector is built against a fake and parked for now).
+  // enabled: on unless ALLEVIA_SEARCH_CONSOLE=0 (it was parked behind =1 until the connections framework, #40).
   google: { enabled: boolean; clientId?: string; clientSecret?: string; redirectUri: string; connectorKey?: string };
+  // The connections framework (src/connections, docs/connections-setup.md). previousKeys: older ALLEVIA_CONNECTOR_KEY values
+  // (comma-separated ALLEVIA_CONNECTOR_KEY_PREVIOUS) that can still open what they sealed, so the key can be rotated.
+  connections: {
+    previousKeys: string[];
+    composioApiKey?: string;
+    googleAdsDeveloperToken?: string;
+    googleAdsLoginCustomerId?: string;
+    googleAdsApiVersion?: string;
+    gmailRead: boolean; // ALLEVIA_GMAIL_READ=1: the owner may allow reading the inbox (Google's restricted-scope review must be done first)
+  };
   // Public-data lookups through Apify store actors (docs/apify-setup.md). No token: the lookups say they are not switched
   // on and nothing else changes. Budgets in US dollars: per business per calendar month, and all businesses per day.
   apify: { token?: string; monthlyUsd?: string; dailyUsd?: string };
@@ -100,11 +110,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
     port,
     webBaseUrl,
     google: {
-      enabled: (get("ALLEVIA_SEARCH_CONSOLE") ?? "") === "1",
+      enabled: (get("ALLEVIA_SEARCH_CONSOLE") ?? "1") !== "0",
       clientId: get("ALLEVIA_GOOGLE_CLIENT_ID"),
       clientSecret: get("ALLEVIA_GOOGLE_CLIENT_SECRET"),
       redirectUri: get("ALLEVIA_GOOGLE_REDIRECT_URI") ?? `${webBaseUrl}/api/connectors/google/callback`,
       connectorKey: get("ALLEVIA_CONNECTOR_KEY"),
+    },
+    connections: {
+      previousKeys: (get("ALLEVIA_CONNECTOR_KEY_PREVIOUS") ?? "").split(",").map((k) => k.trim()).filter(Boolean),
+      composioApiKey: get("COMPOSIO_API_KEY"),
+      googleAdsDeveloperToken: get("ALLEVIA_GOOGLE_ADS_DEVELOPER_TOKEN"),
+      googleAdsLoginCustomerId: get("ALLEVIA_GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
+      googleAdsApiVersion: get("ALLEVIA_GOOGLE_ADS_API_VERSION"),
+      gmailRead: (get("ALLEVIA_GMAIL_READ") ?? "") === "1",
     },
     apify: { token: get("APIFY_TOKEN"), monthlyUsd: get("ALLEVIA_APIFY_MONTHLY_USD"), dailyUsd: get("ALLEVIA_APIFY_DAILY_USD") },
     dataforseo: {

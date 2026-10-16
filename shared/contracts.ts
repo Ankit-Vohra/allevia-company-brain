@@ -105,7 +105,7 @@ export type OnboardEvent =
 // ---------- capability ladder and team settings (product design §2.3, §2.4, §8) ----------
 
 // What each connected (or not) source lets the agents do, at the best access mode available, best first.
-export type CapabilityKey = "ga4" | "search_console" | "gbp" | "instagram_insights" | "reviews" | "studio" | "ads";
+export type CapabilityKey = "ga4" | "search_console" | "gbp" | "instagram_insights" | "reviews" | "studio" | "ads" | "calendar" | "email";
 export type AccessMode = "api" | "delegated" | "upload" | "public" | "benchmark" | "none";
 // ok: working at its mode; stale: its connector data is over 7 days old; down: its connector reports an error (it
 // dropped a rung); not_connected: no connector at all.

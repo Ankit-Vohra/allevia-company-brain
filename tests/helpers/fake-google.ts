@@ -24,8 +24,8 @@ export class FakeGoogle implements GoogleClient {
 
   private log(op: string, ...args: unknown[]) { this.calls.push({ op, args }); }
 
-  async exchangeCode(code: string): Promise<GoogleTokens> {
-    this.log("exchangeCode", code);
+  async exchangeCode(code: string, verifier?: string): Promise<GoogleTokens> {
+    this.log("exchangeCode", code, verifier);
     const t = this.script.codes?.[code];
     if (!t) throw new GoogleAuthError("invalid_grant");
     return t;

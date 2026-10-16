@@ -10,7 +10,7 @@ import { entityId } from "../util/ids.js";
 
 export type { AccessMode, CapabilityKey, CapabilityStatus } from "../../shared/contracts.js";
 
-export const CAPABILITY_KEYS: readonly CapabilityKey[] = ["ga4", "search_console", "gbp", "instagram_insights", "reviews", "studio", "ads"];
+export const CAPABILITY_KEYS: readonly CapabilityKey[] = ["ga4", "search_console", "gbp", "instagram_insights", "reviews", "studio", "ads", "calendar", "email"];
 export const ACCESS_MODES: readonly AccessMode[] = ["api", "delegated", "upload", "public", "benchmark", "none"];
 
 export const capabilityId = (key: CapabilityKey): string => entityId("Capability", key); // capability:search-console
@@ -70,6 +70,13 @@ export const CAPABILITIES: readonly CapabilitySpec[] = [
     key: "ads", name: "Ads",
     systems: ["system:meta-ads", "system:google-ads", "system:facebook-ads"], channels: AD_CHANNELS,
     observes: (_m, s) => s.startsWith("campaign:") || AD_CHANNELS.includes(s),
+  },
+  // Doing, not numbers: live when the owner's connection is ok (the Connections page, src/connections). No data of their own.
+  {
+    key: "calendar", name: "Calendar", systems: ["system:google-calendar", "system:calendar"], channels: [], observes: () => false,
+  },
+  {
+    key: "email", name: "Email", systems: ["system:gmail", "system:email"], channels: [], observes: () => false,
   },
 ];
 
