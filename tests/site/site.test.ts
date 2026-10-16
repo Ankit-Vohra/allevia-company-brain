@@ -151,7 +151,10 @@ describe("the legal pages say what the platforms check, and what the code does",
   });
 
   it("names the processors the code uses: the AI model, image generation, chat, hosting and payments", () => {
-    for (const name of ["Anthropic", "Higgsfield", "Discord"]) expect(priv).toContain(name);
+    for (const name of ["Anthropic", "Higgsfield", "Discord", "Apify"]) expect(priv).toContain(name);
+    // public lookups: only public, business-level data, reviewers kept to a first name
+    expect(priv).toMatch(/first name at most/);
+    expect(priv).toMatch(/Never private accounts or private insights/);
     expect(priv).toContain(COMPANY.hosting.provider);
     expect(priv).toMatch(/payment provider/);
   });
