@@ -695,7 +695,10 @@ export async function loadOnboardModule(): Promise<OnboardFn | null> {
   const { loadConfig } = await import("../config.js");
   const studio = productionStudioDeps(loadConfig().dataDir);
   return async (input, emit, signal) => onboard(input, emit, {
-    runner: new AgentSdkRunner({ concurrency: 3 }), signal, brand: { store: studio.store, vision: studio.vision, googleFonts: true },
+    runner: new AgentSdkRunner({ concurrency: 3 }), signal,
+    // what the crawl and the stages say goes to the server log (a failed onboarding leaves a trace there)
+    log: (line: string) => { if (!line.startsWith("[crawl] assets for")) console.error(`[onboard] ${line.replace(/^\[onboard\]\s*/, "")}`); },
+    brand: { store: studio.store, vision: studio.vision, googleFonts: true },
     // public data (Apify): off without APIFY_TOKEN; with it, a blocked site and the Google listing, inside the budget
     publicData: (await import("../publicdata/service.js")).productionPublicData(loadConfig()),
   });

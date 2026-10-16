@@ -133,6 +133,7 @@ export function whyUnreadable(c: Pick<CrawlResult, "pages" | "robots">): string 
   if (bad && [404, 410].includes(bad.status)) return "there is no page at that address.";
   if (bad && bad.status >= 500) return "the site is having trouble on its side. Try again later.";
   if (bad) return "the site did not give us its page.";
+  if (c.pages.some((p) => p.error)) return "our reader could not open its pages on our side (not the site's fault). Try again in a minute.";
   if (c.pages.length) return "the page has almost no text we could read: it may need you to log in, or build everything with scripts.";
   return "we could not reach it.";
 }
@@ -261,6 +262,7 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
       },
     });
     pages = crawl.pages.map(redactPage);
+    if (crawl.browserError) log(`[onboard] ${crawl.browserError}; ${crawl.readWithoutBrowser ?? 0} page(s) read from their HTML`);
     result.pages = pages.length;
     await write("crawl", websiteChannelWrite(crawl.origin, businessId, asOf));
     await write("crawl", linksWrite(pages));
