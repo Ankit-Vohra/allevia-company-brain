@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 import { serve, type ServerType } from "@hono/node-server";
 import { loadConfig } from "../config.js";
 import { verifyToken } from "../auth/tokens.js";
-import { closeAll, openGraph } from "../graph/client.js";
+import { closeAll, openGraph, redactUrl } from "../graph/client.js";
+import { startTelemetrySweep, telemetrySweepOn } from "../graph/telemetry.js";
 import { listTenants } from "../graph/tenants.js";
 import { realGoogleClient } from "../connectors/google/client.js";
 import { startSchedule } from "../connectors/google/schedule.js";
@@ -133,7 +134,12 @@ export async function startServer(opts: ServeOpts = {}): Promise<{ server: Serve
       log: (l) => console.error(l),
     })
     : () => undefined;
-  return { server, url, close: () => { stopRetry?.(); stopNudge?.(); stopSchedule(); stopCheckups(); stopStandups(); return new Promise<void>((r) => server.close(() => r())); } };
+  // FalkorDB's own telemetry streams are cleared every few minutes (src/graph/telemetry.ts, issue #29); a managed server that
+  // refuses plain Redis commands is noticed once and left alone. ALLEVIA_TELEMETRY_SWEEP=off switches it off.
+  const stopTelemetry = !publicMode && telemetrySweepOn() && !opts.over?.listTenants
+    ? startTelemetrySweep({ log: (l) => console.error(redactUrl(l, cfg.falkordbUrl)) })
+    : () => undefined;
+  return { server, url, close: () => { stopRetry?.(); stopNudge?.(); stopSchedule(); stopCheckups(); stopStandups(); stopTelemetry(); return new Promise<void>((r) => server.close(() => r())); } };
 }
 
 // Resolves on SIGINT/SIGTERM after the server has stopped taking requests.

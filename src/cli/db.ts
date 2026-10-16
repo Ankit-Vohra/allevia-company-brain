@@ -6,6 +6,7 @@ import { loadConfig } from "../config.js";
 import { connect, describeUrl, listGraphs, openGraph, openGraphByName, redactUrl } from "../graph/client.js";
 import { ensureSchema } from "../graph/indexes.js";
 import { configDrift, readServerConfig } from "../graph/server-config.js";
+import { redisKeys, sweepTelemetry } from "../graph/telemetry.js";
 import { undoTidy } from "../ingest/tidy.js";
 import { listTenants } from "../graph/tenants.js";
 import type { Command } from "./_command.js";
@@ -48,6 +49,26 @@ export const commands: Command[] = [
         console.log(`  ${t.slug.padEnd(16)} ${t.name} · ${t.graph} · ontology v${t.ontologyVersion} · ${size}`);
       }
       return 0;
+    },
+  },
+  {
+    name: "db:telemetry",
+    usage: "db:telemetry [--dry-run]",
+    summary: "Remove FalkorDB's own telemetry{<graph>} streams from the server (the server does this every 10 minutes; --dry-run only lists them)",
+    async run(args) {
+      const url = loadConfig().falkordbUrl;
+      const dryRun = args.includes("--dry-run");
+      try {
+        const r = await sweepTelemetry(await redisKeys(), { dryRun });
+        if (r.refused) { console.log(`FalkorDB at ${describeUrl(url)} does not allow the plain Redis commands this needs (SCAN, TYPE, UNLINK), so its telemetry streams cannot be removed from here. Nothing to do.`); return 0; }
+        console.log(r.removed.length
+          ? `${dryRun ? "Found" : "Removed"} ${r.removed.length} telemetry stream${r.removed.length === 1 ? "" : "s"} on ${describeUrl(url)}: ${r.removed.join(", ")}`
+          : `No telemetry streams on ${describeUrl(url)}.`);
+        return 0;
+      } catch (e) {
+        console.error(`FalkorDB at ${describeUrl(url)}: ${redactUrl(e instanceof Error ? e.message : String(e), url)}`);
+        return 1;
+      }
     },
   },
   {
