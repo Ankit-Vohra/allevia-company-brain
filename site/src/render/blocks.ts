@@ -102,9 +102,9 @@ const icon = (name: string) => `<svg class="promise__icon" viewBox="0 0 40 40" w
 
 export function securityPromises(): string {
   const items: [string, string, string][] = [
-    ["vault", "Your own database", "Your business is kept apart from every other business. Nothing is shared."],
-    ["tap", "Nothing goes out without your OK", "Your team drafts. You approve. Allevia posts nothing itself."],
-    ["shield", "Private details stay private", "Passwords, card and phone numbers are removed before text reaches the AI. Photos lose their location."],
+    ["vault", "Your own database", "Your business sits in its own database, apart from every other business."],
+    ["tap", "Nothing goes out without your OK", "Your team drafts and you approve. Allevia posts nothing itself."],
+    ["shield", "Private details are removed", "Passwords, card and phone numbers are removed before text reaches the AI. Photos lose their location."],
     ["door", "You can leave", `Ask, and we send you a copy of your data or delete it within ${COMMITMENTS.deleteWithinDays} days.`],
   ];
   return `<ul class="promises">${items.map(([i, h, p]) => `<li class="promise">${icon(i)}<h2 class="promise__h">${esc(h)}</h2><p>${esc(p)}</p></li>`).join("")}</ul>`;
