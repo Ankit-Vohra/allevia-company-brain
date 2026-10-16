@@ -7,6 +7,9 @@ export class FakeComposio implements ComposioClient {
   toolList = new Map<string, ComposioToolInfo[]>();
   catalogue: ComposioToolkitInfo[] = [{ slug: "notion", name: "Notion", description: "Notes and docs" }];
   results = new Map<string, unknown>();           // tool slug -> data
+  /** tool slug -> what to do for one call: data to return, an Error to throw (Composio itself failed), or { fail } (the tool said no). */
+  handlers = new Map<string, (args: Record<string, unknown>, n: number) => unknown>();
+  private perTool = new Map<string, number>();
   private n = 0;
   async authConfigId(toolkit: string): Promise<string> { this.calls.push({ op: "authConfigId", args: toolkit }); return `ac_${toolkit}`; }
   async link(o: { authConfigId: string; userId: string; callbackUrl: string }) {
@@ -23,7 +26,20 @@ export class FakeComposio implements ComposioClient {
     this.calls.push({ op: "execute", args: o });
     const a = this.accounts.get(o.accountId);
     if (!a || a.userId !== o.userId) return { ok: false, data: null, error: "no such account" };
+    const h = this.handlers.get(o.tool);
+    if (h) {
+      const n = (this.perTool.get(o.tool) ?? 0) + 1;
+      this.perTool.set(o.tool, n);
+      const r = h(o.args, n);
+      if (r instanceof Error) throw r;
+      if (r && typeof r === "object" && "fail" in (r as object)) return { ok: false, data: null, error: String((r as { fail: unknown }).fail) };
+      return { ok: true, data: r ?? null };
+    }
     return { ok: true, data: this.results.get(o.tool) ?? null };
+  }
+  /** Every execute the fake saw (of one tool when named), in order: the tool, the arguments and whose account ran it. */
+  executed(tool?: string): Array<{ tool: string; args: Record<string, unknown>; accountId: string; userId: string }> {
+    return this.calls.filter((c) => c.op === "execute").map((c) => c.args as { tool: string; args: Record<string, unknown>; accountId: string; userId: string }).filter((c) => !tool || c.tool === tool);
   }
   async tools(toolkit: string, search?: string): Promise<ComposioToolInfo[]> { this.calls.push({ op: "tools", args: { toolkit, search } }); return (this.toolList.get(toolkit) ?? []).filter((t) => !search || t.slug.toLowerCase().includes(search.toLowerCase())); }
   async searchToolkits(q: string): Promise<ComposioToolkitInfo[]> { this.calls.push({ op: "searchToolkits", args: q }); return this.catalogue.filter((t) => t.name.toLowerCase().includes(q.toLowerCase())); }

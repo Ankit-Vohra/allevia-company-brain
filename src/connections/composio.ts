@@ -30,7 +30,8 @@ import {
 const BASE = "https://backend.composio.dev/api/v3";
 
 export interface ComposioAccount { id: string; status: string; userId: string; toolkit: string }
-export interface ComposioToolInfo { slug: string; name: string; description: string }
+/** `params` is what Composio says the action takes (its input schema): which arguments it requires and which it knows. */
+export interface ComposioToolInfo { slug: string; name: string; description: string; params?: { required: string[]; properties: string[] } }
 export interface ComposioToolkitInfo { slug: string; name: string; description: string }
 
 export interface ComposioClient {
@@ -52,6 +53,11 @@ export class ComposioError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
   }
+}
+
+/** Composio ran the action and the tool itself said it did not work (as opposed to Composio not answering): what the tool refused to do was not done. */
+export class ComposioToolError extends ComposioError {
+  override name = "ComposioToolError";
 }
 
 export function realComposioClient(apiKey: string, fetchFn: FetchFn = realFetch): ComposioClient {
@@ -102,7 +108,12 @@ export function realComposioClient(apiKey: string, fetchFn: FetchFn = realFetch)
     },
     async tools(toolkit, search) {
       const q = new URLSearchParams({ toolkit_slug: toolkit, limit: "100", ...(search ? { search } : {}) });
-      return items((await call(`/tools?${q}`)).body).map((t) => ({ slug: str(t.slug), name: str(t.name), description: str(t.description).slice(0, 240) })).filter((t) => t.slug);
+      return items((await call(`/tools?${q}`)).body).map((t): ComposioToolInfo => {
+        const input = asRecord(t.input_parameters);
+        const properties = Object.keys(asRecord(input.properties));
+        const required = Array.isArray(input.required) ? input.required.filter((x): x is string => typeof x === "string") : [];
+        return { slug: str(t.slug), name: str(t.name), description: str(t.description).slice(0, 240), ...(properties.length || required.length ? { params: { required, properties } } : {}) };
+      }).filter((t) => t.slug);
     },
     async searchToolkits(query) {
       const q = new URLSearchParams({ search: query, limit: "20" });
@@ -336,7 +347,7 @@ export class ComposioConnector implements Connector {
     const client = this.client();
     const execute = async (tool: string, args: Record<string, unknown>): Promise<unknown> => {
       const out = await client.execute({ tool, accountId: r.accountId, userId: r.userId, args });
-      if (!out.ok) throw new ComposioError(out.error ?? "The tool did not work.", 502);
+      if (!out.ok) throw new ComposioToolError(out.error ?? "The tool did not work.", 502);
       return out.data;
     };
     return fn({
