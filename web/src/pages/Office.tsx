@@ -19,7 +19,8 @@ import { Reveal } from "../components/Reveal";
 import { usePendingApprovals } from "../components/TopBar";
 import { WorkFeed } from "../components/WorkFeed";
 import { usePreviewFromUrl, useOfficeClock } from "../lib/daylight";
-import { OfficeCanvas, type ShelfBook } from "../office/OfficeCanvas";
+import { OfficeCanvas, type OfficeStandup, type ShelfBook } from "../office/OfficeCanvas";
+import type { Standup } from "../types-ext";
 import { fmtLongDate } from "../lib/format";
 import { useMedia } from "../lib/useMedia";
 import { plain } from "../lib/words";
@@ -44,6 +45,32 @@ export const FIRST_DAY_QUESTIONS = [
 export const TEAM_CHANGED = "allevia:team-changed";
 
 const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+
+const NUMBER_WORDS = ["Nothing", "One thing", "Two things", "Three things"];
+
+/** The stand-up as the office acts it out: who walks to the table, what each says, who gets a brief from Meera. */
+export function officeStandup(s: Standup): OfficeStandup {
+  const drafted = s.items.filter((i) => i.status === "drafted" && i.approvalId);
+  const n = drafted.length;
+  return {
+    id: s.id,
+    attendees: s.attendees.length ? s.attendees : ["chief-of-staff"],
+    lines: [
+      { agent: "chief-of-staff", text: n ? `Morning, team. ${NUMBER_WORDS[n] ?? `${n} things`} worth doing today.` : "Morning, team. Nothing worth the owner's time today." },
+      ...drafted.map((i) => ({ agent: i.agent, text: `I'll draft ${lowerFirst(i.title)}.` })),
+      ...(n ? [{ agent: "chief-of-staff" as AgentId, text: "Thanks. Drafts go to the owner for an OK." }] : []),
+    ],
+    handoffs: drafted.map((i) => i.agent).filter((a) => a !== "chief-of-staff"),
+  };
+}
+
+const SEEN_KEY = "allevia:standup-seen";
+function seenStandup(id: string): boolean {
+  try { return localStorage.getItem(SEEN_KEY) === id; } catch { return false; }
+}
+function markStandupSeen(id: string): void {
+  try { localStorage.setItem(SEEN_KEY, id); } catch { /* private mode: it plays again next time */ }
+}
 
 export function OfficePage() {
   const { tenant, mode, effectiveTheme, reducedMotion, speed, setSpeed } = useApp();
@@ -83,6 +110,16 @@ export function OfficePage() {
   const team = useAsync(() => api.team(tenant.id).catch(() => []), [tenant.id, tick]);
   const learning = useAsync(() => api.learning(tenant.id).catch(() => null), [tenant.id, tick]);
   const recs = useAsync(() => api.recommendations(tenant.id).catch(() => []), [tenant.id]);
+  const standup = useAsync(() => api.standup(tenant.id).catch(() => null), [tenant.id]);
+  const drafted = useMemo(() => (standup.data?.items ?? []).filter((i) => i.status === "drafted" && i.approvalId), [standup.data]);
+  const stage = useMemo(() => (standup.data ? officeStandup(standup.data) : null), [standup.data]);
+  // the stand-up plays by itself the first time this browser sees it; "Watch the stand-up" plays it again
+  const [standupPlay, setStandupPlay] = useState(0);
+  useEffect(() => {
+    if (!stage || seenStandup(stage.id)) return;
+    markStandupSeen(stage.id);
+    setStandupPlay((n) => n + 1);
+  }, [stage]);
   const pending = usePendingApprovals();
 
   const off = useMemo(() => new Set((team.data ?? []).filter((a) => !a.enabled).map((a) => a.id)), [team.data]);
@@ -277,6 +314,8 @@ export function OfficePage() {
           books={learning.data ? books : undefined}
           onBook={(id) => setOpenRule(learning.data?.rules.find((r) => r.id === id) ?? null)}
           onStatus={setPetNote}
+          standup={stage}
+          standupPlay={standupPlay}
         />
         <p className="visually-hidden" role="status" aria-live="polite">{petNote}</p>
         <div className="run-slot">{tickerEl}</div>
@@ -291,6 +330,30 @@ export function OfficePage() {
           </div>
           <div className="home-row">
             <p className="home-label">Waiting for your OK</p>
+            {standup.data && (
+              <div className="home-standup">
+                <p className="home-standup-head">{drafted.length ? standup.data.heading : "Nothing new worth your time today."}</p>
+                {drafted.length > 0 && (
+                  <ul className="home-standup-list">
+                    {drafted.map((i) => (
+                      <li key={i.key}>
+                        <Link to={`/approvals#${encodeURIComponent(i.approvalId!)}`} className="home-standup-item">
+                          <AgentAvatar id={i.agent} size={22} />
+                          <span className="home-standup-text">
+                            <span className="home-standup-title">{agentDef(i.agent)?.name ?? "Your team"} drafted {lowerFirst(i.title)}</span>
+                            <span className="home-standup-why">{i.why}</span>
+                          </span>
+                          <Icon name="chevron-right" size={14} />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <button type="button" className="btn btn-quiet btn-sm home-standup-watch" onClick={() => setStandupPlay((n) => n + 1)} disabled={running}>
+                  Watch the stand-up
+                </button>
+              </div>
+            )}
             {pending > 0 ? (
               <Link to="/approvals" className="home-ok">
                 <span className="count">{pending}</span>
