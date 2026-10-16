@@ -133,6 +133,12 @@ describe("db:export and db:import (integration)", () => {
     }
   });
 
+  it("db:busy lists what the server is running, and its memory", async () => {
+    const r = await run("db:busy", ["--on", url]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(new RegExp(`^${describeUrl(url).replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}: \\d+ running, \\d+ waiting, [\\d.]+ MB used`));
+  });
+
   it("the digest does not depend on internal ids", () => {
     const d = readDump(file);
     const shift = (k: number) => k + 1000;

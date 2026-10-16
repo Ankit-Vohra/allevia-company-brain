@@ -347,6 +347,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 | `eval <tenant> [--fake]` | Run the tenant's eval questions, score every turn, write `docs/evals/<date>-<tenant>.md` |
 | `showcase <tenant> [<turnId>]` | Mark a stored turn for public replay, or list the showcase turns |
 | `db:check` / `db:migrate [tenant…]` | Ping FalkorDB and compare its settings with `docker-compose.yml`; bring tenant graphs up to the current schema |
+| `db:export` / `db:import` / `db:busy` | Copy a graph between FalkorDB servers as a verified JSON-lines file, and see what a server is running ([moving to FalkorDB Cloud](docs/falkordb-cloud.md)) |
 | `privacy-scan <tenant>` | Scan every string in a tenant's graph for secrets and personal data (must report 0) |
 | `checkup [<url>] --tenant <slug> [--weekly on\|off]` | The free website check-up: top five fixes by likely enquiries; with `--tenant` the site and kind come from onboarding and the run is stored. The web button, `/checkup` and the weekly schedule run it in the background |
 

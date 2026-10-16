@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { expandHome, loadConfig, parseEnvFile } from "../config.js";
 import { GraphHandle, connect, describeUrl, graphName, redactUrl } from "../graph/client.js";
 import { META_GRAPH } from "../graph/tenants.js";
-import { importDump, readDump, readGraph, writeDump } from "../graph/transfer.js";
+import { importDump, readDump, readGraph, usedMemoryMb, writeDump } from "../graph/transfer.js";
 import type { Command } from "./_command.js";
 
 export function resolveUrl(spec: string, env: NodeJS.ProcessEnv = process.env): string {
@@ -38,6 +38,31 @@ export function sourceGraph(what: string): string {
 }
 
 export const commands: Command[] = [
+  {
+    name: "db:busy",
+    usage: "db:busy [--on <url|env:NAME>]",
+    summary: "List the queries a FalkorDB server is running or holding (GRAPH.INFO), and its memory",
+    async run(args) {
+      const url = resolveUrl(flag(args, "--on") ?? loadConfig().falkordbUrl);
+      try {
+        const db = await connect(url);
+        const info = (await (await db.connection).sendCommand(["GRAPH.INFO"])) as unknown[];
+        const list = (title: string) => (info[info.indexOf(title) + 1] as unknown[][] | undefined) ?? [];
+        const show = (q: unknown[]) => {
+          const at = (k: string) => q[q.indexOf(k) + 1];
+          return `  ${String(at("Graph name"))}: ${Math.round(Number(at("Execution duration") ?? at("Wait duration") ?? 0) / 1000)} s  ${String(at("Query")).slice(0, 160)}`;
+        };
+        const running = list("# Running queries"), waiting = list("# Waiting queries");
+        console.log(`${describeUrl(url)}: ${running.length} running, ${waiting.length} waiting, ${(await usedMemoryMb(db)).toFixed(1)} MB used`);
+        for (const q of running) console.log(show(q));
+        for (const q of waiting) console.log(`${show(q)} (waiting)`);
+        return 0;
+      } catch (e) {
+        console.error(`db:busy: ${redactUrl((e as Error).message, url)}`);
+        return 1;
+      }
+    },
+  },
   {
     name: "db:export",
     usage: "db:export <tenant|meta> <file> [--from <url|env:NAME>]",
