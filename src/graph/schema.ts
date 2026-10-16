@@ -224,7 +224,8 @@ export const ALLOWED_PATTERNS: Pattern[] = [
 //     deal, meeting or message is for (Goal);
 //   - a connection (System) PRODUCED the snapshot Documents its facts came from;
 //   - a rival (Competitor) OWNS the channels and ads watched through public data;
-//   - the Discord card an Approval was posted as (Approval PUBLISHED_ON Channel).
+//   - the Discord card an Approval was posted as (Approval PUBLISHED_ON Channel);
+//   - the account a post went from, a Channel PART_OF the platform's Channel.
 export const MAPPER_PATTERNS: Pattern[] = [
   ...pat("Feature", "DEPENDS_ON", ["Page", "Channel"]),
   ...pat(["Approval", "Recommendation"], "GUIDED_BY", ["Rule", "BrandRule", "Memory"]),
@@ -235,6 +236,9 @@ export const MAPPER_PATTERNS: Pattern[] = [
   ...pat("System", "PRODUCED", "Document"),
   ...pat("Competitor", "OWNS", ["Channel", "Content"]),
   ...pat("Approval", "PUBLISHED_ON", "Channel"),
+  // posting (src/publish): the account a post went from is a Channel of its own (channel:instagram:cafe), PART_OF the platform's
+  // channel (channel:instagram), so two accounts on one platform are two nodes and the platform's numbers stay on one
+  ...pat("Channel", "PART_OF", "Channel"),
 ];
 
 const ALLOWED = new Set([...ALLOWED_PATTERNS, ...MAPPER_PATTERNS].map(([f, r, t]) => `${f}|${r}|${t}`));

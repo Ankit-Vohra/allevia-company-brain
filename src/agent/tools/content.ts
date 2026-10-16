@@ -20,7 +20,7 @@ async function runContent(args: { channel?: string; days?: number; limit?: numbe
   const channel = args.channel?.trim() ? await resolveChannel(ctx, args.channel) : null;
   const days = args.days === undefined ? null : clamp(args.days, 30, 1, 3650);
   const cutoff = days === null ? null : isoDate(ctx.now - days * 86_400_000);
-  const match = `MATCH (c:Content) ${channel ? "MATCH (c)-[pr:PUBLISHED_ON]->(:Entity {id:$ch}) WHERE pr.until IS NULL" : ""}
+  const match = `MATCH (c:Content) ${channel ? "MATCH (c)-[pr:PUBLISHED_ON]->(:Entity {id:$ch}) WHERE pr.until IS NULL AND coalesce(pr.state, 'published') = 'published'" : ""}
      WITH DISTINCT c WHERE $cutoff IS NULL OR c.publishedAt >= $cutoff`;
   const p = { ch: channel?.id ?? null, cutoff, cap: CONTENT_CAP };
   const [items, [count]] = await Promise.all([
