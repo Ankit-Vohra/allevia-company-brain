@@ -123,7 +123,9 @@ reading (Observation) -MEASURES-> funnel step (Feature) -DEPENDS_ON-> screen (Pa
 
 On Aamdani the same question honestly ends in "cause not shown": the records hold the sign-up counts, the funnel steps, crash-free sessions, an iOS build in
 review and a login-screen timeout, but no record links a release to a crash or a crash to the sign-up step, so the answer says so and says what to connect.
-`evals/hero.yaml` (Shiftly) and `evals/hero-aamdani.yaml` assert all of this; pass rates over live runs are in [`docs/evals/`](docs/evals). The demo steps are the
+`evals/hero.yaml` (Shiftly) and `evals/hero-aamdani.yaml` assert all of this: the cause named, the path nodes present, valid citations and grounded numbers, the honest
+"not in the records", and the two cards drafted. **Live pass rate, 16 October 2026** (real agents on the Claude subscription, no recordings; Shiftly reseeded before each attempt):
+the hero question passed **5 of 5 on Shiftly** (69 to 102 s) and **5 of 5 on Aamdani** (60 to 85 s); the reports are in [`docs/evals/`](docs/evals). The demo steps are the
 opening of [`docs/demo-script.md`](docs/demo-script.md).
 
 ## How FalkorDB is central
