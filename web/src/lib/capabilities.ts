@@ -25,7 +25,7 @@ export const STATUS_NOTE: Record<CapabilityStatus, string | null> = {
 /** Short names for chips: "Website analytics (GA4)" reads as "GA4". */
 export const SHORT_NAME: Record<CapabilityKey, string> = {
   ga4: "GA4", search_console: "Search Console", gbp: "Business Profile", instagram_insights: "Instagram",
-  reviews: "Reviews", studio: "Studio", ads: "Ads",
+  reviews: "Reviews", studio: "Studio", ads: "Ads", calendar: "Calendar", email: "Email",
 };
 
 // ---------- which capabilities an answer drew on (mirrors src/capabilities/modes.ts) ----------
@@ -54,6 +54,8 @@ const SPECS: Array<{ key: CapabilityKey; systems: string[]; channels: string[]; 
   },
   { key: "studio", systems: ["system:higgsfield", "system:studio"], channels: [], observes: () => false },
   { key: "ads", systems: ["system:meta-ads", "system:google-ads", "system:facebook-ads"], channels: AD_CHANNELS, observes: (_m, s) => s.startsWith("campaign:") || AD_CHANNELS.includes(s) },
+  { key: "calendar", systems: ["system:google-calendar", "system:calendar"], channels: [], observes: () => false },
+  { key: "email", systems: ["system:gmail", "system:email"], channels: [], observes: () => false },
 ];
 
 function parseObservationId(id: string): { metric: string; subject: string } | undefined {

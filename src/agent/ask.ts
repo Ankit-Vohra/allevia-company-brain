@@ -21,6 +21,7 @@ import { loadBusinessSkills } from "./skills/business.js";
 import type { SkillCatalog } from "./skills/catalog.js";
 import type { CreativeDeps } from "../creative/ports.js";
 import type { PublicDataPort } from "../publicdata/service.js";
+import type { ConnectionsPort } from "../connections/service.js";
 import type { RecallBrief, TeamSettings } from "./types.js";
 
 export type Channel = "web" | "discord" | "cli" | "mcp";
@@ -51,6 +52,7 @@ export interface AskDeps {
   skills?: SkillCatalog | null;                       // the shipped skill packs; this business's own are laid over them each turn. none/null: no skills
   creative?: CreativeDeps;                            // what the tools that make things may use; absent: they say it isn't set up
   publicData?: PublicDataPort;                        // public-data lookups (Apify); absent or off: those tools say so
+  connections?: ConnectionsPort;                      // this business's connections; absent: the tools that need one say none is connected
 }
 
 // What src/agent/wiring.ts (written once the graph tools land) must export, so every surface (CLI, server, Discord,
@@ -140,6 +142,10 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
       };
     }
 
+    // What this business has connected, told to the desks that can use it (best-effort: a slow or missing answer is just no note).
+    let connectionsNote = "";
+    if (!outcome && deps.connections) try { connectionsNote = await Promise.race([deps.connections.note(), new Promise<string>((r) => setTimeout(() => r(""), 2500))]); } catch { connectionsNote = ""; }
+
     // The business's own language setting (best-effort): absent, the answer follows the question's language.
     let language: string | undefined;
     if (!outcome) try { language = await loadLanguagePreference(g); } catch { language = undefined; }
@@ -153,6 +159,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
         ...(deps.timeZone ? { timeZone: deps.timeZone } : {}), ...(deps.signal ? { signal: deps.signal } : {}),
         ...(capabilities ? { capabilities } : {}), ...(team ? { team } : {}), ...(language ? { language } : {}), ...(skills ? { skills } : {}),
         ...(deps.creative ? { creative: deps.creative } : {}), ...(deps.publicData ? { publicData: deps.publicData } : {}),
+        ...(deps.connections ? { connections: deps.connections } : {}), ...(connectionsNote ? { connectionsNote } : {}),
       },
       out);
     if (deps.signal?.aborted) failure = STOPPED_MESSAGE;

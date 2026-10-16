@@ -141,7 +141,7 @@ describe("enrol an existing business, then the scorecard (integration)", () => {
     const m = await q<{ metric: string; v: number }>("MATCH (o:Observation)-[:MEASURES]->(:Checkpoint) WHERE o.metric STARTS WITH 'allevia.' RETURN o.metric AS metric, o.value AS v ORDER BY metric, o.id");
     expect(m).toEqual([{ metric: "allevia.deliverables_approved", v: 0 }, { metric: "allevia.learned_rules", v: 0 }]);
     expect((await q<{ c: number }>("MATCH (a:Approval) RETURN count(a) AS c"))[0]!.c).toBe(0);
-    expect(first.capabilities?.length).toBe(7);
+    expect(first.capabilities?.length).toBe(9);
   });
 
   it("enrolling again changes nothing: same program, baselines locked", async () => {
@@ -174,7 +174,7 @@ describe("enrol an existing business, then the scorecard (integration)", () => {
       ["Instagram reach", 2100, 2100, 3150, "on_track", "Tara"],
       ["Search clicks", null, null, 50, "no_data", "Kabir"],
     ]);
-    expect(Object.values(p.capabilities.byMode).reduce((a, b) => a + b, 0)).toBe(7);
+    expect(Object.values(p.capabilities.byMode).reduce((a, b) => a + b, 0)).toBe(9);
   });
 
   it("later: approvals decided since the start make the first-pass curve; day 30 writes its checkpoint and new readings", async () => {

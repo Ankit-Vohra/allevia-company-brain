@@ -20,7 +20,7 @@ export interface AnalyticsQuery {
 export interface AnalyticsRow { keys: string[]; clicks: number; impressions: number; ctr: number; position: number }
 
 export interface GoogleClient {
-  exchangeCode(code: string): Promise<GoogleTokens>;
+  exchangeCode(code: string, codeVerifier?: string): Promise<GoogleTokens>;
   refresh(refreshToken: string): Promise<GoogleTokens>;
   revoke(token: string): Promise<void>;
   listSites(accessToken: string): Promise<SiteEntry[]>;
@@ -50,11 +50,11 @@ const refuseInTests: FetchFn = async () => {
   if (process.env.VITEST) throw new Error("tests must inject a Google client (or fetch): refusing to call Google");
   throw new Error("no fetch available");
 };
-const realFetch: FetchFn = (url, init) => (process.env.VITEST ? refuseInTests(url, init) : (fetch(url, init as RequestInit) as ReturnType<FetchFn>));
+export const realFetch: FetchFn = (url, init) => (process.env.VITEST ? refuseInTests(url, init) : (fetch(url, init as RequestInit) as ReturnType<FetchFn>));
 
-const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
+export const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
 
-async function failure(res: { status: number; text(): Promise<string> }): Promise<never> {
+export async function failure(res: { status: number; text(): Promise<string> }): Promise<never> {
   let code = "";
   try {
     const body = asRecord(JSON.parse(await res.text()));
@@ -79,8 +79,8 @@ export function realGoogleClient(s: RealClientSettings, fetchFn: FetchFn = realF
   const form = (o: Record<string, string>) => ({ method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(o).toString() });
   const auth = (token: string) => ({ authorization: `Bearer ${token}` });
   return {
-    async exchangeCode(code) {
-      const res = await fetchFn(TOKEN_URL, form({ code, client_id: s.clientId, client_secret: s.clientSecret, redirect_uri: s.redirectUri, grant_type: "authorization_code" }));
+    async exchangeCode(code, codeVerifier) {
+      const res = await fetchFn(TOKEN_URL, form({ code, client_id: s.clientId, client_secret: s.clientSecret, redirect_uri: s.redirectUri, grant_type: "authorization_code", ...(codeVerifier ? { code_verifier: codeVerifier } : {}) }));
       return res.ok ? tokensFrom(await res.json()) : failure(res);
     },
     async refresh(refreshToken) {

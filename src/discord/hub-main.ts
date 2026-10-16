@@ -58,6 +58,7 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
         // a spreadsheet dropped in #your-team adds this business's own numbers (the business comes from the channel only)
         numbers: { businessId: businessId(area.slug) },
         checkup: checkupJobs(), // /checkup: this business's own site, in the background
+        connections: await connectLinks(area.slug), // /connect: this business's tools, with one-time links only the owner sees
         revise: async (approvalId, instruction) => {
           const { reviseDraft } = await import("../proactive/revise.js");
           const { productionDrafters } = await import("../proactive/wiring.js");
@@ -117,4 +118,16 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
   timer.unref();
   log(`Allevia on the Discord hub: every customer's own channels, one shared bot. Path links go to ${cfg.webBaseUrl}.`);
   return { stop: async () => { clearInterval(timer); stopNudge(); stopRetry(); await client.stop(); } };
+}
+
+// /connect for one business: the list as an owner reads it and one-time links (src/connections), never another business's.
+async function connectLinks(slug: string): Promise<import("./bot.js").ConnectLinks> {
+  const { productionConnections } = await import("../connections/production.js");
+  const { recommendedFor } = await import("../../shared/connection-map.js");
+  const svc = productionConnections();
+  const recommended = new Set(recommendedFor(null).map((e) => e.id));
+  return {
+    list: async () => (await svc.list(slug)).map((v) => ({ id: v.id, name: v.name, blurb: v.blurb, state: v.state, available: v.available, recommended: recommended.has(v.id) })),
+    link: (id) => { try { return svc.connectLink(slug, id); } catch { return null; } },
+  };
 }

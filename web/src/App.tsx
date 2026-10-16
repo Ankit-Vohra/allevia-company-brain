@@ -13,10 +13,12 @@ const ProgramPage = lazy(() => import("./pages/Program"));
 const PlanPage = lazy(() => import("./pages/Plan"));
 const StudioPage = lazy(() => import("./pages/Studio"));
 const TeamPage = lazy(() => import("./pages/Team"));
+const ConnectionsPage = lazy(() => import("./pages/Connections"));
+const ConnectedPage = lazy(() => import("./pages/Connections").then((m) => ({ default: m.ConnectedPage })));
 
 const TITLES: Record<string, string> = {
   "/": "Office", "/chat": "Chat", "/ask": "Ask", "/brain": "Brain", "/insights": "Insights", "/approvals": "Approvals", "/onboard": "Add a business",
-  "/studio": "Studio", "/team": "Your team", "/plan": "Plan and credits", "/program": "Your growth plan",
+  "/studio": "Studio", "/team": "Your team", "/plan": "Plan and credits", "/program": "Your growth plan", "/connections": "Your tools", "/connected": "Connected",
 };
 
 export function App() {
@@ -47,6 +49,8 @@ export function App() {
             <Route path="/team" element={<TeamPage />} />
             <Route path="/plan" element={<PlanPage />} />
             <Route path="/program" element={<ProgramPage />} />
+            <Route path="/connections" element={<ConnectionsPage />} />
+            <Route path="/connected" element={<ConnectedPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

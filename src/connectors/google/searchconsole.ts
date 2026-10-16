@@ -73,7 +73,7 @@ export async function readSystem(g: GraphHandle): Promise<SystemProps | null> {
   return r ?? null;
 }
 
-async function writeSystem(g: GraphHandle, now: number, props: Record<string, string | number | boolean | string[] | null>): Promise<void> {
+export async function writeSystem(g: GraphHandle, now: number, props: Record<string, string | number | boolean | string[] | null>): Promise<void> {
   await upsertNode(g, { type: "System", id: SYSTEM_ID, name: "Search Console", props: { kind: "connector", provider: "google", ...props } }, now);
 }
 
@@ -160,12 +160,12 @@ async function businessDomain(g: GraphHandle, businessId: string | undefined): P
   return b?.d ?? null;
 }
 
-export async function handleCallback(deps: GoogleDeps, g: GraphHandle, tenant: string, code: string, businessId?: string): Promise<{ state: "connected" | "choose_property"; property?: string }> {
+export async function handleCallback(deps: GoogleDeps, g: GraphHandle, tenant: string, code: string, businessId?: string, codeVerifier?: string): Promise<{ state: "connected" | "choose_property"; property?: string }> {
   if (!deps.settings.configured) throw new NotConfiguredError(deps.settings.missing);
   const now = deps.now();
   let t;
   try {
-    t = await deps.client.exchangeCode(code);
+    t = await deps.client.exchangeCode(code, codeVerifier);
   } catch (e) {
     if (e instanceof GoogleAuthError) throw new ConnectError("google", "Google did not accept that sign-in (it may have run out). Try connecting again.");
     throw new ConnectError("google", "We couldn't reach Google just now. Try connecting again in a minute.");
@@ -234,7 +234,7 @@ export interface PullResult {
 }
 
 // A token good for at least a minute: the stored one, or a refreshed one (stored again; Google leaves the refresh token out).
-async function freshToken(deps: GoogleDeps, g: GraphHandle, tenant: string, tokens: TokenRecord, force = false): Promise<TokenRecord> {
+export async function freshToken(deps: GoogleDeps, g: GraphHandle, tenant: string, tokens: TokenRecord, force = false): Promise<TokenRecord> {
   const now = deps.now();
   if (!force && tokens.expiresAt - REFRESH_MARGIN_MS > now) return tokens;
   const t = await deps.client.refresh(tokens.refreshToken); // GoogleAuthError / GoogleApiError go to the caller

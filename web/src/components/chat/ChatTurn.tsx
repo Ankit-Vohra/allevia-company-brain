@@ -21,6 +21,7 @@ const nameOf = (id: AgentId) => agentDef(id)?.name ?? id;
 const jobOf = (id: AgentId) => agentDef(id)?.title ?? "";
 const KIND: Record<Approval["kind"], string> = {
   content_draft: "A post draft", github_issue: "A fix for your website", pause_ad: "Pausing an ad", discord_post: "A message to your team channel",
+  calendar_event: "A meeting on your calendar", email_send: "An email from your address", connection_action: "A change in one of your tools",
 };
 
 export interface TurnProps {

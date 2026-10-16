@@ -305,3 +305,55 @@ describe("/approvals and the buttons", () => {
     expect(gone.replies[0]).toMatchObject({ ephemeral: true, text: expect.stringMatching(/no longer exists/i) });
   });
 });
+
+describe("/connect", () => {
+  const links = {
+    async list() {
+      return [
+        { id: "gmail", name: "Gmail", blurb: "Your team drafts follow-ups and sends them after your OK.", state: "connected" as const, available: true, recommended: true },
+        { id: "instagram", name: "Instagram", blurb: "Your team sees which posts bring you enquiries.", state: "not_connected" as const, available: true, recommended: true },
+        { id: "shopify", name: "Shopify", blurb: "Your team counts your orders.", state: "needs_attention" as const, available: true, recommended: true },
+        { id: "zoho", name: "Zoho CRM", blurb: "Leads.", state: "not_connected" as const, available: true, recommended: false },
+        { id: "whatsapp", name: "WhatsApp Business", blurb: "Soon.", state: "not_connected" as const, available: false, recommended: true },
+      ];
+    },
+    link: (id: string) => `https://allevia.example/c/code-${id}`,
+  };
+
+  it("lists the tools only to the owner, privately, with a one-time link for each that is not connected", async () => {
+    const bot = await makeBot({ connections: links });
+    const c = command({ command: "connect" });
+    await bot.onCommand(c);
+    const r = c.responses[0]!;
+    expect(r.ephemeral).toBe(true);
+    expect(text(r.m)).toMatch(/Connected: Gmail/);
+    expect(text(r.m)).toMatch(/Needs you to connect it again: Shopify/);
+    expect(text(r.m)).toMatch(/works once, for 10 minutes/);
+    expect(text(r.m)).not.toMatch(/WhatsApp|Zoho/); // not available, or not in the recommended set
+    expect(typeof r.m !== "string" && r.m.links?.map((l) => l.label)).toEqual(["Connect Shopify", "Connect Instagram"]);
+    const member = command({ command: "connect", isOwner: false });
+    await bot.onCommand(member);
+    expect(text(member.responses[0]!.m)).toMatch(/Only the owner/);
+  });
+
+  it("with a name it gives just that tool's link; a tool already connected or unknown is said plainly", async () => {
+    const bot = await makeBot({ connections: links });
+    const one = command({ command: "connect", account: "instagram" });
+    await bot.onCommand(one);
+    expect(text(one.responses[0]!.m)).toMatch(/Connect Instagram so your team can/);
+    expect(typeof one.responses[0]!.m !== "string" && one.responses[0]!.m.links).toEqual([{ label: "Connect Instagram", url: "https://allevia.example/c/code-instagram" }]);
+    const done = command({ command: "connect", account: "gmail" });
+    await bot.onCommand(done);
+    expect(text(done.responses[0]!.m)).toMatch(/already connected/);
+    const nope = command({ command: "connect", account: "myspace" });
+    await bot.onCommand(nope);
+    expect(text(nope.responses[0]!.m)).toMatch(/don't have a tool called/);
+  });
+
+  it("says it isn't switched on when the bot has no connections", async () => {
+    const bot = await makeBot();
+    const c = command({ command: "connect" });
+    await bot.onCommand(c);
+    expect(text(c.responses[0]!.m)).toMatch(/isn't switched on here yet/);
+  });
+});

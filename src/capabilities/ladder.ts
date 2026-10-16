@@ -25,6 +25,7 @@ import { CAPABILITIES, capabilityId, type CapabilityModeInfo, type CapabilitySpe
 export const FRESH_DAYS = 7;
 const DAY_MS = 86_400_000;
 
+const DOING_KEYS = new Set<CapabilityKey>(["calendar", "email"]);
 const OK_STATUS = new Set(["ok", "connected", "active", "healthy", "live", "configured"]);
 const DOWN_STATUS = new Set(["error", "down", "failed", "failing", "expired", "revoked", "broken", "disconnected", "unauthorized", "invalid"]);
 const UPLOAD_KINDS = new Set(["upload", "screenshot", "csv", "export"]);
@@ -118,13 +119,15 @@ async function readFacts(g: GraphHandle, businessId?: string): Promise<LadderFac
 // ---------- the ladder ----------
 
 const CONNECT: Record<CapabilityKey, string> = {
-  ga4: "Add Allevia's service account as a Viewer in Google Analytics to see real visits and where they come from.",
-  search_console: "Add Allevia's service account as a user in Search Console to see the searches that bring people to your site.",
+  ga4: "Connect Google Analytics on the Connections page to see real visits and where they come from.",
+  search_console: "Connect Google Search Console on the Connections page to see the searches that bring people to your site.",
   gbp: "Add Allevia's ops account as a Manager on your Google Business Profile to read views, calls and direction requests.",
   instagram_insights: "Give Allevia partner access in your Meta business portfolio to read reach, saves and follower growth.",
   reviews: "Add Allevia's ops account as a Manager on your Google Business Profile so we can read new reviews and draft replies.",
   studio: "Upload 10 to 30 photos of your work so the Studio can make posts from them.",
-  ads: "Share your Meta or Google Ads account with Allevia so we use your real spend and results instead of benchmarks.",
+  ads: "Connect your Google Ads account on the Connections page so we use your real spend and results instead of benchmarks.",
+  calendar: "Connect Google Calendar on the Connections page so your team can find free times and book calls after your OK.",
+  email: "Connect Gmail on the Connections page so your team can send follow-ups from your address after your OK.",
 };
 
 const PUBLIC_LEAD: Partial<Record<CapabilityKey, string>> = {
@@ -170,6 +173,11 @@ function derive(spec: CapabilitySpec, f: LadderFacts, now: number): DerivedCapab
     const engine = systems.find((s) => OK_STATUS.has(s.status));
     lastOkAt = engine?.at ?? null;
     accessMode = engine && !down ? "api" : f.originals > 0 ? "upload" : isPublic ? "public" : "none";
+  } else if (DOING_KEYS.has(spec.key)) {
+    // Calendar and email have no numbers either: live when the owner's connection says ok, down when it needs attention.
+    const live = systems.find((s) => OK_STATUS.has(s.status));
+    lastOkAt = live?.at ?? null;
+    accessMode = live && !down ? "api" : "none";
   } else if (fresh && !down) accessMode = delegatedGrant ? "delegated" : "api";
   else if (uploads) accessMode = "upload";
   else if (isPublic) accessMode = "public";

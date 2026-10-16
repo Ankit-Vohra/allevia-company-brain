@@ -13,6 +13,9 @@ const SPEC_TOOLS = [
   "google_listing", "instagram_public", "competitor_watch", "ad_library",
   // the website check-up: what to fix, whether AI names the business, and the optional paid keyword ideas
   "website_checkup", "ai_visibility", "keyword_ideas",
+  // the business's connected tools
+  "calendar_free_slots", "calendar_book", "gmail_draft", "gmail_send", "gmail_inbox", "ga4_report", "gsc_report", "ads_report",
+  "connections_available", "connection_tools", "connection_read", "connection_act",
 ];
 
 // The first {...} after "Example:" in a description.
@@ -67,9 +70,9 @@ describe("tool registry", () => {
     for (const t of ALL_TOOLS) expect(() => z.toJSONSchema(z.object(t.input)), t.name).not.toThrow();
   });
 
-  it("only remember, propose_action, the tools that make things, the public-data lookups and keyword ideas write", () => {
+  it("only remember, propose_action, the tools that make things, the public-data lookups, keyword ideas and the proposals through connections (a booking, an email, a change) write", () => {
     expect(ALL_TOOLS.filter((t) => t.writes).map((t) => t.name).sort()).toEqual([
-      "ad_library", "competitor_watch", "generate_image", "google_listing", "instagram_public", "keyword_ideas", "make_poster", "make_reel_script_and_clip", "propose_action", "remember", "write_copy",
+      "ad_library", "calendar_book", "competitor_watch", "connection_act", "generate_image", "gmail_draft", "gmail_send", "google_listing", "instagram_public", "keyword_ideas", "make_poster", "make_reel_script_and_clip", "propose_action", "remember", "write_copy",
     ]);
   });
 });

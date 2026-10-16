@@ -134,7 +134,13 @@ export default function ChatPage() {
   const mine = threadsFor(who, threads.data);
   const title = thread.detail?.title ?? pending?.question;
   const empty = thread.turns.length === 0 && !thread.loading;
-  const chips = who === TEAM ? (SUGGESTIONS[tenant.id] ?? FIRST_DAY_QUESTIONS).slice(0, 4).map((s) => ({ id: s, label: s, prompt: s })) : startersFor(who, person?.skills);
+  // everyday jobs that the tools this business connected make possible (live server only), first in the list
+  const conn = useAsync(() => (getMode() === "live" ? api.connections(tenant.id) : Promise.resolve(null)), [tenant.id]);
+  const jobChips = (conn.data?.starters ?? [])
+    .filter((s) => who === TEAM || who === CHIEF || s.agents.includes(who))
+    .slice(0, who === TEAM ? 3 : 4).map((s) => ({ id: `job:${s.id}`, label: s.label, prompt: s.ask }));
+  const baseChips = who === TEAM ? (SUGGESTIONS[tenant.id] ?? FIRST_DAY_QUESTIONS).slice(0, 4).map((s) => ({ id: s, label: s, prompt: s })) : startersFor(who, person?.skills);
+  const chips = [...jobChips, ...baseChips].slice(0, who === TEAM ? 6 : 8);
 
   const rail = (
     <Rail who={who} sessionId={sessionId} team={team.data} threads={threads.data} mine={mine} loading={threads.loading && !threads.data} working={working} onPick={() => setSheet(false)} />

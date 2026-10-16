@@ -77,7 +77,7 @@ export type AssessmentVerdict = "use" | "enhance" | "recompose" | "reshoot";
 // so new overlay types need no contract change; today: "clutter", "privacy", "text", "lock".
 export interface AssessmentOverlay { kind: string; x: number; y: number; w: number; h: number; note: string }
 
-export type ActionKind = "github_issue" | "content_draft" | "pause_ad" | "discord_post";
+export type ActionKind = "github_issue" | "content_draft" | "pause_ad" | "discord_post" | "calendar_event" | "email_send" | "connection_action";
 
 // Onboarding (paste a website URL) streams these. profile, goals, baseline and capabilities arrived with schema v2.
 export type OnboardStage =
@@ -105,7 +105,7 @@ export type OnboardEvent =
 // ---------- capability ladder and team settings (product design §2.3, §2.4, §8) ----------
 
 // What each connected (or not) source lets the agents do, at the best access mode available, best first.
-export type CapabilityKey = "ga4" | "search_console" | "gbp" | "instagram_insights" | "reviews" | "studio" | "ads";
+export type CapabilityKey = "ga4" | "search_console" | "gbp" | "instagram_insights" | "reviews" | "studio" | "ads" | "calendar" | "email";
 export type AccessMode = "api" | "delegated" | "upload" | "public" | "benchmark" | "none";
 // ok: working at its mode; stale: its connector data is over 7 days old; down: its connector reports an error (it
 // dropped a rung); not_connected: no connector at all.

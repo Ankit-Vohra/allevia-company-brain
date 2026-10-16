@@ -26,7 +26,7 @@ describe("discord.js adapter", () => {
   });
 
   it("defines /ask (a required question), /brief, /approvals and /checkup", () => {
-    expect(SLASH_COMMANDS.map((c) => c.name)).toEqual(["ask", "brief", "approvals", "checkup"]);
+    expect(SLASH_COMMANDS.map((c) => c.name)).toEqual(["ask", "brief", "approvals", "checkup", "connect"]);
     const ask = SLASH_COMMANDS[0]!;
     expect(ask.options?.[0]).toMatchObject({ name: "question", required: true });
   });
