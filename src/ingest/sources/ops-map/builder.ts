@@ -183,6 +183,9 @@ export class Builder {
     const id = this.node("Feature", entityId("Feature", `${audience} signup ${key}`), `${audience === "seekers" ? "Seekers" : "Employers"}: ${name}`,
       { kind: "funnel_step", audience, step: key, order });
     this.edge(id, "DEPENDS_ON", prev ?? this.channel("app"));
+    // a plain sentence, so a search for "the sign-up flow" finds the steps (their names alone are only the step's label)
+    const n = this.nodes.get(id)!;
+    if (!n.summary) n.summary = `Step ${order} of the ${audience === "seekers" ? "job seeker" : "employer"} sign-up flow: ${name}.`;
     return id;
   }
 

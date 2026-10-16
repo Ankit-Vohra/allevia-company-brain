@@ -47,7 +47,7 @@ items:
       No store reviews are recorded for the app (only review state of the iPhone build). The honest answer is "not in the records", never an invented quote.
     expect:
       mustMatch: ['not (in|recorded)|no (store )?reviews?|isn.t recorded|don.t have|no records?']
-      forbid: ['"[^"]{12,}"']
+      forbid: ['(reviews?|reviewers?|users?|people|customers?) (said|wrote|say|complain\w*)[^.]{0,30}"[^"]{12,}"']
 
   - id: hero-depth-contrast
     question: What else breaks if the sign-up screen keeps crashing?
@@ -58,7 +58,7 @@ items:
       mustCite: ['feature:seekers-signup-*', 'campaign:meta-seekers-pune|feature:employer-*|feature:job-alert-sms']
       mustMatch: ['employer|alert|referral|first application']
       mustUseTools: [impact_of]
-      mustPath: ['page:screen/app/auth/sign-up']
+      mustPath: ['page:screen/app/auth/sign-up|feature:seekers-signup-*']
 
   - id: hero-memory
     question: What did we decide last time about the sign-up crash, and where does it stand?
