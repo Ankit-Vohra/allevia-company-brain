@@ -85,7 +85,7 @@ export function heroB(): string {
   <div class="wrap bhero__copy">
     <h1 id="bh-h" class="bhero__h1"><span class="t1">Your company’s brain.</span> <span class="t2">And the team that runs on it.</span></h1>
     <p class="bhero__sub">${HERO_SUB}</p>
-    <p class="bhero__cta"><a class="btn btn-gold" href="/contact/">Get a free Brain Snapshot</a><a class="btn btn-ghost" href="#problem">See how it works</a></p>
+    <p class="bhero__cta"><a class="btn btn-gold" href="/contact/#snapshot">Get a free Brain Snapshot</a><a class="btn btn-ghost" href="#problem">See how it works</a></p>
   </div>
 ${workspaceBlock()}
 </section>`;
@@ -116,7 +116,7 @@ export function heroA(): string {
   <div class="wrap hero__copy">
     <h1 id="hero-h" class="hero__h1"><span class="t1">Your company’s brain.</span> <span class="t2">And the team that runs on it.</span></h1>
     <p class="hero__sub">${HERO_SUB}</p>
-    <p class="hero__cta"><a class="btn btn-gold" href="/contact/">Get a free Brain Snapshot</a><a class="btn btn-ghost" href="#problem">See how it works</a></p>
+    <p class="hero__cta"><a class="btn btn-gold" href="/contact/#snapshot">Get a free Brain Snapshot</a><a class="btn btn-ghost" href="#problem">See how it works</a></p>
   </div>
   <button class="hero__next" type="button" data-next hidden>Next question</button>
   <p class="visually-hidden">The brain answers questions founders ask every day. ${esc(sr)}</p>

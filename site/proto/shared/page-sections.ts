@@ -187,7 +187,7 @@ export function pricing(): string {
     <h3 id="plan-${c.name}" class="plan__name">${esc(c.name)}</h3><p class="plan__note">${esc(c.note)}</p>
     <p class="plan__price"><span class="money">${usd(c.price)}</span><span class="per"> a month</span></p>
     <ul class="plan__lines">${c.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
-    <a class="btn ${c.lead ? "btn-gold" : "btn-ghost"}" href="/contact/">Get started<span class="visually-hidden"> with ${esc(c.name)}</span></a>
+    <a class="btn ${c.lead ? "btn-gold" : "btn-ghost"}" href="/contact/#snapshot">Get started<span class="visually-hidden"> with ${esc(c.name)}</span></a>
   </article>`;
   return `<section class="sec pricing" aria-labelledby="pr-h"><div class="wrap">
   <h1 id="pr-h" class="page-h1"><span class="t1">Simple monthly plans.</span> <span class="t2">Start with your tools connected.</span></h1>
@@ -217,21 +217,32 @@ export function faq(): string {
 
 // ---------- Contact ----------
 
+/** The Snapshot form is first because every button on the site says "Get a free Brain Snapshot" and lands here. There is no form backend yet:
+ *  the form opens the visitor's email with the message written (a plain mailto, built by page.ts; without the script the form posts to the
+ *  same mailto). The Discord box appears only once COMPANY.discordSupportUrl is set. */
 export function contact(): string {
   const mail = COMPANY.email.general;
   const href = (subject: string) => `mailto:${mail}?subject=${encodeURIComponent(subject)}`;
   const discord = COMPANY.discordSupportUrl
-    ? `<p><a class="link" href="${esc(COMPANY.discordSupportUrl)}" rel="noopener">Join our Discord</a></p>`
-    : `<p><span class="todo">TODO(founder): add the Discord invite link in site/src/company.ts</span></p>`;
+    ? `<li class="cbox"><h2 class="h3">Discord</h2><p><a class="link" href="${esc(COMPANY.discordSupportUrl)}" rel="noopener">Join our Discord</a></p></li>`
+    : "";
   return `<section class="sec phead" aria-labelledby="ct-h"><div class="wrap">
-  <h1 id="ct-h" class="page-h1"><span class="t1">Let’s talk.</span> <span class="t2">Ask anything, or book a demo.</span></h1>
+  <h1 id="ct-h" class="page-h1"><span class="t1">Your free Brain Snapshot.</span> <span class="t2">Send us your website.</span></h1>
 </div></section>
-<section class="sec contact"><div class="wrap"><ul class="cbox-row">
-  <li class="cbox" id="demo"><h2 class="h3">Book a demo</h2><p>See Allevia on a business like yours.</p><p><a class="btn btn-gold" href="${href("Book a demo")}">Book a demo</a></p></li>
-  <li class="cbox" id="snapshot"><h2 class="h3">Free Brain Snapshot</h2><p>Send us your website. We send back what we learned and five fixes.</p><p><a class="btn btn-ghost" href="${href("Free Brain Snapshot")}">Ask for a Snapshot</a></p></li>
-  <li class="cbox"><h2 class="h3">Email</h2><p><a class="link" href="mailto:${esc(mail)}">${esc(mail)}</a></p></li>
-  <li class="cbox"><h2 class="h3">Discord</h2>${discord}</li>
-</ul></div></section>`;
+<section class="sec contact"><div class="wrap contact__grid">
+  <form class="snap" id="snapshot" data-snap action="${href("Free Brain Snapshot")}" method="post" enctype="text/plain" aria-labelledby="snap-h">
+    <h2 id="snap-h" class="h3">We read it and send back what we learned and five fixes.</h2>
+    <div class="field"><label for="snap-site">Your website</label><input id="snap-site" name="website" type="text" inputmode="url" autocomplete="url" placeholder="yourbusiness.com" required></div>
+    <div class="field"><label for="snap-email">Your email</label><input id="snap-email" name="email" type="email" autocomplete="email" placeholder="you@yourbusiness.com" required></div>
+    <button class="btn btn-gold" type="submit">Send my website</button>
+    <p class="snap__note">This opens your email with the message ready to send.</p>
+  </form>
+  <ul class="cbox-row">
+    <li class="cbox" id="demo"><h2 class="h3">Prefer to talk first?</h2><p>See Allevia on a business like yours.</p><p><a class="btn btn-ghost" href="${href("Book a demo")}">Book a demo</a></p></li>
+    <li class="cbox"><h2 class="h3">Email</h2><p><a class="link" href="mailto:${esc(mail)}">${esc(mail)}</a></p></li>
+    ${discord}
+  </ul>
+</div></section>`;
 }
 
 export const PAGE_SECTIONS: Record<string, () => string> = {

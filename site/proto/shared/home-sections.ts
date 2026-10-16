@@ -123,7 +123,7 @@ export function closeCta(): string {
   <div class="wrap cta__in">
     <h2 id="close-h" class="h2">Start with a free Brain Snapshot.</h2>
     <p class="cta__sub">Send us your website. We send back what we learned and five fixes.</p>
-    <p><a class="btn btn-gold btn-lg" href="/contact/">Get a free Brain Snapshot</a></p>
+    <p><a class="btn btn-gold btn-lg" href="/contact/#snapshot">Get a free Brain Snapshot</a></p>
   </div>
 </section>`;
 }

@@ -189,7 +189,7 @@ function story(): string {
     ${teams()}
     <section class="wrap team team--end" id="after-walk" aria-labelledby="close-h">
       <h2 class="h2 h2--wide h2--split" id="close-h"><span class="t1">Meet them on your own business.</span> <span class="t2">We set it up.</span></h2>
-      <p class="team__cta"><a class="btn btn-gold" href="/contact/">Get a free Brain Snapshot</a></p>
+      <p class="team__cta"><a class="btn btn-gold" href="/contact/#snapshot">Get a free Brain Snapshot</a></p>
     </section>
   </div>
 </main>`;

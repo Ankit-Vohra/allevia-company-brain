@@ -28,7 +28,7 @@ export function nav(current: string, home: string): string {
   <div class="wrap nav__in">
     <a class="brand" href="${home}" aria-label="Allevia, home">allevia</a>
     <nav class="nav__links" id="site-nav" aria-label="Main">${links}</nav>
-    <a class="btn btn-gold btn-sm nav__cta" href="/contact/">Get a free Brain Snapshot</a>
+    <a class="btn btn-gold btn-sm nav__cta" href="/contact/#snapshot">Get a free Brain Snapshot</a>
     <button class="nav__menu" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="Menu" data-nav-menu><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3 5.5h12M3 9h12M3 12.5h12"/></svg></button>
   </div>
 </header>`;
