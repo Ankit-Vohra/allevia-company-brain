@@ -69,6 +69,10 @@ Working:
 - the hero use case (5/5 live);
 - Today's note with the proactive stand-up;
 - Studio and posters;
+- posting to the owner's own Instagram, Facebook Page and LinkedIn after their OK (issue #20): a "Post to Instagram (your account
+  @cafe)" card with the picture and words, now or at a time in the business's own time zone, cancellable, a dry run until
+  `ALLEVIA_ACTIONS_LIVE=1`, a daily limit, a plain reason and a Try again when it fails. Built and tested on a fake Composio; the
+  action names and arguments were checked against Composio's real tool lists, and **no real post has been made** (`docs/connections-setup.md`, 4b);
 - the website check-up;
 - the Apify public data;
 - spreadsheet upload;

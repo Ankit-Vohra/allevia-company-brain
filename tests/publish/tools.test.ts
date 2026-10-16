@@ -19,6 +19,8 @@ import { planPublish, platformOfChannel, upgradeToPublish } from "../../src/publ
 import { contentIdFor, readPost } from "../../src/publish/record.js";
 import { runDue } from "../../src/publish/scheduler.js";
 import type { ToolContext } from "../../src/agent/tool.js";
+import { parseDirective } from "../../src/settings/directives.js";
+import { setAgentSettings } from "../../src/settings/team.js";
 import { call, makeCtx } from "../helpers/tools.js";
 import { addAsset, NOW, publishHarness, scriptFacebook, scriptInstagram, scriptLinkedIn, TENANT, type PublishHarness } from "./harness.js";
 
@@ -156,6 +158,22 @@ describe("publish_post", () => {
     expect(b.data).toMatchObject({ alreadyPending: true, approvalId: a.data.approvalId });
     // the card shows what was asked for last (now with its time), never a second card
     expect((JSON.parse((await pending(a.data.approvalId)).p) as { publish: { at: number } }).publish.at).toBe(TUESDAY);
+  });
+});
+
+describe("always asking first", () => {
+  it("'always ask before posting' is a standing instruction the owner can give; and no autonomy level posts without the OK", async () => {
+    expect(parseDirective("always ask before posting").patches).toEqual([expect.objectContaining({ kind: "memory.instruction", text: "Always ask before posting." })]);
+    // the most autonomous setting there is: still a card, still nothing posted until the owner decides
+    await setAgentSettings(h.g, "content-strategist", { autonomy: 3 }, { now: NOW });
+    scriptInstagram(h);
+    h.composio.calls.length = 0;
+    const r = await call(publishPost, { platform: "instagram", caption: "Autonomy three still asks first", asset_id: "asset:poster-a", why: "Test of autonomy" }, ctx());
+    expect(r.data).toMatchObject({ status: "pending", posted: false, waitingForOk: true });
+    expect(h.composio.executed().map((c) => c.tool)).toEqual(["INSTAGRAM_GET_USER_INFO"]);
+    expect((await pending(r.data.approvalId)).s).toBe("pending");
+    // ... and the scheduler never touches a post that has no approved card behind it
+    expect(await readPost(h.g, contentIdFor(r.data.approvalId))).toBeNull();
   });
 });
 
