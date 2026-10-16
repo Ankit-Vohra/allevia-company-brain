@@ -50,10 +50,10 @@ try { browser = await chromium.launch({ channel: "chrome" }); } catch { browser 
 for (const vp of VPS) {
   const ctx = await newCtx(browser, vp);
   // the office, idle: coffee, ping-pong, a sleepy desk, the dogs and cats
-  if (want("office-idle")) { const p = await open(ctx, `/?mock=1&${SEED}&clock=11:00`, 3200); await save(p, `office-idle-${vp.tag}`, { fullPage: vp.mobile }); await p.close(); }
+  if (want("office-idle")) { const p = await open(ctx, `/office?mock=1&${SEED}&clock=11:00`, 3200); await save(p, `office-idle-${vp.tag}`, { fullPage: vp.mobile }); await p.close(); }
   // mid-request: a dog running a document from one desk to the next
   if (want("office-midrun")) {
-    const p = await open(ctx, `/?mock=1&${SEED}&clock=11:00&debug=1&ask=${enc(Q)}&seek=3500`, 600);
+    const p = await open(ctx, `/office?mock=1&${SEED}&clock=11:00&debug=1&ask=${enc(Q)}&seek=3500`, 600);
     await untilDog(p, "carry");
     await p.waitForTimeout(250);
     await save(p, `office-midrun-${vp.tag}`, { fullPage: vp.mobile });
@@ -61,7 +61,7 @@ for (const vp of VPS) {
   }
   // the treat: the receiver hops, the dog gets a biscuit
   if (want("office-treat")) {
-    const p = await open(ctx, `/?mock=1&${SEED}&clock=11:00&debug=1&ask=${enc(Q)}&seek=3500`, 600);
+    const p = await open(ctx, `/office?mock=1&${SEED}&clock=11:00&debug=1&ask=${enc(Q)}&seek=3500`, 600);
     await untilDog(p, "treat");
     await p.waitForTimeout(400);
     await save(p, `office-treat-${vp.tag}`, { fullPage: vp.mobile });
@@ -99,7 +99,7 @@ for (const vp of VPS) {
 // the office through the day, by dragging the clock chip's slider
 if (want("office-0") || want("office-1") || want("office-2") || want("office-time")) {
   const ctx = await newCtx(browser, VPS[0]);
-  const p = await open(ctx, `/?mock=1&${SEED}`, 2500);
+  const p = await open(ctx, `/office?mock=1&${SEED}`, 2500);
   for (const [hh, mins] of [["09", 9 * 60], ["13", 13 * 60], ["17", 17 * 60 + 30], ["19", 19 * 60 + 30], ["22", 22 * 60]]) {
     await p.locator(".clock-chip").click();
     await p.locator(".clock-range").fill(String(mins));
@@ -116,7 +116,7 @@ if (process.env.VIDEO) {
   await rm(tmp, { recursive: true, force: true });
   await mkdir(tmp, { recursive: true });
   const ctx = await newCtx(browser, { width: 1280, height: 720, dpr: 1, mobile: false }, { recordVideo: { dir: tmp, size: { width: 1280, height: 720 } } });
-  const p = await open(ctx, `/?mock=1&${SEED}&clock=11:00&ask=${enc(Q)}&speed=1`, 500);
+  const p = await open(ctx, `/office?mock=1&${SEED}&clock=11:00&ask=${enc(Q)}&speed=1`, 500);
   await p.waitForTimeout(26000);
   await ctx.close();
   const [webm] = (await readdir(tmp)).filter((f) => f.endsWith(".webm"));

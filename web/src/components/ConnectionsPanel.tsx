@@ -22,7 +22,8 @@ const REASON: Record<string, string> = {
   not_active: "That sign-in didn't finish. Try connecting again.",
 };
 
-function comingBack(): { id: string; text: string } | undefined {
+/** When the owner comes back from a provider's page: which tool, and what to say. Reads and removes the address's ?connect=&result=. */
+export function comingBack(): { id: string; text: string } | undefined {
   try {
     const q = new URLSearchParams(location.search);
     const id = q.get("connect");

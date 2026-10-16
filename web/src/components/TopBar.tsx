@@ -6,7 +6,7 @@ import { Icon, type IconName } from "./Icon";
 
 // At most five primary places; everything else lives under More.
 const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
-  { to: "/", label: "Office", icon: "office", end: true },
+  { to: "/", label: "Home", icon: "home", end: true },
   { to: "/chat", label: "Chat", icon: "ask" },
   { to: "/insights", label: "Insights", icon: "insights" },
   { to: "/approvals", label: "Approvals", icon: "approvals" },
@@ -146,7 +146,7 @@ function MoreMenu({ variant }: { variant: "desktop" | "mobile" }) {
   const loc = useLocation();
   useEffect(() => { setOpen(false); }, [loc.pathname]);
   useDismiss(open, ref, useCallback(() => setOpen(false), []));
-  const active = MORE_SCREENS.some((x) => loc.pathname === x.to) || ["/team", "/brain", "/onboard"].includes(loc.pathname);
+  const active = MORE_SCREENS.some((x) => loc.pathname === x.to) || ["/office", "/team", "/brain", "/onboard"].includes(loc.pathname);
   return (
     <div className={`more more-${variant}`} ref={ref}>
       {variant === "desktop" ? (
@@ -160,6 +160,10 @@ function MoreMenu({ variant }: { variant: "desktop" | "mobile" }) {
       )}
       {open && (
         <div className="switcher-menu more-menu" role="menu" aria-label="More screens">
+          <NavLink to="/office" role="menuitem" className="more-item">
+            <span className="more-icon"><Icon name="office" size={16} /></span>
+            <span className="switcher-text"><span className="switcher-name">The office</span><span className="switcher-domain">Watch your team at work, with the dogs</span></span>
+          </NavLink>
           <NavLink to="/brain" role="menuitem" className="more-item">
             <span className="more-icon"><Icon name="brain" size={16} /></span>
             <span className="switcher-text"><span className="switcher-name">What your team knows</span><span className="switcher-domain">The company brain, and where each fact came from</span></span>

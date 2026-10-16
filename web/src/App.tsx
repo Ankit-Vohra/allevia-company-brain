@@ -1,8 +1,9 @@
 import { Suspense, lazy, useEffect } from "react";
 import { Route, Routes, useLocation } from "react-router";
 import { TopBar, TabBar } from "./components/TopBar";
-import { OfficePage } from "./pages/Office";
+import HomePage from "./pages/Home";
 
+const OfficePage = lazy(() => import("./pages/Office").then((m) => ({ default: m.OfficePage })));
 const AskPage = lazy(() => import("./pages/Ask"));
 const ChatPage = lazy(() => import("./pages/Chat"));
 const BrainPage = lazy(() => import("./pages/Brain"));
@@ -17,7 +18,7 @@ const ConnectionsPage = lazy(() => import("./pages/Connections"));
 const ConnectedPage = lazy(() => import("./pages/Connections").then((m) => ({ default: m.ConnectedPage })));
 
 const TITLES: Record<string, string> = {
-  "/": "Office", "/chat": "Chat", "/ask": "Ask", "/brain": "Brain", "/insights": "Insights", "/approvals": "Approvals", "/onboard": "Add a business",
+  "/": "Home", "/office": "Office", "/chat": "Chat", "/ask": "Ask", "/brain": "Brain", "/insights": "Insights", "/approvals": "Approvals", "/onboard": "Add a business",
   "/studio": "Studio", "/team": "Your team", "/plan": "Plan and credits", "/program": "Your growth plan", "/connections": "Your tools", "/connected": "Connected",
 };
 
@@ -35,7 +36,8 @@ export function App() {
       <main id="main" className="main" tabIndex={-1}>
         <Suspense fallback={<div className="page-loading" aria-busy="true"><span className="skeleton" /></div>}>
           <Routes>
-            <Route path="/" element={<OfficePage />} />
+            <Route path="/" element={<HomePage />} />
+            <Route path="/office" element={<OfficePage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/chat/:who" element={<ChatPage />} />
             <Route path="/chat/:who/:sessionId" element={<ChatPage />} />

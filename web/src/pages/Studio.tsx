@@ -242,7 +242,7 @@ export default function StudioPage() {
         {hasRun && !running && events.length > 0 && (
           <button type="button" className="btn btn-quiet btn-sm" onClick={() => {
             runStore.replay(tenant.id, f.originalId!, latest?.note ? `Studio: ${latest.note}` : "Studio", events, { paced: true });
-            nav("/");
+            nav("/office");
           }}>
             <Icon name="replay" size={14} /> Watch the team do it in the office
           </button>
