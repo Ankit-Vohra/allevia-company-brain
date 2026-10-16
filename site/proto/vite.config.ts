@@ -9,6 +9,7 @@
 import "./env.ts"; // first: it sets LOGO_DEV_KEY before the shared modules read it
 import { defineConfig, type Plugin } from "vite";
 import { fileURLToPath } from "node:url";
+import { mainSite } from "./main-site.ts";
 import { SECTIONS } from "./shared/sections.ts";
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
@@ -35,7 +36,7 @@ export default defineConfig({
   base: "./",
   publicDir: here("../public"),
   appType: "mpa",
-  plugins: [sections()],
+  plugins: [sections(), mainSite()],
   define: { __LOGO_DEV_KEY__: JSON.stringify(process.env.LOGO_DEV_KEY ?? "") },
   server: { port: 5191, strictPort: true, fs: { allow: [here("../..")] } },
   preview: { port: 4191, strictPort: true },

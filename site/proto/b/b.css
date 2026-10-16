@@ -37,7 +37,7 @@
 .nucleus.is-ping .nucleus__ring { animation: ping 800ms var(--ease-out); }
 @keyframes ping { 0% { opacity: 0.8; scale: 0.96; } 100% { opacity: 0; scale: 1.28; } }
 
-.ws__ask { display: grid; gap: 0.8rem; align-content: start; min-height: 11rem; }
+.ws__ask { display: grid; gap: 0.8rem; align-content: start; min-height: 12rem; } /* tall enough for the longest answer, so the page never jumps when an answer arrives */
 .composer { display: flex; align-items: center; min-height: 3rem; padding: 0 1.1rem; background: #fff; border-radius: var(--r-pill); box-shadow: 0 0 0 1px rgb(60 44 24 / 0.12); font-size: 1rem; }
 .composer__ph { color: var(--color-muted); transition: opacity 160ms ease; }
 .composer__ph.is-sent { color: var(--color-ink); font-weight: 500; }
@@ -66,6 +66,7 @@
   .ws__ask { grid-column: 1 / -1; }
 }
 @media (max-width: 52rem) {
+  .ws__ask { min-height: 22.5rem; }
   .ws__col ul { display: flex; flex-wrap: wrap; }
   .hub { grid-template-areas: "p s" "a r" "c c"; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .nucleus { position: relative; left: auto; top: auto; transform: none !important; margin: 0 auto 1rem; order: -1; }

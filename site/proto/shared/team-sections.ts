@@ -166,7 +166,7 @@ function teams(): string {
     const dark = t.band === "band--ink";
     const rest = t.dept === "knowledge" ? gang(r) : "";    // the dogs lie down at the end of the last team
     return `<section class="${t.band ? `band ${t.band} ` : ""}wrap team" data-team="${t.dept}" aria-labelledby="team-${t.dept}">
-  <h2 class="h2 team__h team__h--${side}${dark ? " on-ink" : ""}" id="team-${t.dept}"><span class="t1">${esc(t.name)}.</span> <span class="t2">${esc(t.line)}</span></h2>
+  <h2 class="h2 h2--split team__h team__h--${side}${dark ? " on-ink" : ""}" id="team-${t.dept}"><span class="t1">${esc(t.name)}.</span> <span class="t2">${esc(t.line)}</span></h2>
   <ol class="people">${items}${rest}</ol>
 </section>`;
   }).join("\n");
@@ -177,7 +177,7 @@ function story(): string {
   return `${symbols()}
 <main id="main" class="team-page">
   <header class="team__head wrap">
-    <h1 class="h2 h2--wide"><span class="t1">Meet the people</span> <span class="t2">who run on your brain.</span></h1>
+    <h1 class="h2 h2--wide h2--split"><span class="t1">Meet the people</span> <span class="t2">who run on your brain.</span></h1>
     <p class="lede">${esc(n.charAt(0).toUpperCase() + n.slice(1))} people with a name, a job and a way of working. They know your business and do the work.</p>
   </header>
   <div class="trail" id="walk">
@@ -188,8 +188,7 @@ function story(): string {
     </div>
     ${teams()}
     <section class="wrap team team--end" id="after-walk" aria-labelledby="close-h">
-      <h2 class="h2 h2--wide" id="close-h"><span class="t1">Meet them on your own business.</span> <span class="t2">We set it up.</span></h2>
-      <p class="lede">We read your website and connect the tools you already use. After that, nothing goes out without your OK.</p>
+      <h2 class="h2 h2--wide h2--split" id="close-h"><span class="t1">Meet them on your own business.</span> <span class="t2">We set it up.</span></h2>
       <p class="team__cta"><a class="btn btn-gold" href="/contact/">Get a free Brain Snapshot</a></p>
     </section>
   </div>

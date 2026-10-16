@@ -84,8 +84,10 @@
   .is-pinned .step__m { grid-column: 2; grid-row: 1 / span 4; align-self: center; max-width: none; opacity: 0; translate: 0 16px; transition: opacity 280ms var(--ease-out), translate 320ms var(--ease-out); pointer-events: none; }
   .is-pinned[data-active="0"] .step[data-step="0"] .step__txt, .is-pinned[data-active="1"] .step[data-step="1"] .step__txt, .is-pinned[data-active="2"] .step[data-step="2"] .step__txt { opacity: 1; }
   .is-pinned[data-active="0"] .step[data-step="0"] .step__m, .is-pinned[data-active="1"] .step[data-step="1"] .step__m, .is-pinned[data-active="2"] .step[data-step="2"] .step__m { opacity: 1; translate: 0 0; pointer-events: auto; }
-  .is-pinned .step__txt p { max-height: 0; opacity: 0; overflow: hidden; transition: max-height 260ms var(--ease-out), opacity 220ms var(--ease-out); }
-  .is-pinned[data-active="0"] .step[data-step="0"] .step__txt p, .is-pinned[data-active="1"] .step[data-step="1"] .step__txt p, .is-pinned[data-active="2"] .step[data-step="2"] .step__txt p { max-height: 4rem; opacity: 1; }
+  .is-pinned .step__txt > div { display: grid; grid-template-rows: auto 0fr; transition: grid-template-rows 260ms var(--ease-out); }
+  .is-pinned .step__txt p { min-height: 0; overflow: hidden; opacity: 0; transition: opacity 220ms var(--ease-out); }
+  .is-pinned[data-active="0"] .step[data-step="0"] .step__txt > div, .is-pinned[data-active="1"] .step[data-step="1"] .step__txt > div, .is-pinned[data-active="2"] .step[data-step="2"] .step__txt > div { grid-template-rows: auto 1fr; }
+  .is-pinned[data-active="0"] .step[data-step="0"] .step__txt p, .is-pinned[data-active="1"] .step[data-step="1"] .step__txt p, .is-pinned[data-active="2"] .step[data-step="2"] .step__txt p { opacity: 1; }
 }
 .clusters { display: grid; gap: 0; margin-top: 0.4rem; }
 .cluster { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 1rem; padding: 0.7rem 0; border-top: 1px solid var(--color-rule); align-items: baseline; }

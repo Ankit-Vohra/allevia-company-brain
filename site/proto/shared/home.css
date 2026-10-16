@@ -38,10 +38,10 @@
   .is-scrub .problem__text { position: relative; height: 100%; display: grid; align-content: center; }
   .is-scrub .beats { grid-area: 1 / 1; opacity: calc(1 - var(--head, 0)); transform: translateY(calc(var(--head, 0) * -10px)); }
   .is-scrub .problem__head { grid-area: 1 / 1; margin: 0; opacity: var(--head, 0); transform: translateY(calc((1 - var(--head, 0)) * 14px)); pointer-events: none; }
-  .is-scrub .beat { opacity: 0.34; transition: opacity 240ms var(--ease-out); }
-  .is-scrub .beat.is-on { opacity: 1; }
-  .is-scrub .beat span { display: block; max-height: 0; opacity: 0; overflow: hidden; transition: max-height 260ms var(--ease-out), opacity 200ms var(--ease-out); }
-  .is-scrub .beat.is-on span { max-height: 4.5rem; opacity: 1; }
+  .is-scrub .beat { display: grid; grid-template-rows: auto 0fr; opacity: 0.34; transition: opacity 240ms var(--ease-out), grid-template-rows 260ms var(--ease-out); }
+  .is-scrub .beat.is-on { opacity: 1; grid-template-rows: auto 1fr; }
+  .is-scrub .beat span { display: block; min-height: 0; overflow: hidden; opacity: 0; transition: opacity 200ms var(--ease-out); }
+  .is-scrub .beat.is-on span { opacity: 1; }
   .is-scrub .problem__stage { height: 100%; min-height: 0; display: block; }
   .is-scrub .problem__links, .is-scrub .nz, .is-scrub .founder { display: flex; }
   .is-scrub .problem__links { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: calc(var(--links, 0) * (1 - var(--pull-all, 0))); }
