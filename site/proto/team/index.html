@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Meet your team, Allevia</title>
+  <meta name="description" content="Thirteen people in nine teams, and three office dogs. Fluffy walks you from desk to desk and each person says what they do best.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <script>
+    // The walk is a pinned scroll story only where motion is welcome; everywhere else the page is a stack of cards. Decided before the
+    // first paint so the page never flashes the wrong version (team.ts uses the same three checks).
+    (function () {
+      var m = matchMedia, d = document.documentElement;
+      var reduce = m("(prefers-reduced-motion: reduce)").matches, narrow = m("(max-width: 860px)").matches;
+      var save = navigator.connection && navigator.connection.saveData;
+      if (!reduce && !narrow && !save) d.classList.add("is-scroll");
+    })();
+  </script>
+  <script type="module" src="./team.ts"></script>
+</head>
+<body>
+  <!-- @section nav -->
+  <!-- @section team-story -->
+  <!-- @section footer -->
+</body>
+</html>
