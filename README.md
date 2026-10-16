@@ -39,7 +39,7 @@ flowchart LR
 ```
 
 What comes back in about 90 seconds, from a recorded live run you can replay: new accounts fell from about 238 a day to about
-51; people stop at the phone-number step (306 entered on 28 Sep, 58 on 15 Oct) while visits to the sign-up screen held; that
+51; people stop at the phone-number step (about 294 entered a day, then about 60) while visits to the sign-up screen held; that
 step sits on a screen with a crash first seen on 7 Oct, and release 2.8.0 brought the field that crashes; the fix is built and
 waits in review; the ad campaign paused three days *after* the fall began is ruled out by its date; what is **not in the
 records** is named; and two cards wait for the founder's OK (a fix task and a two-line message to users). Every figure carries
@@ -50,7 +50,7 @@ its date and how sure the source is, and drawn by `show_path` over exactly these
 
 ```mermaid
 flowchart LR
-  O["Observation<br/>phone number entered:<br/>306 a day, then 58"] -- MEASURES --> F["Feature<br/>phone-number step"]
+  O["Observation<br/>phone number entered:<br/>about 294 a day, then about 60"] -- MEASURES --> F["Feature<br/>phone-number step"]
   F -- DEPENDS_ON --> P["Page<br/>sign-up screen"]
   C["Event<br/>crash, first seen 7 Oct"] -- "AFFECTS: crashed_on" --> P
   R["Event<br/>release 2.8.0, 7 Oct"] -- "AFFECTS: introduced" --> C
@@ -59,8 +59,9 @@ flowchart LR
 
 On Shiftly the cause is **proven** by that chain. On a real business whose records do not link a release to a crash, the same
 question honestly ends in "cause not shown, and here is what to connect" (the pass on that business's eval set). Both are
-asserted by evals that ran live with no recordings: `evals/hero.yaml` passed **5 of 5** on Shiftly and on a real, private
-business (report: [`docs/evals/2026-10-16-demo_growth.md`](docs/evals/2026-10-16-demo_growth.md)).
+asserted by evals that ran live with no recordings: the hero question passed **5 of 5** on Shiftly (`evals/hero.yaml`, report:
+[`docs/evals/2026-10-16-demo_growth.md`](docs/evals/2026-10-16-demo_growth.md)) and **5 of 5** on a real, private business
+(its set and report stay private).
 
 ## Why FalkorDB does real work
 
@@ -132,7 +133,7 @@ the image build.
 git clone <repository-url> allevia && cd allevia
 docker compose up -d --build                                  # FalkorDB 6.0.2 and Allevia, http://127.0.0.1:8787
 docker compose exec app tsx src/cli.ts seed-demo --recorded   # Shiftly (synthetic) with four recorded answers
-open http://127.0.0.1:8787                                    # Chat: pick a thread, then "See the path" (FalkorDB Browser: :3090)
+open http://127.0.0.1:8787                                    # Chat: pick a thread, then "See the path" (FalkorDB Browser: http://127.0.0.1:3090)
 ```
 
 **2. Run the team live, on your own Claude login (Node 22 or later, Docker for FalkorDB).** Five commands; the agents answer
@@ -464,7 +465,7 @@ fresh FalkorDB is empty, so load Shiftly first, as above. Then open http://127.0
 
 - **Chat**, pick a thread (the hero question is the oldest), then **How we got this**, **See the full work log**, **See the
   path**: the answer's chain lit in the graph. Straight to it:
-  http://127.0.0.1:8787/ask/session%3A2026-10-16-c490cd58?tenant=demo_growth
+  http://127.0.0.1:8787/ask/session%3A2026-10-16-ec0314ed?tenant=demo_growth
 - **More**, **What your team knows**, then **What breaks if something stops**: choose "Sign-up screen (phone number)" to see
   three things straight away against ten in all.
 - **Approvals** (two cards wait, nothing is sent) and **Insights**.

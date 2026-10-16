@@ -18,8 +18,8 @@ describe("the recorded Shiftly copy", () => {
   it("holds showcase turns that public mode can replay: the hero question first, each with a log, an answer and passing checks", () => {
     expect(showcase.length).toBeGreaterThanOrEqual(4);
     expect(showcase.some((t) => /why did sign-?ups drop this week/i.test(String(t.p.question)))).toBe(true);
-    // the README links straight to this thread (/ask/session%3A2026-10-16-c490cd58?tenant=demo_growth)
-    const heroThread = dump.nodes.find((n) => n.l.includes("Session") && n.p.id === "session:2026-10-16-c490cd58");
+    // the README links straight to this thread (/ask/session%3A2026-10-16-ec0314ed?tenant=demo_growth)
+    const heroThread = dump.nodes.find((n) => n.l.includes("Session") && n.p.id === "session:2026-10-16-ec0314ed");
     expect(heroThread?.p.name).toMatch(/why did sign-?ups drop this week/i);
     for (const t of showcase) {
       const events = JSON.parse(String(t.p.events)) as Array<{ type: string }>;
@@ -54,7 +54,9 @@ describe("the recorded Shiftly copy", () => {
     for (const n of dump.nodes) {
       for (const [k, v] of Object.entries(n.p)) {
         if (typeof v !== "string") continue;
-        for (const h of findSensitive(v)) hits.push(`${String(n.p.id)}.${k}: ${h.kind}`);
+        // the Sales demo's made-up people use a reserved .example address and a patterned number (as the hygiene test allows)
+        const madeUp = (h: { kind: string; match: string }) => (h.kind === "email" && /\.example$/i.test(h.match)) || (h.kind === "phone" && /(\d)\1{4,}/.test(h.match.replace(/\D/g, "")));
+        for (const h of findSensitive(v)) if (!madeUp(h)) hits.push(`${String(n.p.id)}.${k}: ${h.kind}`);
       }
     }
     expect(hits).toEqual([]);
