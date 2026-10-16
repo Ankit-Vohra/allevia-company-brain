@@ -14,6 +14,8 @@ import type { EdgeInput, NodeInput, ObservationInput } from "../graph/upsert.js"
 import type { LlmRunner } from "../ingest/llm.js";
 import type { GraphWrite } from "../ingest/types.js";
 import { entityId } from "../util/ids.js";
+import { competitorId } from "../publicdata/write.js";
+import { queryId } from "./dataforseo.js";
 
 export interface AiBusiness {
   name: string;
@@ -194,7 +196,16 @@ export async function checkAiVisibility(b: AiBusiness, runner: LlmRunner, o: Ask
 
 export const aiVisibilityDocId = (name: string, asOf: string) => entityId("Document", `ai visibility ${name} ${asOf}`);
 
-/** The run as a report Document and readings on the Business (mention %, questions answered), sourced to the report. */
+// The firms named most often are nodes; a long tail of one-off names is in the report and not the graph.
+const MAX_FIRMS = 12;
+
+/**
+ * The run as a report Document and readings on the Business (mention %, questions answered), sourced to the report. Also what
+ * the answers were made of, as nodes the report points at (graph audit G7): each firm the answers named instead of the
+ * business is a Competitor (COMPETES_WITH the business) with an `ai_named_count` reading that MEASURES it, and each question
+ * asked is a Query with a 0/1 `ai_named` reading that MEASURES it; the report MENTIONS both. So "who does AI name instead, and
+ * for which questions do we show up" is a traversal, and both build a history run after run.
+ */
 export function aiVisibilityWrite(run: AiVisibilityRun, businessId: string): GraphWrite {
   const doc = aiVisibilityDocId(run.business.name, run.asOf);
   const others = topOthers(run, 8);
@@ -215,6 +226,32 @@ export function aiVisibilityWrite(run: AiVisibilityRun, businessId: string): Gra
       evidence: `${run.mentioned} of ${run.answered} answers from ${run.model} named the business` });
   }
   observations.push({ subject: businessId, metric: "ai_questions_answered", value: run.answered, asOf: run.asOf, src: doc, evidence: `${run.answered} of ${run.asked} questions answered` });
+
+  // the firms named instead of the business
+  for (const f of topOthers(run, MAX_FIRMS)) {
+    const id = competitorId(f.name);
+    nodes.push({ type: "Competitor", id, name: f.name.slice(0, 120), src: doc, asOf: run.asOf });
+    edges.push(
+      { from: id, type: "COMPETES_WITH", to: businessId, src: doc, asOf: run.asOf },
+      { from: doc, type: "MENTIONS", to: id, src: doc, asOf: run.asOf },
+    );
+    observations.push({ subject: id, metric: "ai_named_count", value: f.count, unit: "answers", asOf: run.asOf, src: doc,
+      evidence: `${f.count} of ${run.answered} answers from ${run.model} named ${f.name} instead` });
+  }
+
+  // each question asked: whether the business was named in the answer (not counted when there was no answer)
+  const seen = new Set<string>();
+  for (const a of run.answers) {
+    const id = queryId(a.question);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    nodes.push({ type: "Query", id, name: a.question.slice(0, 200), src: doc, asOf: run.asOf, props: { text: a.question.slice(0, 200), via: "ai-assistant" } });
+    edges.push({ from: doc, type: "MENTIONS", to: id, src: doc, asOf: run.asOf });
+    if (a.answered) {
+      observations.push({ subject: id, metric: "ai_named", value: a.mentioned ? 1 : 0, asOf: run.asOf, src: doc,
+        evidence: a.mentioned ? `${run.model} named ${run.business.name}${a.position ? ` (#${a.position})` : ""}` : `${run.model} did not name ${run.business.name}` });
+    }
+  }
   return { nodes, edges, observations };
 }
 
@@ -275,8 +312,17 @@ export async function storedAiRuns(g: Read, limit = 2): Promise<StoredAiRun[]> {
   const obs = await g.roQuery<{ src: string; v: number }>(
     `MATCH (o:Observation)-[m:MEASURES]->(b:Business) WHERE m.until IS NULL AND o.metric = 'ai_mention_pct' AND o.src IN $docs
      RETURN o.src AS src, o.value AS v LIMIT 100`, { docs: docs.map((d) => d.id) });
-  return docs.map((d) => ({
-    docId: d.id, asOf: d.asOf, mentionPct: obs.find((o) => o.src === d.id)?.v ?? null,
-    questions: d.questions ?? [], mentioned: d.mentioned ?? [], others: d.others ?? [],
-  }));
+  // The firms named instead come from the graph (each Competitor the report MENTIONS, with its `ai_named_count` reading from
+  // that report); a run stored before those edges existed falls back to the report's own list.
+  const firms = await g.roQuery<{ doc: string; name: string; n: number }>(
+    `MATCH (d:Entity:Document)-[m:MENTIONS]->(c:Entity:Competitor)<-[x:MEASURES]-(o:Observation {metric: 'ai_named_count'})-[s:SOURCED_FROM]->(d)
+     WHERE d.id IN $docs AND m.until IS NULL AND x.until IS NULL AND s.until IS NULL
+     RETURN d.id AS doc, c.name AS name, o.value AS n ORDER BY doc, n DESC, c.id LIMIT 500`, { docs: docs.map((d) => d.id) });
+  return docs.map((d) => {
+    const named = firms.filter((f) => f.doc === d.id).slice(0, 8).map((f) => `${f.name}|${f.n}`);
+    return {
+      docId: d.id, asOf: d.asOf, mentionPct: obs.find((o) => o.src === d.id)?.v ?? null,
+      questions: d.questions ?? [], mentioned: d.mentioned ?? [], others: named.length ? named : d.others ?? [],
+    };
+  });
 }
