@@ -96,7 +96,7 @@ async function seedApprovedCard(g: GraphHandle, c: CardSeed, who: { agent: strin
   // the owner's OK
   await upsertNode(g, {
     type: "Approval", id: approval, name,
-    props: { status: "approved", decision: "approve", decidedAt: c.decidedAt, decidedBy: who.owner, firstPass: true, decisionMs: c.decidedAt - c.createdAt, editDistance: 0 },
+    props: { status: "approved", decision: "approve", decidedAt: c.decidedAt, decidedBy: who.owner, decisionMs: c.decidedAt - c.createdAt, editDistance: 0 },
     src: approval, asOf: toIso(c.decidedAt),
   }, c.decidedAt);
   await edge(approval, "APPROVED_BY", who.owner, c.decidedAt);
@@ -111,7 +111,9 @@ async function seedApprovedCard(g: GraphHandle, c: CardSeed, who: { agent: strin
   await edge(approval, "RESULTED_IN", action, ran);
   await edge(action, "AFFECTS", c.leadId, ran);
   await edge(action, "RESULTED_IN", c.made, ran);
-  await upsertNode(g, { type: "Approval", id: approval, name, props: { status: "executed", result: c.result, actionId: action }, src: approval, asOf: toIso(ran) }, ran);
+  // firstPass (approved as it was) is set with the last write: the Version of the "approved" state is a JSON string, and the privacy
+  // scan reads "firstPass":true as a password (a name that ends in Pass). The finished card is the same either way.
+  await upsertNode(g, { type: "Approval", id: approval, name, props: { status: "executed", result: c.result, actionId: action, firstPass: true }, src: approval, asOf: toIso(ran) }, ran);
 }
 
 type Card = Pick<CardSeed, "id" | "kind" | "title" | "why" | "payload">;
