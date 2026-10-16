@@ -1,7 +1,9 @@
 // Behaviour of the home page's story sections (shared by prototypes A and B).
 //   problem: on a wide screen with motion welcome the section becomes a pinned story driven by one number, --p (0 to 1), from Motion's
 //            scroll(); everything else is CSS reading that number (shared/home.css). Elsewhere it stays static.
-//   flow:    problems on the left flow through the app to finished work on the right: lines and light pulses on a canvas, cards in HTML.
+//   flow:    problems on the left flow into the company brain, shown as the living graph of the sample business (47 things, 60 links),
+//            which lights up the nodes each problem runs through and rearranges them into a short chain, and finished work comes out on the
+//            right. Lines and light pulses on a canvas, cards in HTML.
 // Only transform, opacity and canvas drawing change per frame; both pause off-screen and in a hidden tab.
 import { scroll } from "motion";
 import { reduceMotion, saveData } from "./chrome.ts";
@@ -46,22 +48,87 @@ function initProblem(): void {
 }
 
 // ---------- the flow ----------
+interface GraphData { nodes: [number, number, number, string][]; edges: [number, number][]; stories: number[][] }
+type Pt = { x: number; y: number };
+
 function initFlow(): void {
   const root = document.querySelector<HTMLElement>("[data-flow]");
   if (!root) return;
   const stage = root.querySelector<HTMLElement>("[data-fstage]")!;
   const canvas = root.querySelector<HTMLCanvasElement>("[data-fcanvas]")!;
   const app = root.querySelector<HTMLElement>("[data-fapp]")!;
+  const panel = root.querySelector<HTMLElement>(".gpanel")!;
+  const gcanvas = root.querySelector<HTMLCanvasElement>("[data-gcanvas]")!;
+  const glabels = root.querySelector<HTMLElement>("[data-glabels]")!;
   const ring = root.querySelector<HTMLElement>(".flow__ring")!;
   const ins = [...root.querySelectorAll<HTMLElement>(".fcard--in")];
   const outs = [...root.querySelectorAll<HTMLElement>(".fcard--out")];
+  const graph = JSON.parse(root.querySelector("#graph-data")!.textContent!) as GraphData;
   const N = Math.min(ins.length, outs.length);
-  const GAP = 2.6, PERIOD = GAP * N;
+  const GAP = 3.9, PERIOD = GAP * N;
   const pulseRing = () => { ring.classList.remove("is-pulse"); void ring.offsetWidth; ring.classList.add("is-pulse"); };
+  const still = reduceMotion() || saveData();
 
-  if (reduceMotion() || saveData()) { outs.forEach((o) => o.classList.add("is-lit")); return; }
+  // ----- the living graph -----
+  const gc = gcanvas.getContext("2d")!;
+  let GW = 1, GH = 1, gdpr = 1;
+  const nn = graph.nodes.length;
+  const deg = new Array<number>(nn).fill(0);
+  graph.edges.forEach(([a, b]) => { deg[a]!++; deg[b]!++; });
+  const baseX = new Float32Array(nn), baseY = new Float32Array(nn);
+  const labs = Array.from({ length: 6 }, () => { const e = document.createElement("span"); e.className = "gpanel__lab"; glabels.append(e); return e; });
+  const COLOURS = ["#c48a2c", "#d1a43a", "#a5651b", "#b87a3a", "#8d7a3d"];
+  const layoutGraph = () => {
+    const r = panel.getBoundingClientRect(); GW = r.width; GH = r.height; gdpr = Math.min(window.devicePixelRatio || 1, 2);
+    gcanvas.width = Math.round(GW * gdpr); gcanvas.height = Math.round(GH * gdpr);
+    graph.nodes.forEach((n, i) => { baseX[i] = GW * (0.12 + 0.76 * n[0]); baseY[i] = GH * (0.14 + 0.66 * n[1]); });
+  };
+  const px = new Float32Array(nn), py = new Float32Array(nn);
+  let labStory = -1;
+  /** Draw the graph at time t (seconds); `act` is the active story and `local` the seconds since it began. Idle when act < 0. */
+  const drawGraph = (t: number, act: number, local: number) => {
+    gc.setTransform(gdpr, 0, 0, gdpr, 0, 0); gc.clearRect(0, 0, GW, GH);
+    const story = act >= 0 ? graph.stories[act % graph.stories.length]! : [];
+    const m = story.length;
+    const fadeOut = 1 - sm(3.05, 3.6, local);
+    const focus = act >= 0 ? sm(1.0, 1.5, local) * fadeOut : 0;
+    const arr = act >= 0 ? sm(1.35, 2.0, local) * fadeOut : 0;
+    const inStory = new Int8Array(nn).fill(-1); story.forEach((ni, k) => (inStory[ni] = k));
+    const lit = (k: number) => sm(0, 0.3, local - (1.25 + k * 0.24)) * fadeOut;
+    for (let i = 0; i < nn; i++) {
+      let x = baseX[i]! + Math.sin(t * 0.5 + i * 1.7) * 3.2, y = baseY[i]! + Math.cos(t * 0.42 + i * 1.1) * 3.2;
+      const k = inStory[i]!;
+      if (k >= 0 && m > 0) { const tx = GW * (0.17 + 0.66 * (m === 1 ? 0.5 : k / (m - 1))), ty = GH * (0.44 + 0.075 * Math.sin(k * 1.5 + 0.4)); x += (tx - x) * arr; y += (ty - y) * arr; }
+      px[i] = x; py[i] = y;
+    }
+    gc.lineWidth = 1;
+    for (const [a, b] of graph.edges) {
+      const both = inStory[a]! >= 0 && inStory[b]! >= 0;
+      gc.strokeStyle = `rgba(80,66,46,${(both ? 0.2 : 0.14) * (1 - 0.72 * focus)})`;
+      gc.beginPath(); gc.moveTo(px[a]!, py[a]!); gc.lineTo(px[b]!, py[b]!); gc.stroke();
+    }
+    // the chain the answer runs through
+    for (let k = 0; k + 1 < m; k++) {
+      const a = story[k]!, b = story[k + 1]!, l = Math.min(lit(k), lit(k + 1)); if (l <= 0.01) continue;
+      gc.strokeStyle = `rgba(224,150,40,${0.95 * l})`; gc.lineWidth = 2.2; gc.beginPath(); gc.moveTo(px[a]!, py[a]!); gc.lineTo(px[b]!, py[b]!); gc.stroke();
+    }
+    for (let i = 0; i < nn; i++) {
+      const k = inStory[i]!; const l = k >= 0 ? lit(k) : 0;
+      const dim = 1 - 0.78 * focus * (k >= 0 ? 0 : 1);
+      const r = 2.5 + Math.min(4, deg[i]! * 0.35) + l * 3.2;
+      if (l > 0.02) { const g = gc.createRadialGradient(px[i]!, py[i]!, 0, px[i]!, py[i]!, r * 3.6); g.addColorStop(0, `rgba(255,226,150,${0.8 * l})`); g.addColorStop(1, "rgba(224,150,40,0)"); gc.fillStyle = g; gc.beginPath(); gc.arc(px[i]!, py[i]!, r * 3.6, 0, 6.2832); gc.fill(); }
+      gc.fillStyle = k >= 0 && l > 0.3 ? "#e0961e" : COLOURS[graph.nodes[i]![2]! % COLOURS.length]!; gc.globalAlpha = (0.55 + 0.4 * l) * dim; gc.beginPath(); gc.arc(px[i]!, py[i]!, r, 0, 6.2832); gc.fill(); gc.globalAlpha = 1;
+    }
+    // short labels on the lit nodes
+    if (act !== labStory) { labStory = act; labs.forEach((e, k) => { const ni = story[k]; e.textContent = ni === undefined ? "" : graph.nodes[ni]![3]; }); }
+    labs.forEach((e, k) => { const ni = story[k]; if (ni === undefined) { e.style.opacity = "0"; return; } const l = lit(k); e.style.opacity = l.toFixed(2); e.style.transform = `translate3d(${px[ni]!.toFixed(1)}px, ${(py[ni]! - 12).toFixed(1)}px, 0) translate(-50%, -100%)`; });
+  };
+  const resizeG = new ResizeObserver(() => { layoutGraph(); drawGraph(performance.now() / 1000, -1, 0); });
+  resizeG.observe(panel); layoutGraph();
 
-  type Pt = { x: number; y: number };
+  if (still) { outs.forEach((o) => o.classList.add("is-lit")); drawGraph(0, -1, 0); return; }
+
+  // ----- the lines and pulses between the cards and the graph (wide screens) -----
   let W = 0, H = 0; let dpr = 1;
   let inAnch: Pt[] = [], outAnch: Pt[] = [], appIn: Pt[] = [], appOut: Pt[] = [];
   let base: HTMLCanvasElement | null = null;
@@ -76,7 +143,7 @@ function initFlow(): void {
     inAnch = ins.map((c) => { const r = rel(c.getBoundingClientRect(), s); return { x: r.right, y: (r.top + r.bottom) / 2 }; });
     outAnch = outs.map((c) => { const r = rel(c.getBoundingClientRect(), s); return { x: r.left, y: (r.top + r.bottom) / 2 }; });
     const spread = (n: number) => Array.from({ length: n }, (_, i) => a.top + (a.bottom - a.top) * (0.2 + (0.6 * i) / Math.max(1, n - 1)));
-    appIn = spread(N).map((y) => ({ x: a.left, y })); appOut = spread(N).map((y) => ({ x: a.right, y }));
+    appIn = spread(N).map((y) => ({ x: a.left + 10, y })); appOut = spread(N).map((y) => ({ x: a.right - 10, y }));
     base = document.createElement("canvas"); base.width = canvas.width; base.height = canvas.height;
     const b = base.getContext("2d")!; b.scale(dpr, dpr); b.lineWidth = 1; b.strokeStyle = "rgba(70,61,51,0.2)";
     for (let i = 0; i < N; i++) for (const [p0, p3] of [[inAnch[i]!, appIn[i]!], [appOut[i]!, outAnch[i]!]] as [Pt, Pt][]) { const [c1, c2] = ctrl(p0, p3); b.beginPath(); b.moveTo(p0.x, p0.y); b.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p3.x, p3.y); b.stroke(); }
@@ -95,30 +162,31 @@ function initFlow(): void {
   const frame = (ts: number) => {
     if (!running) return;
     const t = (ts - t0) / 1000;
+    const cyc = t % PERIOD; const act = Math.floor(cyc / GAP); const local = cyc - act * GAP; // story `act` is the one being worked on now
+    drawGraph(t, act, local);
     if (wide()) {
       g2.setTransform(dpr, 0, 0, dpr, 0, 0); g2.clearRect(0, 0, W, H);
       if (base) g2.drawImage(base, 0, 0, W, H);
       for (let i = 0; i < N; i++) {
-        const tt = (((t - i * GAP) % PERIOD) + PERIOD) % PERIOD;
-        // two quiet drifters per line, always
-        for (const [p0, p3, ph] of [[inAnch[i]!, appIn[i]!, 0.0], [appOut[i]!, outAnch[i]!, 0.5]] as [Pt, Pt, number][]) { const [c1, c2] = ctrl(p0, p3); const u = (t * 0.09 + i * 0.17 + ph) % 1; dot(bez(p0, c1, c2, p3, u), 1.3, 0.35); }
+        const tt = t < PERIOD ? t - i * GAP : (((t - i * GAP) % PERIOD) + PERIOD) % PERIOD; // the first round starts at the first problem
+        for (const [p0, p3, ph] of [[inAnch[i]!, appIn[i]!, 0.0], [appOut[i]!, outAnch[i]!, 0.5]] as [Pt, Pt, number][]) { const [c1, c2] = ctrl(p0, p3); const u = (t * 0.09 + i * 0.17 + ph) % 1; dot(bez(p0, c1, c2, p3, u), 1.3, 0.3); }
         if (tt > 0.2 && tt < 1.2) comet(inAnch[i]!, appIn[i]!, (tt - 0.2) / 1.0, 1);
-        if (tt > 1.45 && tt < 2.45) comet(appOut[i]!, outAnch[i]!, (tt - 1.45) / 1.0, 1);
-        const on = tt < GAP, lit = tt > 2.45 && tt < 11.5, rg = tt > 1.2 && tt < 1.3;
+        if (tt > 2.6 && tt < 3.6) comet(appOut[i]!, outAnch[i]!, (tt - 2.6) / 1.0, 1);
+        const on = tt >= 0 && tt < GAP, lit = tt > 3.6 && tt < 14, rg = tt > 1.2 && tt < 1.3;
         if (on !== state.on[i]) { state.on[i] = on; ins[i]!.classList.toggle("is-on", on); }
         if (lit !== state.lit[i]) { state.lit[i] = lit; outs[i]!.classList.toggle("is-lit", lit); }
         if (rg && !state.ringAt[i]) { state.ringAt[i] = true; pulseRing(); } else if (!rg) state.ringAt[i] = false;
       }
     } else {
-      // phones: no canvas; one pair at a time
       for (let i = 0; i < N; i++) {
-        const tt = (((t - i * GAP) % PERIOD) + PERIOD) % PERIOD; const on = tt < GAP;
+        const tt = t < PERIOD ? t - i * GAP : (((t - i * GAP) % PERIOD) + PERIOD) % PERIOD; const on = tt >= 0 && tt < GAP, lit = tt > 3.6 && tt < 14;
         if (on !== state.on[i]) { state.on[i] = on; ins[i]!.classList.toggle("is-on", on); if (on) pulseRing(); }
+        if (lit !== state.lit[i]) { state.lit[i] = lit; outs[i]!.classList.toggle("is-lit", lit); }
       }
     }
     raf = requestAnimationFrame(frame);
   };
-  const start = () => { if (running || !visible || document.hidden) return; running = true; t0 = performance.now() - 0; raf = requestAnimationFrame(frame); };
+  const start = () => { if (running || !visible || document.hidden) return; running = true; t0 = performance.now(); raf = requestAnimationFrame(frame); };
   const stop = () => { running = false; cancelAnimationFrame(raf); };
   new IntersectionObserver(([e]) => { visible = !!e?.isIntersecting; visible ? start() : stop(); }, { rootMargin: "80px" }).observe(root);
   document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));

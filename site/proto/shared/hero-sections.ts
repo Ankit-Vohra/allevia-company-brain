@@ -43,6 +43,51 @@ export function heroData(): string {
   return JSON.stringify({ questions, counts: BRAIN.counts }).replace(/</g, "\\u003c");
 }
 
+/** The one supporting line under the headline: not something that only answers, but a brain that remembers and a team that does the work. */
+const HERO_SUB = "Allevia is your Founder OS. It remembers everything, works while you’re away, and gets real work done in the tools you already use.";
+
+// ---------- prototype B: the calm diagram ----------
+
+const B_TOOLS = ["gmail", "google-calendar", "google-ads", "meta-ads", "google-analytics", "instagram", "hubspot"];
+const B_TEAM = ["chief-of-staff", "data-analyst", "growth-marketer", "content-strategist", "sales-lead", "tech-lead"];
+const ROLE: Record<string, string> = { "chief-of-staff": "Chief of Staff", "data-analyst": "Analytics", "growth-marketer": "Marketing", "content-strategist": "Content", "sales-lead": "Sales", "tech-lead": "Tech" };
+const CLUSTER_AREA: Record<string, string> = { people: "p", signups: "s", app: "a", reach: "r", customers: "c" };
+
+export function heroB(): string {
+  const tools = B_TOOLS.map((id) => `<li class="wtool" data-tool="${id}">${logoMarkup(id, 22)}<span>${esc(logo(id)?.name ?? id)}</span></li>`).join("");
+  const team = B_TEAM.map((id) => `<li class="wagent" data-agent="${id}"><span class="face face--sm" aria-hidden="true">${AGENTS[id]?.svg ?? ""}</span><span><b>${esc(AGENTS[id]?.name ?? id)}</b><i>${ROLE[id]}</i></span></li>`).join("");
+  const clusters = BRAIN.clusters.map((c) => `<li class="ccard" data-cluster="${c.id}" style="grid-area:${CLUSTER_AREA[c.id]}"><b>${esc(c.label)}</b><span class="num">${c.count}</span><i>${esc(c.sample.slice(0, 3).join(", "))}</i></li>`).join("");
+  return `<section class="bhero" data-bhero aria-labelledby="bh-h">
+  <div class="wrap bhero__copy">
+    <h1 id="bh-h" class="bhero__h1"><span class="t1">Your company’s brain.</span> <span class="t2">And the team that runs on it.</span></h1>
+    <p class="bhero__sub">${HERO_SUB}</p>
+    <p class="bhero__cta"><a class="btn btn-gold" href="/contact/">Get a free Brain Snapshot</a><a class="btn btn-ghost" href="#problem">See how it works</a></p>
+  </div>
+  <div class="wrap">
+    <div class="ws" data-ws role="group" aria-label="The company brain with its tools and its team, answering a founder's questions">
+      <svg class="ws__lines" data-lines aria-hidden="true"></svg>
+      <div class="ws__col ws__col--tools"><p class="ws__label">Your tools</p><ul>${tools}</ul></div>
+      <div class="ws__brain">
+        <ul class="hub">${clusters}</ul>
+        <div class="nucleus" data-nuc><img src="/shared/img/brain-still-480.webp" width="480" height="480" alt="" decoding="async"><b>Company brain</b><span class="num">${BRAIN.counts.nodes} things, ${BRAIN.counts.edges} links</span><i class="nucleus__ring" aria-hidden="true"></i></div>
+      </div>
+      <div class="ws__col ws__col--team"><p class="ws__label">Your team</p><ul>${team}</ul></div>
+      <div class="ws__ask">
+        <div class="composer" data-composer><span class="composer__ph" data-ph>Ask your team anything</span><span class="composer__typed" data-typed></span><i class="caret" aria-hidden="true"></i></div>
+        <article class="wanswer" data-wanswer>
+          <header><span class="face face--sm" data-wface></span><b data-wwho></b><span class="wanswer__ok" data-wok>Waiting for your OK</span></header>
+          <p data-wtext></p><p class="wanswer__how" data-whow></p>
+        </article>
+      </div>
+      <figure class="ws__office" data-office><video muted loop playsinline preload="none" poster="/media/office-loop-poster.webp" data-src="/media/office-loop.mp4" aria-label="Your team at their desks, with the office dogs"></video><figcaption>Your team at their desks</figcaption></figure>
+    </div>
+  </div>
+  <button class="hero__next" type="button" data-next hidden>Next question</button>
+  <p class="visually-hidden">The brain answers questions founders ask every day. ${esc(QUESTIONS.map((q) => `${q.q} ${q.answer}`).join(" "))}</p>
+  <script type="application/json" id="hero-data">${heroData()}</script>
+</section>`;
+}
+
 export function heroA(): string {
   const chips = ORBIT_SLOTS.map(chipHtml).join("");
   const sr = QUESTIONS.map((q) => `${q.q} ${q.answer}`).join(" ");
@@ -61,9 +106,9 @@ export function heroA(): string {
     </article>
   </div>
   <div class="wrap hero__copy">
-    <h1 id="hero-h" class="hero__h1"><span class="t1">Founder OS.</span> <span class="t2">Your company brain plus an AI team that works with all your tools.</span></h1>
+    <h1 id="hero-h" class="hero__h1"><span class="t1">Your company’s brain.</span> <span class="t2">And the team that runs on it.</span></h1>
+    <p class="hero__sub">${HERO_SUB}</p>
     <p class="hero__cta"><a class="btn btn-gold" href="/contact/">Get a free Brain Snapshot</a><a class="btn btn-ghost" href="#problem">See how it works</a></p>
-    <p class="hero__fine">Sample business: Shiftly. Made-up data.</p>
   </div>
   <button class="hero__next" type="button" data-next hidden>Next question</button>
   <p class="visually-hidden">The brain answers questions founders ask every day. ${esc(sr)}</p>

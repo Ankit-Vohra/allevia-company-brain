@@ -18,7 +18,7 @@ const frame = (src: string, w: number, h: number, alt: string, cls = "", loading
 /** The same card in Discord, drawn to match the bot's message (src/discord/approval-card.ts). */
 const discordCard = (body: string, label: string) => `<figure class="frame">
   <div class="dc" role="img" aria-label="${esc(label)}"><p class="dc__chan"># approvals</p><div class="dc__msg"><span class="dc__av" aria-hidden="true">a</span><div class="dc__body"><p class="dc__who">Allevia <span class="dc__bot">APP</span></p>${body}</div></div></div>
-  <figcaption class="frame__cap">In Discord <span class="tag" title="Redrawn to match the message the Allevia bot sends">redrawn</span></figcaption>
+  <figcaption class="frame__cap">In Discord</figcaption>
 </figure>`;
 
 // ---------- Integrations ----------
@@ -99,10 +99,10 @@ export function productBrain(): string {
   return `<section class="wrap chapter chapter--split" id="brain" aria-labelledby="ch2-h">
   <div class="chapter__copy">
     <h2 id="ch2-h" class="h2"><span class="t1">One company brain.</span> <span class="t2">Everything your business knows, with where it came from.</span></h2>
-    <p class="lede">The sample business has <span class="num">${BRAIN.counts.nodes}</span> things and <span class="num">${BRAIN.counts.edges}</span> links, in five groups.</p>
+    <p class="lede">A brain like this one holds <span class="num">${BRAIN.counts.nodes}</span> things and <span class="num">${BRAIN.counts.edges}</span> links, in five groups.</p>
     <ul class="clusters">${chips}</ul>
   </div>
-  ${frame("/media/shot-brain.webp", 1200, 900, "The company brain of a sample business: people, sign-up steps, the app and its releases, ads and customers, each connected to what depends on it.", "chapter__shot")}
+  ${frame("/media/shot-brain.webp", 1200, 900, "The company brain: people, sign-up steps, the app and its releases, ads and customers, each connected to what depends on it.", "chapter__shot")}
 </section>`;
 }
 
@@ -118,7 +118,7 @@ export function productAsk(): string {
 
 export function productNote(): string {
   return `<section class="wrap chapter chapter--split" id="note" aria-labelledby="ch4-h">
-  ${frame("/shared/img/app-home-ok.webp", 608, 596, "The app's home on the sample business: what is waiting for your OK, with the draft, the reason and Approve, Change and No thanks.", "chapter__shot")}
+  ${frame("/shared/img/app-home-ok.webp", 608, 596, "The app's home: what is waiting for your OK, with the draft, the reason and Approve, Change and No thanks.", "chapter__shot")}
   <div class="chapter__copy">
     <h2 id="ch4-h" class="h2"><span class="t1">Today’s note.</span> <span class="t2">One short note each morning, and what is waiting for you.</span></h2>
     <p class="lede">Three things on your home screen: how the business is doing, what waits for your OK, and one next step. Everything else is one tap away.</p>
@@ -157,7 +157,6 @@ export function productPlan(): string {
   <div class="chapter__copy">
     <h2 id="ch6-h" class="h2"><span class="t1">Your plan moves.</span> <span class="t2">Three goals, one bar each. Your team checks its own progress every month.</span></h2>
     <p class="lede">You say OK to the plan, or change a number. After that, your team keeps it on track and asks you only when something costs money or speaks in public.</p>
-    <p class="fine">Sample numbers.</p>
   </div>
   <ul class="goals">${bars}</ul>
 </section>`;

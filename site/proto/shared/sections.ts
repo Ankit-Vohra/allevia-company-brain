@@ -6,7 +6,7 @@ import { CHIP_ROWS } from "./data.ts";
 import { TEAM_SECTIONS } from "./team-sections.ts";
 
 import { esc } from "./util.ts";
-import { heroA } from "./hero-sections.ts";
+import { heroA, heroB } from "./hero-sections.ts";
 import { HOME_SECTIONS } from "./home-sections.ts";
 import { PAGE_SECTIONS } from "./page-sections.ts";
 export { esc };
@@ -41,7 +41,7 @@ export function footer(): string {
     <a class="brand" href="/" aria-label="Allevia">allevia</a>
     <div>
       <nav class="foot__links" aria-label="Footer">${pages}<a href="/faq/">Questions</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="/cookies/">Cookies</a></nav>
-      <p class="foot__fine">The business shown on this site is Shiftly, a shift-jobs app. It is a sample: its data is made up.${usingLogoDev() ? ' <a href="https://logo.dev" rel="noopener">Logos provided by Logo.dev</a>.' : ""}</p>
+      <p class="foot__fine">Allevia is a Founder OS: your company brain, an AI team and all your tools, in one place.${usingLogoDev() ? ' <a href="https://logo.dev" rel="noopener">Logos provided by Logo.dev</a>.' : ""}</p>
     </div>
   </div>
 </footer>`;
@@ -68,6 +68,7 @@ export const SECTIONS: Record<string, (page: string) => string> = {
   ...HOME_SECTIONS,
   ...PAGE_SECTIONS,
   "hero-a": () => heroA(),
+  "hero-b": () => heroB(),
   nav: (page) => nav(NAV.some((n) => n.id === page) ? page : "", page === "b" ? "/b/" : "/a/"),
   footer: () => footer(),
   switcher: (page) => switcher(page),

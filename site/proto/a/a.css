@@ -58,7 +58,7 @@
 .hero__copy > * { max-width: 34rem; pointer-events: auto; }
 .hero__h1 { font-size: clamp(2.3rem, 1.1rem + 3.1vw, 3.75rem); line-height: 1.04; letter-spacing: -0.024em; }
 .hero__cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 2rem; }
-.hero__fine { margin-top: 1.1rem; font-size: 0.8125rem; color: var(--color-muted); }
+.hero__sub { margin-top: 1.4rem; font-size: var(--fs-lede); line-height: 1.5; color: var(--color-ink-2); max-width: 30rem; }
 .hero__next { position: absolute; z-index: 25; left: var(--gutter); bottom: 1rem; padding: 0.55rem 1.1rem; border-radius: var(--r-pill); border: 1px solid rgb(31 26 20 / 0.28); background: #fff; font: 500 0.9375rem var(--font-body); cursor: pointer; }
 .hero__next[hidden] { display: none; }
 

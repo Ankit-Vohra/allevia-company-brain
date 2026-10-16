@@ -112,7 +112,7 @@ html.is-scroll .cards { display: none; }
 .walk .tool { opacity: 0; transform: translateY(12px) scale(0.9); transition: opacity 140ms var(--ease-out), transform 140ms var(--ease-out); }
 .walk .agent.is-tools .tool { opacity: 1; transform: none; transition-duration: 240ms; transition-delay: calc(var(--i) * 70ms); }
 
-.walk .treat { position: absolute; left: calc((var(--dx) - var(--ax)) * var(--px)); top: calc((var(--dy) - var(--ay)) * var(--px)); width: calc(5 * var(--px) * 0.8); height: calc(3 * var(--px) * 0.8); margin: -0.2rem 0 0 -0.5rem; opacity: 0; z-index: 2; }
+.walk .treat { position: absolute; max-width: none; left: calc((var(--dx) - var(--ax)) * var(--px)); top: calc((var(--dy) - var(--ay)) * var(--px)); width: calc(5 * var(--px) * 0.8); height: calc(3 * var(--px) * 0.8); margin: -0.2rem 0 0 -0.5rem; opacity: 0; z-index: 2; }
 .walk .agent.is-treat .treat { animation: toss-x 360ms linear forwards, toss-y 360ms linear forwards, toss-fade 360ms linear forwards; }
 @keyframes toss-x { to { translate: var(--gx, -300px) 0; } }
 @keyframes toss-y {

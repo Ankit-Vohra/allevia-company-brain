@@ -76,8 +76,18 @@ export const OUTCOMES: { logo: string; title: string; line: string }[] = [
   { logo: "gmail", title: "Reply sent to 6 leads", line: "Gmail, from your address" },
   { logo: "instagram", title: "Diwali post scheduled", line: "Instagram, Thursday 6 pm" },
   { logo: "github", title: "Fix filed for the slow photos", line: "Ready for your developer" },
-  { logo: "github", title: "Fix filed for the sign-up crash", line: "Owner: Farhan" },
+  { logo: "slack", title: "Owner found: Farhan", line: "He owns the sign-up screen. Told on Slack." },
   { logo: "google-calendar", title: "Meeting booked with Sarah", line: "Tuesday, 4 pm" },
+];
+
+/** For each problem above, the real nodes of the sample business' graph that its answer runs through (the living picture lights them in this order). */
+export const FLOW_PATHS: string[][] = [
+  ["campaign:meta-seekers-pune", "channel:meta-ads", "page:screen/app/auth/sign-up", "event:sentry-issue-shiftly-41"],
+  ["lead:sana-sahyadrihotels-example", "deal:sana-sahyadrihotels-example", "lead:rohit-desaicaterers-example", "lead:ira-greenleafcafes-example", "lead:arjun-mehtalogistics-example"],
+  ["audience:seekers", "channel:app", "feature:job-alert-sms", "feature:referral-invites"],
+  ["channel:website", "channel:google-search", "event:google-update-september-2026-spam-update"],
+  ["event:sentry-issue-shiftly-41", "page:screen/app/auth/sign-up", "person:farhan", "team:mobile"],
+  ["lead:arjun-mehtalogistics-example", "deal:arjun-mehtalogistics-example", "meeting:arjun-mehtalogistics-example-202610170530"],
 ];
 
 /** The noise a founder carries (the problem scene): what piles up, in four kinds. */

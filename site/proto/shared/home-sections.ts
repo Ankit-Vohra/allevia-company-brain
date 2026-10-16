@@ -1,7 +1,7 @@
 // The home page's story sections (shared by prototypes A and B): the founder's problems pulled into one brain, a three-card glimpse of
 // what it does, a strip of tools, the problems-to-outcomes flow, and the one button. Built at compile time; behaviour in home-client.ts.
-import { AGENTS } from "./assets.generated.ts";
-import { CALM, NOISE, OUTCOMES, PROBLEMS } from "./data.ts";
+import { AGENTS, BRAIN_GRAPH } from "./assets.generated.ts";
+import { CALM, FLOW_PATHS, NOISE, OUTCOMES, PROBLEMS } from "./data.ts";
 import { logo, logoMarkup } from "./logos.ts";
 import { esc } from "./util.ts";
 
@@ -127,6 +127,13 @@ export function teaser(): string {
 
 // ---------- the flow: many problems in, finished work out ----------
 
+/** The real graph (47 things, 60 links) and, for each problem, the nodes its answer runs through, for the living picture. */
+function graphJson(): string {
+  const nodes = BRAIN_GRAPH.nodes; const ix = new Map(nodes.map((n, i) => [n[0], i]));
+  const stories = FLOW_PATHS.map((p) => p.map((id) => ix.get(id)).filter((i): i is number => i !== undefined));
+  return JSON.stringify({ nodes: nodes.map((n) => [n[1], n[2], n[3], n[4]]), edges: BRAIN_GRAPH.edges, stories }).replace(/</g, "\\u003c");
+}
+
 export function flow(): string {
   const left = PROBLEMS.map((p, i) => `<li class="fcard fcard--in" data-fi="${i}"><span class="fcard__dot" aria-hidden="true"></span>${esc(p)}</li>`).join("");
   const right = OUTCOMES.map((o, i) => `<li class="fcard fcard--out" data-fo="${i}"><span class="fcard__logo">${logoMarkup(o.logo, 24)}</span><span class="fcard__t"><b>${esc(o.title)}</b><span>${esc(o.line)}</span></span><span class="fcard__ok" aria-label="You said OK"></span></li>`).join("");
@@ -137,12 +144,18 @@ export function flow(): string {
       <canvas class="flow__canvas" data-fcanvas aria-hidden="true"></canvas>
       <ul class="flow__col flow__col--in" aria-label="What you carry">${left}</ul>
       <div class="flow__app" data-fapp>
-        <figure class="device device--laptop"><img src="/media/shot-answer.webp" width="1200" height="900" alt="The Allevia app: a question and its answer with the sources" loading="lazy" decoding="async"></figure>
+        <div class="gpanel" role="img" aria-label="The company brain as a graph of everything the business knows. Each problem lights up the part of it that holds the answer.">
+          <img class="gpanel__brain" src="/shared/img/brain-still-900.webp" width="900" height="900" alt="" loading="lazy" decoding="async">
+          <canvas class="gpanel__canvas" data-gcanvas aria-hidden="true"></canvas>
+          <div class="gpanel__labels" data-glabels aria-hidden="true"></div>
+          <p class="gpanel__cap" data-gcap aria-hidden="true">Company brain</p>
+        </div>
         <span class="flow__ring" aria-hidden="true"></span>
       </div>
+      <script type="application/json" id="graph-data">${graphJson()}</script>
       <ul class="flow__col flow__col--out" aria-label="What comes back">${right}</ul>
     </div>
-    <p class="flow__note">Sample business: Shiftly. Made-up data. Every outcome waited for an OK first.</p>
+    <p class="flow__note">Every outcome waited for your OK first.</p>
   </div>
 </section>`;
 }
