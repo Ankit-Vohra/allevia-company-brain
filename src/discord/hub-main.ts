@@ -18,6 +18,9 @@ import { StudioDiscord, StudioGate } from "./studio-bot.js";
 import { syncArea, type TenantSource } from "./hub-provision.js";
 import { hubSettings, productionHub } from "./hub-service.js";
 import { tenantTimeZone } from "./main.js";
+import { readStandup } from "../proactive/note.js";
+import { isoDate } from "../util/time.js";
+import type { ApprovalDto } from "../server/types.js";
 
 export interface StartedHub { stop: () => Promise<void> }
 
@@ -29,6 +32,16 @@ export const tenantSource = (g: GraphHandle, slug?: string): TenantSource => ({
     return b ? { id: b.id, title: b.title, ...(b.asOf ? { asOf: b.asOf } : {}), text: b.text } : null;
   },
   ...(slug ? { actionTarget: () => getActionTarget(g, slug, { founders: usesFoundersAccounts(slug) }) } : {}),
+  standupCards: async () => {
+    const s = await readStandup(g, isoDate(Date.now()));
+    const out: Array<{ approval: ApprovalDto; why: string }> = [];
+    for (const i of s?.items ?? []) {
+      if (i.status !== "drafted" || !i.approvalId) continue;
+      const a = await readApproval(g, i.approvalId);
+      if (a) out.push({ approval: a, why: i.why });
+    }
+    return out;
+  },
 });
 
 export async function startHubBot(o: { model?: string; log?: (line: string) => void; syncEveryMs?: number }): Promise<StartedHub> {
@@ -68,6 +81,13 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
         // a spreadsheet dropped in #your-team adds this business's own numbers (the business comes from the channel only)
         numbers: { businessId: businessId(area.slug) },
         checkup: checkupJobs(), // /checkup: this business's own site, in the background
+        revise: async (approvalId, instruction) => {
+          const { reviseDraft } = await import("../proactive/revise.js");
+          const { productionDrafters } = await import("../proactive/wiring.js");
+          const r = await reviseDraft(graph, approvalId, instruction, { text: productionDrafters(graph, area.slug, businessId(area.slug)).text });
+          if (!r.ok) return { why: r.why };
+          return (await readApproval(graph, approvalId)) ?? { why: "That draft is no longer there." };
+        },
       });
     },
     studioFor: async (area) => new StudioDiscord({

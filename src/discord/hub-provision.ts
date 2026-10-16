@@ -12,7 +12,7 @@
 // Permissions are managed here: a hand-added overwrite on a customer channel is removed by the next run, on purpose
 // (isolation first); use the roles.
 import { graphName } from "../graph/client.js";
-import { approvalCard } from "./bot.js";
+import { approvalCard, standupCard } from "./bot.js";
 import type { ActionTarget } from "../actions/target.js";
 import { renderCitations, splitMessage } from "./format.js";
 import {
@@ -373,20 +373,23 @@ export interface TenantSource {
   latestBrief(): Promise<{ id: string; title: string; asOf?: string; text: string } | null>;
   // where the business's approved fixes go, for the plain wording on a fix card (absent: "a to-do in your tasks")
   actionTarget?(): Promise<ActionTarget | undefined>;
+  // Today's stand-up drafts still waiting for the owner, with the one-line reason for each (src/proactive). Absent: none.
+  standupCards?(): Promise<Array<{ approval: ApprovalDto; why: string }>>;
 }
 
 const MAX_CARDS = 10;
 const cardOpts = async (t: Promise<ActionTarget | undefined>): Promise<{ target?: ActionTarget }> => { const x = await t; return x ? { target: x } : {}; };
 
-// Posts what is new, once: pending approval cards (with buttons) into #approvals, the newest note into #todays-note;
-// and takes the buttons off a card that was decided somewhere else (the web).
-export async function syncArea(slug: string, d: Pick<ProvisionDeps, "hub" | "store" | "now" | "log">, src: TenantSource): Promise<{ cards: number; note: boolean; closed: number }> {
+// Posts what is new, once: pending approval cards (with buttons) into #approvals, the newest note into #todays-note,
+// then today's stand-up drafts under it with Approve, Change and No thanks; and takes the buttons off a card that was
+// decided somewhere else (the web). A note that gained the stand-up after it was first posted is posted once more.
+export async function syncArea(slug: string, d: Pick<ProvisionDeps, "hub" | "store" | "now" | "log">, src: TenantSource): Promise<{ cards: number; note: boolean; closed: number; today?: number }> {
   const { hub, store } = d;
   const now = (d.now ?? Date.now)();
   const area = await store.getArea(slug);
   const approvals = area?.channels.approvals;
   const noteChannel = area?.channels["todays-note"];
-  const out = { cards: 0, note: false, closed: 0 };
+  const out: { cards: number; note: boolean; closed: number; today?: number } = { cards: 0, note: false, closed: 0 };
   if (!area || area.status !== "ready" || !approvals || !noteChannel) return out;
 
   let target: Promise<ActionTarget | undefined> | undefined; // read once, only when a card is posted
@@ -409,7 +412,7 @@ export async function syncArea(slug: string, d: Pick<ProvisionDeps, "hub" | "sto
   }
   const b = await src.latestBrief();
   if (b?.text.trim()) {
-    const key = `${slug}|note|${b.id}`;
+    const key = `${slug}|note|${b.id}${/^Your team (noticed|met) /m.test(b.text) ? "|standup" : ""}`;
     if (!(await store.getPost(key))) {
       const parts = splitMessage(`**${b.title}**${b.asOf ? ` · as of ${b.asOf}` : ""}\n\n${renderCitations(b.text, new Map())}`);
       let first: string | undefined;
@@ -420,6 +423,15 @@ export async function syncArea(slug: string, d: Pick<ProvisionDeps, "hub" | "sto
       await store.savePost({ key, slug, kind: "note", refId: b.id, channelId: noteChannel, messageId: first ?? "", closed: true, postedAt: now });
       out.note = true;
     }
+  }
+  for (const { approval: a, why } of (await src.standupCards?.()) ?? []) {
+    if (a.status !== "pending") continue;
+    const key = `${slug}|today|${a.id}`;
+    if (await store.getPost(key)) continue;
+    const m = await hub.sendMessage(noteChannel, standupCard(a, why));
+    // kept as an approval post, so its buttons come off when it is decided anywhere
+    await store.savePost({ key, slug, kind: "approval", refId: a.id, channelId: noteChannel, messageId: m.id, closed: false, postedAt: now });
+    out.today = (out.today ?? 0) + 1;
   }
   return out;
 }

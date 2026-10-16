@@ -488,6 +488,35 @@ describe.each(["memory", "graph"] as const)("cards and the daily note go to the 
     expect((await syncArea("aamdani", r.deps, src)).note).toBe(true);
   });
 
+  it("posts today's stand-up drafts under the note with Approve, Change and No thanks, once, and re-posts a note that gained the stand-up", async () => {
+    const r = rig(kind);
+    const prov = await provisionCustomer("aamdani", r.deps);
+    const noteCh = prov.area.channels["todays-note"]!;
+    const draft = { ...card("approval:standup-diwali"), kind: "content_draft" as const, title: "A Diwali post with a poster", by: "content-strategist" as ApprovalDto["by"], payload: { title: "A Diwali post with a poster", body: "Diwali greetings from Raipur.", target: "Instagram post" } };
+    const state = { note: { id: "document:brief-1", title: "Today's note", asOf: "2026-10-16", text: "Signups held steady." }, drafts: [] as ApprovalDto[] };
+    const src: TenantSource = {
+      pendingApprovals: async () => state.drafts.filter((c) => c.status === "pending"),
+      approval: async (id) => state.drafts.find((c) => c.id === id) ?? null,
+      latestBrief: async () => state.note,
+      standupCards: async () => state.drafts.map((a) => ({ approval: a, why: "Diwali is in about 23 days." })),
+    };
+    await syncArea("aamdani", r.deps, src);
+    state.note = { ...state.note, text: "Your team noticed 1 thing and drafted it\n1. Tara drafted a Diwali post with a poster: Diwali is in about 23 days. [[approval:standup-diwali]]\n\nSignups held steady." };
+    state.drafts = [draft];
+    const out = await syncArea("aamdani", r.deps, src);
+    expect(out).toMatchObject({ note: true, today: 1 });
+    const inNote = [...r.hub.messages.values()].filter((m) => m.channelId === noteCh);
+    expect(inNote).toHaveLength(3); // the first note, the note with the stand-up, the draft
+    const posted = inNote.at(-1)!;
+    expect(posted.content).toContain("drafted by Tara");
+    expect(posted.content).toContain("Why: Diwali is in about 23 days.");
+    expect(posted.buttons).toEqual(["allevia:approve:approval:standup-diwali", "allevia:change:approval:standup-diwali", "allevia:reject:approval:standup-diwali"]);
+    expect((await syncArea("aamdani", r.deps, src)).today).toBeUndefined(); // once
+    state.drafts[0] = { ...draft, status: "approved" };
+    await syncArea("aamdani", r.deps, src);
+    expect(posted.buttons).toEqual([]);
+  });
+
   it("does nothing for a business that is not ready", async () => {
     const r = rig(kind);
     r.hub.fail = (op) => (op === "createRole" ? "down" : undefined);
