@@ -27,7 +27,10 @@ Nothing in Jarvis changes during the hackathon. This page is the recipe for when
 | `who_owns` / `who_knows` | The current owner, and people ranked by what they know about something. |
 | `impact_of` | "What breaks if…": downstream dependencies, with a betweenness score. |
 | `metric_trend` | A metric's observations over time, with deltas. |
-| `recall` | Earlier Allevia threads and the owner's notes about some entities. |
+| `important` / `topics` | The graph algorithms: the most central nodes (PageRank) and the groups of related ones (label propagation). |
+| `history` | How one node changed: property changes with before and after, and relationships that ended. |
+| `show_path` | The path that joins the ids you name: each pair by a current edge or a short path; ids that are not linked are named, not drawn. |
+| `recall` | Earlier Allevia threads and the owner's notes about some entities, and earlier questions that mean the same. |
 | `cypher` | Read-only Cypher (5 s timeout, 200 rows) for anything the other tools miss. |
 
 ## Run it
@@ -101,7 +104,7 @@ allow without a prompt.
 
 ## Check it
 
-- `claude mcp list` should show `allevia` as connected, with 11 tools.
+- `claude mcp list` should show `allevia` as connected, with 15 tools.
 - Ask Jarvis "use allevia to search for instagram". It should call `mcp__allevia__search` and cite node ids from the
   result.
 - A write attempt such as `cypher` with `CREATE …` comes back refused, and the graph is unchanged.

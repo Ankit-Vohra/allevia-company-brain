@@ -301,7 +301,7 @@ what fails one step away against what fails up to four steps away, with the path
 | **Projections** | `algo.*` cannot filter on edge properties, so ranking and community algorithms run on a slim, cached projection graph of the currently valid edges (or of the edges valid at `asOf`), rebuilt when a write lands ([`src/graph/projection.ts`](src/graph/projection.ts)). |
 | **Vector + full-text indexes** | 384-dim cosine vector indexes on entities and document chunks (local multilingual e5 embeddings, English and Hindi) and full-text indexes on names, summaries and chunk text, fused by reciprocal rank in `search` ([`src/graph/indexes.ts`](src/graph/indexes.ts), [`src/agent/tools/search.ts`](src/agent/tools/search.ts)). |
 | **Memory in the graph** | `Session`, `Turn` (with `TOUCHED` and `CITED` edges and the full event log), `Finding`, `Memory`, learned `Rule`s with `LEARNED_FROM`, `GUIDED_BY` from a finding to the owner instruction it followed. Agents hand off through Findings stored in the graph. |
-| **MCP** | `npm run cli -- mcp --tenant <slug>` serves 11 read-only graph tools for one tenant over stdio or Streamable HTTP, so another agent can use the company brain ([`docs/jarvis-integration.md`](docs/jarvis-integration.md)). |
+| **MCP** | `npm run cli -- mcp --tenant <slug>` serves 15 read-only graph tools for one tenant over stdio or Streamable HTTP, so another agent can use the company brain ([`docs/jarvis-integration.md`](docs/jarvis-integration.md)). |
 | **FalkorDB Browser** | The compose file publishes it on 127.0.0.1:3090 for exploring the tenant graphs directly. |
 
 ### The graph data model
