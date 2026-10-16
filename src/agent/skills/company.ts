@@ -42,6 +42,18 @@ export interface CompanyFacts {
   channels: string[];
 }
 
+// One post is often several Content nodes (its caption, a note about it, its file name), each carrying the same reading, so
+// a ranking lists it three times. Of a run of posts of one format whose views are within 1% of each other, only the first
+// (the best ranked) is kept: the skill would otherwise say four reels worked when it was one.
+export function distinctPosts<T extends { views?: number | null; format?: string }>(items: T[]): T[] {
+  const kept: T[] = [];
+  for (const i of items) {
+    const v = i.views ?? 0;
+    if (!kept.some((k) => k.format === i.format && Math.abs((k.views ?? 0) - v) <= 0.01 * Math.max(k.views ?? 0, v))) kept.push(i);
+  }
+  return kept;
+}
+
 export const companySlug = (tenant: string): string => tenant.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "company";
 
 export async function companyFacts(g: GraphHandle, tenant: string, now: number = Date.now()): Promise<CompanyFacts> {
@@ -65,10 +77,17 @@ export async function companyFacts(g: GraphHandle, tenant: string, now: number =
   let weakest: string[] = [];
   try {
     const ctx: ToolContext = { graph: g, tenant, turnId: "skills", agentId: "content-strategist", asker: "person:founder", touched: new TouchedSet(), now, readOnly: true };
-    const r = await contentPerformance.run({ days: 365, limit: 25 }, ctx);
-    const items = ((r.data as { items?: Array<{ name?: string; views?: number | null; multiple?: number | null; hook?: { name?: string } | null; format?: string }> })?.items ?? [])
-      .filter((i) => typeof i.views === "number");
-    const line = (i: (typeof items)[number]) => one(`${i.name ?? "a post"}${i.format ? ` (${i.format})` : ""}: ${i.views} views${i.multiple ? `, ${i.multiple}x the usual` : ""}${i.hook?.name ? `; hook: ${i.hook.name}` : ""}`);
+    type Item = { name?: string; views?: number | null; multiple?: number | null; hook?: { name?: string } | null; format?: string };
+    // The last year first. A post whose date was never recorded is dropped by that window, so when it leaves nothing, ask
+    // again with no window at all (Aamdani: 70 posts, only 32 dated, and the dated ones keep their views under another name).
+    const seen = async (args: { days?: number; limit: number }): Promise<Item[]> => {
+      const r = await contentPerformance.run(args, ctx);
+      // a reading of 0 is the placeholder a post gets before its first numbers arrive, not a result
+      return ((r.data as { items?: Item[] })?.items ?? []).filter((i) => typeof i.views === "number" && i.views > 0);
+    };
+    const found = (await seen({ days: 365, limit: 25 }));
+    const items = distinctPosts(found.length ? found : await seen({ limit: 25 }));
+    const line = (i: Item) => one(`${i.name ?? "a post"}${i.format ? ` (${i.format})` : ""}: ${i.views} views${i.multiple ? `, ${i.multiple}x the usual` : ""}${i.hook?.name ? `; hook: ${i.hook.name}` : ""}`);
     worked = items.slice(0, 4).map(line);
     weakest = items.length > 4 ? items.slice(-2).map(line) : [];
   } catch { /* no content yet */ }
