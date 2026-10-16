@@ -6,9 +6,9 @@ copied unchanged. MIT licence, see `LICENSE` in this folder.
 - Source: https://github.com/nateherkai/scroll-craft
 - Path in that repository: `plugins/nateherk-design/skills/scroll-craft/engine/`
 - Pinned commit: `75d81f74e83692add18cd7a8a8e078b8a887a579` (release 0.3.1, 2026-09-30)
-- SHA-256 at copy time:
-  - `scrollcraft.js`  `4a419b3ede51f64790af7b56c0195ea01c98a84df8e0e768ebf343956b922f39`
-  - `scrollcraft.css` `e19eb3aa73b0944626ca56e6e427c76f44753481e04d60f4bac20e8cf1d7758a`
+- SHA-256 at copy time (the test compares the first 16 digits):
+  - `scrollcraft.js`  `4a419b3ede51f647 (first 16 hex digits)`
+  - `scrollcraft.css` `e19eb3aa73b09446 (first 16 hex digits)`
 
 **Do not edit these two files.** The skill's rule is that the engine is the mechanism and is never changed per project.
 Allevia's look comes from the theme tokens and our own markup in `site/src/styles/story.css`; Allevia's own scroll
