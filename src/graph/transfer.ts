@@ -323,8 +323,13 @@ export async function importDump(dump: GraphDump, url: string, opts: ImportOpts 
   };
   await memoryGuard();
 
-  // labels in the source's order
-  for (const l of dump.header.labels) await g.query(`CREATE (n:${l}) DELETE n`);
+  // labels in the source's order. Two statements, never `CREATE (n:L) DELETE n` in one: FalkorDB 6.0.2 writes no effects for
+  // a node made and deleted in the same query, so the label would be missing from the append-only file and the server could
+  // not load that file on its next start (tests/graph/aof-restart.test.ts).
+  for (const l of dump.header.labels) {
+    await g.query(`CREATE (n:${l})`);
+    await g.query(`MATCH (n:${l}) DELETE n`);
+  }
 
   // nodes, one statement shape per label set
   const map = new Map<number, number>();

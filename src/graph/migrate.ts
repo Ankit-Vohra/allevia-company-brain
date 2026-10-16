@@ -35,7 +35,11 @@ export async function registerTypeLabels(g: GraphHandle): Promise<number> {
   let made = 0;
   for (const label of ["Entity", ...ENTITY_TYPES].filter((l) => !have.has(l))) {
     try {
-      await g.query(label === "Entity" ? "CREATE (n:Entity) DELETE n" : `CREATE (n:Entity:${label}) DELETE n`);
+      // two statements (a node made and deleted in one query leaves no effects in FalkorDB 6.0.2's append-only file, which
+      // then cannot be loaded on the next start); the node has no id, so only it matches the second statement
+      const pattern = label === "Entity" ? "(n:Entity)" : `(n:Entity:${label})`;
+      await g.query(`CREATE ${pattern}`);
+      await g.query(`MATCH ${pattern} WHERE n.id IS NULL DELETE n`);
       made++;
     } catch (e) {
       if (!/constraint/i.test(String((e as Error).message))) throw e; // Entity.id is MANDATORY here: leave it, the order is a nicety
