@@ -134,6 +134,9 @@ describe("server: writes and public mode (integration)", () => {
       expect(byQuestion.map((e) => e.type)).toEqual(["session", "agent_start", "text", "final"]);
       const byId = sseEvents(await (await post(pub, "/api/mini/ask", { question: "", turnId: "turn:show-1" })).text());
       expect(byId).toEqual(byQuestion);
+      // punctuation, case and hyphens do not matter ("signups" finds a recorded "sign-ups" question)
+      const sloppy = sseEvents(await (await post(pub, "/api/mini/ask", { question: "  WHAT is   waiting-on me???" })).text());
+      expect(sloppy).toEqual(byQuestion);
     });
 
     it("threads and replays show only showcase turns", async () => {

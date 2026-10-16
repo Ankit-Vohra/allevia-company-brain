@@ -43,7 +43,7 @@ export const commands: Command[] = [
       if (values["no-register"] !== true) {
         await ensureTenant({ slug: tenant, name: "Shiftly (synthetic demo)", domain: "demo.example", industry: "shift-jobs app (synthetic demo data)", city: "Pune" });
         console.log(values.recorded === true
-          ? `Registered "${tenant}". Start the app (npm run cli -- serve --public) and open Chat: the four recorded answers replay with their work logs and paths.`
+          ? `Registered "${tenant}". In the app (npm run cli -- serve --public, or the Docker app) open Chat: the four recorded answers replay with their work logs and paths.`
           : `Registered "${tenant}". Ask it: npm run cli -- ask ${tenant} "Why did sign-ups drop this week, and what should we do?"`);
       }
       return 0;

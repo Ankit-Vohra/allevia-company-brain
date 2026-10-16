@@ -1,16 +1,175 @@
 # Allevia
 
-**A done-for-you AI growth team for small businesses, with a company brain in FalkorDB behind every answer.**
+**Founder OS: an AI team and a company brain on FalkorDB, working through the founder's own tools.**
 
-Thirteen AI staff in nine departments share one knowledge graph per business. They answer "why" with the path through
-the graph that proves it, remember what the owner taught them, and turn findings into one-tap approvals. Built in
-India for owner-run businesses in the US, UK, UAE and Australia.
+A founder whose business already works (customers, revenue, a reputation) gets one place to run it with an AI team.
+Thirteen AI staff in nine departments share **one FalkorDB graph per business**, built from the business's website, the
+founder's connected tools, uploads and conversations, every fact with its source and its date. The team answers "why" with the
+path through the graph that proves it, remembers what the founder taught it, and turns what it finds into one-tap approvals:
+nothing that spends money, goes public or contacts someone happens without the founder's OK. Built in India for owner-run
+businesses in the US, UK, UAE and Australia.
 
-Entry for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB, 15–18 Oct 2026), all three tracks. The
-first two businesses on it are real: **Aamdani** (a Hindi-first jobs platform, from its operating vault and read-only
-connectors) and **AVS Atelier** (an architecture studio, from nothing but its website URL).
+Entry for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB, 15–18 Oct 2026), all three tracks. Everything below
+that can be run is shown on **Shiftly**, a synthetic shift-jobs app that ships with the repository (no private data).
 
-![The office mid-request: Meera recalls what the graph already knows, the work log streams on the right](docs/screenshots/live-office-midrun.png)
+![The team's answer to "why did sign-ups drop", and the path through the graph that supports it, lit node by node (Shiftly, synthetic)](docs/demo-screens/hero-path-desktop.png)
+
+**Jump to:** [the hero use case](#the-hero-use-case-in-one-minute) · [why FalkorDB](#why-falkordb-does-real-work) ·
+[every query and algorithm](docs/falkordb-queries.md) · [tracks](#the-three-tracks) · [data model](#the-data-model) ·
+[run it](#run-it) · [what is live](#what-is-live-and-what-needs-an-account) · [the five live scenarios](docs/live-scenarios.md) ·
+[AI tools used](#ai-tools-and-licence)
+
+## The hero use case in one minute
+
+> **"Why did sign-ups drop this week, and what should we do?"**
+
+Meera, the Chief of Staff, does not answer from one place: she sends five desks into the same graph at once. Kabir finds
+which step of the sign-up flow fell and on which day, Zoya what crashed on those screens, Imran what shipped and what waits
+in App Store review, Sara what the team decided last time, and Arjun what else breaks one step away against four.
+
+```mermaid
+flowchart LR
+  Q["Why did sign-ups drop,<br/>and what should we do?"] --> M[Meera plans five desks]
+  M --> K["Kabir: which step fell, which day"]
+  M --> Z["Zoya: what crashed on those screens"]
+  M --> I["Imran: what shipped, what waits in review"]
+  M --> S["Sara: what we decided before"]
+  Z --> A["Arjun: what else breaks,<br/>one step against four"]
+  K & Z & I & S & A --> C["Meera: cause, chain, path,<br/>two cards for your OK"]
+```
+
+What comes back in about 90 seconds, from a recorded live run you can replay: new accounts fell from about 238 a day to about
+51; people stop at the phone-number step (306 entered on 28 Sep, 58 on 15 Oct) while visits to the sign-up screen held; that
+step sits on a screen with a crash first seen on 7 Oct, and release 2.8.0 brought the field that crashes; the fix is built and
+waits in review; the ad campaign paused three days *after* the fall began is ruled out by its date; what is **not in the
+records** is named; and two cards wait for the founder's OK (a fix task and a two-line message to users). Every figure carries
+its date, every claim cites a node, and the server checks each citation was returned by a tool in that turn.
+
+**The graph path behind the answer** (written by the ingest mappers from the tracker's own fields, each edge with its source,
+its date and how sure the source is, and drawn by `show_path` over exactly these nodes):
+
+```mermaid
+flowchart LR
+  O["Observation<br/>phone number entered:<br/>306 a day, then 58"] -- MEASURES --> F["Feature<br/>phone-number step"]
+  F -- DEPENDS_ON --> P["Page<br/>sign-up screen"]
+  C["Event<br/>crash, first seen 7 Oct"] -- "AFFECTS: crashed_on" --> P
+  R["Event<br/>release 2.8.0, 7 Oct"] -- "AFFECTS: introduced" --> C
+  X["Person<br/>Farhan, Android"] -- OWNS --> P
+```
+
+On Shiftly the cause is **proven** by that chain. On a real business whose records do not link a release to a crash, the same
+question honestly ends in "cause not shown, and here is what to connect" (the pass on that business's eval set). Both are
+asserted by evals that ran live with no recordings: `evals/hero.yaml` passed **5 of 5** on Shiftly and on a real, private
+business (report: [`docs/evals/2026-10-16-demo_growth.md`](docs/evals/2026-10-16-demo_growth.md)).
+
+## Why FalkorDB does real work
+
+The agents cannot answer without walking the graph: every one of the 21 graph tools is a query or an algorithm, and the answer's
+path is checked against the graph before it is drawn. Take FalkorDB away and no tool has anything to answer from.
+
+- **The cause is a path of unknown length**, through different kinds of things (a number, a flow step, a screen, a crash, a
+  release, a person). One Cypher pattern and `algo.SPpaths` walk it; a table would need a join written for this one question
+  ([queries §13](docs/falkordb-queries.md)).
+- **"What breaks if this stops"** is `impact_of`: one traversal per hop over `DEPENDS_ON`, `AFFECTS` and `BLOCKS`, so depth 1
+  (what a lookup sees) sits beside depth 4 with the path to each far item and its owner
+  ([§3](docs/falkordb-queries.md)); the Brain page draws it.
+- **Facts have two clocks.** Every edge carries valid time (`since`/`until`) and record time (`recordedAt`/`retiredAt`); nothing
+  is deleted, a contradicted fact is closed, every tool takes `asOf` ([§7](docs/falkordb-queries.md)).
+- **Memory is nodes and edges.** `Turn`, `Finding`, `Memory` and `Rule` live in the same graph; recall is a traversal from the
+  nodes in the question to earlier turns, decisions and the cards they drafted, and an edit becomes
+  `Rule -LEARNED_FROM-> Approval` ([§11](docs/falkordb-queries.md)).
+- **One graph per business** (`allevia_<slug>`), vector and full-text indexes fused in `search`, graph algorithms
+  (`pageRank`, `labelPropagation`, `WCC`) on cached projections, and a read-only Cypher escape hatch behind its own guard.
+
+The queries and algorithms the product depends on, each with its file and line, parameters, why a table would not do, and a plan
+or timing note: **[`docs/falkordb-queries.md`](docs/falkordb-queries.md)**. A test holds that page to the code. Two FalkorDB 6.0.2
+crash shapes were found and are written up in [`docs/notes/`](docs/notes/falkordb-nan-crash.md).
+
+## The three tracks
+
+| Track | In one line |
+|---|---|
+| **Agents That Act on Connected Data** | 47 agent tools (21 of them graph queries and algorithms) over the business's own data and connected tools; every finding becomes an approval card with its graph evidence, and an approved card is carried out (dry run until switched on). |
+| **Agent Memory and Coordination** | Thirteen agents hand work to each other through `Finding` nodes in one shared graph; each turn's citations, the owner's notes and learned rules are written back and recalled by traversal on the next question. |
+| **Company Brain** | Decisions with their evidence and deciders, who owns and who knows what, facts with valid time and sources, versions one hop away, and "what breaks if this stops" with the path. |
+
+What fits each, and where it is thinner, is in [Tracks](#tracks) below.
+
+## The data model
+
+Every node is an `Entity` with a unique `id` (`<type>:<slug>`); every relationship carries `since`/`until`, `recordedAt`/`retiredAt`,
+`src` and `asOf`. The part that carries the hero use case and the memory loop (all 38 node types and 54 relationship types are in
+[`src/graph/schema.ts`](src/graph/schema.ts); the full diagram is [below](#the-graph-data-model)):
+
+```mermaid
+flowchart LR
+  O[Observation] -- MEASURES --> F[Feature: funnel step]
+  F -- DEPENDS_ON --> P[Page: screen]
+  E1[Event: crash] -- AFFECTS --> P
+  E2[Event: release] -- AFFECTS --> E1
+  Pe[Person] -- OWNS --> P
+  D[Decision] -- BASED_ON --> O
+  D -- AFFECTS --> F
+  Tu[Turn] -- CITED --> D
+  Fi[Finding] -- PART_OF --> Tu
+  Ag[Agent] -- PRODUCED --> Fi
+  Re[Recommendation] -- PROPOSES --> Ap[Approval]
+  Ru[Rule] -- LEARNED_FROM --> Ap
+  Tu -- TOUCHED --> Ap
+  Ap -- RESULTED_IN --> Ac[Action]
+  Ac -- RESULTED_IN --> Ta[Task]
+```
+
+## Run it
+
+Two ways. Neither needs an API key: the agents run on a claude.ai login, never on an API key.
+
+**1. Look first, no accounts (Docker with Compose v2.24 or later).** The public read-only demo: the office, the Brain page, the
+approvals and four recorded team answers on Shiftly, replayed with their work logs and lit paths. About 5 minutes, most of it
+the image build.
+
+```sh
+git clone <repository-url> allevia && cd allevia
+docker compose up -d --build                                  # FalkorDB 6.0.2 and Allevia, http://127.0.0.1:8787
+docker compose exec app tsx src/cli.ts seed-demo --recorded   # Shiftly (synthetic) with four recorded answers
+open http://127.0.0.1:8787                                    # Chat: pick a thread, then "See the path" (FalkorDB Browser: :3090)
+```
+
+**2. Run the team live, on your own Claude login (Node 22 or later, Docker for FalkorDB).** Five commands; the agents answer
+the hero question for real, in about 90 seconds.
+
+```sh
+git clone <repository-url> allevia && cd allevia && npm install && (cd web && npm install && npm run build)   # 1
+docker compose up -d falkordb       # 2  FalkorDB on 127.0.0.1:6390 (no Compose? docker run -d -p 127.0.0.1:6390:6379 falkordb/falkordb:6.0.2)
+npm run cli -- seed-demo            # 3  Shiftly, plain: no recorded answers, so the live run starts from the records only
+npm run cli -- serve                # 4  http://127.0.0.1:8787; Claude Code logged in first: `claude`, then /login
+npm run cli -- ask demo_growth "Why did sign-ups drop this week, and what should we do?"   # 5  or ask it in the web app
+```
+
+More (live mode in Docker, the CLI, tests, FalkorDB settings): [Run it in detail](#run-it-in-detail).
+
+## What is live, and what needs an account
+
+| Part | State today | Needs |
+|---|---|---|
+| The graph, thirteen agents, answers with their path, approvals, learned rules, Today's note, the pixel office | **Works, live.** The eval runs are real agents, no recordings. | A claude.ai login on the machine |
+| The public read-only demo with recorded answers | **Works with nothing.** | Docker |
+| Onboarding a business from its website | **Works, live** (crawl, brand kit, SEO checks, goals; a large site takes about 8 minutes) | Chromium for the crawler (`WITH_CHROMIUM=1` in Docker), a Claude login |
+| Studio: photo clean-up, posters in the brand's fonts, captions | **Works, live** on the free paths | A Claude login |
+| Studio AI edits, paid artwork, 5-second clips | **Works, paid and capped**; each generation is quoted first | The `higgsfield` CLI logged in, and credits |
+| Connections: Google (Calendar, Gmail, Search Console, GA4, Ads) and 16 other toolkits | **Built.** The connect flow, the approvals and the audit log are tested against fakes; the first real account is not yet connected. | A Composio key; a Google OAuth app for GA4 and Ads |
+| Public data: a business's Google listing, public Instagram, competitors, ad libraries | **Built, budgeted, off by default.** A live smoke test passes. | An Apify token |
+| Discord: a thread per conversation, live work log, approval buttons | **Ran live on the founder's server**; the newest approval cards were tested with fake ports only | A Discord bot token and server |
+| Acting in the outside world: GitHub issues, posts, emails, calendar bookings, ad changes | **Dry run by default.** An approved card is recorded; nothing is sent until `ALLEVIA_ACTIONS_LIVE=1`. Ad data is simulated and always marked. | |
+
+## AI tools and licence
+
+Claude Code, with subagents working in parallel git worktrees, wrote most of the code, tests and docs under the founder's
+direction and review. Claude, through a claude.ai subscription login (the Claude Agent SDK), runs the thirteen agents at runtime.
+Higgsfield made the website's illustrations. Local multilingual e5 embeddings serve vector search. What the founder decided and
+checked, and what was reused, is in [AI tools used](#ai-tools-used) and [Built during the event](#built-during-the-event).
+Licence: **MIT** (see `LICENSE`); vendored third-party data and skills keep their own licences ([`NOTICE.md`](NOTICE.md),
+[`vendor/`](vendor)).
 
 ---
 
@@ -39,8 +198,8 @@ running), give the owner a team instead of a tool, and make every answer carry i
 - **A thirteen-person company in a pixel office.** Meera (Chief of Staff) plans each request and sends it to the right
   desks: Isha (Center of Excellence, checks every number), Kabir (Analytics), Rohan (Marketing), Tara, Dev and Nisha
   (Content Studio: strategist, copy editor, fact checker), Arjun, Zoya and Imran (Tech: tech lead, on-call engineer for
-  Sentry errors and crashes, QA and release manager for builds and the app stores), Vikram (Operations) and Sara
-  (Library). Every
+  Sentry errors and crashes, QA and release manager for builds and the app stores), Vikram (Operations), Neel (Sales: answers new
+  enquiries, offers real times from the calendar, books the call once the owner says OK, follows up) and Sara (Library). Every
   agent is an `Agent` node in the graph, every step streams to the office and the work log, and every handoff is
   visible. The roster is [`shared/roster.ts`](shared/roster.ts).
 - **Every answer comes with its graph path.** The answer cites node ids; the server checks each citation was returned
@@ -79,25 +238,14 @@ running), give the owner a team instead of a tool, and make every answer carry i
 - **Other surfaces.** A Discord bot (a thread per conversation, live work log, approval buttons), a read-only MCP server
   for other agents, a CLI for everything, and a static marketing site with pricing in four currencies (`site/`).
 
-## Hero use case: "Why did sign-ups drop this week, and what should we do?"
+## Hero use case, in detail
 
-The question the demo is built around, and the clearest place to see the graph doing work. It runs live on the Claude subscription,
-on two businesses: **Shiftly** (`demo_growth`, a synthetic shift-jobs app, seeded by `npm run cli -- seed-demo`, no private data) and
-Aamdani (private, real records). On Shiftly the 2.8.0 release (7 Oct) put a new phone-number box on the sign-up screen, it crashes, and new
-accounts fell from about 250 a day to about 50 the same day. Around it, the noise a real week has: Google sign-ups unchanged, an ad campaign
-paused three days *after* the fall began, a search update from September, an older crash on another screen, a hotfix waiting in the App
-Store's review queue, a decision from last week and the thread it came from.
-
-```mermaid
-flowchart LR
-  Q["Why did sign-ups drop,<br/>and what should we do?"] --> M[Meera plans five desks]
-  M --> K["Kabir: which step fell, which day"]
-  M --> Z["Zoya: what crashed on those screens"]
-  M --> I["Imran: what shipped, what waits in review"]
-  M --> S["Sara: what we decided before"]
-  Z --> A["Arjun: what else breaks,<br/>one step against four"]
-  K & Z & I & S & A --> C["Meera: cause, chain, path,<br/>two cards for your OK"]
-```
+The question the demo is built around, and the clearest place to see the graph doing work. It runs live on the Claude subscription.
+**Shiftly** (`demo_growth`, a synthetic shift-jobs app, seeded by `npm run cli -- seed-demo`, no private data) is what this repository
+ships: on it the 2.8.0 release (7 Oct) put a new phone-number box on the sign-up screen, it crashes, and new accounts fell from
+about 250 a day to about 50 the same day. Around it, the noise a real week has: Google sign-ups unchanged, an ad campaign paused
+three days *after* the fall began, a search update from September, an older crash on another screen, a hotfix waiting in the App
+Store's review queue, a decision from last week and the thread it came from. The five desks and the answer are at the top of this page.
 
 What comes back, in about two minutes: the cause and how sure it is ("proven" where a record links the release to the crash, "likely" where only the dates
 fit, "not shown" where nothing does); the chain with dates; what else it hits at depth 1 against depth 4; what we decided last time and where it
@@ -121,12 +269,16 @@ reading (Observation) -MEASURES-> funnel step (Feature) -DEPENDS_ON-> screen (Pa
 | Honest "not in the records" | A crash with no route gets no screen; a crash with no first release gets no release; the answer says what the records do not link | [`app-health.ts`](src/ingest/sources/ops-map/app-health.ts) |
 | Two cards, then a learned rule | `Recommendation -PROPOSES-> Approval`; an edit becomes `Rule -LEARNED_FROM-> Approval` | [`actions/`](src/actions) |
 
-On Aamdani the same question honestly ends in "cause not shown": the records hold the sign-up counts, the funnel steps, crash-free sessions, an iOS build in
-review and a login-screen timeout, but no record links a release to a crash or a crash to the sign-up step, so the answer says so and says what to connect.
-`evals/hero.yaml` (Shiftly) and `evals/hero-aamdani.yaml` assert all of this: the cause named, the path nodes present, valid citations and grounded numbers, the honest
-"not in the records", and the two cards drafted. **Live pass rate, 16 October 2026** (real agents on the Claude subscription, no recordings; Shiftly reseeded before each attempt):
-the hero question passed **5 of 5 on Shiftly** (69 to 102 s) and **5 of 5 on Aamdani** (60 to 85 s), and each of the other items in the two sets passed on a live run (the ad red herring, "not in the records", depth 1 against 4, memory; Aamdani's no-invented-release and depth items, the latter 3 of 3 after the steps were given a plain summary); the reports are in [`docs/evals/`](docs/evals). The demo steps are the
-opening of [`docs/demo-script.md`](docs/demo-script.md).
+On a real business whose records hold the sign-up counts, the funnel steps and the crash-free sessions but no record that links a release to a
+crash or a crash to the sign-up step, the same question honestly ends in "cause not shown", and says what to connect. The mapper links a crash to its
+screen and a release to its crash the day the tracker's data carries them (`firstRelease`, the route in `where`). `evals/hero.yaml` (Shiftly) asserts
+all of this: the cause named, the path nodes present, valid citations and grounded numbers, the honest "not in the records", and the two cards drafted.
+**Live pass rate, 16 October 2026** (real agents on the Claude subscription, no recordings; Shiftly reseeded before each attempt): the hero question passed
+**5 of 5 on Shiftly** (69 to 102 s) and **5 of 5 on a real, private business** (60 to 85 s, where the pass is the honest "not shown"), and each of the other items in
+the set passed on a live run (the ad red herring, "not in the records", depth 1 against 4, memory). The Shiftly report is
+[`docs/evals/2026-10-16-demo_growth.md`](docs/evals/2026-10-16-demo_growth.md); the real business's stays private. The demo steps are the opening of
+[`docs/demo-script.md`](docs/demo-script.md), and four answers recorded on 16 October from a clean copy of this repository are what the public mode replays
+(`seed-demo --recorded`, [`src/demo/recorded/`](src/demo/recorded)).
 
 ## How FalkorDB is central
 
@@ -209,8 +361,8 @@ Three patterns carry most of the weight:
 - **Functional slots.** Some relationships have one holder at a time ("a task has one current owner", "an asset has one
   parent"): a new holder closes the old edge instead of adding a second.
 
-On 15 October the Aamdani graph held about 3,700 nodes and 11,300 edges, and AVS Atelier's about 460 nodes and 2,000
-edges.
+On 15 October the graph of a real business built from its operating vault, read-only connectors and GitHub held about 3,700
+nodes and 11,300 edges, and a second real business's, built from its website URL alone, about 460 nodes and 2,000 edges.
 
 We built on FalkorDB 6.0.2 and found two query shapes that crash it (a tied full sort over rows with nullable maps,
 and NaN in a sort key). They are measured and reproduced in
@@ -225,7 +377,7 @@ fits each, and where it is thinner:
 | Track | What fits | Honest limits |
 |---|---|---|
 | **Agents That Act on Connected Data** | 21 graph tools (impact at depth 1 to 4, shortest paths, PageRank, communities, decisions, ownership, metrics, SEO, read-only Cypher); findings become approval cards with graph evidence; approved actions are recorded as `Action` nodes; an MCP server lets other agents use the same tools. | GitHub issues and Discord posts are dry runs unless switched on; ad changes are simulated; content is drafted, never published by us. |
-| **Agent Memory and Coordination** | Twelve agents hand work to each other through `Finding` nodes in one shared graph (`BASED_ON` is the handoff); each turn's citations, the owner's notes and learned rules are written back and recalled by traversal on the next question; an owner's edit becomes a `Rule` linked to the approval it came from. | Memory is per business (by design); there is no memory across businesses. |
+| **Agent Memory and Coordination** | Thirteen agents hand work to each other through `Finding` nodes in one shared graph (`BASED_ON` is the handoff); each turn's citations, the owner's notes and learned rules are written back and recalled by traversal on the next question; an owner's edit becomes a `Rule` linked to the approval it came from. | Memory is per business (by design); there is no memory across businesses. |
 | **Company Brain** | Decisions with their evidence and deciders, who owns and who knows what, facts with valid time and sources, versions one hop away, "what breaks if this stops" with the path. | Proven on two real businesses and a synthetic demo company; the connectors that would feed it daily are read-only and few. |
 
 ## Architecture
@@ -250,8 +402,8 @@ flowchart LR
   SDK["Claude Agent SDK<br/>(subscription login)"]
   subgraph FDB["FalkorDB 6.0.2"]
     META[("allevia_meta")]
-    T1[("allevia_aamdani")]
-    T2[("allevia_avs_atelier")]
+    T1[("allevia_demo_growth")]
+    T2[("allevia_your_business")]
     PROJ[("projections<br/>current edges")]
   end
   SRC["Sources: vault, registry, GitHub,<br/>ops connectors (read-only),<br/>website crawl, playbooks, simulated ads"]
@@ -279,43 +431,55 @@ full event log are written to the graph, which is what makes replay possible. De
 
 ## Screenshots
 
+All of Shiftly, the synthetic business, from the public read-only mode (`node web/scripts/screenshots-demo.mjs`).
+
 | | |
 |---|---|
-| ![An answer with its path lit in the graph](docs/screenshots/live-ask-final.png) | ![Allevia 90: day 0, goals against their baselines](docs/screenshots/allevia90-office-desktop.png) |
-| **Ask.** The answer cites nodes, the work log shows who did what, and the path behind the answer is lit (synthetic demo company). | **Your 90 days.** Goals against the Day-0 baseline, the first-pass curve and learned rules (Aamdani, read-only). |
-| ![An edited approval becomes a learned rule](docs/screenshots/approvals-learned-chip-desktop.png) | ![Tell your team: a plain-language instruction previewed as a diff](docs/screenshots/team-directive-preview-desktop.png) |
-| **Approvals.** An edit becomes a learned rule that later drafts apply; executors are dry runs by default. | **Tell your team.** A plain-language instruction previewed as a change before it applies. |
-| ![Onboarding a business from its URL](docs/screenshots/onboard-done-desktop.png) | ![The marketing site](docs/screenshots/site-home-desktop.png) |
-| **Onboard.** The brain built from a website (web app in mock mode). | **Site.** Home and pricing in four currencies, generated from `shared/plans.ts`. |
+| ![The answer to the hero question, with its citations as labels](docs/demo-screens/hero-answer-desktop.png) | ![The same answer's path: five nodes lit out of 91 things checked](docs/demo-screens/hero-path-desktop.png) |
+| **The answer.** Cause, chain, what is not recorded, what waits for OK; every claim is a label on a node. | **"How we know".** The path the answer stands on, lit in the business's own graph: step, screen, crash, release, fix. |
+| ![Brain: what breaks if the sign-up screen stops, one step away against up to four](docs/demo-screens/brain-desktop.png) | ![Waiting for your OK: a fix task and a message, nothing sent](docs/demo-screens/approvals-desktop.png) |
+| **What breaks if something stops.** Three things straight away, ten in all, each with its path and who looks after it. | **Approvals.** An edit becomes a learned rule that later drafts apply; executors are dry runs by default. |
+| ![The pixel office: thirteen people in nine departments](docs/demo-screens/office-desktop.png) | ![Insights: what the team noticed, with the evidence behind each idea](docs/demo-screens/insights-desktop.png) |
+| **The office.** Every agent, department and handoff is visible while a request runs. | **What we noticed.** Deterministic detectors over the graph, each idea with its numbers and sources. |
 
-More, in light and dark and on mobile: [`docs/screenshots/`](docs/screenshots).
+More, on a phone: [`docs/demo-screens/`](docs/demo-screens). Screens of the founder's real businesses stay in the private repository.
 
-## Run it
+## Run it in detail
+
+The short version is [near the top](#run-it).
 
 ### Public demo with Docker (no model needed)
 
-Needs Docker with Compose v2.24 or later.
+Needs Docker with Compose v2.24 or later (Docker Desktop, or Colima with the Compose plugin).
 
 ```sh
-docker compose up -d --build                # FalkorDB 6.0.2 + Allevia on http://127.0.0.1:8787
+docker compose up -d --build                                  # FalkorDB 6.0.2 + Allevia on http://127.0.0.1:8787
+docker compose exec app tsx src/cli.ts seed-demo --recorded   # Shiftly (synthetic) with four recorded team answers
 ```
 
-The app starts in **public mode** (`ALLEVIA_PUBLIC_MODE=1`): the office, brain explorer, insights, approvals history
-and scorecard read live from the graph; every write is refused; Ask replays recorded showcase turns instead of
-calling a model. A fresh FalkorDB is empty, so load something first:
+The app starts in **public mode** (`ALLEVIA_PUBLIC_MODE=1`): the office, the Brain page, insights, approvals history and the
+scorecard read live from the graph; every write is refused; Chat replays recorded showcase answers instead of calling a model
+(a question that was recorded replays with its work log; anything else says live chat needs the owner's own model access). A
+fresh FalkorDB is empty, so load Shiftly first, as above. Then open http://127.0.0.1:8787:
+
+- **Chat**, pick a thread (the hero question is the oldest), then **How we got this**, **See the full work log**, **See the
+  path**: the answer's chain lit in the graph. Straight to it:
+  http://127.0.0.1:8787/ask/session%3A2026-10-16-c490cd58?tenant=demo_growth
+- **More**, **What your team knows**, then **What breaks if something stops**: choose "Sign-up screen (phone number)" to see
+  three things straight away against ten in all.
+- **Approvals** (two cards wait, nothing is sent) and **Insights**.
+- The FalkorDB Browser is on http://127.0.0.1:3090: the graph `allevia_demo_growth`.
+
+Without `--recorded`, `seed-demo` builds the same business with no recorded answers (the live path starts from the records
+only). A second synthetic company, with the Instagram-connector chain that shows depth 1 against 4 on a different shape of
+graph, loads with:
 
 ```sh
-# the synthetic demo company: a small graph with real structure and made-up data (no model calls)
 docker compose exec app tsx scripts/seed-demo.ts demo_seed --register
-docker compose exec app tsx src/cli.ts seed-demo           # the hero-use-case twin: Shiftly, sign-ups fell after a release (demo_growth)
 docker compose exec app tsx src/cli.ts enroll demo_seed --country UK --industry "jobs platform"
 docker compose exec app tsx src/cli.ts insights demo_seed   # deterministic detectors, approval cards
 docker compose exec app tsx src/cli.ts brief demo_seed      # today's note (the morning brief)
 ```
-
-Then open http://127.0.0.1:8787: the office, the 90-day card, the brain explorer, insights and approval cards for
-"Demo Seed". The FalkorDB Browser is on http://127.0.0.1:3090. The demo company has no recorded showcase turns, so
-Ask has nothing to replay in public mode; the hosted demo carries the recorded Aamdani and AVS Atelier turns.
 
 ### Live mode (needs your own Claude login)
 
@@ -334,21 +498,26 @@ cannot offer live chat to strangers. An evaluator with their own Claude account 
 
 ### Development setup
 
-Node 22 or later (24 recommended), Docker for FalkorDB.
+Node 22 or later (24 recommended), Docker for FalkorDB. These are the steps of "Run it", with the optional ones:
 
 ```sh
-npm install && (cd web && npm install)
+npm install && (cd web && npm install && npm run build)   # the API serves web/dist; or `cd web && npm run dev` on :5173
 docker compose up -d falkordb                  # FalkorDB on 127.0.0.1:6390, the CLI's default
-mkdir -p ~/.config/allevia && cp .env.example ~/.config/allevia/allevia.env && chmod 600 ~/.config/allevia/allevia.env
-(cd web && npm run build)                      # the API serves web/dist; or `cd web && npm run dev` on :5173
-npm run cli -- db:check
-npx tsx scripts/seed-demo.ts demo_seed --register   # the synthetic demo company, as in the Docker quick start
+npm run cli -- db:check                        # "FalkorDB at redis://127.0.0.1:6390: ok"
+npm run cli -- seed-demo                       # Shiftly, the synthetic hero-use-case business (add --recorded for the replays)
+npm run cli -- serve                           # http://127.0.0.1:8787 (add --public for the read-only demo)
 ```
 
-The env file is optional: every name has a default, and secrets (a Discord bot token, for example) live only there,
-outside the repo. Local embeddings are optional too ($0, no network after the first download): `npx tsx
-scripts/spikes/embeddings.ts` fetches `Xenova/multilingual-e5-small` (about 130 MB) into `models/`. Without it, search
-is full-text only.
+Optional: `mkdir -p ~/.config/allevia && cp .env.example ~/.config/allevia/allevia.env && chmod 600 ~/.config/allevia/allevia.env`
+for the settings (Discord, connections, Apify) in [`.env.example`](.env.example); every name has a default and none is needed for
+the above. To use another FalkorDB port, set `ALLEVIA_FALKORDB_URL=redis://127.0.0.1:<port>` and, with Compose, `FALKORDB_PORT=<port>`.
+
+Local embeddings are optional too ($0, no network after the first download): `npx tsx scripts/spikes/embeddings.ts` fetches
+`Xenova/multilingual-e5-small` (about 130 MB) into `models/`. Without it, search is full-text only. Onboarding a business from
+its website needs Chromium for the crawler: `npx playwright install chromium`.
+
+If `npm install` prints "install scripts not yet covered by allowScripts" (npm 11.16 and later), it is a notice: esbuild,
+sharp, onnxruntime and the Agent SDK all load without those scripts.
 
 ### Keeping it running
 
@@ -391,7 +560,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 | `program <tenant> [--read-only]` | The Allevia 90 scorecard |
 | `tell <tenant> "<instruction>"` | "Tell your team": preview a plain-language change, `--apply` to make it |
 | `serve [--public]` | The API and the web app on one port |
-| `discord [--tenant aamdani]` | The Discord bot (needs a bot token in the env file); with `DISCORD_HUB_GUILD_ID` set it serves every customer on the hub |
+| `discord [--tenant <slug>]` | The Discord bot (needs a bot token in the env file); with `DISCORD_HUB_GUILD_ID` set it serves every customer on the hub |
 | `discord-hub status \| list \| provision <tenant> \| reinvite <tenant>` | The customer hub on Discord: read-only check and list, set a business up, a new join link ([setup](docs/discord-hub-setup.md)) |
 | `mcp --tenant <slug> [--http]` | The read-only MCP server for one tenant |
 | `auth:issue <tenant> [--days N]` / `auth:list` / `auth:revoke <id>` / `auth:demo <tenant>` | Owner links for `ALLEVIA_AUTH=1`: issue one (shown once), list them, revoke, mark a business as a public demo |
@@ -411,9 +580,11 @@ edges nothing refers to; the suite holds both rules (see Tests).
   over a graph built of ties, zeros and gaps. Two live-model tests are skipped unless `ALLEVIA_LIVE_LLM=1`.
   `npm test` (or `ALLEVIA_FALKORDB_URL=redis://127.0.0.1:<port> npx vitest run` against a throwaway server).
 - **Evals** ([`evals/`](evals), reports in [`docs/evals/`](docs/evals)): 43 questions with expected citations, regexes,
-  tools, agents and trap questions, scored automatically. The first live runs on 15 October: Aamdani 8 of 12 passed
-  every check and expectation (96% of expectations hit, 100% of turns finished), AVS Atelier 2 of 5 (89% of
-  expectations hit). Failures are kept in the reports with their causes.
+  tools, agents and trap questions, scored automatically. The hero set on Shiftly (`evals/hero.yaml`) passed 5 of 5 on its
+  hero question and every item on a live run (report: [`docs/evals/2026-10-16-demo_growth.md`](docs/evals/2026-10-16-demo_growth.md)).
+  The first live runs on 15 October on two real, private businesses: 8 of 12 questions passed every check and expectation on
+  one (96% of expectations hit, 100% of turns finished) and 2 of 5 on the other (89% of expectations hit); failures are kept
+  in the reports, with their causes, in the private repository.
 
 ## Privacy and safety
 
@@ -449,14 +620,19 @@ edges nothing refers to; the suite holds both rules (see Tests).
 | Path | What |
 |---|---|
 | `src/graph/` | FalkorDB client with the crash guards, schema, bi-temporal upsert, algorithms, projections, indexes, tenants |
-| `src/agent/` | Orchestrator, runtime (Agent SDK), 21 tools, answer checks, memory |
-| `src/ingest/` | Sources, privacy and redaction, extraction, embeddings, librarian |
+| `src/agent/` | Orchestrator, runtime (Agent SDK), 47 tools (21 of them graph queries and algorithms), answer checks, memory |
+| `src/ingest/`, `src/onboard/` | Sources, privacy and redaction, extraction, embeddings, librarian; onboarding a business from its website |
 | `src/server/`, `web/` | Hono API and the React web app (Vite) |
-| `src/insights/`, `src/actions/`, `src/program/`, `src/capabilities/`, `src/settings/`, `src/studio/` | Detectors and brief; approvals, executors and learning; Allevia 90; capability ladder; team settings; Studio |
+| `src/insights/`, `src/actions/`, `src/program/`, `src/capabilities/`, `src/settings/`, `src/proactive/` | Detectors and brief; approvals, executors and learning; Allevia 90; capability ladder; team settings; the daily stand-up |
+| `src/studio/`, `src/creative/`, `src/checkup/` | Photo Studio; posters, ads and reels; the website check-up |
+| `src/connections/`, `src/connectors/`, `src/publicdata/` | The founder's connected tools (Composio and Google) with a sealed per-business store and audit log; read-only connectors; public data through Apify |
 | `src/discord/`, `src/mcp/` | Discord bot, MCP server |
+| `src/demo/` | The synthetic business (Shiftly) and its recorded answers (`recorded/shiftly-hero.jsonl`) |
 | `shared/` | Contracts, roster and plans shared by server, web and site |
 | `site/` | The public website (home, how it works, product tour, demo, pricing, security, about, contact, FAQ, privacy, terms, data deletion, cookies); static, built from shared/plans.ts. See docs/website-deploy.md |
 | `evals/`, `tests/` | Eval sets and runner; the test suite |
+| `docs/` | The queries doc, the live scenarios, the demo script, design and setup notes; `demo-screens/` are screenshots of Shiftly |
+| `skills/` | The agents' skills (plain-language playbooks they open with `use_skill`) |
 | `vendor/playbooks/` | Third-party playbook data, with licences and notices |
 
 ## Credits and licences
@@ -477,7 +653,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 
 - **Claude Code** (with subagents working in parallel git worktrees) wrote most of the code, tests and docs, under the
   founder's direction and review.
-- **Claude, through a claude.ai subscription login** (the Claude Agent SDK), runs the twelve agents at runtime. No API
+- **Claude, through a claude.ai subscription login** (the Claude Agent SDK), runs the thirteen agents at runtime. No API
   key is used or accepted.
 - **Higgsfield** made the website's illustrations, hero loop and social card, and the Studio demo's generated photo
   variant; every generation is logged in [`docs/higgsfield-spend.md`](docs/higgsfield-spend.md).
@@ -486,7 +662,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 What the founder decided and checked: the product (a done-for-you team for owner-run businesses, not a tool), who it is
 for and the pricing; that FalkorDB is the company brain and one graph per business; the data rules (read-only
 connectors, a privacy filter before anything is stored, actions as dry runs until approved, subscription only); which
-businesses to use (his own, Aamdani, and AVS Atelier; the public demo uses synthetic data only);
+businesses to use (his own two, kept private; the public demo uses synthetic data only);
 the plain-words, owner-first style; and that the demo must be run live. He reviewed the agents' answers and the screens,
 and can explain the graph model and the queries above.
 

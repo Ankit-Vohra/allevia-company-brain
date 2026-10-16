@@ -18,6 +18,9 @@ describe("the recorded Shiftly copy", () => {
   it("holds showcase turns that public mode can replay: the hero question first, each with a log, an answer and passing checks", () => {
     expect(showcase.length).toBeGreaterThanOrEqual(4);
     expect(showcase.some((t) => /why did sign-?ups drop this week/i.test(String(t.p.question)))).toBe(true);
+    // the README links straight to this thread (/ask/session%3A2026-10-16-c490cd58?tenant=demo_growth)
+    const heroThread = dump.nodes.find((n) => n.l.includes("Session") && n.p.id === "session:2026-10-16-c490cd58");
+    expect(heroThread?.p.name).toMatch(/why did sign-?ups drop this week/i);
     for (const t of showcase) {
       const events = JSON.parse(String(t.p.events)) as Array<{ type: string }>;
       expect(events.length, String(t.p.question)).toBeGreaterThan(10);
