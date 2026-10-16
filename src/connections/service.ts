@@ -95,7 +95,7 @@ export class ConnectionsService {
     for (const [k, e] of this.spentLinks) if (e < t) this.spentLinks.delete(k);
   }
 
-  ctx(tenant: string, connectorId: string, businessId?: string): ConnectorCtx {
+  ctx(tenant: string, connectorId: string, businessId?: string, extra: Record<string, string> = {}): ConnectorCtx {
     let graph: Promise<GraphHandle> | undefined;
     return {
       tenant, ...(businessId ? { businessId } : {}),
@@ -106,7 +106,7 @@ export class ConnectionsService {
         this.sweep();
         const nonce = randomBytes(16).toString("hex");
         const exp = this.now() + STATE_TTL_MS;
-        this.pending.set(nonce, { tenant, connector: connectorId, data, exp });
+        this.pending.set(nonce, { tenant, connector: connectorId, data: { ...data, ...extra }, exp });
         return signState(this.d.connectorKey, { k: "auth", t: tenant, c: connectorId, e: exp, n: nonce });
       },
       audit: (op, ok, detail) => this.d.audit.append({ at: this.now(), tenant, connector: connectorId, op, ok, ...(detail ? { detail } : {}) }).catch(() => undefined),
@@ -117,9 +117,9 @@ export class ConnectionsService {
     return this.d.businessIdOf ? await this.d.businessIdOf(tenant).catch(() => undefined) : undefined;
   }
 
-  private async ctxFor(tenant: string, id: string): Promise<{ c: Connector; ctx: ConnectorCtx }> {
+  private async ctxFor(tenant: string, id: string, extra: Record<string, string> = {}): Promise<{ c: Connector; ctx: ConnectorCtx }> {
     const c = this.connector(id);
-    return { c, ctx: this.ctx(tenant, id, await this.businessId(tenant)) };
+    return { c, ctx: this.ctx(tenant, id, await this.businessId(tenant), extra) };
   }
 
   // ---------- what an owner reads ----------
@@ -151,7 +151,7 @@ export class ConnectionsService {
   // ---------- connecting ----------
 
   async connect(tenant: string, id: string, options: Record<string, string> = {}): Promise<{ url: string }> {
-    const { c, ctx } = await this.ctxFor(tenant, id);
+    const { c, ctx } = await this.ctxFor(tenant, id, options.returnTo ? { returnTo: options.returnTo } : {});
     const a = c.availability();
     if (!a.ok) throw new NotConfiguredError(id, a);
     const start = await c.connect(ctx, options);
@@ -179,6 +179,11 @@ export class ConnectionsService {
     return { tenant: p.t, id: p.c, options: p.i === "1" ? { inbox: "1" } : {} };
   }
 
+  /** True for any state this service signed (even one that has run out or was used), so the older handler never sees it. */
+  ownsState(state: string): boolean {
+    return this.keyOk() && verifyState<{ k: string }>(this.d.connectorKey, state)?.k === "auth";
+  }
+
   /** The business and connection a returning `state` was made for, without using it up (the callback route needs the tenant first). */
   peekState(state: string): { tenant: string; id: string } | null {
     if (!this.keyOk()) return null;
@@ -188,7 +193,7 @@ export class ConnectionsService {
   }
 
   /** The owner came back from the provider. The state is used up here whatever happens next. */
-  async complete(state: string, params: Record<string, string>): Promise<{ tenant: string; id: string; outcome: CompleteOutcome } | null> {
+  async complete(state: string, params: Record<string, string>): Promise<{ tenant: string; id: string; outcome: CompleteOutcome; returnTo?: string } | null> {
     if (!this.keyOk()) return null;
     const p = verifyState<{ k: string; t: string; c: string; e: number; n: string }>(this.d.connectorKey, state);
     this.sweep();
@@ -203,10 +208,10 @@ export class ConnectionsService {
     } catch (e) {
       outcome = { result: "problem", reason: e instanceof Error && e.name === "ConnectError" ? (e as { code?: string }).code ?? "problem" : "problem" };
       await ctx.audit("connect finished", false, e instanceof Error ? e.message : "failed");
-      return { tenant: p.t, id: p.c, outcome };
+      return { tenant: p.t, id: p.c, outcome, ...(pend.data.returnTo ? { returnTo: pend.data.returnTo } : {}) };
     }
     await ctx.audit("connect finished", outcome.result === "connected" || outcome.result === "choose", outcome.result);
-    return { tenant: p.t, id: p.c, outcome };
+    return { tenant: p.t, id: p.c, outcome, ...(pend.data.returnTo ? { returnTo: pend.data.returnTo } : {}) };
   }
 
   async select(tenant: string, id: string, value: string): Promise<ConnectionView> {

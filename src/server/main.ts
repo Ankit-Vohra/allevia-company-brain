@@ -65,6 +65,7 @@ export function productionDeps(o: { model?: string; publicMode: boolean; authReq
       return { deps: productionStudioDeps(dataDir), ...(clip ? { clip } : {}), sample: (tenant) => studioSample(dataDir, tenant) };
     },
     google: async () => productionGoogle(),
+    connections: async () => ({ service: (await import("../connections/production.js")).productionConnections(), webBaseUrl: loadConfig().webBaseUrl }),
     standup: async (slug, g, businessId) => (await import("../proactive/wiring.js")).runDaily(slug, g, businessId, { force: true }),
     ...(o.staticDir ? { staticDir: o.staticDir } : {}),
   };
