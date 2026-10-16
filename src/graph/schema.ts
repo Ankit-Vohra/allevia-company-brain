@@ -224,7 +224,8 @@ export const ALLOWED_PATTERNS: Pattern[] = [
 //     deal, meeting or message is for (Goal);
 //   - a connection (System) PRODUCED the snapshot Documents its facts came from;
 //   - a rival (Competitor) OWNS the channels and ads watched through public data;
-//   - the Discord card an Approval was posted as (Approval PUBLISHED_ON Channel).
+//   - the Discord card an Approval was posted as (Approval PUBLISHED_ON Channel);
+//   - the run that measured a graph-hygiene reading (Observation SOURCED_FROM Event: an onboarding or ingest run).
 export const MAPPER_PATTERNS: Pattern[] = [
   ...pat("Feature", "DEPENDS_ON", ["Page", "Channel"]),
   ...pat(["Approval", "Recommendation"], "GUIDED_BY", ["Rule", "BrandRule", "Memory"]),
@@ -235,6 +236,7 @@ export const MAPPER_PATTERNS: Pattern[] = [
   ...pat("System", "PRODUCED", "Document"),
   ...pat("Competitor", "OWNS", ["Channel", "Content"]),
   ...pat("Approval", "PUBLISHED_ON", "Channel"),
+  ...pat("Observation", "SOURCED_FROM", "Event"),
 ];
 
 const ALLOWED = new Set([...ALLOWED_PATTERNS, ...MAPPER_PATTERNS].map(([f, r, t]) => `${f}|${r}|${t}`));

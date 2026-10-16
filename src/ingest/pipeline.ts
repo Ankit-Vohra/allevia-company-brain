@@ -37,6 +37,7 @@ import { AgentSdkRunner, FatalLlmError, Semaphore, type LlmRunner } from "./llm.
 import { EMBED_MODEL, embedPassages, entityText } from "./embed.js";
 import { scanGraph, type ScanHit } from "./privacy.js";
 import { runLibrarian, type LibrarianReport } from "./librarian.js";
+import { graphSize, runRecordWrite } from "./run-record.js";
 import { loadBrain } from "./sources/brain.js";
 import { mapSnapshot } from "./sources/ops.js";
 import { loadPlaybooks } from "./sources/playbooks.js";
@@ -490,7 +491,7 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
     // Resolve one document's extraction against `known`, write it, and (retire) close the MENTIONS the document no
     // longer makes. Returns how much the graph changed.
     const apply = async (d: RawDoc, ex: Extraction, retire: boolean) => {
-      const resolved = await resolveExtraction(ex, { docId: d.id, text: d.text, asOf: d.asOf, existing: known, similar, founderNames: tc.founderNames });
+      const resolved = await resolveExtraction(ex, { docId: d.id, text: d.text, asOf: d.asOf, existing: known, similar, founderNames: tc.founderNames, model });
       const readings = await keepNewestReadings(g, resolved.write.observations, d.id);
       const write = { ...resolved.write, observations: readings.keep };
       const s = await put(write);
@@ -597,8 +598,9 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
     const where = hits.slice(0, 5).map((h) => `${h.id} .${h.prop} (${h.kind})`).join("; "); // ids and prop names only, never values
     throw new Error(`privacy scan found ${hits.length} hit(s) in the graph (${Object.entries(report.privacyScan.byKind).map(([k, n]) => `${k} ${n}`).join(", ")}): ${where}; report: ${reportPath}`);
   }
+  const eventId = entityId("Event", `ingest ${tc.slug} ${startedAt}`);
   await upsertNode(g, {
-    type: "Event", id: entityId("Event", `ingest ${tc.slug} ${startedAt}`), name: `Ingest run ${startedAt}`,
+    type: "Event", id: eventId, name: `Ingest run ${startedAt}`,
     summary: `Ingested ${[...want].join(", ")}: +${report.stats.nodesCreated} nodes, +${report.stats.edgesCreated} edges, ${report.extraction.docs} documents extracted.`,
     props: {
       kind: "ingest", at: startedAt, finishedAt: report.finishedAt, sources: [...want], nodesCreated: report.stats.nodesCreated,
@@ -607,6 +609,14 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
     },
     asOf: istDate(nowMs),
   }, nowMs);
+  // The run is a node with edges (graph audit G17): it AFFECTS the Business, and what it measured about the graph itself
+  // (size, orphans, duplicates merged, privacy hits) is a series of Observations that MEASURE the Business, so "is the
+  // graph getting cleaner" is a metric_trend. Not counted in the run's stats: the run's own record, like its Event.
+  const record = await writeBatch(g, runRecordWrite({
+    event: eventId, business: businessId(tc.slug), asOf: startedAt, day: istDate(nowMs), note: "ingest run",
+    numbers: { orphan_count: report.librarian.orphans.count, merged_count: report.librarian.merge.merged, graph_nodes: await graphSize(g), privacy_scan_hits: 0 },
+  }), nowMs);
+  if (record.errors.length) log(`[run-record] ${record.errors.length} write(s) failed, first: ${record.errors[0]!.error}`);
   log(`[report] ${reportPath}`);
   return { report, reportPath };
 }

@@ -9,6 +9,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes, createHash } from "node:crypto";
 import { closeAll, openGraph, openGraphByName, type GraphHandle } from "../../src/graph/client.js";
+import { businessId } from "../../src/graph/tenants.js";
+import { ONTOLOGY_VERSION } from "../../src/graph/schema.js";
+import { graphSize, HYGIENE_METRICS } from "../../src/ingest/run-record.js";
 import { runIngest, alignAdrDecision, extractionOrder, mergeNodes, writeWithRetry, isTransientDbError, type IngestRun } from "../../src/ingest/pipeline.js";
 import type { Extraction } from "../../src/ingest/extract.js";
 import type { WriteStats } from "../../src/graph/upsert.js";
@@ -185,8 +188,10 @@ describe("runIngest (integration, fixture vault, fake model)", () => {
     await closeAll();
   });
 
+  // (the run's own record, its Event and the graph-hygiene readings that point at it, is left out: every run adds its own)
   const counts = async () => (await g.roQuery<{ n: number; r: number }>(
-    "MATCH (n:Entity) WHERE NOT n.id STARTS WITH 'event:ingest-' OPTIONAL MATCH (n)-[r]->() RETURN count(DISTINCT n) AS n, count(r) AS r"))[0]!;
+    `MATCH (n:Entity) WHERE NOT n.id STARTS WITH 'event:ingest-' AND NOT (n:Observation AND n.metric IN $hygiene)
+     OPTIONAL MATCH (n)-[r]->() RETURN count(DISTINCT n) AS n, count(r) AS r`, { hygiene: Object.keys(HYGIENE_METRICS) }))[0]!;
 
   it("writes every source with no errors, extracts each candidate once, and passes the privacy scan", () => {
     const r = first.report;
@@ -209,6 +214,49 @@ describe("runIngest (integration, fixture vault, fake model)", () => {
     expect(JSON.parse(readFileSync(first.reportPath, "utf8"))).toMatchObject({ tenant: tenant.slug, privacyScanHits: 0 });
     const ev = await g.roQuery<{ kind: string; head: string }>("MATCH (e:Event) WHERE e.id STARTS WITH 'event:ingest-' RETURN e.kind AS kind, e.vaultHead AS head");
     expect(ev).toEqual([{ kind: "ingest", head: vault.head.slice(0, 12) }]);
+  });
+
+  it("the run is a node with edges: the ingest Event AFFECTS the business (G17)", async () => {
+    const rows = await g.roQuery<{ e: string; b: string; src: string; asOf: string }>(
+      "MATCH (e:Event {kind:'ingest'})-[a:AFFECTS]->(b:Business) WHERE a.until IS NULL RETURN e.id AS e, b.id AS b, a.src AS src, a.asOf AS asOf");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ b: businessId(tenant.slug) });
+    expect(rows[0]!.src).toBe(rows[0]!.e);
+    expect(rows[0]!.asOf).toBe(first.report.startedAt);
+  });
+
+  it("graph hygiene (orphans, duplicates merged, size, privacy hits) is a series of readings on the business, each sourced from the run (G17)", async () => {
+    const rows = await g.roQuery<{ metric: string; value: number; unit: string; day: string; run: string }>(
+      `MATCH (o:Observation)-[m:MEASURES]->(b:Business) WHERE m.until IS NULL AND o.metric IN $metrics
+       MATCH (o)-[s:SOURCED_FROM]->(e:Event {kind:'ingest'}) WHERE s.until IS NULL
+       RETURN o.metric AS metric, o.value AS value, o.unit AS unit, o.asOf AS day, e.id AS run ORDER BY metric, o.id`, { metrics: Object.keys(HYGIENE_METRICS) });
+    const by = Object.fromEntries(rows.map((r) => [r.metric, r]));
+    expect(Object.keys(by).sort()).toEqual(["graph_nodes", "merged_count", "orphan_count", "privacy_scan_hits"]);
+    expect(by.orphan_count!.value).toBe(first.report.librarian!.orphans.count);
+    expect(by.merged_count!.value).toBe(first.report.librarian!.merge.merged);
+    expect(by.graph_nodes!.value).toBe(await graphSize(g));
+    expect(by.graph_nodes!.value).toBeGreaterThan(20);
+    expect(by.privacy_scan_hits!.value).toBe(0);
+    expect(rows.every((r) => r.unit === "count" && r.day === "2026-10-15")).toBe(true);
+    // "graph quality over time" is a metric_trend: the reading is in the same series every other number is
+    const { metricTrend } = await import("../../src/agent/tools/metrics.js");
+    const { call, makeCtx } = await import("../helpers/tools.js");
+    const trend = await call(metricTrend, { metric: "orphan_count", subject: businessId(tenant.slug) }, makeCtx(g, { now: Date.parse("2026-10-16T00:00:00Z") }));
+    expect(trend.data.series).toEqual([{ date: "2026-10-15", value: by.orphan_count!.value }]);
+  });
+
+  it("records which model said each extracted fact and under which ontology (G17c)", async () => {
+    const model = first.report.model;
+    const rel = await g.roQuery<{ by: string | null; onto: number | null; ev: string }>(
+      "MATCH (:Decision {id:'decision:001-human-review'})-[r:BASED_ON]->(:Event) WHERE r.until IS NULL RETURN r.extractedBy AS by, r.ontologyVersion AS onto, r.evidence AS ev");
+    expect(rel).toHaveLength(1);
+    expect(rel[0]).toMatchObject({ by: model, onto: ONTOLOGY_VERSION });
+    const mentions = await g.roQuery<{ by: string | null }>(
+      "MATCH (:Document {id:'document:10-company-overview-md'})-[m:MENTIONS]->(x:Entity) WHERE m.until IS NULL AND (x:Product OR x:Channel) RETURN m.extractedBy AS by");
+    expect(mentions.length).toBeGreaterThan(0);
+    expect(mentions.every((m) => m.by === model)).toBe(true);
+    // what a deterministic mapper wrote (a task's owner from the PENDING file) was not read by a model
+    expect(await g.roQuery("MATCH (:Entity)-[r:OWNS]->(:Task) WHERE r.extractedBy IS NOT NULL RETURN r")).toEqual([]);
   });
 
   it("merges the ADR's extracted decision into the ADR Decision, with its evidence and the founder", async () => {

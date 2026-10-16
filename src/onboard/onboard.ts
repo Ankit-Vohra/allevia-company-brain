@@ -43,6 +43,8 @@ import { factsWrite, readDayOneFacts } from "../ingest/sources/website/facts.js"
 import type { Ask } from "../ingest/sources/website/ask.js";
 import { tidyGraph } from "../ingest/tidy.js";
 import { rankAndCommunities } from "../ingest/librarian.js";
+import { redact } from "../ingest/privacy.js";
+import { recordOnboardRun, recordPrivacyScan, type RunStamp } from "./record.js";
 
 export interface OnboardInput {
   name: string;
@@ -140,7 +142,17 @@ export function whyUnreadable(c: Pick<CrawlResult, "pages" | "robots">): string 
   return "we could not reach it.";
 }
 
-export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => void, deps: OnboardDeps): Promise<OnboardResult> {
+// What the owner typed is free text, and an email or a phone number slipped into it is as personal as one on a web page:
+// redacted like any source before anything reads or writes it (graph audit G12). Only the fields that take free text.
+function ownerWords(typed: OnboardInput): OnboardInput {
+  const out = { ...typed };
+  for (const k of ["industry", "vertical", "instagram"] as const) if (out[k]) out[k] = redact(out[k]!).text;
+  return out;
+}
+
+export async function onboard(typed: OnboardInput, emit: (e: OnboardEvent) => void, deps: OnboardDeps): Promise<OnboardResult> {
+  const t0 = Date.now();
+  const input = ownerWords(typed);
   const cfg = deps.dataDir && deps.model ? undefined : loadConfig();
   const dataDir = deps.dataDir ?? cfg!.dataDir;
   const model = deps.model ?? cfg!.extractModel;
@@ -243,6 +255,7 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
   let siteProfile: Profile | undefined;  // what the website says the business is: its kind and industry pick the template
   let pages: PageData[] = [];
   let modelCheck: Ask | undefined;       // the cached model questions, for the tidy pass after the index
+  let tidyMerged: number | undefined;    // duplicates the tidy pass merged: a hygiene reading on the run's record
   if (website) {
   // ---------- crawl ----------
   stage("crawl", `Reading ${domain}`);
@@ -532,6 +545,7 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
           owner: { id: businessId, name, ...(domain ? { domain } : {}) }, ...(modelCheck ? { ask: modelCheck } : {}),
           embed: deps.embed ?? embedPassages, now: now(), log,
         });
+        tidyMerged = t.merged;
         if (t.touched.length) {
           const rows = await retrying(() => g.roQuery<{ id: string; labels: string[]; name: string | null }>(
             "UNWIND $ids AS id MATCH (n:Entity {id:id}) RETURN n.id AS id, labels(n) AS labels, n.name AS name", { ids: t.touched }));
@@ -563,6 +577,28 @@ export async function onboard(input: OnboardInput, emit: (e: OnboardEvent) => vo
       log(`[onboard] company skills: ${s.written.length} written, ${s.unchanged.length} unchanged`);
     } catch (e) {
       log(`[onboard] company skills not written: ${msg(e)}`);
+    }
+  }
+
+  // ---------- the run's own record: the privacy scan and the run, each an Event with edges to the business ----------
+  // (graph audit G12 and G17). Best effort like everything after the knowledge itself: the business is already written.
+  // A hit never stops anything; the owner is told in plain words and the scan's ids and prop names go in the log.
+  if (website && !stopped()) {
+    const stamp: RunStamp = { slug: input.slug, businessId, startedAt: asOf, day, now: now() };
+    try {
+      const scan = await recordPrivacyScan(g, stamp, { ownIp: !!domain && /^\d{1,3}(\.\d{1,3}){3}$/.test(domain) });
+      if (scan.hits) fail("privacy", `${scan.hits} possible personal detail(s) in the graph (${Object.entries(scan.byKind).map(([k, n]) => `${k} ${n}`).join(", ")}): ${scan.where.join("; ")}`);
+      else log("[onboard] privacy scan: nothing found");
+    } catch (e) {
+      fail("privacy", e);
+    }
+    try {
+      await recordOnboardRun(g, {
+        ...stamp, formDoc, url: start, pages: pages.length, ...(result.seoScore !== undefined ? { seoScore: result.seoScore } : {}),
+        model, durationMs: Date.now() - t0, softErrors: errors.length, ...(tidyMerged !== undefined ? { merged: tidyMerged } : {}),
+      });
+    } catch (e) {
+      fail("record", e);
     }
   }
 
@@ -663,6 +699,8 @@ const SOFT: Record<string, string> = {
   baseline: "We could not write down where you start yet. It will be filled in after your first full week.",
   index: "We could not finish filing what we read for search, so some answers may miss things until it is done again.",
   capabilities: "We could not check which of your accounts the team can see yet.",
+  privacy: "We noticed what looks like a personal detail, such as an email address or a phone number, in what we read. Tell us and we will remove it.",
+  record: "We could not save a note of this set-up. Nothing else is affected.",
   map: "We could not arrange the map of your business yet. Everything else works, and the map improves with your next update.",
   done: "The final tally did not finish. Nothing was lost.",
   stopped: "The set-up was stopped.",

@@ -13,6 +13,8 @@ import { getTenant } from "../../src/graph/tenants.js";
 import { onboard, softMessage, startUrl, type OnboardDeps, type OnboardResult } from "../../src/onboard/onboard.js";
 import { localRuleId } from "../../src/ingest/sources/website/seo.js";
 import { scanGraph } from "../../src/ingest/privacy.js";
+import { ONTOLOGY_VERSION } from "../../src/graph/schema.js";
+import { graphSize } from "../../src/ingest/run-record.js";
 import { testGraph } from "../helpers/graph.js";
 import { FakeLlm } from "../helpers/fake-llm.js";
 import { startSite, type SiteServer } from "../fixtures/website/server.js";
@@ -181,7 +183,56 @@ describe("onboard (fixture site, fake LLM, test graph)", () => {
     expect(r.facts.address).toBe(true);
   });
 
-  it("re-runs as a no-op: no new nodes or edges, the LLM is not asked again, the same counts", async () => {
+  it("the run is a node with edges (G17): an onboard Event AFFECTS the business and is SOURCED_FROM the form, with the model, ontology and timing", async () => {
+    const rows = await q<{ id: string; pages: number; seo: number | null; model: string; onto: number; ms: number; soft: number; biz: string; form: string; formKind: string }>(
+      `MATCH (e:Event {kind:'onboard'})-[a:AFFECTS]->(b:Business)
+       MATCH (e)-[s:SOURCED_FROM]->(d:Document) WHERE a.until IS NULL AND s.until IS NULL
+       RETURN e.id AS id, e.pages AS pages, e.seoScore AS seo, e.model AS model, e.ontologyVersion AS onto, e.durationMs AS ms, e.softErrors AS soft,
+              b.id AS biz, d.id AS form, d.kind AS formKind`);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ pages: first.pages, seo: first.seoScore, model: "haiku", onto: ONTOLOGY_VERSION, soft: 0, formKind: "form" });
+    expect(rows[0]!.form).toMatch(/^document:onboarding-form-/);
+    expect(rows[0]!.ms).toBeGreaterThanOrEqual(0);
+    expect(rows[0]!.biz).toMatch(/^business:/);
+    // the edges carry their source and date like every other edge
+    const [edge] = await q<{ src: string; asOf: string }>("MATCH (:Event {kind:'onboard'})-[a:AFFECTS]->(:Business) RETURN a.src AS src, a.asOf AS asOf");
+    expect(edge).toEqual({ src: rows[0]!.id, asOf: "2026-10-15T09:00:00.000Z" });
+  });
+
+  it("graph hygiene is a metric on the business, each reading sourced from the run that measured it (G17)", async () => {
+    const rows = await q<{ metric: string; value: number; unit: string; run: string }>(
+      `MATCH (o:Observation)-[m:MEASURES]->(b:Business) WHERE o.metric IN ['graph_nodes', 'merged_count', 'privacy_scan_hits'] AND m.until IS NULL
+       MATCH (o)-[s:SOURCED_FROM]->(e:Event) WHERE s.until IS NULL
+       RETURN o.metric AS metric, o.value AS value, o.unit AS unit, e.kind AS run ORDER BY metric, run, o.id`);
+    expect(rows.map((r) => `${r.metric}@${r.run}`)).toEqual(["graph_nodes@onboard", "merged_count@onboard", "privacy_scan_hits@privacy-scan"]);
+    const size = rows.find((r) => r.metric === "graph_nodes")!.value;
+    expect(size).toBe(await graphSize(g)); // the run records themselves are not counted, so a re-run does not make the graph "bigger"
+    expect(size).toBeGreaterThan(first.pages);
+    expect(rows.find((r) => r.metric === "privacy_scan_hits")!.value).toBe(0);
+  });
+
+  it("the privacy scan ran at the end and is recorded: an Event that AFFECTS the business and a privacy_scan_hits reading of 0 (G12)", async () => {
+    const rows = await q<{ hits: number; summary: string }>(
+      "MATCH (e:Event {kind:'privacy-scan'})-[a:AFFECTS]->(:Business) WHERE a.until IS NULL RETURN e.hits AS hits, e.summary AS summary");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.hits).toBe(0);
+    expect(rows[0]!.summary).toMatch(/found nothing/);
+  });
+
+  it("every fact the model read records which model said it and under which ontology (G17c)", async () => {
+    const mentions = await q<{ by: string | null; onto: number | null }>(
+      "MATCH (:Document {kind:'webpage'})-[m:MENTIONS]->(x:Entity) WHERE m.until IS NULL AND (x:Product OR x:Audience OR x:Need OR x:Content) RETURN m.extractedBy AS by, m.ontologyVersion AS onto");
+    expect(mentions.length).toBeGreaterThan(0);
+    expect(mentions.every((m) => m.by === "haiku" && m.onto === ONTOLOGY_VERSION)).toBe(true);
+    const rel = await q<{ t: string; by: string | null; onto: number | null }>(
+      "MATCH (a:Entity)-[r:HAS_NEED|TARGETS]->(b:Entity) WHERE r.until IS NULL AND r.evidence IS NOT NULL RETURN type(r) AS t, r.extractedBy AS by, r.ontologyVersion AS onto");
+    expect(rel.length).toBeGreaterThan(0);
+    expect(rel.every((r) => r.by === "haiku" && r.onto === ONTOLOGY_VERSION)).toBe(true);
+    // a deterministic edge (the crawl's own) is not claimed by a model
+    expect(await q("MATCH (:Page)-[r:PART_OF]->(:Channel) WHERE r.extractedBy IS NOT NULL RETURN r")).toEqual([]);
+  });
+
+  it("re-runs as a no-op: no new nodes or edges, the LLM is not asked again, the same counts apart from the second run's own record", async () => {
     const calls = llm.calls.length;
     clock += 60 * 60 * 1000;
     const again: OnboardEvent[] = [];
@@ -192,7 +243,14 @@ describe("onboard (fixture site, fake LLM, test graph)", () => {
     expect(second.stats.versions).toBe(0);
     expect(second.stats.edgesClosed).toBe(0);
     expect(llm.calls.length).toBe(calls);
-    expect(second.counts).toEqual(first.counts);
+    // what the run wrote about itself (an Event for the run and one for the privacy scan, with their edges) is the only
+    // difference: the same day's readings are the same Observations, and the graph did not grow
+    const own = new Set(["Event", "rel:AFFECTS", "rel:SOURCED_FROM", "edges"]);
+    const strip = (c: Record<string, number>) => Object.fromEntries(Object.entries(c).filter(([k]) => !own.has(k)));
+    expect(strip(second.counts)).toEqual(strip(first.counts));
+    expect(second.counts.Event).toBe(first.counts.Event! + 2);
+    expect(second.counts["rel:AFFECTS"]).toBe(first.counts["rel:AFFECTS"]! + 2);
+    expect((await q("MATCH (e:Event) WHERE e.kind IN ['onboard', 'privacy-scan'] RETURN e.id")).length).toBe(4);
   }, 120_000);
 
   it("reports a failing step as an error event, keeps what it has, and still finishes", async () => {
