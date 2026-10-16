@@ -165,7 +165,7 @@ export class ComposioConnector implements Connector {
     const r = await this.rec(ctx).catch(() => null);
     if (r && this.deps.client) await this.deps.client.deleteAccount(r.accountId).catch(() => undefined);
     await ctx.vault.delete(ctx.tenant, this.info.id);
-    await this.markSystem(ctx, "disconnected");
+    await this.markSystem(ctx, "not_connected");
   }
 
   async health(ctx: ConnectorCtx): Promise<ConnectionHealth> {

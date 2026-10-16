@@ -11,7 +11,7 @@ import { buildConnections } from "../../src/connections/wiring.js";
 import { FakeGoogle, tokens } from "../helpers/fake-google.js";
 import { FakeGoogleApis, type FakeApisScript } from "../helpers/fake-google-apis.js";
 import { FakeComposio } from "../helpers/fake-composio.js";
-import { seededGraph } from "../helpers/tools.js";
+import { graphFrom } from "../helpers/templates.js";
 
 export const KEY = "test-connector-key-0123456789abcdef0123456789abcdef";
 export const WEB = "https://allevia.example";
@@ -46,7 +46,7 @@ export async function connHarness(o: { env?: Record<string, string>; apis?: Fake
   const apis = new FakeGoogleApis(o.apis);
   const composio = new FakeComposio();
   const audit = new MemoryAuditLog();
-  const seeded = o.graph === false ? null : await seededGraph();
+  const seeded = o.graph === false ? null : await graphFrom("mini");
   const g = seeded?.g as GraphHandle;
   const svc = buildConnections(cfg, {
     googleClient: google, googleApis: apis, composio, audit, now: () => clock.now,

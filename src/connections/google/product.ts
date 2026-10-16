@@ -166,7 +166,7 @@ export class GoogleProductConnector implements Connector {
     const rec = await this.load(ctx).catch(() => null);
     if (rec) await this.deps.client.revoke(rec.refreshToken).catch(() => undefined);
     await this.deps.store.delete(ctx.tenant, this.info.id);
-    await this.markSystem(ctx, "disconnected", { lastError: null });
+    await this.markSystem(ctx, "not_connected", { lastError: null });
   }
 
   async health(ctx: ConnectorCtx): Promise<ConnectionHealth> {
