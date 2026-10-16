@@ -10,6 +10,7 @@ import type { LearnedEvent } from "../actions/learning.js";
 import { ApprovalNotFound, decideApproval } from "../actions/approvals.js";
 import type { ActionView, Drafter, ExecutorDeps, GhRunner, HttpFn } from "../actions/executors.js";
 import type { ConnectionsPort } from "../connections/service.js";
+import type { PublishRuntime } from "../publish/executor.js";
 import { demoConnections, isSalesDemo } from "../sales/demo.js";
 import type { LlmRunner } from "../ingest/llm.js";
 import { loadConfig } from "../config.js";
@@ -36,7 +37,8 @@ export interface ActionOpts {
   http?: HttpFn;
   drafter?: Drafter;
   config?: ExecutorDeps["config"];
-  connections?: (tenant: string) => ConnectionsPort | undefined; // a business's connections for calendar_event and email_send (default: the server's own)
+  connections?: (tenant: string) => ConnectionsPort | undefined; // a business's connections for calendar_event, email_send and publish_post (default: the server's own)
+  publish?: (tenant: string) => PublishRuntime | undefined;      // how a post's picture is made reachable and the daily limit (default: from the server's config)
   llm?: LlmRunner;            // optional Haiku summary of a complex edit (off when absent)
 }
 
@@ -48,16 +50,22 @@ export interface DecideOpts {
   log?: (line: string) => void;
 }
 
+/** What an executor needs for one business: a dry run unless real actions are on, the business's connections, and the posting runtime. */
+export function executorsFor(tenant: string, a: ActionOpts = {}): Omit<ExecutorDeps, "tenant"> {
+  return {
+    dryRun: !(a.live ?? loadConfig().actionsLive),
+    ...(a.gh ? { gh: a.gh } : {}), ...(a.http ? { http: a.http } : {}), ...(a.drafter ? { drafter: a.drafter } : {}), ...(a.config ? { config: a.config } : {}),
+    ...(a.connections?.(tenant) ? { connections: a.connections(tenant)! } : isSalesDemo(tenant) ? { connections: demoConnections(tenant) } : {}),
+    ...(a.publish?.(tenant) ? { publish: a.publish(tenant)! } : {}),
+  };
+}
+
 export async function decide(g: GraphHandle, tenant: string, id: string, d: Decision, o: DecideOpts = {}): Promise<DecisionDto> {
   const before = await readApproval(g, id);
   if (!before) throw new DecisionError(404, "No such approval.");
   if (before.status !== "pending") throw new DecisionError(409, `${id} was already decided (${before.status}).`);
   const a = o.actions ?? {};
-  const executors: Omit<ExecutorDeps, "tenant"> = {
-    dryRun: !(a.live ?? loadConfig().actionsLive),
-    ...(a.gh ? { gh: a.gh } : {}), ...(a.http ? { http: a.http } : {}), ...(a.drafter ? { drafter: a.drafter } : {}), ...(a.config ? { config: a.config } : {}),
-    ...(a.connections?.(tenant) ? { connections: a.connections(tenant)! } : isSalesDemo(tenant) ? { connections: demoConnections(tenant) } : {}),
-  };
+  const executors = executorsFor(tenant, a);
   const learned: LearnedEvent[] = [];
   let action: ActionView | null = null;
   try {

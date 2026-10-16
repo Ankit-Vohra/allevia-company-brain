@@ -18,6 +18,8 @@ const SPEC_TOOLS = [
   "connections_available", "connection_tools", "connection_read", "connection_act",
   // the Sales desk: enquiries waiting, the pipeline, leads and deals in the records
   "enquiries_read", "crm_read", "crm_write",
+  // posting to the owner's own channels, after their OK
+  "publish_post", "publish_status", "publish_cancel",
 ];
 
 // The first {...} after "Example:" in a description.
@@ -74,7 +76,7 @@ describe("tool registry", () => {
 
   it("only remember, propose_action, the tools that make things, the public-data lookups, keyword ideas and the proposals through connections (a booking, an email, a change) write", () => {
     expect(ALL_TOOLS.filter((t) => t.writes).map((t) => t.name).sort()).toEqual([
-      "ad_library", "calendar_book", "competitor_watch", "connection_act", "crm_write", "generate_image", "gmail_draft", "gmail_send", "google_listing", "instagram_public", "keyword_ideas", "make_poster", "make_reel_script_and_clip", "propose_action", "remember", "write_copy",
+      "ad_library", "calendar_book", "competitor_watch", "connection_act", "crm_write", "generate_image", "gmail_draft", "gmail_send", "google_listing", "instagram_public", "keyword_ideas", "make_poster", "make_reel_script_and_clip", "propose_action", "publish_cancel", "publish_post", "remember", "write_copy",
     ]);
   });
 });

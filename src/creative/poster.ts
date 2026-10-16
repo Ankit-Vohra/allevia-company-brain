@@ -91,7 +91,7 @@ export function artworkPrompt(kit: ComposeKit, o: { scene: string; occasion: Occ
 
 const alt = (c: PosterContent): string => `Poster: ${[c.headline, c.offer, c.cta].filter(Boolean).join(". ")}.`;
 const captionOf = (c: PosterContent): string => [c.headline, c.subline, c.offer, ...(c.details ?? []), c.cta].filter((x): x is string => !!x?.trim()).join("\n");
-const channelFor = (f: FormatKey): string => (f === "insta_story" ? "instagram story" : f === "flyer" ? "print" : "instagram");
+export const channelFor = (f: FormatKey): string => (f === "insta_story" ? "instagram story" : f === "flyer" ? "print" : "instagram");
 const goalOf = (o: Occasion): Goal => (o === "offer" ? "offer" : o === "announcement" ? "announce" : "sell");
 
 // The layouts this business's last posters used, newest first: the chooser never repeats the last one.

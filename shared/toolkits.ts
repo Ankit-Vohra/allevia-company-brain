@@ -88,6 +88,10 @@ export const TOOL_META: ToolMeta[] = [
   read("enquiries_read", "sales", "Finds new enquiries nobody has answered yet, in the records and in the inbox"),
   read("crm_read", "sales", "Reads the leads, deals and meetings: the pipeline, what moved, what is stuck"),
   { name: "crm_write", domain: "sales", mode: "write", cost: "free", needsOk: false, summary: "Adds a lead, opens a deal, moves a stage or adds a follow-up in the records" },
+  // posting to the owner's own channels (src/publish): the card waits for the owner's OK and posts exactly what they approved
+  { name: "publish_post", domain: "content", mode: "write", cost: "free", needsOk: true, summary: "Proposes posting to the owner's Instagram, Facebook Page or LinkedIn, now or at a time, for their OK" },
+  read("publish_status", "content", "Lists what is scheduled and what posted lately"),
+  { name: "publish_cancel", domain: "content", mode: "write", cost: "free", needsOk: false, summary: "Cancels a scheduled post that has not gone out" },
   // making things
   { name: "write_copy", domain: "content", mode: "create", cost: "model", needsOk: true, summary: "Writes captions, ad lines or emails in the brand's voice" },
   { name: "make_poster", domain: "creative", mode: "create", cost: "credits", needsOk: true, summary: "Makes a poster or ad with the real logo and exact words" },
@@ -127,6 +131,7 @@ export const TOOLKITS: Toolkit[] = [
   { id: "competitors", label: "Competitors and their ads", domain: "research", tools: ["competitor_watch", "ad_library"] },
   { id: "brand", label: "The brand library", domain: "brand", tools: ["get_brand_asset"] },
   { id: "copywriting", label: "Write copy", domain: "content", tools: ["write_copy"] },
+  { id: "posting", label: "Post to your own accounts, after your OK", domain: "content", tools: ["publish_post", "publish_status", "publish_cancel"] },
   { id: "creative", label: "Make posters, images and clips", domain: "creative", tools: ["make_poster", "generate_image", "make_reel_script_and_clip"] },
 ];
 

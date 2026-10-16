@@ -5,6 +5,7 @@
 // ALLEVIA_STUDIO_ENGINE=recorded (or ALLEVIA_STUDIO_CACHE_ONLY=1) switches the live engine off: nothing is ever spent.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { productionConnections } from "../connections/production.js";
 import { isTenantSlug } from "../graph/slug.js";
 import { ChainEngine, RecordedEngine, recordingsManifest, type GenerationEngine } from "./engine.js";
 import { CreditLedger, creditCaps } from "./credits.js";
@@ -43,6 +44,8 @@ export function productionStudioDeps(dataDir: string, o: { cacheOnly?: boolean; 
     store: new AssetStore(dataDir),
     vision: new CachedVision(live, studioCacheDir(dataDir)),
     engine: studioEngine(dataDir, { live: o.liveEngine !== false && !o.cacheOnly && !/^(recorded|off|none)$/i.test(process.env.ALLEVIA_STUDIO_ENGINE ?? "") }),
+    // the business's own connections: with Instagram connected, the card waiting for the OK posts after it (src/publish)
+    connections: (tenant) => productionConnections().port(tenant),
   };
 }
 

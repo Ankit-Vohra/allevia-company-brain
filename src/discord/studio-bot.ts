@@ -13,6 +13,8 @@
 import type { AgentEvent } from "../../shared/contracts.js";
 import { DecisionError, decide, type ActionOpts, type OnDecision } from "../server/approvals.js";
 import { studioErrorMessage } from "../server/studio.js";
+import { approval as readApproval } from "../server/reads.js";
+import { accountWords, PLATFORMS } from "../publish/platforms.js";
 import type { GraphHandle } from "../graph/client.js";
 import { upsertNode } from "../graph/upsert.js";
 import { approveStudioDraft, studioCard, type DecideFn } from "../studio/approve.js";
@@ -218,7 +220,9 @@ export class StudioDiscord {
         canRetry: !!card?.payload.studio.variants.find((x) => x.id === v.id)?.canRetry,
       });
     }
-    await thread.send("Tap Approve on the one you like. It is saved as a draft and nothing is posted anywhere. To change one, reply here. Light and colour changes are free, for example \"make it warmer\". A bigger change, like \"make it festive\", \"change the background\" or \"make this into an ad saying ...\", uses the AI editor, and I will tell you what it costs.");
+    const posting = card?.payload.publish;
+    const what = posting ? `Approving posts it to ${PLATFORMS[posting.platform].name} (${accountWords(PLATFORMS[posting.platform], posting.account)}). Nothing is posted until you tap it.` : "It is saved as a draft and nothing is posted anywhere.";
+    await thread.send(`Tap Approve on the one you like. ${what} To change one, reply here. Light and colour changes are free, for example "make it warmer". A bigger change, like "make it festive", "change the background" or "make this into an ad saying ...", uses the AI editor, and I will tell you what it costs.`);
   }
 
   // One option as a message: the picture, the check, the caption, and the buttons that fit (Approve and Change when Nisha passed
@@ -380,8 +384,10 @@ export class StudioDiscord {
       const decideWith: DecideFn = (id, edited) => decide(this.d.graph, this.d.tenant, id, { decision: "approve", ...(edited ? { editedPayload: edited } : {}) },
         { now: this.now(), log: (l) => this.log(l), ...(this.d.onDecision ? { onDecision: this.d.onDecision } : {}), ...(this.d.actions ? { actions: this.d.actions } : {}) });
       await approveStudioDraft(this.d.graph, { approvalId, variantId: v.id, now: this.now() }, decideWith);
+      // a card that posts says what became of it (posted with its address, scheduled, a dry run, or why not); a draft says it is only a draft
+      const after = card.payload.publish ? await readApproval(this.d.graph, approvalId).catch(() => null) : null;
       await b.update({
-        content: clip([`✅ You approved option ${label}. It is saved as a draft post. Nothing has been published.`, "", quote(clip(card.payload.body, 1200))].join("\n"), 1900),
+        content: clip([card.payload.publish ? `✅ You approved option ${label}. ${after?.result ?? "It is on its way."}` : `✅ You approved option ${label}. It is saved as a draft post. Nothing has been published.`, "", quote(clip(card.payload.body, 1200))].join("\n"), 1900),
         buttons: [],
       });
     } catch (e) {

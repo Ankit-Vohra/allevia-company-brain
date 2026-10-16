@@ -70,7 +70,7 @@ async function portFor(env: PublishEnv): Promise<ConnectionsPort> {
 
 // ---------- what a post is made of ----------
 
-interface Media { assetId: string; sha: string; kind: "image" | "video"; w?: number; h?: number }
+export interface Media { assetId: string; sha: string; kind: "image" | "video"; w?: number; h?: number }
 
 interface StudioLike { variants?: Array<{ id: string; label?: string; badge?: string; note?: string }>; recommended?: string; creative?: { allowUnchecked?: boolean } }
 
@@ -87,20 +87,38 @@ async function resolveMedia(g: GraphHandle, approvalId: string, p: Payload, bloc
     const v = studio.variants.find((x) => x.id === assetId);
     if (!v) return { ok: false, words: "Nothing was posted: the picture chosen isn't one of this card's options." };
     const may = v.badge === "unchanged" || (v.badge === "unchecked" && studio.creative?.allowUnchecked === true);
-    if (!may) return { ok: false, words: `Nothing was posted: Nisha held option ${v.label ?? ""} back${v.note ? ` (${clip(oneLine(v.note), 120)})` : ""}. Pick another option.`.replace("option  back", "that option back") };
+    if (!may) return { ok: false, words: `Nothing was posted: Nisha held ${v.label ? `option ${v.label}` : "that option"} back${v.note ? ` (${clip(oneLine(v.note), 120)})` : ""}. Pick another option.` };
   }
+  const a = await assessAsset(g, assetId, spec, { checked: !!studio?.variants?.length });
+  return a.ok ? { ok: true, media: a.media } : { ok: false, words: `Nothing was posted: ${a.words}` };
+}
+
+/**
+ * Whether one picture or video can be posted to a platform, and what it is. `checked`: Nisha's verdict on the card already covered
+ * it (a card with options), so the asset's own check is not asked again.
+ */
+export async function assessAsset(g: Pick<GraphHandle, "roQuery">, assetId: string, spec: PlatformSpec, o: { checked?: boolean } = {}): Promise<{ ok: true; media: Media; check: string | null } | { ok: false; words: string }> {
   const [a] = await g.roQuery<{ mime: string | null; sha: string | null; w: number | null; h: number | null; check: string | null }>(
     "MATCH (a:Entity:Asset {id:$id}) RETURN a.mime AS mime, a.sha256 AS sha, a.w AS w, a.h AS h, a.check AS check", { id: assetId });
-  if (!a?.sha) return { ok: false, words: "Nothing was posted: the picture or video for this post is missing from your records." };
-  if (!studio?.variants?.length && a.check === "held") return { ok: false, words: "Nothing was posted: the picture was held back in the quality check." };
+  if (!a?.sha) return { ok: false, words: "the picture or video for this post is missing from your records." };
+  if (!o.checked && a.check === "held") return { ok: false, words: "the picture was held back in the quality check." };
   const kind = a.mime?.startsWith("video/") ? "video" as const : "image" as const;
   if (spec.id === "instagram" && kind === "image" && a.w && a.h) {
     const ratio = a.w / a.h;
     if (ratio < 0.79 || ratio > 1.92) {
-      return { ok: false, words: `Nothing was posted: this picture is ${a.w} by ${a.h}, and Instagram's feed takes shapes between 4:5 (tall) and 1.91:1 (wide). Make it again in a feed shape.` };
+      return { ok: false, words: `this picture is ${a.w} by ${a.h}, and Instagram's feed takes shapes between 4:5 (tall) and 1.91:1 (wide). Make it again in a feed shape.` };
     }
   }
-  return { ok: true, media: { assetId, sha: a.sha, kind, ...(a.w ? { w: a.w } : {}), ...(a.h ? { h: a.h } : {}) } };
+  return { ok: true, check: a.check, media: { assetId, sha: a.sha, kind, ...(a.w ? { w: a.w } : {}), ...(a.h ? { h: a.h } : {}) } };
+}
+
+/** What is wrong with the words of a post for a platform, or null. */
+export function captionProblem(spec: PlatformSpec, caption: string): string | null {
+  const text = caption.trim();
+  if (!text) return "the post has no text.";
+  if (text.length > spec.captionMax) return `the text is ${text.length} characters and ${spec.name} takes ${spec.captionMax}. Shorten it and approve again.`;
+  if (spec.id === "instagram" && (text.match(/#[\p{L}\p{N}_]+/gu)?.length ?? 0) > 30) return "Instagram allows 30 hashtags at most. Remove a few and approve again.";
+  return null;
 }
 
 const hashOf = (spec: PlatformSpec, block: PublishBlock, caption: string, m: Media | undefined, at: number | undefined): string =>
@@ -147,9 +165,8 @@ export async function publishPostAction(g: GraphHandle, input: PublishInput, env
   if (!block) return fail("Nothing was posted: this card doesn't say where to post.");
   const spec = PLATFORMS[block.platform];
   const caption = String(p.body ?? "").trim();
-  if (!caption) return fail("Nothing was posted: the post has no text.");
-  if (caption.length > spec.captionMax) return fail(`Nothing was posted: the text is ${caption.length} characters and ${spec.name} takes ${spec.captionMax}. Shorten it and approve again.`);
-  if (spec.id === "instagram" && (caption.match(/#[\p{L}\p{N}_]+/gu)?.length ?? 0) > 30) return fail("Nothing was posted: Instagram allows 30 hashtags at most. Remove a few and approve again.");
+  const bad = captionProblem(spec, caption);
+  if (bad) return fail(`Nothing was posted: ${bad}`);
 
   const m = await resolveMedia(g, input.approvalId, p, block, spec);
   if (!m.ok) return fail(m.words);

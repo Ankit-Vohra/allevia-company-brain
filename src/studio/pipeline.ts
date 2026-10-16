@@ -3,7 +3,10 @@
 //   variant B, generative, prompted from the graph (asset) → Nisha checks both (review) → Dev writes the caption →
 //   the approval card (proposal) → final.
 // The run's events are kept on the original Asset (studioEvents), so the page can show the last run after a reload.
-import type { AgentEvent, AgentId, TurnChecks } from "../../shared/contracts.js";
+import type { ActionKind, AgentEvent, AgentId, TurnChecks } from "../../shared/contracts.js";
+import type { ConnectionsPort } from "../connections/service.js";
+import { approvingWords, planPublish, upgradeToPublish } from "../publish/offer.js";
+import { postTitle } from "../publish/platforms.js";
 import type { GraphHandle } from "../graph/client.js";
 import { upsertEdge, upsertNode } from "../graph/upsert.js";
 import { ensureRoster } from "../agent/memory.js";
@@ -30,6 +33,9 @@ export interface StudioDeps {
   vision: VisionRunner;            // Tara and Nisha look at photos
   engine: GenerationEngine;        // variant B
   models?: Partial<StudioModels>;
+  // This business's connections. With Instagram connected, the card that waits for the owner's OK is a post (approving posts the
+  // chosen option with Dev's caption); without it, or when this is absent, it is a draft as before.
+  connections?: (tenant: string) => ConnectionsPort | undefined;
   // Dev rewrites Tara's draft with the model (one more call per photo). Off by default: Dev's voice check runs in code
   // either way, and two calls per post keep within Appendix B.3's $0.10 of Claude per post.
   devRewrite?: boolean;
@@ -233,13 +239,26 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
     ...(redacted ? { privacy: { people: priv.people, redacted: true, note: privacyNote(priv) } } : {}),
     ...(notices.length ? { notices } : {}),
   });
-  send({ type: "proposal", agent: TARA, recommendationId: card.recommendationId, approvalId: card.approvalId, title: card.title, kind: "content_draft" });
+  // with Instagram connected, approving this card posts the option the owner picks (after their OK)
+  let cardKind: ActionKind = "content_draft";
+  let cardTitle = card.title;
+  let postsWords = "";
+  const port = deps.connections?.(input.tenant);
+  if (port) {
+    const plan = await planPublish({ graph: g, connections: port, agent: TARA }, "instagram").catch(() => null);
+    if (plan?.ok && (await upgradeToPublish(g, card.approvalId, plan.block, now()))) {
+      cardKind = "publish_post";
+      cardTitle = `${postTitle(plan.spec, plan.block.account)}: ${card.title.replace(/^Post (the )?/i, "")}`;
+      postsWords = approvingWords(plan.spec, plan.block);
+    }
+  }
+  send({ type: "proposal", agent: TARA, recommendationId: card.recommendationId, approvalId: card.approvalId, title: cardTitle, kind: cardKind });
 
   const okCount = fidelity.filter((f) => f.badge === "unchanged").length;
   const answer = [
     `Tara: ${assessment.verdict} (${assessment.subject}).`,
     `${variants.length} variant${variants.length === 1 ? "" : "s"}; Nisha passed ${okCount} as "building unchanged".`,
-    `Dev's caption is on the card, waiting for your approval (1 Studio credit when approved).`,
+    `Dev's caption is on the card, waiting for your approval (1 Studio credit when approved).${postsWords ? ` ${postsWords}` : ""}`,
     ...notices,
   ].join(" ");
   send({
