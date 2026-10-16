@@ -19,6 +19,7 @@ const P90 = ALLEVIA_90;
 export const PAGE_TOKENS: Record<string, string> = {
   __STAFF_COUNT__: String(AGENTS.length),
   __STAFF_WORD__: numberWord(AGENTS.length),
+  __STAFF_WORD_CAP__: numberWord(AGENTS.length).replace(/^./, (c) => c.toUpperCase()),
 };
 /** "Up to 50 posts or 12 reels" for a monthly allowance of Studio credits. */
 export function postsAndReels(credits: number): string {
@@ -77,16 +78,16 @@ export function smallPrint(): string {
 
 // ---------- questions ----------
 
-const faqItem = (f: FaqItem) => `<details><summary><h3>${esc(f.q)}</h3></summary><p>${esc(f.a)}</p></details>`;
+const faqItem = (level: 2 | 3) => (f: FaqItem) => `<details><summary><h${level}>${esc(f.q)}</h${level}></summary><p>${esc(f.a)}</p></details>`;
 
 export function faqAll(): string {
-  return `<div class="faq">${FAQ.map(faqItem).join("")}</div>`;
+  return `<div class="faq">${FAQ.map(faqItem(2)).join("")}</div>`;
 }
 
 /** The three short questions shown on the pricing page. */
 export function faqPricing(): string {
   const pick = ["What if it does not work for me?", "Will it post something that embarrasses me?", "Will it replace my marketing person, or guarantee growth?"];
-  return `<div class="faq">${FAQ.filter((f) => pick.includes(f.q)).map(faqItem).join("")}</div>`;
+  return `<div class="faq">${FAQ.filter((f) => pick.includes(f.q)).map(faqItem(3)).join("")}</div>`;
 }
 
 // ---------- security ----------

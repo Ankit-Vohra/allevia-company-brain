@@ -2,7 +2,6 @@
 // structured data), the sitemap, the footer and the link check all read this list, so a page cannot be in one and
 // missing from another. A page's file is derived from its path: "/" is site/index.html, "/pricing/" is
 // site/pricing/index.html.
-import { AGENTS, numberWord } from "../../shared/roster.ts";
 
 export type Schema = "organization" | "website" | "software" | "faq" | "breadcrumb";
 
@@ -27,7 +26,6 @@ export interface PageDef {
   imageAlt?: string;
 }
 
-const STAFF = numberWord(AGENTS.length);
 
 export const PAGES: readonly PageDef[] = [
   {
