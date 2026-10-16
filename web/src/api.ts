@@ -354,7 +354,7 @@ export const api = {
     return (await getJson<{ results: Array<{ id: string; name: string; description: string }> }>(`/api/${enc(t)}/connections/search?q=${encodeURIComponent(q)}`)).results;
   },
   /** POST .../connect: where the owner says yes. `returnTo: "popup"` lands on a "you can close this tab" page. */
-  async connectConnection(t: string, id: string, o: { inbox?: boolean; returnTo?: "connections" | "onboard" | "popup" } = {}): Promise<{ url: string }> {
+  async connectConnection(t: string, id: string, o: { inbox?: boolean; returnTo?: "connections" | "onboard" | "popup" | "home" } = {}): Promise<{ url: string }> {
     if (mode === "mock") throw new ApiError("Connecting your tools needs the live server.", 501);
     return sendJson(`/api/${enc(t)}/connections/${encodeURIComponent(id)}/connect`, "POST", o);
   },

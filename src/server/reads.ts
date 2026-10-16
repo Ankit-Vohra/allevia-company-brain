@@ -11,6 +11,7 @@ import { TouchedSet, type ToolContext } from "../agent/tool.js";
 import { search } from "../agent/tools/search.js";
 import { NODE, toRef, type NodeRow } from "../agent/tools/common.js";
 import { localCommunities, localPageRank } from "./local-graph.js";
+import { previewOf } from "./preview.js";
 import {
   APPROVAL_STATUSES, REC_AREAS, type AgentDetailDto, type AgentStatsDto, type AgentSummaryDto, type ApprovalDto, type ApprovalPayload,
   type ApprovalStatus, type BriefDto, type Channel, type FindingRecordDto, type FreshnessDto, type GraphDataDto, type GraphNodeDto,
@@ -539,11 +540,13 @@ function toApproval(r: Record<string, unknown>): ApprovalDto {
   const kind = (ACTION_KINDS as readonly string[]).includes(str(r.kind)) ? (str(r.kind) as ApprovalDto["kind"]) : "github_issue";
   const status = (APPROVAL_STATUSES as readonly string[]).includes(str(r.status)) ? (str(r.status) as ApprovalStatus) : "pending";
   const recId = str(r.rec) || str(r.recProp);
+  const preview = previewOf(r.payload, { kind, why: str(r.recWhy) });
   return {
     id: str(r.id), kind, status, title, by: agentById(str(r.by)) ? str(r.by) : rosterIdOf(r.producer) ?? "chief-of-staff",
     ...(recId ? { recommendationId: recId } : {}),
     payload: toPayload(r.payload, title),
     ...(r.editedPayload ? { editedPayload: toPayload(r.editedPayload, title) } : {}),
+    ...(preview ? { preview } : {}),
     createdAt: iso(r.createdAt) ?? new Date(0).toISOString(),
     ...(iso(r.decidedAt) ? { decidedAt: iso(r.decidedAt) } : {}),
     ...(typeof r.result === "string" && r.result ? { result: r.result } : {}),
@@ -561,7 +564,7 @@ const approvalQuery = (where: string) =>
    OPTIONAL MATCH (r:Entity:Recommendation {id: rid})
    OPTIONAL MATCH (ag:Agent)-[pr:PRODUCED]->(r) WHERE ID(pr) >= 0
    WITH a, r, collect(ag.id)[0] AS producer
-   RETURN ${APPROVAL_FIELDS}, r.id AS rec, coalesce(r.by, a.by) AS by, r.simulated AS recSimulated, producer`;
+   RETURN ${APPROVAL_FIELDS}, r.id AS rec, coalesce(r.by, a.by) AS by, r.simulated AS recSimulated, r.summary AS recWhy, producer`;
 
 export async function approvals(g: GraphHandle, limit: number = LIMITS.approvals): Promise<ApprovalDto[]> {
   const rows = await ro<Record<string, unknown>>(g, approvalQuery(""), { limit: Math.max(1, Math.min(limit, LIMITS.approvals)) });

@@ -12,6 +12,7 @@ import { MadeCard, QuickReplies } from "../MadeCard";
 import { Reveal } from "../Reveal";
 import { APPROVALS_CHANGED } from "../TopBar";
 import { CHIEF, TEAM, type Who, checksPass, contributions, doorWords, howWeGotThis, teamTalk, workingNow } from "../../lib/chat";
+import { kindWords } from "../../lib/approval-words";
 import { humanDates, plain } from "../../lib/words";
 import type { RunView } from "../../state/derive";
 import type { Approval } from "../../types-ext";
@@ -19,10 +20,6 @@ import type { TurnItem } from "./useThread";
 
 const nameOf = (id: AgentId) => agentDef(id)?.name ?? id;
 const jobOf = (id: AgentId) => agentDef(id)?.title ?? "";
-const KIND: Record<Approval["kind"], string> = {
-  content_draft: "A post draft", github_issue: "A fix for your website", pause_ad: "Pausing an ad", discord_post: "A message to your team channel",
-  calendar_event: "A meeting on your calendar", email_send: "An email from your address", connection_action: "A change in one of your tools",
-};
 
 export interface TurnProps {
   turn: TurnItem;
@@ -229,7 +226,7 @@ function ApprovalInline({ tenantId, id, title, by, approval, onChanged }: {
       <header>
         <AgentAvatar id={by} size={22} />
         <p><b>{decided ? (approval.status === "rejected" ? "You said no" : "You said OK") : "Waiting for your OK"}</b>
-          <span className="ct-role">{approval ? KIND[approval.kind] : "From " + nameOf(by)}</span></p>
+          <span className="ct-role">{approval ? kindWords(approval).label :"From " + nameOf(by)}</span></p>
         {approval?.simulated && <SimBadge label="sample" />}
       </header>
       <p className="ct-approve-title">{plain(approval?.title ?? title)}</p>

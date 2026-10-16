@@ -14,6 +14,7 @@ import { LearnedChips, LearnedPathDialog, RuleRow, ruleClause } from "../compone
 import { Reveal } from "../components/Reveal";
 import { APPROVALS_CHANGED } from "../components/TopBar";
 import { ACTION } from "../lib/actions";
+import { kindWords } from "../lib/approval-words";
 import { wordDiff } from "../lib/diff";
 import { useApp, useAsync } from "../state/app";
 import type { Approval, LearnedEvent } from "../types-ext";
@@ -21,17 +22,6 @@ import { TEAM_CHANGED } from "./Office";
 import "./approvals.css";
 
 type Payload = Approval["payload"];
-
-/** What each kind of draft is called to an owner, and what saying OK does, in plain words. */
-const KIND: Record<ActionKind, { label: string; effect: (target?: string) => string; done: string }> = {
-  github_issue: { label: "A fix for your website", effect: () => "If you say OK, this goes to whoever builds your website as a to-do. Nothing on the site changes yet.", done: "Sent to whoever builds your website." },
-  content_draft: { label: "A post draft", effect: () => "If you say OK, the draft is saved for you. Nothing is posted.", done: "Draft saved. Nothing was posted." },
-  pause_ad: { label: "A change to an ad", effect: () => "If you say OK, the change is made to the ad. You can undo it from your ad account any time.", done: "The change was made." },
-  discord_post: { label: "A message to your team chat", effect: (t) => `If you say OK, this is posted${t ? ` to ${t}` : ""}.`, done: "Posted." },
-  calendar_event: { label: "A meeting on your calendar", effect: () => "If you say OK, the meeting is added to your calendar, and the guest is invited if one is named.", done: "Meeting added." },
-  connection_action: { label: "A change in one of your tools", effect: (t) => `If you say OK, this is done${t ? ` in ${t}` : " in your connected tool"}. Nothing happens before.`, done: "Done." },
-  email_send: { label: "An email from your address", effect: () => "If you say OK, this email is sent from your address. Nothing is sent before.", done: "Email sent." },
-};
 
 const OUTCOME: Record<Approval["status"], { text: string; cls: string }> = {
   pending: { text: "Waiting for your OK", cls: "is-wait" },
@@ -138,7 +128,7 @@ export default function ApprovalsPage() {
               <Icon name={last.outcome === "rejected" ? "x" : "check"} size={15} />
               <span><b>{last.outcome === "rejected" ? "You said no" : last.outcome === "edited" ? "Approved with your edits" : "Approved"}</b>: {last.title}</span>
             </p>
-            <p className="small muted">{last.outcome === "rejected" ? "Nothing was changed." : KIND[last.kind].done}</p>
+            <p className="small muted">{last.outcome === "rejected" ? "Nothing was changed." : kindWords({ kind: last.kind, title: last.title }).done}</p>
             <LearnedChips events={taught[last.id]} edited={last.outcome === "edited"} />
           </div>
         )}
@@ -213,7 +203,7 @@ function safeDecode(s: string) {
 }
 
 function ApprovalCard({ a, advanced, recTitle, onDecide, tz, locale }: { a: Approval; advanced: boolean; recTitle?: string; onDecide: (a: Approval, d: "approve" | "reject", p?: Payload) => Promise<void>; tz?: string; locale?: string }) {
-  const k = KIND[a.kind];
+  const k = kindWords(a);
   const who = agentDef(a.by);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Payload>(a.payload);

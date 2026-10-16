@@ -3,7 +3,7 @@
 // "Needs a push" with a line on why, and so on (docs/owner-words.md).
 import { describe, it, expect } from "vitest";
 import type { ProgramCheckpoint, ProgramGoal, ProgramScorecard } from "../../shared/contracts.js";
-import { checkInNote, goalView, monthWeek, nextCheckIn, usdOnlyNote } from "../../web/src/lib/plainwords.js";
+import { checkInNote, goalState, goalView, monthWeek, nextCheckIn, usdOnlyNote } from "../../web/src/lib/plainwords.js";
 
 const goal = (over: Partial<ProgramGoal> = {}): ProgramGoal => ({
   id: "goal:weekly-signups", name: "Weekly signups", metricKey: "new_accounts", unit: "signups", period: "week",
@@ -65,6 +65,19 @@ describe("goalView", () => {
     const v = goalView(goal({ status: "no_data", current: null, progress: null, baseline: null, baselineConf: "unknown" }), 0, f);
     expect(v).toMatchObject({ status: null, known: false, now: null, start: null, progress: null });
     expect(v.why).toBe("We'll know after your first full week.");
+  });
+  it("a zero in week one is not 'Going well': we'll know after the first full week (audit #39)", () => {
+    const zero = goal({ current: 0, baseline: null, baselineConf: "unknown", progress: 0, status: "on_track", unit: "clicks", period: "month", target: 50, name: "Search clicks" });
+    const v = goalView(zero, 3, f);
+    expect(v).toMatchObject({ status: null, known: false, now: null, progress: null });
+    expect(v.why).toBe("We'll know after your first full week.");
+    expect(goalState(zero, 3)).toBe("no_data");
+    expect(goalState(zero, 6)).toBe("no_data");
+    // from day 7 a zero is a real reading again, and so is any positive number in week one
+    expect(goalState(zero, 7)).toBe("on_track");
+    expect(goalView(zero, 8, f).known).toBe(true);
+    expect(goalState({ ...zero, current: 12 }, 3)).toBe("on_track");
+    expect(goalState({ ...zero, current: null }, 30)).toBe("no_data");
   });
   it("a reading but no baseline: the bar is empty and the start is said to be unmeasured", () => {
     const v = goalView(goal({ baseline: null, baselineConf: "unknown", progress: null, status: "no_data" }), 9, f);

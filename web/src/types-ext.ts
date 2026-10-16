@@ -125,6 +125,17 @@ export interface Recommendation {
 
 export type ApprovalStatus = "pending" | "approved" | "edited" | "rejected" | "executed" | "failed";
 
+/** What a card carries beyond its title and text (src/server/types.ts ApprovalPreview). Change both together. */
+export interface ApprovalPreview {
+  why?: string;
+  to?: string;
+  cc?: string;
+  subject?: string;
+  draftOnly?: boolean;
+  when?: { start: string; end?: string; timeZone?: string; guests: string[] };
+  media?: { kind: "photo" | "poster" | "image" | "clip"; options: Array<{ id: string; label: string; note: string; pick: boolean; held: boolean }> };
+}
+
 export interface Approval {
   id: string;
   kind: ActionKind;
@@ -134,6 +145,8 @@ export interface Approval {
   recommendationId?: string;
   payload: { title: string; body: string; target?: string };
   editedPayload?: { title: string; body: string; target?: string };
+  /** Pictures, recipients, meeting time: what the owner decides on, beyond the text. Absent when there is nothing more. */
+  preview?: ApprovalPreview;
   createdAt: string;
   decidedAt?: string;
   result?: string;          // e.g. the GitHub issue URL once executed

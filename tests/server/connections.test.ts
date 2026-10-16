@@ -68,6 +68,18 @@ describe("server: connections", () => {
     expect(back.headers.get("location")).toBe(`${WEB}/onboard?connect=slack&result=denied`);
   });
 
+  it("connecting from Home comes back to Home (issue #43)", async () => {
+    const res = await post(app, "/api/mini/connections/calendly/connect", { returnTo: "home" });
+    expect(res.status).toBe(200);
+    const link = c.composio.calls.filter((x) => x.op === "link").at(-1)!.args as { callbackUrl: string };
+    const accountId = new URL(((await res.json()) as { url: string }).url).pathname.split("/").pop()!;
+    c.composio.activate(accountId);
+    const cb = new URL(link.callbackUrl);
+    const back = await app.request(`${cb.pathname}${cb.search}&status=success&connected_account_id=${accountId}`, { redirect: "manual" });
+    expect(back.headers.get("location")).toBe(`${WEB}/?connect=calendly&result=connected`);
+    expect((await post(app, "/api/mini/connections/calendly/disconnect", {})).status).toBe(200);
+  });
+
   it("Discord's one-time link redirects to the provider once, and never twice", async () => {
     const code = c.svc.connectLink("mini", "stripe").split("/c/")[1]!;
     const first = await app.request(`/c/${code}`, { redirect: "manual" });

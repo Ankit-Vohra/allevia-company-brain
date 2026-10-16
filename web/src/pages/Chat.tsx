@@ -110,6 +110,19 @@ export default function ChatPage() {
     if (!sessionId) setPendingKey(key);
     setText("");
   }, [thread.running, resting, tenant.id, sessionId, who]);
+  // Home's ask box lands here as /chat/team?ask=…: the question is sent at once, and the address is cleaned so a reload does not
+  // ask twice (the ref also covers React's double run of effects in development)
+  const asked = useRef<string | null>(null);
+  useEffect(() => {
+    const q = params.get("ask");
+    if (!q || asked.current === q) return;
+    asked.current = q;
+    const next = new URLSearchParams(params);
+    next.delete("ask");
+    setParams(next, { replace: true });
+    send(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const onSubmit = (e: FormEvent) => { e.preventDefault(); send(text); };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(text); }

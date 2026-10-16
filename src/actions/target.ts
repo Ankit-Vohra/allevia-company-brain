@@ -8,6 +8,7 @@
 // and getActionTarget (which the executor calls every time) treats it as "app" even if the graph was written directly. The
 // founder's own businesses (tenant-config.ts, ALLEVIA_ACTION_TENANTS) keep using that tracker when they chose nothing;
 // beyond that only an operator (the CLI, never a web request) can mark a business as allowed to use that repo.
+import { FIX_UNCHANGED, type FixSubject } from "../../shared/fix-words.js";
 import { loadConfig } from "../config.js";
 import type { GraphHandle } from "../graph/client.js";
 import { upsertNode } from "../graph/upsert.js";
@@ -33,9 +34,9 @@ const same = (a: string, b: string): boolean => normalizeRepo(a).toLowerCase() =
 export const APP_TARGET_LABEL = "Tasks inside the app and on Discord";
 
 // What an approved fix does, in the owner's words, for a card that waits for their OK (Discord, issue #8).
-export function fixDestinationWords(t: ActionTarget | undefined): string {
-  if (t?.kind === "github") return `If you say OK, it goes to ${t.repo} on GitHub as a to-do. Nothing on your site changes yet.`;
-  return "If you say OK, it becomes a to-do in your tasks. Nothing on your site changes yet.";
+export function fixDestinationWords(t: ActionTarget | undefined, subject: FixSubject = "website"): string {
+  if (t?.kind === "github") return `If you say OK, it goes to ${t.repo} on GitHub as a to-do. ${FIX_UNCHANGED[subject]}`;
+  return `If you say OK, it becomes a to-do in your tasks. ${FIX_UNCHANGED[subject]}`;
 }
 const OWN_REPO_REASON = "That repo is Allevia's own, so the fix went to your tasks instead.";
 

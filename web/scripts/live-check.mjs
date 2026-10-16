@@ -55,7 +55,7 @@ const problems = [];
 page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
 page.on("console", (m) => { if (m.type() === "error") problems.push(`console: ${m.text()}`); });
 
-await page.goto(`${base}/?tenant=${encodeURIComponent(tenant)}`, { waitUntil: "networkidle" });
+await page.goto(`${base}/office?tenant=${encodeURIComponent(tenant)}`, { waitUntil: "networkidle" });
 const mode = (await page.locator(".mode-pill").count()) ? "mock" : "live"; // the "Demo data" pill shows only in mock mode
 if (mode !== "live") throw new Error("The app fell back to mock mode: is the server running and /api/health ok?");
 await page.fill("#office-q", question);

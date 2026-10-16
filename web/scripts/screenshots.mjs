@@ -17,10 +17,10 @@ const enc = encodeURIComponent;
 
 /** name, path, wait (ms after load), optional action */
 const shots = [
-  { name: "office-idle", path: "/?mock=1", wait: 1200 },
-  { name: "office-midrun", path: `/?mock=1&ask=${enc(Q_STORIES)}&seek=17600`, wait: 2400 },
-  { name: "office-answer", path: `/?mock=1&ask=${enc(Q_STORIES)}&seek=27000`, wait: 2600 },
-  { name: "office-agent-profile", path: "/?mock=1", wait: 900, action: async (page) => { await page.getByRole("button", { name: /^Tara, Content Strategist/ }).click(); await page.waitForTimeout(1800); } },
+  { name: "office-idle", path: "/office?mock=1", wait: 1200 },
+  { name: "office-midrun", path: `/office?mock=1&ask=${enc(Q_STORIES)}&seek=17600`, wait: 2400 },
+  { name: "office-answer", path: `/office?mock=1&ask=${enc(Q_STORIES)}&seek=27000`, wait: 2600 },
+  { name: "office-agent-profile", path: "/office?mock=1", wait: 900, action: async (page) => { await page.getByRole("button", { name: /^Tara, Content Strategist/ }).click(); await page.waitForTimeout(1800); } },
   { name: "ask-midrun", path: `/ask?mock=1&ask=${enc(Q_STORIES)}&seek=19000`, wait: 2600 },
   { name: "ask-final", path: "/ask/s-aamdani-stories?mock=1", wait: 3200 },
   { name: "ask-final-checks", path: "/ask/s-aamdani-stories?mock=1", wait: 3200, action: async (page) => { await page.evaluate(() => { const el = document.querySelector(".ask-scroll"); if (el) el.scrollTop = el.scrollHeight; else window.scrollTo(0, document.body.scrollHeight); }); await page.waitForTimeout(400); } },

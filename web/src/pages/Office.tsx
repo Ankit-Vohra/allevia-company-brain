@@ -30,20 +30,9 @@ import { laneOf } from "../state/derive";
 import { runStore, useRun, useRunStore, useRunView } from "../state/runs";
 import "./office-page.css";
 
-/** Two simple questions to start with; the owner can ask anything. */
-export const SUGGESTIONS: Record<string, string[]> = {
-  aamdani: ["How is the business doing this week?", "What should we post this week?"],
-  "avs-atelier": ["Why don't we show up when people search 'architect in Raipur'?", "What should we fix first on the website?"],
-};
-
-/** For a business set up a moment ago: questions any owner can ask on day one. */
-export const FIRST_DAY_QUESTIONS = [
-  "What should we fix first on the website, and why?",
-  "Who are our customers, and what do they need from us?",
-];
-
-/** Fired by Team settings and Approvals when desks or learned rules change, so the office redraws them. */
-export const TEAM_CHANGED = "allevia:team-changed";
+// (the suggestions and the team-changed event moved to lib/office-shared.ts so Home does not load this page's canvas)
+import { FIRST_DAY_QUESTIONS, SUGGESTIONS, TEAM_CHANGED } from "../lib/office-shared";
+export { FIRST_DAY_QUESTIONS, SUGGESTIONS, TEAM_CHANGED };
 
 const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 

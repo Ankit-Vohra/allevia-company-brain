@@ -19,6 +19,7 @@ import type { AskInput, AskResult } from "../agent/ask.js";
 import { LANGUAGE_REPLY, parseLanguageSetting, setLanguagePreference } from "../agent/language.js";
 import type { GraphHandle } from "../graph/client.js";
 import { isDbUnavailable, WAKING_UP_MESSAGE } from "../graph/waking.js";
+import { FIX_LABEL, fixSubject } from "../../shared/fix-words.js";
 import { fixDestinationWords, getActionTarget, validRepo, type ActionTarget } from "../actions/target.js";
 import { usesFoundersAccounts } from "../actions/executors.js";
 import { applyDirective, getDirective, parseDirective, previewDirective } from "../settings/directives.js";
@@ -146,8 +147,12 @@ const KIND_LABEL: Record<ApprovalDto["kind"], string> = {
   calendar_event: "a meeting on your calendar", email_send: "an email from your address", connection_action: "a change in one of your connected tools",
 };
 
+// A fix says whether it is for the website or the app (shared/fix-words.ts).
+const kindLabel = (a: Pick<ApprovalDto, "kind" | "title" | "payload">): string =>
+  a.kind === "github_issue" ? FIX_LABEL[fixSubject(a.title, a.payload.target)] : (KIND_LABEL[a.kind] ?? a.kind);
+
 const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
-const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+const message =(e: unknown): string => (e instanceof Error ? e.message : String(e));
 // The plain sentence for a failure: "waking up" while the database restarts, else the handler's own words.
 const sorry = (e: unknown, fallback: string): string => (isDbUnavailable(e) ? WAKING_UP_MESSAGE : fallback);
 const quote = (s: string): string => s.split("\n").map((l) => `> ${l}`).join("\n");
@@ -179,11 +184,11 @@ export function approvalCard(a: ApprovalDto, opts: { buttons?: boolean; target?:
   const who = agentById(a.by)?.name ?? a.by;
   const about = a.payload.target && !(a.kind === "github_issue" && validRepo(a.payload.target)) ? a.payload.target : undefined;
   const lines = [
-    `**${clip(a.title, 200)}** · ${KIND_LABEL[a.kind] ?? a.kind}${a.simulated ? " (sample numbers)" : ""}`,
+    `**${clip(a.title, 200)}** · ${kindLabel(a)}${a.simulated ? " (sample numbers)" : ""}`,
     `Proposed by ${who} · ${a.createdAt.slice(0, 10)}`,
     ...(a.payload.body.trim() ? [quote(clip(a.payload.body.trim(), 900))] : []),
     ...(about ? [`About: ${clip(about, 200)}`] : []),
-    ...(a.kind === "github_issue" && opts.buttons !== false ? [fixDestinationWords(opts.target)] : []),
+    ...(a.kind === "github_issue" && opts.buttons !== false ? [fixDestinationWords(opts.target, fixSubject(a.title, a.payload.target))] : []),
   ];
   const ids = [buttonId("approve", a.id), changeButtonId(a.id), buttonId("reject", a.id)];
   const fits = ids.every((id) => id.length <= 100); // Discord's custom_id limit

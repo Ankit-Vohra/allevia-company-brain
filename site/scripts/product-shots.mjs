@@ -48,8 +48,8 @@ const untilDog = (page, ms = 40000) =>
   page.waitForFunction(() => window.__office?.life?.pets.some((p) => p.carrying), null, { timeout: ms }).then(() => true, () => false);
 
 try {
-  await shoot("office-idle", `/?mock=1&${SEED}&clock=11:00`, { wait: 3200 });
-  await shoot("office-midrun", `/?mock=1&${SEED}&clock=11:00&debug=1&ask=${enc(Q)}&seek=3500`, {
+  await shoot("office-idle", `/office?mock=1&${SEED}&clock=11:00`, { wait: 3200 });
+  await shoot("office-midrun", `/office?mock=1&${SEED}&clock=11:00&debug=1&ask=${enc(Q)}&seek=3500`, {
     wait: 600,
     action: async (p) => { await untilDog(p); await p.waitForTimeout(250); },
   });
@@ -79,7 +79,7 @@ try {
   await shoot("onboard-steps", "/onboard?mock=1&url=avsatelier.in&name=AVS%20Atelier&instagram=avs.atelier&country=India&go=1", { wait: 5200 });
   await shoot("onboard-done", "/onboard?mock=1&url=avsatelier.in&name=AVS%20Atelier&instagram=avs.atelier&country=India&go=1&speed=4", { wait: 9000 });
   // the same app on a phone
-  await shoot("phone-office", `/?mock=1&${SEED}&clock=11:00`, { vp: PHONE, mobile: true, wait: 3200 });
+  await shoot("phone-office", `/office?mock=1&${SEED}&clock=11:00`, { vp: PHONE, mobile: true, wait: 3200 });
   await shoot("phone-approvals", "/approvals?mock=1", { vp: PHONE, mobile: true, wait: 1500 });
   await shoot("phone-plan", "/plan?mock=1", { vp: PHONE, mobile: true, wait: 1800 });
 } finally {

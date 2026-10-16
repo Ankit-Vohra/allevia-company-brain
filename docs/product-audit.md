@@ -31,9 +31,9 @@ check-up and stand-up schedules were off, and nothing was posted to the real hub
 
 ## Notes that need the founder's taste (not changed)
 
-- **Where "Check my website" lives.** It is inside Office, under "See the full plan", then at the bottom. A founder will not find it. Candidates: a card on Insights, or a button on the first Today's note.
-- **"A fix for your website"** is the label for every fix, including an app crash fix. Maybe "A fix to hand over".
-- **Goal status early on.** "Search clicks: Going well, 0 clicks a month, goal 50" in week one reads oddly; "We'll know after your first full week" may be better until there is a reading.
+- ~~**Where "Check my website" lives.** It is inside Office, under "See the full plan", then at the bottom.~~ **Fixed in Home v3 (#43):** it is a visible button in the "Your tools" card on Home, on the plan card and on the growth plan page; on Discord it is `/checkup`.
+- ~~**"A fix for your website"** is the label for every fix, including an app crash fix.~~ **Fixed (#43):** `shared/fix-words.ts` reads the subject from the card ("App:", "Android:", "Release check:" say "a fix for your app"; "Funnel:" says "a fix to hand over"; everything else stays "a fix for your website"), on the web, in Discord cards and in Today's note.
+- ~~**Goal status early on.** "Search clicks: Going well, 0 clicks a month, goal 50" in week one.~~ **Fixed (#43):** a zero in the first 7 days says "We'll know after your first full week", in the server's goal status (so Today's note and Discord agree) and in the web app.
 - **"Growth" is both a price tier and "your growth plan".** On Plan and credits the page says "Growth, $449 a month, included while you're in your growth plan".
 - **Today's note is a snapshot**, so after the stand-up it can say "Waiting for your OK: Nothing" while two cards wait.
 - **Customise** repeats itself on each skill ("waiting for the owner's OK. Waits for your OK.").

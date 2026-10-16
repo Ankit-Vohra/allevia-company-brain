@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import type { CapabilityState, GoalState, ProgramGoal, ProgramScorecard } from "@shared/contracts";
 import { fmtDate, fmtNum, fmtPct } from "../lib/format";
-import { monthWeek } from "../lib/plainwords";
+import { goalState, monthWeek, notStartedYet } from "../lib/plainwords";
 import { AgentAvatar } from "./bits";
 import { CapabilityLadder } from "./Capabilities";
 import { ConnectSearchConsole } from "./ConnectSearchConsole";
@@ -78,7 +78,7 @@ export function ProgramCard({ program, caps, loading, error, tenantId, onNumbers
       </header>
       <Journey day={p.day} />
       {p.goals.length ? (
-        <ul className="goals">{p.goals.slice(0, 3).map((g) => <GoalRow key={g.id} g={g} />)}</ul>
+        <ul className="goals">{p.goals.slice(0, 3).map((g) => <GoalRow key={g.id} g={g} day={p.day} />)}</ul>
       ) : (
         <p className="plan-empty">No goals yet. Your team proposes three, and you say OK.</p>
       )}
@@ -89,6 +89,8 @@ export function ProgramCard({ program, caps, loading, error, tenantId, onNumbers
           {p.goals.some((g) => g.status === "no_data") ? "Add your numbers to know today" : "Add your latest numbers"}
         </button>
       ))}
+      {/* the free website check-up is a button anyone can find, not something under "See the full plan" (audit #39) */}
+      {tenantId && <CheckWebsite tenantId={tenantId} />}
       <Reveal label="See the full plan" className="plan-more">
         <div className="plan-detail">
           <dl className="plan-facts">
@@ -120,7 +122,6 @@ export function ProgramCard({ program, caps, loading, error, tenantId, onNumbers
             <CapabilityLadder caps={ladder} />
           </div>
           {tenantId && <ConnectSearchConsole tenantId={tenantId} onChanged={() => onNumbersAdded?.()} />}
-          {tenantId && <CheckWebsite tenantId={tenantId} />}
         </div>
       </Reveal>
     </section>
@@ -139,10 +140,11 @@ function Journey({ day }: { day: number }) {
   );
 }
 
-function GoalRow({ g }: { g: ProgramGoal }) {
-  const s = STATUS[g.status];
-  const known = g.baseline !== null && g.target !== null;
-  const progress = g.progress === null ? null : Math.max(0, Math.min(1, g.progress));
+function GoalRow({ g, day }: { g: ProgramGoal; day: number }) {
+  const s = STATUS[goalState(g, day)];
+  const started = !notStartedYet(g, day); // a zero in week one is a count that has not started, not a result
+  const known = g.baseline !== null && g.target !== null && started;
+  const progress = g.progress === null || !started ? null : Math.max(0, Math.min(1, g.progress));
   const unit = g.unit ? ` ${g.unit}` : "";
   return (
     <li className={`goal tone-${s.tone}`}>
@@ -154,7 +156,7 @@ function GoalRow({ g }: { g: ProgramGoal }) {
         {known && progress !== null && <span className="goal-fill" style={{ width: `${Math.max(3, progress * 100)}%` }} />}
       </div>
       <p className="goal-meta">
-        {g.current !== null ? <span><b className="num">{fmtNum(g.current)}</b>{unit} {per(g)}</span> : <span>Not measured yet</span>}
+        {g.current !== null && started ? <span><b className="num">{fmtNum(g.current)}</b>{unit} {per(g)}</span> : <span>Not measured yet</span>}
         {g.target !== null && <span>Goal <b className="num">{fmtNum(g.target)}</b></span>}
         {g.owner && <span className="goal-owner"><AgentAvatar id={g.owner.id} size={16} /> {g.owner.name}</span>}
       </p>

@@ -112,7 +112,7 @@ const SCENES = {
   },
   // The office at eleven in the morning with a question running: desks light, bubbles open, dogs carry documents.
   async office() {
-    const url = `/?mock=1&seed=11&clock=11:00&ask=${enc(Q_OFFICE)}`;
+    const url = `/office?mock=1&seed=11&clock=11:00&ask=${enc(Q_OFFICE)}`;
     await film("office", url, DESKTOP, { seconds: 14, lead: 0.9 });
     await film("office-phone", url, PHONE, { seconds: 12, lead: 0.9 });
   },
@@ -128,7 +128,7 @@ const SCENES = {
     });
     await still("approve-phone", "/approvals?mock=1", PHONE);
     await still("plan", "/plan?mock=1", DESKTOP, { wait: 2 });
-    await still("home-quiet", `/?mock=1&seed=11&clock=11:00`, DESKTOP, { wait: 3.5 });
+    await still("home-quiet", `/office?mock=1&seed=11&clock=11:00`, DESKTOP, { wait: 3.5 });
     await still("insights", "/insights?mock=1", DESKTOP, { wait: 2 });
     await still("studio", "/studio?mock=1", DESKTOP, { wait: 2 });
   },

@@ -84,8 +84,28 @@ Working:
 Missing for the Founder OS:
 
 - connections beyond upload and Apify (the layer is built; each business still has to connect its tools);
-- one founder workspace that ties chat, waiting-for-OK, connections, the plan and the team together;
+- ~~one founder workspace that ties chat, waiting-for-OK, connections, the plan and the team together~~ (Home, #43; see
+  "Home and Discord" below);
 - an end-to-end check that every screen and flow works.
+
+## Home and Discord
+
+Home (`/`, web app) is the founder's workspace: an ask box, then one calm card per area, each with a "See all" link into
+its full page. The office is its own page (`/office`). The cards are data (`web/src/pages/home-cards.tsx`), so a new area
+(Sales, #41) adds one entry and the layout does not change. Nothing on Home is web-only unless it is listed as a gap.
+
+| Home card | What the owner does there | The same on Discord |
+|---|---|---|
+| Ask box | Types a question; the team's chat opens and the question is sent | `/ask`, or a message in the channel |
+| Waiting for your OK | Sees the real content (poster options and our pick, the email and who gets it, the meeting and when, the words of a post or a fix) and taps Approve, Change or No thanks | The same card, with the same content and the same three buttons (#approvals, and under Today's note) |
+| Today's note | One line; a tap shows the stand-up's picks with their reasons | `/brief`, and the daily post |
+| Your plan | Sees the three goals with bars (week one says "We'll know after your first full week") | Today's note carries the goals. **Gap:** saying OK to the suggested goals, or changing a number, is on the growth plan page only |
+| Your tools | Sees what is connected and the tool that would help most ("Connect Google Analytics to see visits"); Connect opens the provider's page and returns to Home | `/connect` (a link only the owner sees) |
+| Check my website | A button in the same card | `/checkup` |
+| Your team | A strip of the people, the ones working first; a tap opens a chat with that person | The team answers in the hub; nothing to decide there |
+
+Deciding a draft from Home is the same call as the Approvals page and the Discord buttons (`POST /api/:t/approvals/:id`),
+so an edit becomes a habit the team keeps on every door.
 
 ## Order of work
 

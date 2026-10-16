@@ -210,6 +210,8 @@ describe("server: reads (integration)", () => {
     expect(list.find((a) => a.id === "approval:t-001-1")).toEqual({
       id: "approval:t-001-1", kind: "content_draft", status: "pending", title: "Double down on salary reels", by: "content-strategist",
       recommendationId: "recommendation:double-down-on-salary-reels", payload: { title: "Double down on salary reels", body: "" },
+      // the idea's reason, as one line, for the card on Home
+      preview: { why: "The salary reveal reel did 6x the median views" },
       createdAt: expect.stringMatching(/^2026-/),
     });
   });
