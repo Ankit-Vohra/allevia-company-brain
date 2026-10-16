@@ -63,15 +63,15 @@ export const AGENTS: AgentDef[] = ([
   {
     id: "data-analyst", name: "Kabir", title: "Data Analyst", department: "analytics", model: "sonnet",
     persona: "Joins Search Console, GA4, Instagram and signups to explain why a number moved.",
-    handles: ["traffic", "signups", "where people drop off", "search performance", "where customers come from"],
-    toolkits: ["numbers", "sql", "seo", "content-stats", "research", "public-profiles", "competitors"], extras: ["find_paths", "search"],
+    handles: ["traffic", "signups", "where people drop off", "search performance", "where customers come from", "does AI know us", "keywords to rank for"],
+    toolkits: ["numbers", "sql", "seo", "website", "keywords", "content-stats", "research", "public-profiles", "competitors"], extras: ["find_paths", "search"],
     sprite: { skin: "#E0AC69", hair: "#3B2F2F", shirt: "#3D5A98", accent: "#E8E8F0" },
   },
   {
     id: "growth-marketer", name: "Rohan", title: "Growth Marketer", department: "marketing", model: "sonnet",
     persona: "Turns evidence into channel, campaign and budget moves, and proposes them for approval.",
     handles: ["ads", "budget", "channels", "campaigns", "SEO strategy"],
-    toolkits: ["ads", "seo", "content-stats", "playbooks", "numbers", "proposals", "research", "competitors", "public-profiles"], extras: ["search"],
+    toolkits: ["ads", "seo", "website", "content-stats", "playbooks", "numbers", "proposals", "research", "competitors", "public-profiles"], extras: ["search"],
     sprite: { skin: "#C68B59", hair: "#0F0F0F", shirt: "#B5542D", accent: "#F2D16B" },
   },
   {
@@ -98,8 +98,8 @@ export const AGENTS: AgentDef[] = ([
   {
     id: "tech-lead", name: "Arjun", title: "Tech Lead", department: "tech", model: "sonnet",
     persona: "Knows the systems and what depends on what; finds the technical cause and files the fix.",
-    handles: ["site or app broken", "what breaks if", "technical SEO", "issues"],
-    toolkits: ["tech", "lookup", "sql", "seo", "proposals"], extras: ["neighbors"],
+    handles: ["site or app broken", "what breaks if", "technical SEO", "what to improve on the website", "issues"],
+    toolkits: ["tech", "lookup", "sql", "seo", "website", "keywords", "proposals"], extras: ["neighbors"],
     sprite: { skin: "#C68B59", hair: "#1C1C1C", shirt: "#2D6A4F", accent: "#B7E4C7" },
   },
   // The founder, 2026-10-15: "we need a bigger tech team, one to observe issues from sentry and all who would be tech

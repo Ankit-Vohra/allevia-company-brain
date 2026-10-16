@@ -31,6 +31,8 @@ export interface AlleviaConfig {
   // Public-data lookups through Apify store actors (docs/apify-setup.md). No token: the lookups say they are not switched
   // on and nothing else changes. Budgets in US dollars: per business per calendar month, and all businesses per day.
   apify: { token?: string; monthlyUsd?: string; dailyUsd?: string };
+  // The optional paid keyword layer (src/checkup/dataforseo.ts): off unless both are set; a per-business monthly budget.
+  dataforseo: { credentials: { login: string; password: string } | null; monthlyBudgetUsd: number };
 }
 
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -105,5 +107,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
       connectorKey: get("ALLEVIA_CONNECTOR_KEY"),
     },
     apify: { token: get("APIFY_TOKEN"), monthlyUsd: get("ALLEVIA_APIFY_MONTHLY_USD"), dailyUsd: get("ALLEVIA_APIFY_DAILY_USD") },
+    dataforseo: {
+      credentials: get("DATAFORSEO_LOGIN") && get("DATAFORSEO_PASSWORD") ? { login: get("DATAFORSEO_LOGIN")!, password: get("DATAFORSEO_PASSWORD")! } : null,
+      monthlyBudgetUsd: budget(get("DATAFORSEO_MONTHLY_BUDGET_USD")),
+    },
   };
+}
+
+// A dollar budget from the env file: a non-negative number, else the default of $1.
+function budget(raw: string | undefined): number {
+  const n = Number(raw);
+  return raw !== undefined && Number.isFinite(n) && n >= 0 ? n : 1;
 }

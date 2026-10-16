@@ -2,6 +2,7 @@
 // strings run with page.evaluate: TypeScript here has no DOM types, and a transpiled function could carry helper calls
 // (esbuild's __name) that do not exist in the page. Everything a page says is untrusted data: it is stored and
 // measured, never obeyed.
+import type { ConversionCapture } from "../../../checkup/conversion.js";
 import { cutText } from "../../extract-schema.js";
 import { redact } from "../../privacy.js";
 import { normalizeUrl, toSiteUrl } from "./urls.js";
@@ -57,6 +58,8 @@ export interface PageData {
   iconLinks?: Array<{ href: string; sizes?: string; rel: string }>;
   logo?: LogoCandidate;
   styles?: StyleSample[];     // only on brand pages (home plus a few key pages)
+  // only when the crawl was asked for it (the website check-up), on brand pages: what a visitor sees at each size
+  conversion?: { desktop?: ConversionCapture; mobile?: ConversionCapture };
   error?: string;
 }
 

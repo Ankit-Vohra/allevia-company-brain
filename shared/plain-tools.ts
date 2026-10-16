@@ -33,6 +33,9 @@ export const PLAIN_TOOLS: Record<string, string> = {
   instagram_public: "Read public Instagram numbers",
   competitor_watch: "Keep an eye on competitors' public numbers and ads",
   ad_library: "Look up ads in the public ad libraries",
+  website_checkup: "Check what to fix on your website first",
+  ai_visibility: "See whether AI assistants name you",
+  keyword_ideas: "Find searches you could show up for (paid, within your budget)",
 };
 
 /** The owner's words for a tool; an unknown tool reads as its name with spaces. */

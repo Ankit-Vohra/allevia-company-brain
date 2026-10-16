@@ -25,7 +25,8 @@ const BEFORE: Record<string, string[]> = {
 // What was added: new tools only, to the agents that should have them.
 const PUBLIC_DATA = ["google_listing", "instagram_public", "competitor_watch", "ad_library"];
 const ADDED: Record<string, string[]> = {
-  "data-analyst": ["research", ...PUBLIC_DATA], "growth-marketer": ["research", ...PUBLIC_DATA],
+  "data-analyst": ["research", ...PUBLIC_DATA, "website_checkup", "ai_visibility", "keyword_ideas"], "growth-marketer": ["research", ...PUBLIC_DATA, "website_checkup", "ai_visibility"],
+  "tech-lead": ["website_checkup", "ai_visibility", "keyword_ideas"],
   "chief-of-staff": ["make_poster", "generate_image", "make_reel_script_and_clip", "get_brand_asset", "write_copy", "research"],
   "content-strategist": ["write_copy", "get_brand_asset", "research", ...PUBLIC_DATA],
 };
@@ -49,8 +50,9 @@ describe("toolkits", () => {
       if (m.mode === "create" || m.name === "propose_action") expect(m.needsOk, m.name).toBe(true);
       // credits are spent only by the tools that make pictures and clips
       if (m.cost === "credits") expect(["creative"]).toContain(m.domain);
-      // dollars are spent only by the public-data lookups, which save what they read and post nothing
-      if (m.cost === "paid") expect([m.domain, m.mode, m.needsOk], m.name).toEqual(["research", "write", false]);
+      // money at a data provider is spent only by the public-data lookups (which save what they read and post nothing)
+      // and the optional keyword research, which records each call's cost
+      if (m.cost === "paid" && m.name !== "keyword_ideas") expect([m.domain, m.mode, m.needsOk], m.name).toEqual(["research", "write", false]);
     }
   });
 
