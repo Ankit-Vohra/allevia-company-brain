@@ -10,6 +10,7 @@ import type { AssetStore } from "../studio/store.js";
 import { isoDate } from "../util/time.js";
 import { postOfApproval } from "../publish/record.js";
 import { approvalExtras } from "./approval-extras.js";
+import { notePosted } from "./hub-graph.js";
 import type { TenantSource } from "./hub-provision.js";
 
 export const tenantSource = (g: GraphHandle, slug?: string, o: { store?: AssetStore; webBase?: string } = {}): TenantSource => ({
@@ -22,6 +23,7 @@ export const tenantSource = (g: GraphHandle, slug?: string, o: { store?: AssetSt
   ...(slug ? {
     actionTarget: () => getActionTarget(g, slug, { founders: usesFoundersAccounts(slug) }),
     extras: (a: ApprovalDto, why?: string) => approvalExtras(a, { graph: g, tenant: slug, ...(o.store ? { store: o.store } : {}), ...(o.webBase ? { webBase: o.webBase } : {}) }, why),
+    posted: (approvalId: string, p: Parameters<typeof notePosted>[3]) => notePosted(g, slug, approvalId, p),
   } : {}),
   post: (approvalId) => postOfApproval(g, approvalId),
   standupCards: async () => {

@@ -7,6 +7,19 @@ After that nothing is manual.
 Nothing on this page needs code. Real ids and the bot's token go only in `~/.config/allevia/allevia.env`, never in the
 repository.
 
+## The registry is a graph (graph audit G3, G13)
+
+`allevia_meta` is the mapping from a Discord channel to a business, kept as relationships (raw Cypher: the product's allowed patterns are
+for business graphs): `(Tenant)-[:HAS_AREA]->(DiscordArea)-[:HAS_CHANNEL {kind}]->(DiscordChannel)-[:POSTED]->(DiscordPost)`,
+`(Tenant)-[:ISSUED]->(DiscordInvite)`, `(Tenant)-[:HAS_TOKEN]->(AuthToken)`. A post hangs off its **channel** (a message lives in a
+channel; the business is two hops up). A channel that stops being a business's is **closed** (`until`), never deleted: `channel()` no
+longer answers for it and the history of who had which channel when stays. `npm run cli -- db:migrate` and the hub bot's start add
+the relationships older rows lack (`linkRegistry`, safe to run again).
+
+The business's own graph knows too: when the area is ready, `channel:discord` is `PART_OF` the Business; each card posted is
+`Approval -PUBLISHED_ON {messageId, postedAt}-> channel:discord`; and each person who joins with the business's link is a `Person`
+(`discordUserId`, `MEMBER_OF` the Business, named by no one's name), so a card they approve has an approver node.
+
 ## What each customer gets
 
 Each company is one private category named after the business (for example "AVS Atelier"), with the same channels in

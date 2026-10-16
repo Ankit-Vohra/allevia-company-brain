@@ -100,6 +100,40 @@ export async function ensureTenant(input: TenantInput, opts?: TenantOpts): Promi
   return (await getTenant(input.slug, opts))!;
 }
 
+// ---------- the registry's relationships ----------
+
+// The registry is a graph, so what belongs to a business hangs off its Tenant node (raw Cypher: ALLOWED_PATTERNS are for business graphs):
+//   (:Tenant)-[:HAS_AREA]->(:DiscordArea)           src/discord/hub-store.ts
+//   (:DiscordArea)-[:HAS_CHANNEL {kind}]->(:DiscordChannel)
+//   (:Tenant)-[:ISSUED]->(:DiscordInvite)
+//   (:DiscordChannel)-[:POSTED]->(:DiscordPost)      what was posted where (the business is two hops up)
+//   (:Tenant)-[:HAS_TOKEN]->(:AuthToken)            src/auth/tokens.ts
+// The writers MERGE each one when they write its node. This adds the ones that rows written earlier lack. Idempotent: MERGE never makes
+// a second edge, and it returns how many it added (0 on a registry that is already linked). `db:migrate` and the hub's start call it.
+export interface RegistryLinks { areas: number; channels: number; invites: number; posts: number; tokens: number }
+
+const REGISTRY_LINKS: Array<{ key: keyof RegistryLinks; rel: string; link: string }> = [
+  { key: "areas", rel: "HAS_AREA", link: "MATCH (a:DiscordArea) MATCH (t:Tenant) WHERE t.slug = a.slug MERGE (t)-[r:HAS_AREA]->(a) ON CREATE SET r.since = coalesce(a.createdAt, $now)" },
+  { key: "channels", rel: "HAS_CHANNEL", link: "MATCH (c:DiscordChannel) WHERE c.until IS NULL MATCH (a:DiscordArea) WHERE a.slug = c.slug MERGE (a)-[r:HAS_CHANNEL]->(c) ON CREATE SET r.since = coalesce(c.mappedAt, a.createdAt, $now), r.kind = c.kind" },
+  { key: "invites", rel: "ISSUED", link: "MATCH (i:DiscordInvite) MATCH (t:Tenant) WHERE t.slug = i.slug MERGE (t)-[r:ISSUED]->(i) ON CREATE SET r.since = coalesce(i.createdAt, $now)" },
+  { key: "posts", rel: "POSTED", link: "MATCH (p:DiscordPost) MATCH (c:DiscordChannel) WHERE c.channelId = p.channelId MERGE (c)-[r:POSTED]->(p) ON CREATE SET r.at = coalesce(p.postedAt, $now)" },
+  { key: "tokens", rel: "HAS_TOKEN", link: "MATCH (k:AuthToken) MATCH (t:Tenant) WHERE t.slug = k.scope MERGE (t)-[r:HAS_TOKEN]->(k) ON CREATE SET r.since = coalesce(k.createdAt, $now)" },
+];
+
+export async function linkRegistry(opts?: TenantOpts & { now?: number }): Promise<RegistryLinks> {
+  const meta = await openGraphByName(metaName(opts));
+  const now = opts?.now ?? Date.now();
+  const total = async (rel: string): Promise<number> =>
+    (await meta.peek<{ c: number }>(`MATCH ()-[r:${rel}]->() WHERE ID(r) >= 0 RETURN count(r) AS c`))[0]?.c ?? 0;
+  const out: RegistryLinks = { areas: 0, channels: 0, invites: 0, posts: 0, tokens: 0 };
+  for (const l of REGISTRY_LINKS) {
+    const before = await total(l.rel);
+    await meta.query(l.link, { now });
+    out[l.key] = (await total(l.rel)) - before;
+  }
+  return out;
+}
+
 // Marks (or unmarks) a registered business as a public demo. Only a demo business is readable without an owner link when
 // ALLEVIA_AUTH=1, and then only read-only. A business that is not registered cannot be marked. Returns whether it exists.
 export async function setDemo(slug: string, demo: boolean, opts?: TenantOpts): Promise<boolean> {

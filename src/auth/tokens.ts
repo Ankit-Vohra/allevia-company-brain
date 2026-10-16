@@ -5,7 +5,9 @@
 // secret is stored, as an (:AuthToken) node in the registry graph (allevia_meta), next to the (:Tenant) nodes:
 //   {tokenId, scope, hash, label, createdAt, expiresAt?, revokedAt?}
 // The token itself is shown once, when it is issued, and cannot be read back. A fast hash is right here because the
-// secret is already 256 random bits; there is nothing to guess and nothing for a slow hash to protect. Looking a token
+// secret is already 256 random bits; there is nothing to guess and nothing for a slow hash to protect. The token hangs off
+// its business, (:Tenant)-[:HAS_TOKEN]->(:AuthToken), so "which links does this business have, and which were revoked" is a
+// traversal; the secret is never on the edge or anywhere else. Looking a token
 // up is one indexed read by hash, so revoking takes effect on the very next request. The scope in the token is a
 // convenience (it picks the cookie and rejects a token for another business without a read); the stored scope decides.
 import { createHash, randomBytes } from "node:crypto";
@@ -56,8 +58,10 @@ export async function issueToken(scope: string, o: { label?: string; expiresAt?:
   await ensureIndexes(meta, [
     { label: "AuthToken", prop: "hash", type: "RANGE" }, { label: "AuthToken", prop: "tokenId", type: "RANGE" }, { label: "AuthToken", prop: "scope", type: "RANGE" },
   ]);
+  // the token hangs off its business: (:Tenant)-[:HAS_TOKEN]->(:AuthToken) (an operator token has no business, so no edge)
   await meta.query(
-    "CREATE (t:AuthToken {tokenId:$tokenId, scope:$scope, hash:$hash, label:$label, createdAt:$now}) SET t.expiresAt = $expiresAt",
+    `CREATE (t:AuthToken {tokenId:$tokenId, scope:$scope, hash:$hash, label:$label, createdAt:$now}) SET t.expiresAt = $expiresAt
+     WITH t MATCH (b:Tenant {slug:$scope}) MERGE (b)-[r:HAS_TOKEN]->(t) ON CREATE SET r.since = $now`,
     { tokenId, scope, hash: sha256(secret), label, now, expiresAt: o.expiresAt ?? null });
   return { token: `${scope}.${secret}`, tokenId, scope, label, createdAt: now, ...(o.expiresAt !== undefined ? { expiresAt: o.expiresAt } : {}) };
 }

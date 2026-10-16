@@ -36,6 +36,8 @@ export interface HubBotDeps {
   botFor(area: AreaRecord): Promise<AlleviaBot> | AlleviaBot;
   /** The business's Studio on Discord (photos and videos in #studio). Absent: the Studio is not wired, and those messages are ignored. */
   studioFor?(area: AreaRecord): Promise<StudioDiscord | undefined> | StudioDiscord | undefined;
+  /** Someone joined with the business's link and got its role: the business's own graph gets a Person for them (hub-graph.ts). Absent: not. */
+  memberJoined?(slug: string, m: { userId: string; joinedAt: number }): Promise<void>;
   now?: () => number;
   log?: (line: string) => void;
 }
@@ -230,6 +232,8 @@ export class HubBot {
     try {
       await j.addRole(a.roleId);
       this.log(`${a.slug}: a new member joined with their link and got the customer role`);
+      // the member is a Person in the business's own records, so a card they approve has an approver (never a reason to fail the join)
+      await this.d.memberJoined?.(a.slug, { userId: j.userId, joinedAt: (this.d.now ?? Date.now)() }).catch((e) => this.log(`${a.slug}: could not record the new member in the business's records: ${message(e)}`));
     } catch (e) {
       this.log(`${a.slug}: could not give the customer role: ${message(e)}`);
       await this.tellStaff(`<@${j.userId}> joined with ${a.slug}'s link but I could not give them the customer role (${clip(message(e), 150)}). Check the bot's role sits above the customer roles, then give it by hand.`);

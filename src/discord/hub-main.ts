@@ -19,6 +19,7 @@ import { tenantSource } from "./hub-source.js";
 import { startApprovalNudge } from "./hub-nudge.js";
 import { hubSettings, productionHub } from "./hub-service.js";
 import { tenantTimeZone } from "./main.js";
+import { recordMember } from "./hub-graph.js";
 
 export interface StartedHub { stop: () => Promise<void> }
 
@@ -32,6 +33,10 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
 
   const service = await productionHub({ cfg, log });
   if (!service) throw new Error("The hub is not configured.");
+  // the registry's relationships (Tenant -HAS_AREA-> Area, ...) are added to rows written before they existed: once per start, never fatal
+  // (the read-only commands, `discord-hub list` and `status`, do not do this)
+  await service.deps.store.link?.().then((l) => { if (l && Object.values(l as Record<string, number>).some((n) => n > 0)) log(`[hub] linked the registry: ${JSON.stringify(l)}`); })
+    .catch((e) => log(`[hub] could not link the registry: ${e instanceof Error ? e.message : String(e)}`));
   const { createAskDeps, tenantGraph } = await import("../agent/wiring.js");
   const { productionDeps } = await import("../server/main.js");
   const { onDecision, actions } = productionDeps({ publicMode: false });
@@ -46,6 +51,7 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
 
   const hubBot = new HubBot({
     guildId, staffRoleId, store: service.deps.store, hub: service.deps.hub, log,
+    memberJoined: async (slug, m) => { await recordMember(await tenantGraph(slug), slug, m); },
     botFor: async (area) => {
       const graph = await tenantGraph(area.slug);
       const deps = await createAskDeps({ tenant: area.slug, ...(o.model ? { model: o.model } : {}) }, { graph });

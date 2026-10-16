@@ -215,7 +215,15 @@ agent setup card ─────┘   (one per business)  └─ rented: Composi
   as the graph tools). A test in `tests/security/` proves a tool call for business A cannot reach B's account.
 - **The graph** gets a `System` node per connection (status, which account or property, connected by whom, why, last
   read, last error), `DEPENDS_ON` edges from the capabilities that read it, and the numbers as `Observation`s with
-  `src` the connector. Never a token, never a refresh token, never a Composio key (`privacy-scan` already looks for
+  `src` the connector. As built (graph audit G6, `src/connections/graph.ts`): the System carries `connectedAt`, `connectedBy` (the
+  owner's Person when the graph has one), `lastPullAt`, `dataThrough`, `factCount` (the Observations and Documents the last read wrote),
+  `src` and `asOf`, and its `status` (ok, expired, not_connected) leaves a `Version` on every change. `Business -OWNS-> System`,
+  `Channel -DEPENDS_ON-> System` (Search Console and Analytics: the website; Instagram, Facebook, LinkedIn, Ads: their own channel),
+  and `System -PRODUCED-> Document` for each read's snapshot, so "which facts came from Instagram" is
+  `(:System)-[:PRODUCED]->(:Document)<-[:SOURCED_FROM]-(:Observation)`. Calendar, Gmail, Stripe and Shopify write a snapshot and the number
+  they computed (meetings this week, a balance, orders, emails) as an Observation that `MEASURES` the System. A live read
+  (`gsc_report`, `ga4_report`, `ads_report`, `calendar_free_slots`, `gmail_inbox`, `connection_read`) returns a
+  `Document{kind:'live_read'}` per connection per day, `PRODUCED` by the System, so the turn `TOUCHED` it ("which turn used Gmail"). Never a token, never a refresh token, never a Composio key (`privacy-scan` already looks for
   credentials).
 - **Capability ladder** (`src/capabilities/ladder.ts`, `modes.ts`): no change to the rungs. A connected, fresh source is
   `api`; an expired one is `down` and drops a rung, with the existing "Reconnect it" words. New capability keys
