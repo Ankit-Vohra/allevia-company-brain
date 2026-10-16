@@ -45,10 +45,12 @@ export function eligible(def: LayoutDef, i: ChooseInput): { ok: boolean; generat
 export function chooseLayouts(i: ChooseInput): Choice[] {
   const last = i.recent[0];
   const scored: Choice[] = [];
+  let repeat: Choice | undefined;
   for (const def of LAYOUTS) {
     const e = eligible(def, i);
     if (!e.ok) continue;
-    if (def.key === last && !i.prefer?.includes(def.key)) continue; // never the same layout twice in a row
+    // never the same layout twice in a row, unless nothing else can hold this brief (then it comes last, said by its score)
+    if (def.key === last && !i.prefer?.includes(def.key)) { repeat = { key: def.key, generateScene: e.generateScene, score: -100, why: "used last time; nothing else fits" }; continue; }
     if (def.key === "carousel-cover" && !i.prefer?.includes(def.key)) continue; // only for a carousel someone asked for
     let score = 0;
     const why: string[] = [];
@@ -69,5 +71,6 @@ export function chooseLayouts(i: ChooseInput): Choice[] {
     scored.push({ key: def.key, generateScene: e.generateScene, score, why: why.join(", ") });
   }
   scored.sort((a, b) => b.score - a.score || LAYOUTS.findIndex((l) => l.key === a.key) - LAYOUTS.findIndex((l) => l.key === b.key));
+  if (repeat && scored.length < i.count) scored.push(repeat);
   return scored.slice(0, Math.max(1, i.count));
 }

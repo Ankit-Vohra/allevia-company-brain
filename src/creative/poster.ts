@@ -97,7 +97,7 @@ const goalOf = (o: Occasion): Goal => (o === "offer" ? "offer" : o === "announce
 // The layouts this business's last posters used, newest first: the chooser never repeats the last one.
 async function recentLayouts(g: GraphHandle): Promise<string[]> {
   const rows = await g.roQuery<{ layout: string | null }>(
-    "MATCH (a:Asset) WHERE a.kind = 'poster' AND a.layout IS NOT NULL RETURN a.layout AS layout, a.createdAt AS at ORDER BY at DESC LIMIT 12").catch(() => []);
+    "MATCH (a:Asset) WHERE a.kind = 'poster' AND a.layout IS NOT NULL RETURN a.layout AS layout, a.createdAt AS at, a.id AS id ORDER BY at DESC, id LIMIT 12").catch(() => []);
   const out: string[] = [];
   for (const r of rows) if (r.layout && !out.includes(r.layout)) out.push(r.layout);
   return out;
