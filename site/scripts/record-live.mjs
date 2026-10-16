@@ -9,6 +9,8 @@
 //   node site/scripts/record-live.mjs events ID  # the stored events of an earlier turn
 //
 // Writes to site/scripts/.footage-live/ (not committed). encode-live.sh turns the masters into the site's media.
+// The app's home is now the founder's workspace; the office is at /office, which is where these scripts go. (Recorded on 16 October
+// 2026, when the office was still at /; the paths were updated afterwards and not re-run.)
 import { chromium } from "playwright";
 import { mkdirSync, renameSync, writeFileSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -44,7 +46,7 @@ async function hero() {
   page.on("pageerror", (e) => console.error("pageerror:", e.message));
   const tPage = Date.now(); // the video starts when the page is made
   const at = () => Math.round(Date.now() - tPage) / 1000;
-  await page.goto(`${base}/?tenant=${TENANT}&clock=11:00&ask=${enc(HERO_Q)}`, { waitUntil: "load" });
+  await page.goto(`${base}/office?tenant=${TENANT}&clock=11:00&ask=${enc(HERO_Q)}`, { waitUntil: "load" });
   const timed = [];
   let turnId = "";
   let seen = 0;
@@ -92,7 +94,7 @@ async function saveEvents(turnId) {
 async function run() {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, colorScheme: "light", locale: "en-US", timezoneId: "Asia/Kolkata" });
   const page = await ctx.newPage();
-  await page.goto(`${base}/?tenant=${TENANT}&clock=11:00&ask=${enc(HERO_Q)}`, { waitUntil: "load" });
+  await page.goto(`${base}/office?tenant=${TENANT}&clock=11:00&ask=${enc(HERO_Q)}`, { waitUntil: "load" });
   let turnId = "";
   for (let i = 0; i < 1500; i++) {
     await sleep(400);
@@ -165,7 +167,7 @@ async function stills() {
     done();
   }
   // the office with Sales at its desk, the brain, your tools
-  if (want("office")) { await open("/?clock=11:00");
+  if (want("office")) { await open("/office?clock=11:00");
   { const { png, done } = await save("shot-office-sales", 1200, 82); await page.screenshot({ path: png, clip: { x: 32, y: 144, width: 1008, height: 432 } }); done(); } }
   if (want("brain")) { await open("/brain");
   { const { png, done } = await save("shot-brain", 1000); await page.screenshot({ path: png, clip: { x: 330, y: 80, width: 780, height: 700 } }); done(); } }
