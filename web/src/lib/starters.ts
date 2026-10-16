@@ -72,6 +72,14 @@ export const STARTERS: Record<string, string> = {
   "review-replies": "Draft replies to our new reviews.",
   "stuck-work-check": "What work is stuck?",
   "whats-waiting-and-owners": "What is waiting right now, and who has it?",
+  // Neel, sales
+  "answer-a-new-enquiry": "Someone new asked about us. Draft a reply with three times to talk.",
+  "propose-meeting-times": "Offer three free times for a call with this person.",
+  "book-the-meeting": "They picked a time. Book the call and send the invite.",
+  "remind-and-follow-up": "Remind people about tomorrow's calls and follow up on the ones that happened.",
+  "nudge-stalled-deals": "Which deals have gone quiet? Draft a nudge for each.",
+  "add-leads-from-the-inbox": "Add the new people who wrote to us to my customer list.",
+  "weekly-pipeline-note": "How did selling go this week? What should I do first?",
   // Sara, records
   "decision-on-one-page": "Put a recent decision on one page.",
   "keep-facts-current": "What in our records is out of date?",
