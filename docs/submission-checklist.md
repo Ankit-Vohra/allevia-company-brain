@@ -19,7 +19,7 @@ on a decision or on the deployment). Nothing is submitted yet, nothing is pushed
 | Project name and one-line pitch | README first lines: "Founder OS: an AI team and a company brain on FalkorDB, working through the founder's own tools." | done |
 | Tracks | All three, verbatim in the form: "Agents That Act on Connected Data", "Agent Memory and Coordination", "Company Brain" (README "The three tracks" and "Tracks", with what fits each and its limits) | done in README; **needs founder** in the form |
 | README with setup steps | README top (60 seconds) and "Run it": no accounts in 3 commands, live in 5. **Checked on a clean copy on 16 Oct** (below) | done |
-| Setup verified on a clean machine | 16 Oct, 19:25 to 20:10 IST: export, `npm install`, web build, FalkorDB, `seed-demo`, serve, the hero question live and replayed; Docker image built and run from the export. Times and what broke: "Clean-machine check" below | done |
+| Setup verified on a clean machine | 16 Oct, 19:25 to 20:40 IST: export, `npm install`, web build, FalkorDB, `seed-demo`, serve, the hero question live and replayed; Docker image built and run from the export. Times and what broke: "Clean-machine check" below | done |
 | Graph data model | README "The data model" and "The graph data model" (Mermaid diagrams and the three patterns) | done |
 | Cypher queries and graph algorithms the product depends on | [`docs/falkordb-queries.md`](falkordb-queries.md), each with file:line, held to the code by `tests/graph/queries-doc.test.ts` | done |
 | The graph doing real work, visible | The lit path under the hero answer and the Brain page's "What breaks if something stops" (depth 1 vs depth 4); replayable in public mode (`seed-demo --recorded`) | done |
@@ -44,12 +44,12 @@ no founder data, no env file, the Claude subscription only):
 
 | Step | Result | Time |
 |---|---|---|
-| `scripts/export-public.sh` (export, secrets scan, hygiene test, dead-link report) | one commit, no remote, secrets scan clean, hygiene passed | about 20 s |
-| `npm install` and `cd web && npm install && npm run build` | clean; npm 11.16 prints "install scripts not yet covered by allowScripts" (a notice: esbuild, sharp, onnxruntime and the Agent SDK all load) | 16 s with a warm npm cache |
-| `npm run typecheck` | clean | 25 s |
+| `scripts/export-public.sh` (export, secrets scan, hygiene test, dead-link report) | one commit, no remote, secrets scan clean, hygiene passed, no dead links | 25 s |
+| `npm install` and `cd web && npm install && npm run build` | clean; npm 11.16 prints "install scripts not yet covered by allowScripts" (a notice: esbuild, sharp, onnxruntime and the Agent SDK all load) | 23 s with a warm npm cache, web build included |
+| `npm run typecheck` | clean | under a minute |
 | FalkorDB 6.0.2, `db:check` | "ok", settings as docker-compose.yml | 4 s |
 | `npm run cli -- seed-demo` | Shiftly: 52 nodes, 73 edges, 312 readings, registered | 3 s |
-| `npm run cli -- serve`, then the hero question in the web app (live, on the subscription) | answered, path drawn, two cards waiting, all checks green | 92 s |
+| `npm run cli -- serve`, then the hero question in the web app (live, on the subscription) | answered, path drawn, two cards waiting, all checks green | 64 to 102 s over four runs |
 | The same in public mode, `seed-demo --recorded` | the four recorded answers replay with their work logs and lit paths; writes refused (403); an unrecorded question says live chat needs the owner's model | 2 s |
 | Docker: `docker build` of the export, then the app container against a fresh FalkorDB, `seed-demo --recorded`, the optional `demo_seed` commands | healthy, public mode on, replay works | 140 s to build with the base image cached |
 
