@@ -79,7 +79,7 @@ export async function businessFacts(g: GraphHandle, ctx: StudioContext): Promise
   const pages = await g.roQuery<{ url: string | null }>("MATCH (p:Page) WHERE p.url IS NOT NULL RETURN p.url AS url ORDER BY p.id LIMIT 60").catch(() => []);
   const hosts = [...new Set(pages.map((p) => (p.url ? hostOf(p.url) : null)).filter((h): h is string => !!h))].slice(0, 6);
   facts.push(...hosts);
-  const chans = await g.roQuery<{ handle: string | null; name: string | null }>("MATCH (c:Channel) RETURN c.handle AS handle, c.name AS name ORDER BY c.id LIMIT 30").catch(() => []);
+  const chans = await g.roQuery<{ handle: string | null; name: string | null }>("MATCH (c:Channel) WHERE c.rival IS NULL RETURN c.handle AS handle, c.name AS name ORDER BY c.id LIMIT 30").catch(() => []);
   for (const c of chans) { if (c.handle) facts.push(c.handle.startsWith("@") ? c.handle : `@${c.handle}`); }
   return facts;
 }

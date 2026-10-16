@@ -536,7 +536,7 @@ export async function previewDirective(g: GraphHandle, input: { text: string; ac
   let parser: DirectivePreview["parser"] = "rules";
   if (parsed.unparsed.length && deps.llm !== null) {
     try {
-      const channels = await g.roQuery<{ id: string; name: string }>("MATCH (c:Channel) RETURN c.id AS id, c.name AS name ORDER BY id LIMIT 40");
+      const channels = await g.roQuery<{ id: string; name: string }>("MATCH (c:Channel) WHERE c.rival IS NULL RETURN c.id AS id, c.name AS name ORDER BY id LIMIT 40");
       const m = await parseWithModel(deps.llm ?? await defaultLlm(), text, parsed.unparsed, channels);
       parsed.patches.push(...m.patches);
       parsed.notes.push(...m.notes);

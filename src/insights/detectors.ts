@@ -318,7 +318,7 @@ const formatPlural = (f: string): string => (f.endsWith("y") ? `${f.slice(0, -1)
 async function loadPosts(g: Read): Promise<{ posts: Post[]; hooks: Map<string, Hook[]>; groupMedian: Map<string, number> }> {
   const subjects = bySubject(await latestObs(g, VIEW_METRICS, ["Content"]));
   const chans = await ro<{ c: string; id: string; name: string | null }>(g,
-    "MATCH (c:Content)-[p:PUBLISHED_ON]->(ch:Channel) WHERE p.until IS NULL RETURN c.id AS c, ch.id AS id, ch.name AS name ORDER BY c, id");
+    "MATCH (c:Content)-[p:PUBLISHED_ON]->(ch:Channel) WHERE p.until IS NULL AND ch.rival IS NULL RETURN c.id AS c, ch.id AS id, ch.name AS name ORDER BY c, id");
   const channelOf = new Map<string, { id: string; name: string }>();
   for (const r of chans) if (!channelOf.has(r.c)) channelOf.set(r.c, { id: r.id, name: r.name ?? r.id });
   const posts: Post[] = [];
@@ -494,7 +494,7 @@ const contentPostingGap: Detector = {
     const gapDays = opts.gapDays ?? 7;
     const rows = await ro<{ id: string; name: string | null; dates: string[]; formats: string[] }>(g,
       `MATCH (c:Content)-[p:PUBLISHED_ON]->(ch:Channel)
-       WHERE p.until IS NULL AND c.publishedAt IS NOT NULL AND coalesce(c.status, 'published') <> 'draft'
+       WHERE p.until IS NULL AND c.publishedAt IS NOT NULL AND coalesce(c.status, 'published') <> 'draft' AND ch.rival IS NULL
        WITH ch, collect(c.publishedAt) AS dates, collect(coalesce(c.format, 'post')) AS formats
        RETURN ch.id AS id, ch.name AS name, dates, formats
        ORDER BY id`);

@@ -66,7 +66,7 @@ async function options(g: GraphHandle): Promise<{ things: Row[]; audiences: stri
   const aud = await g.roQuery<{ name: string | null }>("MATCH (a:Audience) RETURN a.name AS name ORDER BY a.id LIMIT 6").catch(() => []);
   const pages = await g.roQuery<{ url: string | null }>("MATCH (p:Page) WHERE p.url IS NOT NULL RETURN p.url AS url ORDER BY p.id LIMIT 1").catch(() => []);
   const host = pages[0]?.url ? (() => { try { return new URL(pages[0]!.url!).hostname.replace(/^www\./, ""); } catch { return null; } })() : null;
-  const chans = await g.roQuery<{ handle: string | null }>("MATCH (c:Channel) WHERE c.handle IS NOT NULL RETURN c.handle AS handle ORDER BY c.id LIMIT 2").catch(() => []);
+  const chans = await g.roQuery<{ handle: string | null }>("MATCH (c:Channel) WHERE c.handle IS NOT NULL AND c.rival IS NULL RETURN c.handle AS handle ORDER BY c.id LIMIT 2").catch(() => []);
   const ctas = [...(host ? [`Visit ${host}`] : []), "Send us a message", ...(chans[0]?.handle ? [`Follow @${chans[0].handle.replace(/^@/, "")}`] : []), "Book a call"];
   return { things: things.filter((t) => t.name), audiences: aud.map((a) => a.name).filter((n): n is string => !!n), ctas: ctas.slice(0, 4) };
 }

@@ -112,9 +112,9 @@ export function aggregate(kind: Aggregate, rows: Array<{ value: number }>): numb
 export async function resolveChannel(ctx: ToolContext, channel: string): Promise<NodeRow> {
   const key = channel.trim().toLowerCase();
   const rows = await ro<{ c: NodeRow }>(ctx,
-    `MATCH (c:Entity:Channel) WHERE c.id = $raw OR c.id = 'channel:' + $key OR toLower(c.name) = $key OR toLower(c.platform) = $key
+    `MATCH (c:Entity:Channel) WHERE c.rival IS NULL AND (c.id = $raw OR c.id = 'channel:' + $key OR toLower(c.name) = $key OR toLower(c.platform) = $key)
      RETURN ${NODE("c")} AS c ORDER BY c.id LIMIT 1`, { raw: channel.trim(), key });
   if (rows[0]) return rows[0].c;
-  const all = await ro<{ id: string }>(ctx, "MATCH (c:Channel) RETURN c.id AS id ORDER BY id LIMIT 30");
+  const all = await ro<{ id: string }>(ctx, "MATCH (c:Channel) WHERE c.rival IS NULL RETURN c.id AS id ORDER BY id LIMIT 30");
   throw new InputError(`No channel ${JSON.stringify(channel)}. Channels: ${all.map((a) => a.id).join(", ") || "none"}.`);
 }
