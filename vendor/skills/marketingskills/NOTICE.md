@@ -22,7 +22,7 @@ SaaS or e-commerce, and they are **not** loaded by Allevia. Their methods are re
 
 | Our skill | Who uses it | Built from |
 |---|---|---|
-| `skills/growth-marketer/bring-customers-back/SKILL.md` | Rohan, growth | `emails`, `sms` (+ `references/whatsapp.md`, `references/compliance.md`), `referrals`, `churn-prevention` |
+| `skills/ops-manager/bring-customers-back/SKILL.md` | Vikram, ops | `emails`, `sms` (+ `references/whatsapp.md`, `references/compliance.md`), `referrals`, `churn-prevention` |
 | `skills/data-analyst/page-that-should-sell/SKILL.md` | Kabir, analytics | `cro` |
 | `skills/data-analyst/which-channel-brings-customers/SKILL.md` | Kabir, analytics | `attribution` |
 | `skills/copy-editor/seven-sweeps-edit/SKILL.md` | Dev, copy | `copy-editing`, and the "no AI tells" lists in `social` and `emails` |

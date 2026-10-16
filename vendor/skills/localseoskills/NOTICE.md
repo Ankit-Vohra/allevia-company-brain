@@ -1,6 +1,6 @@
 # localseoskills: third-party notice
 
-Allevia's local search check and review replies borrow the methods of three skills from Garrett Smith's
+Allevia's local search advice and review replies borrow the methods of three skills from Garrett Smith's
 `localseoskills`: Google Business Profile optimisation, review management, and the local search audit.
 
 | | |
@@ -18,7 +18,7 @@ words, with Allevia's own tools, in:
 
 | Our skill | Who uses it | Built from |
 |---|---|---|
-| `skills/data-analyst/local-search-check/SKILL.md` | Kabir, analytics | `gbp-optimization`, `local-seo-audit` |
+| `skills/growth-marketer/get-found-locally/SKILL.md` (upgraded: compare with the top 3 on Maps, main category, reviews in the last 90 days, no keywords in the name, no rewards for reviews) | Rohan, growth | `gbp-optimization`, `local-seo-audit` |
 | `skills/ops-manager/review-replies/SKILL.md` | Vikram, ops | `review-management` (with `knowledge-work-plugins` `review-reputation`) |
 
 Rules kept from the originals: recent reviews matter more than the total; never offer a reward for a review (against

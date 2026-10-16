@@ -1,9 +1,13 @@
 # Tool scout: skills, repos and services for every department
 
-Checked on 2026-10-15. Stars, licence (SPDX) and last push come from the GitHub API on that day; SaaS prices come from the
-vendors' pages or third-party reports and must be re-checked before anyone pays. Already in use or owned by another
-builder, so not re-scouted here: `i-have-adhd` and `humanizer` (vendored), Aamdani's own skills (read-only), Apify actors,
-open-seo and claude-seo (website check-up), Higgsfield (creative).
+Checked on 2026-10-15 and rebased on dev on 2026-10-16. Stars, licence (SPDX) and last push come from the GitHub API on
+2026-10-15; SaaS prices come from the vendors' pages or third-party reports and must be re-checked before anyone pays.
+
+Already on dev, so not re-adopted here: `i-have-adhd` and `humanizer` (vendored); Aamdani's own skills (read-only); the
+Apify public-data tools with budgets; the website check-up (local Lighthouse, first-screen checks, open-seo and
+claude-seo methods, optional DataForSEO) with the `website_checkup`, `ai_visibility` and `keyword_ideas` tools and the
+skills `get-found-locally`, `does-ai-know-us`, `public-numbers-benchmark`, `competitor-ads-and-moves`,
+`website-checkup-fixes`; the HTML/CSS design engine with its `design-standard` skill; Higgsfield.
 
 Verdicts: **adopt now** (taken in this change, or free and ready the day the founder gives a login), **adopt later**
 (good, but needs a connector, an account, an app review, or a customer who needs it), **skip** (and why).
@@ -12,9 +16,9 @@ Verdicts: **adopt now** (taken in this change, or free and ready the day the fou
 
 | # | What | Licence | Stars, last push | What it gives Allevia | Status |
 |---|---|---|---|---|---|
-| 1 | [anthropics/knowledge-work-plugins](https://github.com/anthropics/knowledge-work-plugins) `small-business` plugin | Apache-2.0 | 29,764, 2026-10-15 | 44 skills written for a small business owner: cash flow, invoice chasing, answering leads fast, reviews, win-back, Monday brief | **Taken.** 7 files vendored; 6 new skills for Isha, Vikram, Zoya, Rohan |
-| 2 | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | MIT | 54,869, 2026-10-15 | 50 marketing skills; the best text on email, WhatsApp, referrals, CRO, attribution, copy editing | **Taken.** 10 files vendored; 4 new skills for Rohan, Kabir, Dev |
-| 3 | [garrettjsmith/localseoskills](https://github.com/garrettjsmith/localseoskills) | MIT | 126, 2026-08-15 | ~40 local SEO skills: Google Business Profile, reviews, citations, service areas | **Taken.** 3 files vendored; Kabir's local search check, Vikram's review replies |
+| 1 | [anthropics/knowledge-work-plugins](https://github.com/anthropics/knowledge-work-plugins) `small-business` plugin | Apache-2.0 | 29,764, 2026-10-15 | 44 skills written for a small business owner: cash flow, invoice chasing, answering leads fast, reviews, win-back, Monday brief | **Taken.** 7 files vendored; 6 new skills for Isha, Vikram, Zoya |
+| 2 | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | MIT | 54,869, 2026-10-15 | 50 marketing skills; the best text on email, WhatsApp, referrals, CRO, attribution, copy editing | **Taken.** 10 files vendored; 4 new skills for Vikram, Kabir, Dev |
+| 3 | [garrettjsmith/localseoskills](https://github.com/garrettjsmith/localseoskills) | MIT | 126, 2026-08-15 | ~40 local SEO skills: Google Business Profile, reviews, citations, service areas | **Taken.** 3 files vendored; Rohan's get-found-locally upgraded, Vikram's review replies |
 | 4 | [adr/madr](https://github.com/adr/madr) | MIT or CC0-1.0 | 2,559, 2026-08-28 | The standard short shape for a decision record | **Taken.** Template vendored; Sara's "A decision on one page" |
 | 5 | [googleanalytics/google-analytics-mcp](https://github.com/googleanalytics/google-analytics-mcp) | Apache-2.0 | 3,469, 2026-10-02 | Official, read-only GA4 reports for Kabir (real funnels instead of fixtures) | Free; needs the founder's Google Cloud project (below) |
 | 6 | Sentry hosted MCP ([getsentry/sentry-mcp](https://github.com/getsentry/sentry-mcp)) | FSL-1.1-Apache-2.0 (not OSI; use the hosted server, don't fork) | 928, 2026-10-15 | Zoya reads real issues, events and releases | Free Developer plan; needs a Sentry token (below) |
@@ -27,10 +31,10 @@ Verdicts: **adopt now** (taken in this change, or free and ready the day the fou
 
 | Our skill (new) | Who | Built from (vendored, pinned) |
 |---|---|---|
-| `skills/growth-marketer/bring-customers-back` | Rohan | marketingskills `emails`, `sms` (+ WhatsApp and compliance references), `referrals`, `churn-prevention`; knowledge-work-plugins `reactivate` |
+| `skills/ops-manager/bring-customers-back` | Vikram | marketingskills `emails`, `sms` (+ WhatsApp and compliance references), `referrals`, `churn-prevention`; knowledge-work-plugins `reactivate` |
 | `skills/data-analyst/page-that-should-sell` | Kabir | marketingskills `cro` |
 | `skills/data-analyst/which-channel-brings-customers` | Kabir | marketingskills `attribution` |
-| `skills/data-analyst/local-search-check` | Kabir | localseoskills `gbp-optimization`, `local-seo-audit` |
+| `skills/growth-marketer/get-found-locally` (upgraded, already on dev) | Rohan | localseoskills `gbp-optimization`, `local-seo-audit`: compare with the top 3 on Maps, main category, reviews in the last 90 days, no keywords in the name, no rewards for reviews |
 | `skills/copy-editor/seven-sweeps-edit` | Dev | marketingskills `copy-editing`, plus the "no AI tells" lists in `social` and `emails` |
 | `skills/coe-lead/cash-flow-check` | Isha | knowledge-work-plugins `cash-flow-snapshot` |
 | `skills/ops-manager/chase-unpaid-invoices` | Vikram | knowledge-work-plugins `invoice-chase` (+ `tone-matching.md`) |
@@ -42,12 +46,12 @@ Verdicts: **adopt now** (taken in this change, or free and ready the day the fou
 Each source sits in `vendor/skills/<name>/` with its verbatim `LICENSE` and a `NOTICE.md` (pinned commit, files taken,
 where each method is restated). The vendored files are references only; Allevia never loads them. Our skills keep our
 format (purpose first, Allevia's own tools, plain owner words, nothing goes out without the owner's OK) and pass the
-skills lint. Skill counts now: Rohan 8 and Tara 8 (both at the limit of 8), Kabir 7, Dev 6, Isha 6, Vikram 6, Zoya 5,
-Sara 4.
+skills lint. Rohan is at the limit of 10 skills after dev added four, so the win-back and referral series sits with
+Vikram, who owns follow-ups; a separate local search skill for Kabir was dropped because dev's `get-found-locally` covers
+it, and its extra rules went into that skill instead.
 
-Not taken, though good: Tara is at her limit of 8 skills, so marketingskills `social` (content pillars, hook formulas,
-repurposing) is vendored for Dev's edit and Rohan's messages but not yet a skill of hers. Next step: merge two of her
-skills (carousel and Instagram post) to make room for a weekly content plan.
+Not taken yet: marketingskills `social` (content pillars, hook formulas, repurposing) is vendored for Dev's edit but is
+not yet a skill of Tara's; a weekly content plan built from it is the next skill for her.
 
 ## coreyhaines31/marketingskills, skill by skill
 
@@ -56,18 +60,19 @@ MIT, Copyright (c) 2025 Corey Haines, commit `45f51253` (2026-10-15). 50 skills,
 
 | Skill | Best fit | Verdict |
 |---|---|---|
-| emails, sms (WhatsApp reference), referrals, churn-prevention | Rohan | **Adopted** into bring-customers-back |
+| emails, sms (WhatsApp reference), referrals, churn-prevention | Vikram (Rohan is full) | **Adopted** into bring-customers-back |
 | cro | Kabir | **Adopted** into page-that-should-sell |
 | attribution | Kabir | **Adopted** into which-channel-brings-customers |
 | copy-editing | Dev | **Adopted** into seven-sweeps-edit |
-| social | Tara (Dev for the tells) | Vendored; Tara's skill waits for room (above) |
+| social | Tara (Dev for the tells) | Vendored; Tara's weekly content plan is next |
 | ad-creative, ads | Rohan | Later: our ad-creative-and-copy and ad-budget-check cover it; borrow the "angle matrix" when real ad data arrives |
 | offers, pricing, marketing-psychology | Rohan | Later: fold into offer-test-plan when it is next revised |
 | ab-testing | Rohan | Later: offer-test-plan already holds the small-sample method |
-| content-strategy, copywriting, image, video | Tara | Later: overlaps her skills and the creative builder's |
+| content-strategy, copywriting | Tara | Later: overlaps her post, reel and campaign skills |
+| image, video | Tara | Skip: dev's design engine and Higgsfield cover it |
 | analytics, signup, onboarding | Kabir | Later: needs GA4 connected; funnel-drop-off-diagnosis covers the basics |
-| seo-audit, ai-seo, schema, site-architecture, programmatic-seo | Arjun / Kabir | Skip here: the website check-up builder owns SEO (open-seo, claude-seo) |
-| competitor-profiling, competitors | Rohan | Skip: competitor-benchmark plus Apify covers it |
+| seo-audit, ai-seo, schema, site-architecture, programmatic-seo | Arjun / Kabir | Already covered on dev: website check-up, `does-ai-know-us`, `website-checkup-fixes` |
+| competitor-profiling, competitors | Rohan | Already covered on dev: competitor-benchmark, competitor-ads-and-moves (Apify) |
 | customer-research, product-marketing | Meera / Rohan | Later: useful for setting up a new business's profile |
 | marketing-plan, marketing-ideas, marketing-loops, launch, lead-magnets, events | Meera / Rohan | Later: plan-across-desks and campaign-brief cover the small-business version |
 | cold-email, prospecting, revops, sales-enablement | Vikram | Skip for now: B2B outbound; small businesses here sell to walk-in and online customers |
@@ -100,12 +105,12 @@ MIT, Copyright (c) 2025 Corey Haines, commit `45f51253` (2026-10-15). 50 skills,
 | Name | Licence | Stars, last push | What it gives | Cost | Risk | Verdict |
 |---|---|---|---|---|---|---|
 | marketingskills `copy-editing`, `social` | MIT | as above | Seven-sweeps edit; hooks, pillars, the "no AI tells" list | Free | Low | **Adopt now** (Dev's skill taken; Tara's waits for room) |
-| [anthropics/skills](https://github.com/anthropics/skills) `brand-guidelines`, `canvas-design`, `theme-factory` | Apache-2.0 per folder (docx, pdf, pptx, xlsx are not open source) | 181,341, 2026-10-09 | Brand tokens and poster design method | Free | Take only the Apache folders | Adopt later: the creative builder owns posters (`src/creative/compose*`); offer it to them |
+| [anthropics/skills](https://github.com/anthropics/skills) `brand-guidelines`, `canvas-design`, `theme-factory` | Apache-2.0 per folder (docx, pdf, pptx, xlsx are not open source) | 181,341, 2026-10-09 | Brand tokens and poster design method | Free | Take only the Apache folders | Skip: dev's design engine and `design-standard` skill now cover posters |
 | [gitroomhq/postiz-app](https://github.com/gitroomhq/postiz-app) | AGPL-3.0 | 37,227, 2026-10-15 | Self-hosted scheduler for ~20 networks, with an API | Free self-hosted; hosted ~$29 to $99 a month | AGPL: run as a separate service, unmodified | Adopt later: the posting back-end if Buffer's free tier is too small |
 | [inovector/mixpost](https://github.com/inovector/mixpost) | MIT (Lite) | 3,817, 2026-03-16 | Laravel scheduler | Free Lite | Slower development | Adopt later: the MIT alternative to Postiz |
 | Instagram Graph API | Meta ToS | n/a | Publish reels and posts, read insights and comments (Business or Creator accounts) | Free | Meta app review; scraping tools break the terms | Adopt later |
 | Canva AI Connector | Canva ToS | n/a | Create and export designs from the owner's brand kit | Free/Pro; brand templates need Enterprise | OAuth into the owner's Canva | Adopt later |
-| [vercel/satori](https://github.com/vercel/satori) | MPL-2.0 | 14,085, 2026-10-15 | HTML to SVG/PNG for code-made posters | Free | MPL only if we change its files | For the creative builder to judge |
+| [vercel/satori](https://github.com/vercel/satori) | MPL-2.0 | 14,085, 2026-10-15 | HTML to SVG/PNG for code-made posters | Free | MPL only if we change its files | Skip: dev's design engine renders HTML/CSS with Playwright already |
 
 ## Analytics (Kabir) and CRO
 
@@ -114,11 +119,11 @@ MIT, Copyright (c) 2025 Corey Haines, commit `45f51253` (2026-10-15). 50 skills,
 | [google-analytics-mcp](https://github.com/googleanalytics/google-analytics-mcp) | Apache-2.0 | 3,469, 2026-10-02 | Read-only GA4 reports and realtime | Free | OAuth to the client's GA4 | **Adopt now** |
 | marketingskills `cro`, `attribution` | MIT | as above | Page check and channel credit methods | Free | Low | **Adopt now** (taken) |
 | knowledge-work-plugins `data` | Apache-2.0 | 29,764, 2026-10-15 | analyze, explore-data, validate-data | Free | Low | Adopt later: Isha's is-this-figure-real covers most of it |
-| [GoogleChrome/lighthouse](https://github.com/GoogleChrome/lighthouse) and PageSpeed Insights API | Apache-2.0 / Google ToS | 30,890, 2026-10-15 | Speed and accessibility of a page on a phone | Free (API key) | Low | For the website check-up builder |
+| [GoogleChrome/lighthouse](https://github.com/GoogleChrome/lighthouse) and PageSpeed Insights API | Apache-2.0 / Google ToS | 30,890, 2026-10-15 | Speed and accessibility of a page on a phone | Free (API key) | Low | Already on dev (local Lighthouse in the check-up) |
 | [umami-software/umami](https://github.com/umami-software/umami) | MIT | 39,395, 2026-10-15 | Light, privacy-friendly analytics for a client with none | Free self-hosted | Low | Adopt later |
 | [PostHog/posthog](https://github.com/PostHog/posthog) | MIT outside `ee/` | 40,292, 2026-10-15 | Funnels, cohorts, replays; hosted MCP | Free tier, then usage | `ee/` is not MIT | Adopt later: for the fintech app's funnels |
 | [microsoft/clarity](https://github.com/microsoft/clarity) | MIT (SDK) | 2,751, 2026-10-15 | Free heatmaps and recordings | Free | Needs a consent banner in UK and EU | Adopt later |
-| [saurabhsharma2u/search-console-mcp](https://github.com/saurabhsharma2u/search-console-mcp) | MIT | 302, 2026-09-02 | Search Console queries | Free | Community code | Leave to the website check-up builder |
+| [saurabhsharma2u/search-console-mcp](https://github.com/saurabhsharma2u/search-console-mcp) | MIT | 302, 2026-09-02 | Search Console queries | Free | Community code | Adopt later, if the check-up wants live Search Console data |
 | [ahonn/mcp-server-gsc](https://github.com/ahonn/mcp-server-gsc) | none | 278, 2026-09-04 | Search Console | Free | No licence | Skip |
 | [plausible/analytics](https://github.com/plausible/analytics) | AGPL-3.0 | 29,420, 2026-10-15 | Simple analytics | Paid cloud | AGPL | Skip: Umami does it under MIT |
 
@@ -126,8 +131,8 @@ MIT, Copyright (c) 2025 Corey Haines, commit `45f51253` (2026-10-15). 50 skills,
 
 | Name | Licence | Stars, last push | What it gives | Cost | Risk | Verdict |
 |---|---|---|---|---|---|---|
-| [localseoskills](https://github.com/garrettjsmith/localseoskills) | MIT | 126, 2026-08-15 | Profile, reviews, citations, service-area methods | Free | Some skills route to paid tools | **Adopt now** (taken) |
-| [AgriciDaniel/claude-seo](https://github.com/AgriciDaniel/claude-seo) `seo-local`, `seo-maps` | MIT | 18,985, 2026-10-04 | Local SEO checks | Free | Low | In use by the website check-up builder |
+| [localseoskills](https://github.com/garrettjsmith/localseoskills) | MIT | 126, 2026-08-15 | Profile, reviews, citations, service-area methods | Free | Some skills route to paid tools | **Adopt now** (taken into get-found-locally and review-replies) |
+| [AgriciDaniel/claude-seo](https://github.com/AgriciDaniel/claude-seo) `seo-local`, `seo-maps` | MIT | 18,985, 2026-10-04 | Local SEO checks | Free | Low | Already on dev (website check-up) |
 | Google Business Profile API | Google ToS | n/a | Read and reply to reviews, post updates, read calls and directions | Free, but quota starts at 0 until Google approves | Slow approval; apply as the profile's owner or manager | Adopt later: **apply now**, it takes weeks |
 | [cablate/mcp-google-map](https://github.com/cablate/mcp-google-map) | MIT | 471, 2026-09-26 | Places search, nearby competitors | Google Maps pay-as-you-go | API key | Adopt later |
 | GBP community MCPs (Insightful-Pipe and others) | MIT | 0 to 4 | Thin wrappers | Free | Unproven | Skip: build our own on the official API |
@@ -149,7 +154,7 @@ MIT, Copyright (c) 2025 Corey Haines, commit `45f51253` (2026-10-15). 50 skills,
 
 | Name | Licence | Stars, last push | What it gives | Cost | Risk | Verdict |
 |---|---|---|---|---|---|---|
-| knowledge-work-plugins `speed-to-lead`, `review-reputation`, `reactivate` | Apache-2.0 | 29,764, 2026-10-15 | Fast replies to new enquiries, review replies, win-back | Free | Low | **Adopt now** (taken) |
+| knowledge-work-plugins `speed-to-lead`, `review-reputation`, `reactivate` with marketingskills `emails`, `sms`, `referrals` | Apache-2.0 / MIT | 29,764 / 54,869, 2026-10-15 | Fast replies to new enquiries, review replies, win-back and refer-a-friend series | Free | Low | **Adopt now** (taken) |
 | knowledge-work-plugins `sales`, `customer-support` | Apache-2.0 | 29,764 | draft-response, ticket-triage, handle-objection, crm-hygiene-check | Free | B2B-heavy | Adopt later: ticket-triage when an inbox is connected |
 | [chatwoot/chatwoot](https://github.com/chatwoot/chatwoot) | MIT outside `enterprise/` | 37,823, 2026-10-15 | One inbox for WhatsApp, Instagram, email, web chat, with an API | Free self-hosted; paid cloud | WhatsApp needs Meta business verification | Adopt later: the best support inbox for salons and the atelier |
 | HubSpot remote MCP | HubSpot ToS | n/a | Contacts, deals, notes | HubSpot free CRM | Writes to customer data; scope it | Adopt later: for owners already on HubSpot |
