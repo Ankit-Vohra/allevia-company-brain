@@ -2,7 +2,7 @@
 
 **A done-for-you AI growth team for small businesses, with a company brain in FalkorDB behind every answer.**
 
-Twelve AI staff in eight departments share one knowledge graph per business. They answer "why" with the path through
+Thirteen AI staff in nine departments share one knowledge graph per business. They answer "why" with the path through
 the graph that proves it, remember what the owner taught them, and turn findings into one-tap approvals. Built in
 India for owner-run businesses in the US, UK, UAE and Australia.
 
@@ -36,7 +36,7 @@ running), give the owner a team instead of a tool, and make every answer carry i
 
 ## What it does
 
-- **A twelve-person company in a pixel office.** Meera (Chief of Staff) plans each request and sends it to the right
+- **A thirteen-person company in a pixel office.** Meera (Chief of Staff) plans each request and sends it to the right
   desks: Isha (Center of Excellence, checks every number), Kabir (Analytics), Rohan (Marketing), Tara, Dev and Nisha
   (Content Studio: strategist, copy editor, fact checker), Arjun, Zoya and Imran (Tech: tech lead, on-call engineer for
   Sentry errors and crashes, QA and release manager for builds and the app stores), Vikram (Operations) and Sara

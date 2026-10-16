@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { AGENTS, DEPARTMENTS, DEPARTMENT_COUNT, STAFF_COUNT, agentById, numberWord } from "../../shared/roster.js";
+import { AGENTS, DEPARTMENTS, DEPARTMENT_COUNT, STAFF_COUNT, agentById, numberWord, plainWho } from "../../shared/roster.js";
 
 describe("roster", () => {
-  it("has twelve staff in eight departments, every id and name unique, every desk in a known department", () => {
-    expect(AGENTS).toHaveLength(12);
-    expect(DEPARTMENTS).toHaveLength(8);
+  it("has thirteen staff in nine departments, every id and name unique, every desk in a known department", () => {
+    expect(AGENTS).toHaveLength(13);
+    expect(DEPARTMENTS).toHaveLength(9);
     expect(new Set(AGENTS.map((a) => a.id)).size).toBe(AGENTS.length);
     expect(new Set(AGENTS.map((a) => a.name)).size).toBe(AGENTS.length);
     const depts = new Set(DEPARTMENTS.map((d) => d.id));
@@ -20,11 +20,19 @@ describe("roster", () => {
     expect(agentById("oncall-engineer")!.handles).toContain("Sentry error alerts");
   });
 
+  it("the sales department is one person: Neel, the Sales Lead", () => {
+    const sales = AGENTS.filter((a) => a.department === "sales");
+    expect(sales.map((a) => [a.id, a.name, a.title])).toEqual([["sales-lead", "Neel", "Sales Lead"]]);
+    expect(DEPARTMENTS.find((d) => d.id === "sales")!.hue).toBe(120);
+    expect(new Set(DEPARTMENTS.map((d) => d.hue)).size).toBe(DEPARTMENTS.length);
+    expect(plainWho("sales-lead")).toBe("Neel, sales");
+  });
+
   it("says its own size: counts and words come from the roster, so copy can't drift", () => {
     expect(STAFF_COUNT).toBe(AGENTS.length);
     expect(DEPARTMENT_COUNT).toBe(DEPARTMENTS.length);
-    expect(numberWord(STAFF_COUNT)).toBe("twelve");
-    expect(numberWord(DEPARTMENT_COUNT)).toBe("eight");
+    expect(numberWord(STAFF_COUNT)).toBe("thirteen");
+    expect(numberWord(DEPARTMENT_COUNT)).toBe("nine");
     expect(numberWord(10)).toBe("ten");
     expect(numberWord(37)).toBe("37");
   });

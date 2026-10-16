@@ -66,6 +66,7 @@ const ALIASES: Record<string, string[]> = {
   "oncall-engineer": ["on-call engineer", "on call engineer", "oncall engineer", "on-call", "on call"],
   "qa-release": ["release manager", "qa manager", "qa", "release desk"],
   "ops-manager": ["ops manager", "operations manager"],
+  "sales-lead": ["sales lead", "sales"],
   "librarian": ["librarian"],
 };
 const words = (alts: string[], flags: string) => new RegExp(`(?<![\\p{L}\\p{N}-])(?:${alts.map(escapeRe).join("|")})(?![\\p{L}\\p{N}-])`, flags);
@@ -364,7 +365,7 @@ export function directiveSystemPrompt(channels: Array<{ id: string; name: string
     `Skills (id: name, for whom):\n${codeCatalog().skills.map((k) => `- ${k.id}: ${k.name} (${k.agents.join(", ")})`).join("\n")}`,
     `Rules:
 - chief-of-staff can never be switched off.
-- Posts and content go to content-strategist (copy-editor checks them); ads, budgets and campaigns to growth-marketer; the website and anything technical to tech-lead; app errors, crashes, Sentry and incidents to oncall-engineer; releases, builds and the app stores to qa-release; numbers to data-analyst; follow-ups to ops-manager.
+- Posts and content go to content-strategist (copy-editor checks them); ads, budgets and campaigns to growth-marketer; the website and anything technical to tech-lead; app errors, crashes, Sentry and incidents to oncall-engineer; releases, builds and the app stores to qa-release; numbers to data-analyst; follow-ups to ops-manager; new enquiries, leads, replies to customers, booking calls and the pipeline to sales-lead.
 - Make a patch only for what the owner clearly asked. Anything unclear goes in "unclear", quoted.
 - Never invent desks; keep every text short and in the owner's words.`,
   ].join("\n\n");

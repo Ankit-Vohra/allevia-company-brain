@@ -129,6 +129,7 @@ const LOOKS: Record<string, Look> = {
   "fact-checker": { hair: "bob", extras: [] },
   "tech-lead": { hair: "sidepart", extras: ["glasses"] },
   "ops-manager": { hair: "short", extras: ["mustache"] },
+  "sales-lead": { hair: "sidepart", extras: [] },
   librarian: { hair: "bun", extras: ["glasses"] },
 };
 
