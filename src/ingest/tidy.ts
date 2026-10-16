@@ -180,8 +180,10 @@ export async function tidyGraph(g: GraphHandle, deps: TidyDeps): Promise<TidyRep
 
   const state = await readGraphState(g, deps.owner.id, { embeddings: true });
 
+  // ---- 1. near-duplicates (again after step 2: a retyped business can now pair with its twin) ----
+  const dedupe = async (st: typeof state, withModel: boolean) => {
   // vectors for nodes that have none yet (in memory only: the index stage stores them)
-  const missing = state.nodes.filter((n) => !n.embedding);
+  const missing = st.nodes.filter((n) => !n.embedding);
   if (missing.length && deps.embed) {
     try {
       const vecs = await deps.embed(missing.map((n) => entityText({ name: n.name, type: n.type, ...(n.summary ? { summary: n.summary } : {}) })));
@@ -191,8 +193,6 @@ export async function tidyGraph(g: GraphHandle, deps: TidyDeps): Promise<TidyRep
     }
   }
 
-  // ---- 1. near-duplicates (again after step 2: a retyped business can now pair with its twin) ----
-  const dedupe = async (st: typeof state, withModel: boolean) => {
   const byIdOf = new Map(st.nodes.map((n) => [n.id, n] as const));
   const { certain, borderline } = findDuplicatePairs(st.nodes, { business: deps.owner.name });
   const accepted: Pair[] = [...certain];
