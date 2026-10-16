@@ -4,6 +4,7 @@ import { TopBar, TabBar } from "./components/TopBar";
 import { OfficePage } from "./pages/Office";
 
 const AskPage = lazy(() => import("./pages/Ask"));
+const ChatPage = lazy(() => import("./pages/Chat"));
 const BrainPage = lazy(() => import("./pages/Brain"));
 const InsightsPage = lazy(() => import("./pages/Insights"));
 const ApprovalsPage = lazy(() => import("./pages/Approvals"));
@@ -14,7 +15,7 @@ const StudioPage = lazy(() => import("./pages/Studio"));
 const TeamPage = lazy(() => import("./pages/Team"));
 
 const TITLES: Record<string, string> = {
-  "/": "Office", "/ask": "Ask", "/brain": "Brain", "/insights": "Insights", "/approvals": "Approvals", "/onboard": "Add a business",
+  "/": "Office", "/chat": "Chat", "/ask": "Ask", "/brain": "Brain", "/insights": "Insights", "/approvals": "Approvals", "/onboard": "Add a business",
   "/studio": "Studio", "/team": "Your team", "/plan": "Plan and credits", "/program": "Your growth plan",
 };
 
@@ -33,6 +34,9 @@ export function App() {
         <Suspense fallback={<div className="page-loading" aria-busy="true"><span className="skeleton" /></div>}>
           <Routes>
             <Route path="/" element={<OfficePage />} />
+            <Route path="/chat" element={<ChatPage />} />
+            <Route path="/chat/:who" element={<ChatPage />} />
+            <Route path="/chat/:who/:sessionId" element={<ChatPage />} />
             <Route path="/ask" element={<AskPage />} />
             <Route path="/ask/:sessionId" element={<AskPage />} />
             <Route path="/brain" element={<BrainPage />} />

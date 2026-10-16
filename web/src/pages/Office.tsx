@@ -16,6 +16,7 @@ import { Icon } from "../components/Icon";
 import { LearnedPathDialog } from "../components/Learning";
 import { ProgramCard, weekLine } from "../components/ProgramCard";
 import { Reveal } from "../components/Reveal";
+import { chatPath } from "../lib/chat";
 import { usePendingApprovals } from "../components/TopBar";
 import { WorkFeed } from "../components/WorkFeed";
 import { usePreviewFromUrl, useOfficeClock } from "../lib/daylight";
@@ -79,7 +80,8 @@ export function OfficePage() {
   const record = useRun(runKey);
   const view = useRunView(record);
   const [question, setQuestion] = useState("");
-  const [selected, setSelected] = useState<AgentId | null>(null);
+  // clicking someone in the office opens their chat; their profile is one tap away from there (?profile=<id> opens it here)
+  const [selected, setSelected] = useState<AgentId | null>(() => (AGENTS.find((a) => a.id === new URLSearchParams(location.search).get("profile"))?.id ?? null));
   const [elapsed, setElapsed] = useState(0);
   const [askFocus, setAskFocus] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
@@ -309,7 +311,7 @@ export function OfficePage() {
           compact={compact}
           maxHeight={narrow ? 100000 : Math.max(300, vh - 56 - 250)}
           selected={selected}
-          onSelect={setSelected}
+          onSelect={(id) => (id ? nav(chatPath(id)) : setSelected(null))}
           off={off}
           books={learning.data ? books : undefined}
           onBook={(id) => setOpenRule(learning.data?.rules.find((r) => r.id === id) ?? null)}

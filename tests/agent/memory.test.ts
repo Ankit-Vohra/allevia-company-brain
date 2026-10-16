@@ -283,3 +283,13 @@ describe("memory (integration)", () => {
     expect(await count("MATCH (:Turn {id:$t})-[r:GUIDED_BY]->() RETURN count(r) AS c", { t: turnId })).toBe(1); // re-saving adds nothing
   });
 });
+
+describe("compactEvents with a reset", () => {
+  it("keeps only the replacement when the answer was taken back or re-written, and merges ordinary deltas", async () => {
+    const { compactEvents } = await import("../../src/agent/memory.js");
+    const t = (delta: string, extra: object = {}) => ({ type: "text" as const, agent: "chief-of-staff", delta, ...extra });
+    expect(compactEvents([t("Let me "), t("check."), t("Real "), t("answer.")])).toEqual([t("Let me check.Real answer.")]);
+    expect(compactEvents([t("Let me "), t("check."), t("", { reset: true }), t("Real "), t("answer.")])).toEqual([t("Real answer.")]);
+    expect(compactEvents([t("Plain answer"), t("A plainer answer", { reset: true })])).toEqual([t("A plainer answer")]);
+  });
+});

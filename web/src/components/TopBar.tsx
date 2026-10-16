@@ -7,7 +7,7 @@ import { Icon, type IconName } from "./Icon";
 // At most five primary places; everything else lives under More.
 const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
   { to: "/", label: "Office", icon: "office", end: true },
-  { to: "/ask", label: "Ask", icon: "ask" },
+  { to: "/chat", label: "Chat", icon: "ask" },
   { to: "/insights", label: "Insights", icon: "insights" },
   { to: "/approvals", label: "Approvals", icon: "approvals" },
   { to: "/studio", label: "Studio", icon: "sparkle" },

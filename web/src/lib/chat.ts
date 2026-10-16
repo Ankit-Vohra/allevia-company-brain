@@ -234,7 +234,7 @@ export interface Tone { id: string; label: string; says: string }
 /** The tones to pick from. `says` finishes "always write in a …" for the instruction the team keeps. */
 export const TONES: Tone[] = [
   { id: "warm", label: "Warm", says: "warm, friendly tone, like a good neighbour" },
-  { id: "direct", label: "Straight to the point", says: "direct tone: the answer first, short sentences, no padding" },
+  { id: "direct", label: "Straight to the point", says: "direct tone: the answer first, no padding" },
   { id: "playful", label: "Playful", says: "light, playful tone, with a little humour" },
   { id: "formal", label: "Formal", says: "formal, professional tone" },
 ];
