@@ -9,7 +9,8 @@ import { ensureIndexes } from "../../src/graph/indexes.js";
 import { ALLOWED_PATTERNS, ENTITY_TYPES, SEARCHABLE, type EntityType, type RelType } from "../../src/graph/schema.js";
 import { writeBatch, type ObservationInput } from "../../src/graph/upsert.js";
 import { idPrefix } from "../../src/util/ids.js";
-import { fakeEmbed, seedMini, SEED_NOW } from "./seed-graph.js";
+import { fakeEmbed, SEED_NOW } from "./seed-graph.js";
+import { seedFrom } from "../helpers/templates.js";
 
 export const SWARM = 24; // sorts only check their ordering from 21 rows up
 export const hubId = (t: EntityType): string => `${idPrefix(t)}:swarm-hub`;
@@ -91,7 +92,7 @@ const CLOSED = { since: T0, recordedAt: T0, until: CLOSED_AT, retiredAt: CLOSED_
 const WITH_HISTORY = new Set<RelType>(["OWNS", "DEPENDS_ON", "BLOCKS", "AFFECTS", "MEMBER_OF", "KNOWS_ABOUT", "PART_OF", "MENTIONS", "DECIDED"]);
 
 export async function seedDegenerate(g: GraphHandle): Promise<void> {
-  await seedMini(g); // creates the indexes too
+  await seedFrom("mini", g); // seedMini (a copy of the run's template when there is one); creates the indexes too
   await ensureIndexes(g);
 
   // ---- nodes: a hub and SWARM identical satellites of every type ----

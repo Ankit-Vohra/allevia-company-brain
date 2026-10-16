@@ -3,24 +3,15 @@ import type { GraphHandle } from "../../src/graph/client.js";
 import { closeAll } from "../../src/graph/client.js";
 import { addObservation } from "../../src/graph/upsert.js";
 import { DETECTORS, runDetectors, type Candidate, type DetectorName } from "../../src/insights/detectors.js";
-import { seedInsights, SEED_NOW } from "../fixtures/insights-graph.js";
-import { testGraph } from "../helpers/graph.js";
+import { SEED_NOW } from "../fixtures/insights-graph.js";
+import { graphFrom } from "../helpers/templates.js";
 import { whenFree } from "../helpers/tools.js";
 
 let g: GraphHandle;
 let cleanup: () => Promise<void>;
 
 beforeAll(async () => {
-  ({ g, cleanup } = await whenFree(async () => {
-    const t = await testGraph();
-    try {
-      await seedInsights(t.g);
-    } catch (e) {
-      await t.cleanup().catch(() => undefined);
-      throw e;
-    }
-    return t;
-  }));
+  ({ g, cleanup } = await whenFree(() => graphFrom("insights")));
 });
 
 afterAll(async () => {

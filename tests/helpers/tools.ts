@@ -4,8 +4,8 @@ import { z } from "zod";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
 import { TouchedSet, type AlleviaTool, type ToolContext } from "../../src/agent/tool.js";
 import type { ToolResult } from "../../shared/contracts.js";
-import { fakeEmbed, seedMini, SEED_NOW } from "../fixtures/seed-graph.js";
-import { testGraph } from "./graph.js";
+import { fakeEmbed, SEED_NOW } from "../fixtures/seed-graph.js";
+import { graphFrom } from "./templates.js";
 
 // The test server is shared (and small: 2 threads, 25 queued queries); when its queue is full it refuses a query
 // before running it, so a refused seed is dropped and tried again. Any other failure drops the graph and throws.
@@ -23,15 +23,10 @@ export async function whenFree<T>(fn: () => Promise<T>, tries = 5): Promise<T> {
   }
 }
 
+// seedMini in a throwaway graph: a copy of the run's template (tests/helpers/templates.ts), so one command, not ~800 writes.
 export async function seededGraph(): Promise<{ g: GraphHandle; cleanup: () => Promise<void> }> {
   return whenFree(async () => {
-    const { g, cleanup } = await testGraph();
-    try {
-      await seedMini(g);
-    } catch (e) {
-      await cleanup().catch(() => undefined); // a failed seed must not leave its graph on the shared server
-      throw e;
-    }
+    const { g, cleanup } = await graphFrom("mini"); // drops its graph itself when the seed fails
     return { g, cleanup: async () => { await cleanup(); await closeAll(); } };
   });
 }

@@ -5,8 +5,8 @@ import { goalStatus, writeBrief, type Brief } from "../../src/insights/brief.js"
 import { ownerJargon } from "../../src/agent/style.js";
 import { insightApprovalId, runInsights } from "../../src/insights/recommend.js";
 import { decideApproval } from "../../src/actions/approvals.js";
-import { D, seedInsights, SEED_NOW } from "../fixtures/insights-graph.js";
-import { testGraph } from "../helpers/graph.js";
+import { D, SEED_NOW } from "../fixtures/insights-graph.js";
+import { graphFrom } from "../helpers/templates.js";
 import { whenFree } from "../helpers/tools.js";
 
 let g: GraphHandle;
@@ -15,16 +15,7 @@ let brief: Brief;
 const published: Brief[] = [];
 
 beforeAll(async () => {
-  ({ g, cleanup } = await whenFree(async () => {
-    const t = await testGraph();
-    try {
-      await seedInsights(t.g);
-    } catch (e) {
-      await t.cleanup().catch(() => undefined);
-      throw e;
-    }
-    return t;
-  }));
+  ({ g, cleanup } = await whenFree(() => graphFrom("insights")));
   await runInsights("test", { graph: g, now: SEED_NOW - 3_600_000 });
   await upsertNode(g, { type: "Rule", id: "rule:learned-say-home-not-villa", name: 'Say "home", not "villa".',
     props: { kind: "learned", text: 'Say "home", not "villa".', op: "replace", find: "villa", replace: "home", status: "active", confidence: 0.6, appliedCount: 0 } }, SEED_NOW - 600_000);
