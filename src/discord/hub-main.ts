@@ -64,6 +64,8 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
         ...(onDecision ? { onDecision } : {}), ...(actions ? { actions } : {}), log,
         // what the team makes comes back here as files with Approve and Change, read from this business's own storage
         deliverables: { file: (assetId) => loadAssetFile(graph, studioDeps.store, area.slug, assetId) },
+        // a spreadsheet dropped in #your-team adds this business's own numbers (the business comes from the channel only)
+        numbers: { businessId: businessId(area.slug) },
       });
     },
     studioFor: async (area) => new StudioDiscord({

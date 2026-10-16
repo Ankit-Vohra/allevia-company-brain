@@ -2,7 +2,7 @@
 // words. A Discord handler downloads the attachment, calls previewUpload (src/server/routes/numbers.ts) with its bytes,
 // shows describePreview, and on "OK" calls importUpload with the preview's plan, or the plan with the owner's changes
 // (applyReply turns "column C is orders" and "leave out D" into those changes). Nothing here talks to Discord.
-import { guessHeader } from "./metrics.js";
+import { guessHeader, metricByKey } from "./metrics.js";
 import type { Preview, UploadPlan } from "./types.js";
 import type { ImportResult } from "./import.js";
 
@@ -16,6 +16,22 @@ export function describePreview(p: Preview): string {
   lines.push("", p.questions.length
     ? "Tell me what is missing (for example: “column C is orders”, “leave out D”, “each row is a week”), then say OK."
     : "Say OK to add these, or tell me what to change (for example: “column C is orders”, “leave out D”).");
+  return lines.join("\n");
+}
+
+// The columns again after the owner changed some ("column C is orders"): what each one will be kept as now.
+export function describePlan(p: Preview, plan: UploadPlan): string {
+  const lines = ["Got it. Here is what I'll keep:"];
+  for (const c of p.columns) {
+    const pc = plan.columns.find((x) => x.index === c.index);
+    const what = !pc || pc.metric === null ? "I'm not sure what this is"
+      : pc.metric === "skip" ? "left out"
+      : pc.metric === "other" ? (pc.label ?? "your own name for it")
+      : metricByKey(pc.metric)?.label ?? pc.metric;
+    lines.push(`- Column ${c.letter} “${c.header}”: ${what}`);
+  }
+  if (plan.cadence && plan.cadence !== "ranges") lines.push(`Each row is a ${plan.cadence}.`);
+  lines.push("", "Say OK to add these, or tell me what else to change.");
   return lines.join("\n");
 }
 

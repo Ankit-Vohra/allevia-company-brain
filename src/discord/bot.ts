@@ -26,7 +26,8 @@ import { quickReplies } from "../../shared/quick-replies.js";
 import { DecisionError, decideAndNotify, type ActionOpts, type OnDecision } from "../server/approvals.js";
 import { approvals as listApprovals, latestBrief, sessionDetail } from "../server/reads.js";
 import type { ApprovalDto } from "../server/types.js";
-import type { AttachmentRef } from "./attachments.js";
+import type { AttachmentRef, FetchFn } from "./attachments.js";
+import { isNumbersButton, NumbersOnDiscord, pickSpreadsheet } from "./numbers-bot.js";
 import { studioButtonId } from "./studio-bot.js";
 import { pathViewUrl, renderAnswer, renderCitations, splitMessage, threadName } from "./format.js";
 import { findThreadSession, linkSessionThread, openThreadSession, recentUnlinkedSessions } from "./sessions.js";
@@ -107,6 +108,9 @@ export interface BotDeps {
   // Things the team made this turn (a poster, a picture, a clip) come back in the thread as files with Approve and Change
   // buttons, the way Studio options do. `file` reads one made Asset's file from this business's own storage.
   deliverables?: { file(assetId: string): Promise<{ name: string; data: Buffer } | null> };
+  // Hub only: a spreadsheet dropped in #your-team adds the owner's numbers to this business (its own Business node; the hub
+  // chose this bot from the channel). Absent: spreadsheets are left alone.
+  numbers?: { businessId: string; fetch?: FetchFn };
   log?: (line: string) => void;
 }
 
@@ -177,7 +181,15 @@ export class AlleviaBot {
   private queues = new Map<string, Promise<void>>();
   private sessions = new Map<string, string>();
 
-  constructor(private d: BotDeps) {}
+  private numbers: NumbersOnDiscord | undefined;
+
+  constructor(private d: BotDeps) {
+    if (d.numbers) {
+      this.numbers = new NumbersOnDiscord({
+        graph: d.graph, businessId: d.numbers.businessId, now: () => this.now(), log: (l) => this.log(l), ...(d.numbers.fetch ? { fetch: d.numbers.fetch } : {}),
+      });
+    }
+  }
 
   private now(): number { return this.d.now?.() ?? Date.now(); }
   private log(line: string): void { (this.d.log ?? ((l: string) => console.error(l)))(`[discord] ${line}`); }
@@ -198,6 +210,14 @@ export class AlleviaBot {
   private async handleMessage(m: MessagePort): Promise<void> {
     if (m.authorIsBot || m.system || m.guildId !== this.d.guildId) return;
     const question = m.content.trim();
+    // a spreadsheet of the owner's numbers (hub #your-team): the upload's preview, their changes, then OK (numbers-bot.ts)
+    const here = m.channelId === this.d.channelId || m.threadParentId === this.d.channelId;
+    if (this.numbers && here && m.authorIsOwner) {
+      const sheet = pickSpreadsheet(m.files);
+      if (sheet) return this.numbers.onFile(m, sheet);
+      const t = m.threadParentId && question ? m.thread() : null;
+      if (t && await this.numbers.onReply(question, t)) return;
+    }
     if (!question) return;
     const asker = m.authorIsOwner ? FOUNDER : MEMBER;
     // "always answer in English": the business's language setting, said in plain words (only the owner changes it)
@@ -399,6 +419,11 @@ export class AlleviaBot {
   }
 
   private async handleButton(b: ButtonPort): Promise<void> {
+    if (isNumbersButton(b.customId)) {
+      if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
+      if (!b.isOwner || !this.numbers) return b.reply("Only the owner can add numbers here.", { ephemeral: true });
+      return this.numbers.onButton(b);
+    }
     const cont = CONTINUE.exec(b.customId);
     if (cont) {
       if (b.guildId !== this.d.guildId) return b.reply(NOT_HERE, { ephemeral: true });
