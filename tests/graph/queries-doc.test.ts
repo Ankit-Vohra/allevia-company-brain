@@ -5,8 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
 import { assertSafeQuery } from "../../src/graph/safety.js";
-import { seedMini } from "../fixtures/seed-graph.js";
-import { testGraph } from "../helpers/graph.js";
+import { graphFrom } from "../helpers/templates.js";
 
 const DOC = readFileSync(new URL("../../docs/falkordb-queries.md", import.meta.url), "utf8");
 const root = (p: string) => new URL(`../../${p}`, import.meta.url);
@@ -27,8 +26,7 @@ describe("docs/falkordb-queries.md", () => {
     let g: GraphHandle;
     let cleanup: () => Promise<void>;
     beforeAll(async () => {
-      ({ g, cleanup } = await testGraph());
-      await seedMini(g);
+      ({ g, cleanup } = await graphFrom("mini"));
     }, 60_000);
     afterAll(async () => {
       await cleanup();

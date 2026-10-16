@@ -120,6 +120,7 @@ const ALLOWED_VALUES: Array<{ match: string; why: string }> = [
   { match: "e6b505348c39c6e751a70d52ff407e7b0a6bf676", why: "vendor/skills/knowledge-work-plugins/NOTICE.md: pinned upstream commit" },
   { match: "405ce209775f8cb8f9dbaa511656594bb682cf9f", why: "vendor/skills/localseoskills/NOTICE.md: pinned upstream commit" },
   { match: "ba75bb1b20d42af5746b246ad348c202419ae681", why: "vendor/skills/madr/NOTICE.md: pinned upstream commit" },
+  { match: "com/2025-11-19-Workday-Signs-Definitive-Agreement-to-Acquire-Pipedream", why: "docs/connections-design.md: the path of a public Workday press-release URL, not a credential" },
   { match: "support@brand.com", why: "vendor/skills/marketingskills/sms/references/compliance.md: the upstream's placeholder support address in a HELP-reply template, kept verbatim" },
 ];
 

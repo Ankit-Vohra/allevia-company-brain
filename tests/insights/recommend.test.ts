@@ -5,24 +5,15 @@ import { decideApproval } from "../../src/actions/approvals.js";
 import type { LlmRunner, StructuredInput } from "../../src/ingest/llm.js";
 import { insightApprovalId, insightRecId, relatedGoals, runInsights } from "../../src/insights/recommend.js";
 import { sameFigures } from "../../src/insights/polish.js";
-import { seedInsights, SEED_NOW } from "../fixtures/insights-graph.js";
-import { testGraph } from "../helpers/graph.js";
+import { SEED_NOW } from "../fixtures/insights-graph.js";
+import { graphFrom } from "../helpers/templates.js";
 import { whenFree } from "../helpers/tools.js";
 
 let g: GraphHandle;
 let cleanup: () => Promise<void>;
 
 beforeAll(async () => {
-  ({ g, cleanup } = await whenFree(async () => {
-    const t = await testGraph();
-    try {
-      await seedInsights(t.g);
-    } catch (e) {
-      await t.cleanup().catch(() => undefined);
-      throw e;
-    }
-    return t;
-  }));
+  ({ g, cleanup } = await whenFree(() => graphFrom("insights")));
 });
 afterAll(async () => {
   await cleanup?.();
@@ -105,9 +96,8 @@ describe("optional model polish", () => {
     expect(sameFigures("CPA ₹300 vs ₹150 median", "CPA ₹320 vs ₹150 median")).toBe(false);
     expect(sameFigures("See [[campaign:x]]", "See it")).toBe(false);
 
-    const { g: g2, cleanup: c2 } = await testGraph();
+    const { g: g2, cleanup: c2 } = await graphFrom("insights");
     try {
-      await seedInsights(g2);
       const off = runner(() => "x");
       await runInsights("test", { graph: g2, now: SEED_NOW, runner: off, only: ["ads.high_cpa"] });
       expect(off.calls).toHaveLength(0);

@@ -5,8 +5,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
 import { commands, readEdit } from "../../src/cli/insights.js";
 import { insightApprovalId } from "../../src/insights/recommend.js";
-import { seedInsights } from "../fixtures/insights-graph.js";
-import { testGraph } from "../helpers/graph.js";
+import { graphFrom } from "../helpers/templates.js";
 import { whenFree } from "../helpers/tools.js";
 
 let g: GraphHandle;
@@ -15,16 +14,7 @@ let tenant: string;
 let dir: string;
 
 beforeAll(async () => {
-  ({ g, cleanup } = await whenFree(async () => {
-    const t = await testGraph();
-    try {
-      await seedInsights(t.g);
-    } catch (e) {
-      await t.cleanup().catch(() => undefined);
-      throw e;
-    }
-    return t;
-  }));
+  ({ g, cleanup } = await whenFree(() => graphFrom("insights")));
   tenant = g.name.replace(/^allevia_/, "");
   dir = mkdtempSync(join(tmpdir(), "allevia-cli-"));
   process.env.ALLEVIA_DATA_DIR = dir; // drafts land in the temp dir, not the repo's data/
