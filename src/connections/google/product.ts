@@ -10,14 +10,12 @@
 import { ConnectError } from "../../connectors/google/searchconsole.js";
 import { GoogleApiError, GoogleAuthError, type GoogleClient } from "../../connectors/google/client.js";
 import type { TokenRecord, TokenStore } from "../../connectors/google/store.js";
-import { syncCapabilities } from "../../capabilities/ladder.js";
-import type { GraphHandle } from "../../graph/client.js";
-import { upsertNode } from "../../graph/upsert.js";
 import {
   NeedsAttentionError, NotConnectedError,
   type Availability, type CompleteOutcome, type ConnectionHealth, type ConnectionStatus, type Connector, type ConnectorCtx, type ConnectorInfo, type ConnectStart,
 } from "../types.js";
 import { once } from "../once.js";
+import { noteConnection, type ConnectionEvent } from "../graph.js";
 import type { GoogleApis } from "./apis.js";
 import { consentUrl, googleAvailability, newPkce, SCOPES, type GoogleConnSettings } from "./oauth.js";
 
@@ -75,14 +73,9 @@ export class GoogleProductConnector implements Connector {
     return this.deps.store.get(ctx.tenant, this.info.id);
   }
 
-  private async markSystem(ctx: ConnectorCtx, status: string, extra: Record<string, string | number | null> = {}): Promise<void> {
-    try {
-      const g: GraphHandle = await ctx.graph();
-      await upsertNode(g, { type: "System", id: this.spec.system.id, name: this.spec.system.name, props: { kind: "connector", provider: "google", status, ...extra } }, ctx.now());
-      await syncCapabilities(g, { now: ctx.now(), ...(ctx.businessId ? { businessId: ctx.businessId } : {}) });
-    } catch {
-      // the connection itself stands; the ladder catches up on its next sync
-    }
+  // The graph learns of the change (src/connections/graph.ts): status, who and when, the edges around the System, the ladder.
+  private markSystem(ctx: ConnectorCtx, event: ConnectionEvent, extra: Record<string, string | null> = {}): Promise<string[]> {
+    return noteConnection(ctx, { id: this.info.id, system: this.spec.system, provider: "google" }, event, extra);
   }
 
   private words(): { notConnected: string; attention: string } {
@@ -148,7 +141,7 @@ export class GoogleProductConnector implements Connector {
       else meta = { ...meta, none: "1" };
     }
     await this.deps.store.put(ctx.tenant, this.info.id, { accessToken: t.accessToken, refreshToken, expiresAt: now + t.expiresIn * 1000, scope: t.scope, obtainedAt: now, meta });
-    await this.markSystem(ctx, "ok", { connectedAt: now, lastError: null });
+    await this.markSystem(ctx, "connected");
     if (outcome.result === "connected" && this.spec.daily) void this.pull(ctx).catch(() => undefined); // the first look; the daily read retries
     return outcome;
   }
@@ -167,7 +160,7 @@ export class GoogleProductConnector implements Connector {
     const rec = await this.load(ctx).catch(() => null);
     if (rec) await this.deps.client.revoke(rec.refreshToken).catch(() => undefined);
     await this.deps.store.delete(ctx.tenant, this.info.id);
-    await this.markSystem(ctx, "not_connected", { lastError: null });
+    await this.markSystem(ctx, "disconnected");
   }
 
   async health(ctx: ConnectorCtx): Promise<ConnectionHealth> {

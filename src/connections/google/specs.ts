@@ -2,17 +2,19 @@
 // Search Console is its own connector (search-console.ts) because it was built first and keeps its own sealed record and
 // website choice. Permissions per product: Calendar free/busy + events, Gmail send (+ read the inbox only when the owner opts
 // in), Analytics read-only, Ads read-only. docs/connections-setup.md lists which of them Google must verify.
-import { settleGoals } from "../../program/late.js";
-import { syncCapabilities } from "../../capabilities/ladder.js";
-import { upsertNode, writeBatch, type NodeInput, type ObservationInput } from "../../graph/upsert.js";
+import type { NodeInput, ObservationInput } from "../../graph/upsert.js";
 import { addDays } from "../../insights/text.js";
 import { isoDate } from "../../util/time.js";
+import { recordRead, type ConnRef } from "../graph.js";
 import type { ConnectorCtx } from "../types.js";
 import { GoogleProductConnector, type GoogleProductDeps, type GoogleSession, type ProductSpec } from "./product.js";
 import { SCOPES } from "./oauth.js";
 
 export const WEBSITE_CHANNEL = "channel:website";
 export const GOOGLE_ADS_CHANNEL = "channel:google-ads";
+
+const GA4: ConnRef = { id: "google-analytics", system: { id: "system:ga4", name: "Google Analytics" }, provider: "google" };
+const ADS: ConnRef = { id: "google-ads", system: { id: "system:google-ads", name: "Google Ads" }, provider: "google" };
 
 const calendar: ProductSpec = {
   info: {
@@ -54,12 +56,6 @@ async function pullGa4(_deps: GoogleProductDeps, ctx: ConnectorCtx, s: GoogleSes
   const start = addDays(end, -27);
   const rows = await s.apis.ga4Report(s.accessToken, property, { startDate: start, endDate: end, dimensions: ["date"], metrics: ["sessions", "activeUsers", "keyEvents"], limit: 100 });
   const docId = `document:ga4-pull-${today}`;
-  const g = await ctx.graph();
-  const haveChannel = (await g.roQuery<{ id: string }>("MATCH (c:Entity:Channel {id:$id}) RETURN c.id AS id", { id: WEBSITE_CHANNEL })).length > 0;
-  const nodes: NodeInput[] = [
-    ...(haveChannel ? [] : [{ type: "Channel" as const, id: WEBSITE_CHANNEL, name: "Website" }]),
-    { type: "Document", id: docId, name: `Analytics numbers read on ${today}`, summary: `Sessions, visitors and key events for ${s.meta.selectedLabel ?? property}, ${start} to ${end}.`, props: { kind: "snapshot", provider: "ga4", property }, asOf: today },
-  ];
   const observations: ObservationInput[] = [];
   for (const r of rows) {
     const d = ga4Day(r.dimensions[0] ?? "");
@@ -71,9 +67,12 @@ async function pullGa4(_deps: GoogleProductDeps, ctx: ConnectorCtx, s: GoogleSes
       { subject: WEBSITE_CHANNEL, metric: "ga4_conversions", value: r.metrics[2] ?? 0, unit: "count", ...w },
     );
   }
-  const stats = await writeBatch(g, { nodes, observations }, now);
-  if (stats.errors.length) throw new Error(`ga4: ${stats.errors[0]!.error}`);
-  await finish(ctx, "system:ga4", "Google Analytics", end);
+  const summary = `Sessions, visitors and key events for ${s.meta.selectedLabel ?? property}, ${start} to ${end}.`;
+  const done = await recordRead(ctx, GA4, {
+    doc: { type: "Document", id: docId, name: `Analytics numbers read on ${today}`, summary, props: { kind: "snapshot", provider: "ga4", property, headline: summary }, asOf: today },
+    nodes: await channelNode(ctx, WEBSITE_CHANNEL, "Website"), observations, dataThrough: end, props: { property },
+  });
+  if (!done.ok) throw new Error(`ga4: ${done.error}`);
   return { ok: true, message: `Read ${rows.length} days of Analytics up to ${end}.` };
 }
 
@@ -87,12 +86,6 @@ async function pullAds(_deps: GoogleProductDeps, ctx: ConnectorCtx, s: GoogleSes
   const camps = await s.apis.adsCampaigns(s.accessToken, customer, { startDate: start, endDate: end });
   const sum = (f: (c: (typeof camps)[number]) => number) => camps.reduce((a, c) => a + f(c), 0);
   const docId = `document:ads-pull-${today}`;
-  const g = await ctx.graph();
-  const haveChannel = (await g.roQuery<{ id: string }>("MATCH (c:Entity:Channel {id:$id}) RETURN c.id AS id", { id: GOOGLE_ADS_CHANNEL })).length > 0;
-  const nodes: NodeInput[] = [
-    ...(haveChannel ? [] : [{ type: "Channel" as const, id: GOOGLE_ADS_CHANNEL, name: "Google Ads" }]),
-    { type: "Document", id: docId, name: `Google Ads numbers read on ${today}`, summary: `Spend, clicks and conversions across ${camps.length} campaigns, ${start} to ${end}.`, props: { kind: "snapshot", provider: "google-ads" }, asOf: today },
-  ];
   const w = { windowStart: start, windowEnd: end, asOf: today, src: docId };
   const observations: ObservationInput[] = [
     { subject: GOOGLE_ADS_CHANNEL, metric: "ads_spend", value: Math.round(sum((c) => c.costMicros) / 10_000) / 100, unit: "currency", ...w },
@@ -100,22 +93,19 @@ async function pullAds(_deps: GoogleProductDeps, ctx: ConnectorCtx, s: GoogleSes
     { subject: GOOGLE_ADS_CHANNEL, metric: "ads_impressions", value: sum((c) => c.impressions), unit: "count", ...w },
     { subject: GOOGLE_ADS_CHANNEL, metric: "ads_conversions", value: Math.round(sum((c) => c.conversions) * 100) / 100, unit: "count", ...w },
   ];
-  const stats = await writeBatch(g, { nodes, observations }, now);
-  if (stats.errors.length) throw new Error(`ads: ${stats.errors[0]!.error}`);
-  await finish(ctx, "system:google-ads", "Google Ads", end);
+  const summary = `Spend, clicks and conversions across ${camps.length} campaigns, ${start} to ${end}.`;
+  const done = await recordRead(ctx, ADS, {
+    doc: { type: "Document", id: docId, name: `Google Ads numbers read on ${today}`, summary, props: { kind: "snapshot", provider: "google-ads", headline: summary }, asOf: today },
+    nodes: await channelNode(ctx, GOOGLE_ADS_CHANNEL, "Google Ads"), observations, dataThrough: end, props: { customer },
+  });
+  if (!done.ok) throw new Error(`ads: ${done.error}`);
   return { ok: true, message: `Read ${camps.length} campaigns up to ${end}.` };
 }
 
-async function finish(ctx: ConnectorCtx, systemId: string, name: string, through: string): Promise<void> {
+async function channelNode(ctx: ConnectorCtx, id: string, name: string): Promise<NodeInput[]> {
   const g = await ctx.graph();
-  const now = ctx.now();
-  await upsertNode(g, { type: "System", id: systemId, name, props: { kind: "connector", provider: "google", status: "ok", lastPullAt: now, dataThrough: through, lastError: null } }, now);
-  try {
-    await settleGoals(g, { now, ...(ctx.businessId ? { businessId: ctx.businessId } : {}) });
-    await syncCapabilities(g, { now, ...(ctx.businessId ? { businessId: ctx.businessId } : {}) });
-  } catch {
-    // the numbers are in; the goals and the ladder catch up on the next read of the plan
-  }
+  const have = (await g.roQuery<{ id: string }>("MATCH (c:Entity:Channel {id:$id}) RETURN c.id AS id", { id })).length > 0;
+  return have ? [] : [{ type: "Channel", id, name }];
 }
 
 const analytics: ProductSpec = {

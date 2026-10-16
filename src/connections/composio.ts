@@ -16,10 +16,9 @@
 import { createHmac } from "node:crypto";
 import { entryById, entryByToolkit, TOOLKIT_CATALOG, type ToolkitEntry } from "../../shared/connection-map.js";
 import { asRecord, realFetch, type FetchFn } from "../connectors/google/client.js";
-import { syncCapabilities } from "../capabilities/ladder.js";
-import { upsertNode } from "../graph/upsert.js";
 import { once } from "./once.js";
 import { readerFor, type Reader } from "./firstread.js";
+import { noteConnection, type ConnectionEvent } from "./graph.js";
 import type { GoogleApis } from "./google/apis.js";
 import type { GoogleSession } from "./google/product.js";
 import {
@@ -247,7 +246,7 @@ export class ComposioConnector implements Connector {
   readonly pull?: (ctx: ConnectorCtx) => Promise<{ ok: boolean; message: string }>;
   constructor(readonly entry: ToolkitEntry, private deps: ComposioDeps) {
     this.info = infoOf(entry);
-    const reader = readerFor(entry.toolkit, entry.system);
+    const reader = readerFor(entry);
     if (reader) this.pull = (ctx) => once(`${ctx.tenant}\u0000${entry.id}`, () => this.readNow(ctx, reader));
   }
 
@@ -278,14 +277,10 @@ export class ComposioConnector implements Connector {
   private stored(ctx: ConnectorCtx): Promise<Stored | null> { return ctx.vault.get(ctx.tenant, this.info.id) as Promise<Stored | null>; }
   private user(ctx: ConnectorCtx): string { return composioUserId(this.deps.connectorKey, ctx.tenant); }
 
-  private async markSystem(ctx: ConnectorCtx, status: string): Promise<void> {
-    try {
-      const g = await ctx.graph();
-      await upsertNode(g, { type: "System", id: this.entry.system.id, name: this.entry.system.name, props: { kind: "connector", provider: "composio", status } }, ctx.now());
-      await syncCapabilities(g, { now: ctx.now(), ...(ctx.businessId ? { businessId: ctx.businessId } : {}) });
-    } catch {
-      // the ladder catches up on its next sync
-    }
+  // The graph learns of the change: the System's status (a Version each time), when and by whom, and the edges around it
+  // (src/connections/graph.ts). A failure here is said in words and never stops a connection; the ladder catches up on its next sync.
+  private markSystem(ctx: ConnectorCtx, event: ConnectionEvent, extra: Record<string, string | null> = {}): Promise<string[]> {
+    return noteConnection(ctx, { id: this.info.id, system: this.entry.system, provider: "composio" }, event, extra);
   }
 
   async status(ctx: ConnectorCtx): Promise<ConnectionStatus> {
@@ -318,7 +313,7 @@ export class ComposioConnector implements Connector {
     // the account must be this business's own, for this toolkit, and active: never take an id on the word of the address bar
     if (!acct || acct.userId !== this.user(ctx) || acct.toolkit.toLowerCase() !== this.entry.toolkit || acct.status.toUpperCase() !== "ACTIVE") return { result: "problem", reason: "not_active" };
     await ctx.vault.put(ctx.tenant, this.info.id, { accountId: acct.id, userId: acct.userId, at: ctx.now() } satisfies Stored);
-    await this.markSystem(ctx, "ok");
+    await this.markSystem(ctx, "connected");
     if (this.pull) void this.pull(ctx).catch(() => undefined); // the first numbers, straight away; the daily read repeats it
     return { result: "connected" };
   }
@@ -327,16 +322,16 @@ export class ComposioConnector implements Connector {
     const r = await this.stored(ctx).catch(() => null);
     if (r && this.deps.client) await this.deps.client.deleteAccount(r.accountId).catch(() => undefined);
     await ctx.vault.delete(ctx.tenant, this.info.id);
-    await this.markSystem(ctx, "not_connected");
+    await this.markSystem(ctx, "disconnected");
   }
 
   async health(ctx: ConnectorCtx): Promise<ConnectionHealth> {
     const r = await this.stored(ctx).catch(() => null);
     if (!r) return { ok: false, message: `${this.info.name} isn't connected.` };
     const a = await this.client().account(r.accountId);
-    return a && a.userId === this.user(ctx) && a.status.toUpperCase() === "ACTIVE"
-      ? { ok: true, message: `${this.info.name} still answers.` }
-      : { ok: false, message: `${this.info.name} stopped letting us in. Connect it again.` };
+    if (a && a.userId === this.user(ctx) && a.status.toUpperCase() === "ACTIVE") return { ok: true, message: `${this.info.name} still answers.` };
+    await this.markSystem(ctx, "expired", { lastError: "The connection service no longer accepts the saved access" }); // the ladder drops a rung, and the graph keeps when it stopped
+    return { ok: false, message: `${this.info.name} stopped letting us in. Connect it again.` };
   }
 
   /** A session for one call: runs Composio tools as this business, and only this business. */
