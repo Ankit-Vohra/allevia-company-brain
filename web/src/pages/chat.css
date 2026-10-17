@@ -76,7 +76,7 @@
 .chat-empty { max-width: 640px; margin: 0 auto; padding: clamp(28px, 8vh, 80px) clamp(16px, 3vw, 32px) 32px; display: grid; gap: 12px; justify-items: start; }
 .chat-empty h2 { font-family: var(--font-display); font-size: var(--text-2xl); line-height: 1.1; letter-spacing: -0.02em; }
 .chat-empty p { color: var(--color-ink-2); max-width: 56ch; text-wrap: pretty; }
-.chat-empty-note { font-size: var(--text-sm); color: var(--color-muted) !important; }
+.chat-empty-persona { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .chat-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .chat-chip {
   min-height: 36px; max-width: 100%; padding: 6px 14px; border: 1px solid var(--color-rule); border-radius: 18px; background: var(--color-card);
@@ -104,7 +104,7 @@
 .ct-notes ul { list-style: none; display: grid; gap: 10px; }
 .ct-note { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
 .ct-note-by { font-size: var(--text-sm); }
-.ct-note-text { font-size: var(--text-sm); color: var(--color-ink-2); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; text-wrap: pretty; }
+.ct-note-text { font-size: var(--text-sm); color: var(--color-ink-2); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-wrap: pretty; }
 .ct-note-checks { margin-top: 2px; font-size: var(--text-2xs); color: var(--color-muted); }
 
 /* the team talking it over */
@@ -136,7 +136,7 @@
 .ct-approve header { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); }
 .ct-approve header p { flex: 1; }
 .ct-approve-title { font-weight: 600; line-height: 1.4; }
-.ct-approve-body { font-size: var(--text-sm); color: var(--color-ink-2); white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.ct-approve-body { font-size: var(--text-sm); color: var(--color-ink-2); white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .ct-approve-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .ct-edit { display: grid; gap: 8px; }
 

@@ -173,7 +173,7 @@ export default function ChatPage() {
               <h1 id="chat-title" className="chat-title">{nameOf(who)}</h1>
               <p className="chat-sub">
                 {who === TEAM
-                  ? `The whole team. ${agentDef(CHIEF)?.name} sends your request to the right people.`
+                  ? `Everyone · ${agentDef(CHIEF)?.name} picks who answers`
                   : <><span className={`ct-dot dot-${dotOf(person, working.has(who))}`} aria-hidden="true" /> {agentDef(who)?.title} · {dotWords(dotOf(person, working.has(who)), person?.mode)}</>}
               </p>
             </div>
@@ -194,7 +194,7 @@ export default function ChatPage() {
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCustomise(true)} disabled={!person}><Icon name="pen" size={14} /> Customise</button>
               </>
             )}
-            {who === TEAM && <Link to="/team" className="btn btn-quiet btn-sm">Manage your team</Link>}
+            {who === TEAM && <Link to="/team" className="btn btn-quiet btn-sm">Manage</Link>}
           </div>
         </header>
 
@@ -204,14 +204,12 @@ export default function ChatPage() {
               {who === TEAM ? (
                 <>
                   <h2>Ask {tenant.name}'s team anything.</h2>
-                  <p>{agentDef(CHIEF)?.name} reads your question, asks the right people, and gives you one clear answer. Each person who helps is named.</p>
                 </>
               ) : (
                 <>
                   <AgentAvatar id={who} size={64} />
                   <h2>Chat with {nameOf(who)}</h2>
-                  <p>{agentDef(who)?.persona}</p>
-                  <p className="chat-empty-note">{nameOf(who)} answers with their own tools and skills, and every answer is still checked against your records.</p>
+                  <p className="chat-empty-persona">{agentDef(who)?.persona}</p>
                 </>
               )}
               {chips.length > 0 && (
@@ -251,11 +249,11 @@ export default function ChatPage() {
         </div>
 
         {thread.running && thread.liveRun && getMode() === "live" && !getPublicMode() && (
-          <p className="chat-note" role="status">{thread.liveRun.stopping ? "Stopping…" : "The team keeps working if you close this tab. The answer will be here when you come back."}</p>
+          <p className="chat-note" role="status">{thread.liveRun.stopping ? "Stopping…" : "Keeps working if you close this tab."}</p>
         )}
         {resting ? (
           <div className="chat-resting" role="status">
-            <p><b>{nameOf(who)} is resting.</b> Switch {nameOf(who)} back on to chat.</p>
+            <p><b>{nameOf(who)} is resting.</b></p>
             {!getPublicMode() && <button type="button" className="btn btn-gold btn-sm" onClick={() => void patch(who, { mode: "full" })}>Switch {nameOf(who)} on</button>}
           </div>
         ) : (
@@ -317,7 +315,7 @@ function Rail({ who, sessionId, team, threads, mine, loading, working, onPick }:
               <Link to={chatPath(id)} className="btn btn-quiet btn-sm" onClick={onPick}><Icon name="plus" size={13} /> New</Link>
             </div>
             {loading ? <span className="skeleton rail-skel" /> : convos.length === 0 ? (
-              <p className="rail-empty">None yet. What you say here, in Discord or anywhere else lands in this list.</p>
+              <p className="rail-empty">None yet.</p>
             ) : (
               <ul>
                 {convos.map((s) => (
@@ -342,7 +340,7 @@ function Rail({ who, sessionId, team, threads, mine, loading, working, onPick }:
     <nav className="rail" aria-label="Who to talk to">
       <h2 className="rail-title">Chat</h2>
       <ul className="rail-list">
-        {entry(TEAM, <AgentAvatar id={CHIEF} size={36} />, "Your team", `${agentDef(CHIEF)?.name} sends it to the right people`, dotOf(undefined, working.has(TEAM)))}
+        {entry(TEAM, <AgentAvatar id={CHIEF} size={36} />, "Your team", "Everyone", dotOf(undefined, working.has(TEAM)))}
       </ul>
       <p className="rail-label">People</p>
       <ul className="rail-list">
