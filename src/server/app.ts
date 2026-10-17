@@ -369,26 +369,30 @@ export function createApp(deps: ServerDeps): Hono {
     return next();
   });
   // The door (ALLEVIA_AUTH=1): before any body is read or any route runs, a request for a business is let in, in this order:
-  //   1. a signed-in account that is a member of the business, with its role there (owner or member);
-  //   2. that business's owner link (or the operator's), which makes the caller the owner;
-  //   3. a demo business, as the read-only public view;
-  //   4. otherwise a 401, the same for a business that exists and one that does not.
+  //   1. a signed-in operator account (User.operator, set only by `auth:operator` on the server), as the owner of any business
+  //      in the registry: the person who runs Allevia; read with the session on every request, so switching it off is immediate;
+  //   2. a signed-in account that is a member of the business, with its role there (owner or member);
+  //   3. that business's owner link (or the operator's), which makes the caller the owner;
+  //   4. a demo business, as the read-only public view;
+  //   5. otherwise a 401, the same for a business that exists and one that does not.
   // Reserved first segments (health, tenants, plans, onboard, auth) are the global routes below; a first segment that is not a
   // slug is a 404 later.
   app.use("/api/:t/*", async (c, next) => {
     const slug = c.req.param("t") ?? "";
     if (!authOn || RESERVED_SLUGS.includes(slug) || !isTenantSlug(slug)) return next();
     const s = await sessionOf(c);
+    const findReg = async () => (await registry()).find((t) => t.slug === slug);
+    if (s?.operator && (await findReg())) return requestView.run({ publicView: false, role: "owner", userId: s.user.id }, next);
     const member = s?.memberships.find((m) => m.slug === slug);
     if (s && member) return requestView.run({ publicView: false, role: member.role, userId: s.user.id }, next);
     if (await authorize(deps.auth!, c, slug)) return requestView.run({ publicView: false, role: "owner" }, next);
-    const reg = (await registry()).find((t) => t.slug === slug);
+    const reg = await findReg();
     if (reg?.demo === true) return requestView.run({ publicView: true }, next);
     throw new HttpError(401, privateMessage); // the same answer for a business that exists and one that does not
   });
   // A showcase (a real business shown to the public, showcase.ts): what a visitor gets from every route of that business goes
-  // through one filter, after the route has run, so no page can forget it. Its owner and members are let in above as
-  // themselves and get everything; a plain demo is not touched.
+  // through one filter, after the route has run, so no page can forget it. Its owner and members (and the operator) are let in
+  // above as themselves and get everything; a plain demo is not touched.
   app.use("/api/:t/*", async (c, next) => {
     const slug = c.req.param("t") ?? "";
     if (RESERVED_SLUGS.includes(slug) || !isTenantSlug(slug) || !isPublic()) return next();
@@ -434,14 +438,19 @@ export function createApp(deps: ServerDeps): Hono {
   app.get("/api/tenants", async (c) => {
     let list = await registry();
     let roleOf: ((slug: string) => "owner" | "member" | undefined) | undefined;
+    let viaOperator = (_slug: string): boolean => false;
     if (authOn) {
       // a stranger sees the demo businesses; a signed-in account also the businesses it is in, an owner link its business, the
-      // operator all of them. The caller's own businesses come first.
+      // operator (link or account) all of them. The caller's own businesses come first.
       const [scopes, s] = await Promise.all([scopesOf(deps.auth!, c), sessionOf(c)]);
       const mine = new Map(s?.memberships.map((m) => [m.slug, m.role]) ?? []);
-      roleOf = (slug) => mine.get(slug) ?? (scopes.has(OPERATOR_SCOPE) || scopes.has(slug) ? "owner" : undefined);
+      // an operator account is the owner of every business (the door above), and is told which ones it is not itself in
+      const opAccount = s?.operator === true;
+      viaOperator = (slug) => opAccount && !mine.has(slug);
+      roleOf = (slug) => (opAccount ? "owner" : mine.get(slug) ?? (scopes.has(OPERATOR_SCOPE) || scopes.has(slug) ? "owner" : undefined));
       list = list.filter((t) => roleOf!(t.slug) !== undefined || t.demo === true);
-      list = [...list.filter((t) => roleOf!(t.slug)), ...list.filter((t) => !roleOf!(t.slug))];
+      const rank = (slug: string): number => (opAccount && mine.has(slug) ? 0 : roleOf!(slug) ? 1 : 2);
+      list = [0, 1, 2].flatMap((r) => list.filter((t) => rank(t.slug) === r));
     }
     const out = await Promise.all(list.slice(0, 200).map(async (reg) => {
       let g: GraphHandle | undefined;
@@ -449,7 +458,7 @@ export function createApp(deps: ServerDeps): Hono {
       // with sign-in on, a business the caller is not in (and holds no link for) is a demo they may only read: say so, so the app turns its buttons off
       const role = roleOf?.(reg.slug);
       const dto = await tenantDto(reg, g, !!roleOf && !role);
-      return role ? { ...dto, role } : dto;
+      return role ? { ...dto, role, ...(viaOperator(reg.slug) ? { operator: true as const } : {}) } : dto;
     }));
     return c.json(out);
   });

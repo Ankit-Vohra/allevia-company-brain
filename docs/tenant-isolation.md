@@ -101,7 +101,8 @@ the same deployment would have been readable by the world.
   during the trial, see "Accounts" below), is what can start onboarding (a business spends model time and makes a graph).
   Keep it off shared machines.
 - **The business list** (`/api/tenants`) shows a stranger only the demos, a signed-in account the businesses it is in
-  (with its role) and the demos, an owner link its own business and the demos, the operator everything.
+  (with its role) and the demos, an owner link its own business and the demos, the operator (link or operator account)
+  everything.
   `/api/health` stops reporting the number of businesses.
 - **Cross-site requests are refused** (with the flag on): a change that carries a foreign `Origin`, or is a cross-site
   fetch, is a 403. This also stops a form on another site from posting an attacker's own link to `/api/auth/open`.
@@ -127,7 +128,7 @@ the registry graph. With `ALLEVIA_AUTH=1` a person signs up with a name, an emai
 and owns the business that is set up from it. Owner links keep working beside accounts.
 
 - **What is stored** (`src/auth/accounts.ts`, in `allevia_meta`, never in a business's graph):
-  `(:User {id, email, name, passHash, createdAt, disabledAt})`, `(:User)-[:MEMBER_OF {role: owner|member, since}]->(:Tenant)`,
+  `(:User {id, email, name, passHash, createdAt, disabledAt, operator})`, `(:User)-[:MEMBER_OF {role: owner|member, since}]->(:Tenant)`,
   `(:User)-[:HAS_SESSION]->(:Session {idHash, createdAt, expiresAt, lastSeenAt, revokedAt})`,
   `(:Tenant)-[:HAS_INVITE]->(:Invite {codeHash, role, createdAt, expiresAt, usedAt, usedBy})` and
   `(:User)-[:HAS_RESET]->(:PasswordReset {codeHash, createdAt, expiresAt, usedAt})`. Range indexes and unique constraints
@@ -145,10 +146,22 @@ and owns the business that is set up from it. Owner links keep working beside ac
   follows a link from their email arrives signed in; a cross-site change is still refused by the Origin check. A session
   is looked up by its hash on every request, so signing out, a password change (every other session ends), a reset
   link (every session ends) and `auth:disable` take effect on the very next request.
-- **The door** (`src/server/app.ts`), in order: a session whose account is a member of the business in the path (its
-  role and account id go on the request: `src/server/roles.ts`); otherwise that business's owner link, which makes the
-  caller the owner; otherwise a demo business, read-only; otherwise a 401 with one sentence for a business that exists
-  and one that does not. Every route under `/api/<slug>/` is behind it (a test lists them all).
+- **The door** (`src/server/app.ts`), in order: a session whose account is the operator, for any business in the
+  registry, as its owner (see "The operator account" below); a session whose account is a member of the business in the
+  path (its role and account id go on the request: `src/server/roles.ts`); otherwise that business's owner link, which
+  makes the caller the owner; otherwise a demo business, read-only; otherwise a 401 with one sentence for a business that
+  exists and one that does not. Every route under `/api/<slug>/` is behind it (a test lists them all).
+- **The operator account** (since 17 October). The founder runs Allevia, so his own account sees every business:
+  `User.operator = true`, set and cleared only by `auth:operator <email> [--off]` on the server. No HTTP route reads a
+  request for it or writes it (a test lists every route, tries the plausible ones and a sign-up body with
+  `operator: true`, and checks that `setOperator` is called from the CLI alone). A session of that account opens any
+  registered business as its owner, with its account id on the request; `/api/tenants` lists every business, its own
+  memberships first, each with `role: "owner"` and `operator: true` where it is not itself a member; `/api/auth/me` says
+  `operator: true`, and the web app shows an "Operator" tag in the account menu. A showcase is not masked for it (the
+  mask is for visitors). The flag is read with the session on every request, so `--off` takes effect on the very next
+  one: it is back to its own businesses and the demos, masked like any visitor. Every other account keeps the rules
+  above exactly. Keep it to the founder's own account: it is as powerful as the operator link, and a stolen password
+  for it opens every business (there is no second factor yet).
 - **Roles.** The owner may do everything. A member asks, writes drafts and approves, but connecting or disconnecting
   tools, where approved fixes land, switching people on the team on or off, applying instructions to the team and
   inviting people are the owner's (`requireOwner()`); the plan and billing follow when they are built.
@@ -173,8 +186,8 @@ and owns the business that is set up from it. Owner links keep working beside ac
 
 The web app sends a signed-out visitor with no business of their own to `/login`; "See the demo" opens the demo business
 read-only. (`src/server/routes/account.ts`, `web/src/pages/Auth.tsx`; tests: `tests/security/login.test.ts` through the
-app, `tests/security/hosted-demo.test.ts` over real HTTP, `tests/security/accounts.test.ts` and
-`tests/security/passwords.test.ts` for the store.)
+app, `tests/security/operator.test.ts` for the operator account through the app, `tests/security/hosted-demo.test.ts`
+over real HTTP, `tests/security/accounts.test.ts` and `tests/security/passwords.test.ts` for the store.)
 
 ## What we found and fixed
 
@@ -232,8 +245,9 @@ defaults come from code.
    a set-up that does not finish leaves a business in the registry with no owner, for the operator to erase. An owner
    link is still a shared secret: whoever holds it is the owner until it is revoked, and links do not expire unless
    issued with `--days`. Prefer accounts, and revoke old links once their owners have accounts.
-4. **The operator link is all-powerful** and stored the same way as an owner link. Keep it to one or two people; revoke
-   and reissue when someone leaves.
+4. **The operator link and the operator account are all-powerful.** The link is stored the same way as an owner link;
+   the account is only as safe as its password (no second factor yet). Keep both to one or two people; revoke the link
+   and run `auth:operator <email> --off` when someone leaves.
 5. **There is no per-business store for secrets yet.** Every token Allevia uses today (the Discord bot, the founder's Instagram
    and GitHub access, the ops box) is a single value in the founder's env file, and belongs to the founder's own
    businesses. When a customer connects their own accounts (Google, Instagram, ads), each token must be its own record: encrypted
@@ -387,6 +401,7 @@ npm run cli -- auth:users [kestrel_oak]                                    # acc
 npm run cli -- auth:invite kestrel_oak --role owner                        # an owner account for a business set up before accounts
 npm run cli -- auth:reset-link priya@example.com                           # a single-use link to choose a new password (24 hours)
 npm run cli -- auth:disable priya@example.com                              # signed out everywhere, cannot sign in; --off to undo
+npm run cli -- auth:operator founder@example.com                           # this account opens every business as owner; --off to undo
 ALLEVIA_AUTH=1 npm run cli -- serve
 ```
 
