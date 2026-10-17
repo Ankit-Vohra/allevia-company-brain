@@ -9,7 +9,8 @@ import type {
 } from "../types-ext";
 import type { AgentPatch } from "../api";
 import { BRIEF, FRESHNESS, GRAPHS, KNOWS, PLAYBOOKS, TENANTS, seedApprovals, seedRecommendations } from "./data";
-import { type MockGraph, buildGraph, graphData, neighborhood, nodeDetail, refOf, searchGraph } from "./graph-kit";
+import { type MockGraph, buildGraph, graphData, mapOf, neighborhood, nodeDetail, refOf, searchGraph } from "./graph-kit";
+import type { BrainMapDto } from "../lib/brain-map";
 import { directRun, skillsOf, toolsOf } from "./chat";
 import { onboardScript } from "./onboard";
 import * as p90 from "./program";
@@ -186,6 +187,7 @@ export const mockApi = {
   async node(t: string, id: string): Promise<NodeDetail | null> { return nodeDetail(graphOf(t), id); },
   async graph(t: string, focus: string, depth = 1): Promise<GraphData> { return neighborhood(graphOf(t), focus, depth); },
   async graphOverview(t: string): Promise<GraphData> { return graphData(graphOf(t)); },
+  async brainMap(t: string, limit = 400): Promise<BrainMapDto> { return mapOf(graphOf(t), limit); },
 
   async agents(t: string): Promise<AgentSummary[]> {
     return AGENTS.map((a) => ({ id: a.id, stats: statsFor(t, a.id), knows: KNOWS[t]?.[a.id]?.length ?? 0 }));

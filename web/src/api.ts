@@ -174,6 +174,10 @@ export const api = {
   async graphStory(t: string, by: "recorded" | "happened" = "recorded"): Promise<import("./components/GraphGrowth").GraphStoryDto | null> {
     return mode === "mock" ? null : getJson(`/api/${enc(t)}/graph/story?by=${by}`);
   },
+  /** GET /api/:t/graph/map: the Brain map and Home's living brain, the `limit` most important things (light for a phone). */
+  async brainMap(t: string, limit = 400): Promise<import("./lib/brain-map").BrainMapDto> {
+    return mode === "mock" ? (await mock()).brainMap(t, limit) : getJson(`/api/${enc(t)}/graph/map?limit=${limit}`);
+  },
   async graphOverview(t: string): Promise<GraphData> {
     return mode === "mock" ? (await mock()).graphOverview(t) : getJson(`/api/${enc(t)}/graph/overview`);
   },

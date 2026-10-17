@@ -1,20 +1,36 @@
-// Node labels → a hue for dots and graph nodes. Gold is never a label colour: it is reserved for the lit path.
-export const LABEL_HUE: Record<string, number> = {
-  Business: 270, Person: 25, Team: 25, Agent: 300,
-  Decision: 265, Document: 250, Chunk: 250, Memory: 300, Turn: 300, Session: 300,
-  Channel: 330, Content: 340, Campaign: 10,
-  Audience: 170, Need: 185, Product: 150, Feature: 150,
-  Rule: 120, BrandRule: 110, BrandAsset: 110, Playbook: 125,
-  Observation: 225, Metric: 215,
-  Page: 200, Query: 195, Event: 45,
-  Task: 55, System: 160, Recommendation: 300, Approval: 300, Action: 300, Finding: 300,
-  Competitor: 285, Supplier: 285, Partner: 285, Client: 285,
-};
+// Kinds of things and their colours. The Brain map's legend chips are these kinds; every dot in the app (the map, the
+// side panel, search, the answer's path) takes its hue from the kind its label belongs to, so a colour means the same
+// thing everywhere. Soft hues on two calm bases (warm paper, indigo ink). Gold is never a kind colour: it is reserved
+// for the lit answer path and for what the team is reading right now.
+export interface MapKind { id: string; name: string; hue: number; chroma: number; labels: string[] }
 
-export const hueFor = (label: string) => LABEL_HUE[label] ?? 265;
+export const MAP_KINDS: MapKind[] = [
+  { id: "sell", name: "What you sell", hue: 148, chroma: 0.1, labels: ["Product", "Feature"] },
+  { id: "customers", name: "Customers", hue: 176, chroma: 0.09, labels: ["Audience", "Need", "Client", "Lead", "Deal", "Meeting"] },
+  { id: "people", name: "People and teams", hue: 28, chroma: 0.1, labels: ["Business", "Person", "Team", "Agent", "Supplier", "Partner", "Competitor"] },
+  { id: "numbers", name: "Numbers", hue: 232, chroma: 0.1, labels: ["Metric", "Observation", "Goal"] },
+  { id: "decisions", name: "Decisions and plans", hue: 292, chroma: 0.09, labels: ["Decision", "Recommendation", "Finding", "Task", "Event", "Approval", "Action", "Program", "Checkpoint"] },
+  { id: "posts", name: "Posts and channels", hue: 345, chroma: 0.1, labels: ["Content", "Campaign", "Channel", "Asset"] },
+  { id: "website", name: "Website", hue: 204, chroma: 0.09, labels: ["Page", "Query", "Rule"] },
+  { id: "documents", name: "Documents and notes", hue: 262, chroma: 0.035, labels: ["Document", "Chunk", "Memory", "BrandRule", "BrandAsset", "Playbook", "Version"] },
+  { id: "tools", name: "Tools", hue: 118, chroma: 0.09, labels: ["System", "Capability"] },
+];
+const OTHER_KIND: MapKind = { id: "other", name: "Other", hue: 265, chroma: 0.03, labels: [] };
+
+const KIND_OF = new Map(MAP_KINDS.flatMap((k) => k.labels.map((l) => [l, k] as const)));
+/** The kind a label belongs to ("Observation" is a Number, "System" a Tool); anything unlisted is "other". */
+export const kindOf = (label: string): MapKind => KIND_OF.get(label) ?? OTHER_KIND;
+
+export const LABEL_HUE: Record<string, number> = Object.fromEntries(
+  [...KIND_OF.entries()].map(([l, k]) => [l, k.hue]),
+);
+
+export const hueFor = (label: string) => kindOf(label).hue;
+/** How strong a kind's colour is: documents and notes stay nearly grey so the business itself stands out. */
+export const chromaFor = (label: string) => kindOf(label).chroma;
 
 /** Solid node colour for canvases (works on both themes). */
-export const nodeColor = (label: string, dark: boolean) => `oklch(${dark ? 72 : 58}% ${label === "Document" || label === "Chunk" ? 0.04 : 0.11} ${hueFor(label)})`;
+export const nodeColor = (label: string, dark: boolean) => `oklch(${dark ? 72 : 60}% ${chromaFor(label)} ${hueFor(label)})`;
 
 export const COMMUNITY_HUES = [265, 330, 170, 120, 225, 200, 55, 25];
 export const communityColor = (c: number | undefined, dark: boolean) => `oklch(${dark ? 72 : 60}% 0.11 ${COMMUNITY_HUES[(c ?? 0) % COMMUNITY_HUES.length]})`;

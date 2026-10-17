@@ -1,6 +1,7 @@
 // Helpers to declare a mock tenant graph compactly and to cut tool-result-sized pieces out of it.
 import type { EdgeRef, NodeRef, SourceRef } from "@shared/contracts";
 import type { GraphData, GraphNode, NodeDetail, VersionRecord } from "../types-ext";
+import type { BrainMapDto } from "../lib/brain-map";
 
 export interface MockNode extends GraphNode {
   summary?: string;
@@ -94,6 +95,34 @@ export function graphData(g: MockGraph, ids?: string[]): GraphData {
   return {
     nodes: pick.map(({ id, label, name, asOf, simulated, rank, community, summary }) => ({ id, label, name, asOf, simulated, rank, community, summary })),
     edges: g.edges.filter((e) => set.has(e.from) && set.has(e.to)),
+  };
+}
+
+/** The Brain map, shaped like GET /api/:t/graph/map: the top `limit` by rank, links as index triples, the whole graph's size.
+ *  The mock has no record of when each thing was learned, so its own date stands in (and the order is by importance). */
+export function mapOf(g: MockGraph, limit = 400): BrainMapDto {
+  const all = [...g.nodes.values()].filter((n) => !["Version", "Chunk", "Observation", "Turn", "Session"].includes(n.label));
+  const top = all.sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0) || a.id.localeCompare(b.id)).slice(0, Math.max(1, limit));
+  const index = new Map(top.map((n, i) => [n.id, i]));
+  const types: string[] = [];
+  const links: Array<[number, number, number]> = [];
+  for (const e of g.edges) {
+    const a = index.get(e.from), b = index.get(e.to);
+    if (a === undefined || b === undefined || a === b) continue;
+    if (!types.includes(e.type)) types.push(e.type);
+    links.push([a, b, types.indexOf(e.type)]);
+  }
+  const counts: Record<string, number> = {};
+  for (const n of g.nodes.values()) counts[n.label] = (counts[n.label] ?? 0) + 1;
+  const learned = (n: MockNode) => (n.asOf ? Date.parse(n.asOf) : undefined);
+  return {
+    nodes: top.map((n) => ({
+      id: n.id, label: n.label, name: n.name, rank: n.rank ?? 0, ...(n.community !== undefined ? { community: n.community } : {}),
+      ...(n.asOf ? { asOf: n.asOf } : {}), ...(n.simulated ? { simulated: true } : {}), ...(learned(n) ? { learnedAt: learned(n) } : {}),
+    })),
+    types, links, counts,
+    totals: { things: Object.entries(counts).reduce((s, [l, c]) => (l === "Version" || l === "Chunk" ? s : s + c), 0), links: g.edges.length },
+    capped: all.length > top.length,
   };
 }
 
