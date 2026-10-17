@@ -331,6 +331,21 @@ describe("runTurn: reviews", () => {
     expect(out.agents).toEqual(["chief-of-staff", "content-strategist", "copy-editor", "fact-checker"]);
   });
 
+  it("a content revision that drops the copy (a pointer instead of the captions) keeps the draft, with its notes open", async () => {
+    const DRAFT = "Mon: Attikan Estate, dark and smooth. Come taste it. Visit your nearest café. [[product:attikan]]\n"
+      + "Tue: Order a cup, then visit us. [[product:attikan]]\nThu: The gift set, for someone who loves coffee. [[product:gift]]";
+    const { run } = setup({
+      "chief-of-staff:plan": plan([{ agent: "content-strategist", task: "A week of posts" }]),
+      "content-strategist:work": finding(DRAFT),
+      "content-strategist:revise": finding("Captions changed per the notes. Full text is in the message above."),
+      "copy-editor:review": { structured: { verdict: "fix", note: "Mon asks twice: cut 'Come taste it'." } },
+      "fact-checker:review": { structured: { verdict: "ok", note: "Claims hold." } },
+      "chief-of-staff:synthesis": { text: "Here is the week [[product:attikan]]." },
+    });
+    const out = await run();
+    expect(out.findings[0]).toMatchObject({ revised: false, text: DRAFT });
+  });
+
   it("a unanimous 'reject' marks the finding rejected, skips revision and warns the Chief", async () => {
     const { run, runtime } = setup({
       "chief-of-staff:plan": plan([{ agent: "data-analyst", task: "Signups" }]),

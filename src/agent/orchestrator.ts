@@ -1076,6 +1076,10 @@ class Turn {
         prompt: revisePrompt({ question: this.input.question, task: f.task, finding: this.view(f), notes: notes.map((n) => ({ reviewer: n.reviewer, verdict: n.verdict, note: n.note })), toolRounds: toolRounds("revise"), agent: producer.id, language: this.languageNote }),
       });
       const next = this.toFinding(out, { id: f.id, agent: f.agent, task: f.task, depIds: f.basedOn });
+      // The content desk's revision must still hold the copy (KEEP_WHOLE). On 18 Oct one came back as "Mon, Tue, Thu and Fri
+      // captions changed per the notes. Full text is in the message above." and the captions never reached the Chief. A
+      // revision under 60% of the draft's length has lost the copy: keep the draft, and its review notes stay open for the Chief.
+      if (producer.id === CONTENT_DESK && next.text.length < f.text.length * 0.6) return;
       Object.assign(f, { text: next.text, citations: next.citations, basedOn: next.basedOn, proposals: next.proposals.length ? next.proposals : f.proposals, revised: true });
       this.emitFinding(f);
     });
