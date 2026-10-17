@@ -90,7 +90,8 @@ export function useThread(tenantId: string, sessionId: string | undefined, pendi
       return {
         key: t.id, turnId: t.id, question: t.question, at: t.at, record: t, ...(t.target ? { target: t.target } : {}),
         events,
-        status: rp ? rp.status : ended,
+        // its live twin still going (the public demo plays a recorded thread back as the answer): working, with progress
+        status: rp ? rp.status : liveTwin?.status === "running" ? "running" : ended,
         replaying: rp?.status === "running",
         ...(ended === "error" ? { error: unreadable ? "This answer could not be loaded." : t.error ?? "Something went wrong." } : {}),
       };

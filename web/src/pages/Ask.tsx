@@ -112,7 +112,7 @@ export default function AskPage() {
         key: t.id, turnId: t.id, question: t.question, at: t.at, record: t,
         // the saved answer stands in until the work log arrives, or when there is none (never an endless grey box)
         events: rp ? rp.events : liveTwin?.events ?? (logs[t.id]?.length ? logs[t.id]! : savedAnswer(t)),
-        status: rp ? rp.status : ended,
+        status: rp ? rp.status : liveTwin?.status === "running" ? "running" : ended,
         replaying: rp?.status === "running",
         ...(ended === "error" && t.error ? { error: t.error } : {}),
       };

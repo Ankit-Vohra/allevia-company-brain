@@ -23,6 +23,8 @@ import { AnswerPath } from "./AnswerPath";
 
 const nameOf = (id: AgentId) => agentDef(id)?.name ?? id;
 const jobOf = (id: AgentId) => agentDef(id)?.title ?? "";
+/** "Kabir, Zoya and Imran", not "Kabir and Zoya and Imran". */
+const listWords = (names: string[]) => (names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0] ?? "");
 
 export interface TurnProps {
   turn: TurnItem;
@@ -74,7 +76,7 @@ export function ChatTurn(p: TurnProps) {
           {live && !answered && (
             <p className="ct-working" role="status">
               <span className="ct-pulse" aria-hidden="true" />
-              {turn.replaying ? "Replaying: " : ""}{working.length ? `${working.map(nameOf).join(" and ")} ${working.length > 1 ? "are" : "is"} on it…` : direct ? `${nameOf(who)} is reading your question…` : "Meera is reading your question…"}
+              {turn.replaying ? "Replaying: " : ""}{working.length ? `${listWords(working.map(nameOf))} ${working.length > 1 ? "are" : "is"} on it…` : direct ? `${nameOf(who)} is reading your question…` : notes.length ? `${nameOf(CHIEF)} is writing the answer…` : `${nameOf(CHIEF)} is reading your question…`}
             </p>
           )}
 
