@@ -308,12 +308,22 @@ chunks grow without limit.
 - `graph:tidy`;
 - `db:usage` alerts.
 
-**Phase 1** (building on 17 Oct):
-- a shared read-only reference graph;
-- the map shows business knowledge only;
-- a write gate (source, date and known type required);
-- entity resolution on write;
-- a `graph:hygiene` report.
+**Phase 1** (built 17–18 Oct):
+- a shared read-only reference graph, `allevia_reference` (src/graph/reference.ts): the playbooks, their rules, the Google
+  update timeline and the vendored files, loaded once. Onboarding and ingest no longer copy them. The agents' playbook
+  tool, the company skill and the capability ladder read it next to the business graph;
+- a business graph keeps a **stub** (same id, `refStub: true`, name, kind, severity, howToFix) of a shared rule that a
+  business fact points at: a Page FAILS or PASSES it, a Content USES_RULE it, or an answer CITED it. Citations still
+  resolve;
+- `graph:reference-split [--apply] [tenant…]` moves an existing copy out. It is a dry run by default. `--apply` first
+  writes a checked `tenant:export` backup to `~/allevia-db-backups/pre-split-<tenant>-<date>.export`;
+- the map, its counts, the overview and the growth story show business knowledge only. The Brain page has a "Show
+  general know-how" toggle, off by default;
+- a write gate on ingestion, onboarding, turns, meetings and `remember` (src/graph/gate.ts). It needs a known type, a
+  source and a date (the run's or the turn's when the node has none). A refusal is logged;
+- entity resolution on write: a new person, business or product with the same normalised name, email or merge is linked
+  to, not created again;
+- a `graph:hygiene <tenant>` report. It changes nothing.
 
 **Phase 2:**
 - roll up daily numbers to weekly after 90 days and monthly after a year, archiving the raw values to S3;
