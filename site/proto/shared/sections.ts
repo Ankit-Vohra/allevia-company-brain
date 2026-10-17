@@ -24,7 +24,8 @@ export const NAV: { label: string; href: string; id: string }[] = [
 /** The top bar. `current` is the page id that gets aria-current; `home` is where the wordmark goes (the prototype's own home). */
 export function nav(current: string, home: string): string {
   const links = NAV.map((n) => `<a href="${n.href}"${n.id === current ? ' aria-current="page"' : ""}>${esc(n.label)}</a>`).join("");
-  return `<header class="nav" data-nav>
+  return `<a class="skip" href="#main">Skip to content</a>
+<header class="nav" data-nav>
   <div class="wrap nav__in">
     <a class="brand" href="${home}" aria-label="Allevia, home">allevia</a>
     <nav class="nav__links" id="site-nav" aria-label="Main">${links}</nav>

@@ -45,7 +45,7 @@
   .is-scrub .problem__stage { height: 100%; min-height: 0; display: block; }
   .is-scrub .problem__links, .is-scrub .nz, .is-scrub .founder { display: flex; }
   .is-scrub .problem__links { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: calc(var(--links, 0) * (1 - var(--pull-all, 0))); }
-  .is-scrub .problem__links line { stroke: #e3b197; stroke-width: 1.2; stroke-dasharray: 3 7; vector-effect: non-scaling-stroke; opacity: 0.55; }
+  .is-scrub .problem__links line { stroke: #d9b48a; stroke-width: 1.2; stroke-dasharray: 3 7; vector-effect: non-scaling-stroke; opacity: 0.55; }
   .is-scrub .problem__halo { position: absolute; left: 50%; top: 50%; translate: calc(-50% - var(--calm, 0) * var(--sw) * 0.2) -50%; opacity: var(--brain, 0); scale: calc(0.85 + 0.15 * var(--brain, 0)); }
   .is-scrub .problem__brain { position: absolute; left: 50%; top: 50%; translate: calc(-50% - var(--calm, 0) * var(--sw) * 0.2) -50%; width: min(24vw, 22rem); opacity: var(--brain, 0); scale: calc(0.8 + 0.2 * var(--brain, 0)); }
   .is-scrub .founder { position: absolute; z-index: 4; left: 50%; top: 50%; flex-direction: column; align-items: center; gap: 0.35rem; translate: calc(-50% + var(--calm, 0) * var(--sw) * 0.3) calc(-50% + var(--calm, 0) * var(--sh) * 0.36); scale: calc(1 + var(--stress, 0) * 0.1 - var(--calm, 0) * 0.3); }
@@ -138,7 +138,7 @@
 .fcard__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-taupe); flex: none; transition: background-color 200ms ease; }
 .fcard--in.is-on { box-shadow: 0 0 0 2px var(--color-accent), var(--shadow-lift); }
 .fcard--in.is-on .fcard__dot { background: var(--color-accent); }
-.fcard--out { align-items: flex-start; opacity: 0.45; translate: 10px 0; }
+.fcard--out { align-items: flex-start; opacity: 0.6; translate: 10px 0; }
 .fcard--out.is-lit { opacity: 1; translate: 0 0; box-shadow: 0 0 0 1px rgb(60 44 24 / 0.07), var(--shadow-lift); }
 .fcard__logo { display: grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: 8px; background: var(--color-paper-2); flex: none; }
 .fcard__t b { display: block; font-size: 0.9375rem; font-weight: 600; }

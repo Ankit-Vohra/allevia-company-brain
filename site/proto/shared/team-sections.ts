@@ -117,7 +117,7 @@ function card(p: (typeof PEOPLE)[number], i: number, row: number): string {
     <div class="card__body">
       <h3 class="card__name" id="who-${p.id}">${esc(a.name)}</h3>
       <p class="card__role">${esc(s.title)}</p>
-      <p class="card__best"><span class="card__label">Best at</span> ${esc(s.best)}</p>
+      <p class="card__best">${esc(s.best)}</p>
       <ul class="card__asks" aria-label="Ask ${esc(a.name)}">${s.asks.map((q) => `<li>“${esc(q)}”</li>`).join("")}</ul>
       ${toolsHtml(p.id)}
     </div>

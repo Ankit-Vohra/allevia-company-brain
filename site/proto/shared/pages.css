@@ -52,7 +52,14 @@
 /* ---------- Product ---------- */
 .chapter { display: grid; gap: 2.5rem; }
 .chapter__copy { display: grid; gap: 1.2rem; align-content: center; }
-@media (min-width: 52.01rem) { .chapter--split { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(2rem, 6vw, 5rem); align-items: center; } #note .chapter--split { grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr); } }
+@media (min-width: 52.01rem) { .chapter--split { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(2rem, 6vw, 5rem); align-items: center; } #note .chapter--split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+/* what the team gets done: six one-line promises, a portrait each, hairlines instead of cards */
+.work__list { display: grid; margin-top: clamp(2rem, 4vw, 3.2rem); }
+.work__item { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 1.2rem; align-items: start; padding-block: 1.6rem; border-top: 1px solid var(--color-rule); }
+.work__item .face { margin-top: 0.2rem; }
+.work__h { font-size: clamp(1.4rem, 1.2rem + 0.7vw, 1.75rem); line-height: 1.15; margin-bottom: 0.45rem; }
+.work__item p { color: var(--color-ink-2); max-width: 30rem; }
+@media (min-width: 52.01rem) { .work__list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: clamp(2.5rem, 7vw, 6rem); } .work__item { padding-block: 1.9rem; } }
 /* the three setup steps (dark band). Static first: number and words, then the real screen, one step under another. On a wide screen with
  * motion (.is-pinned, set by home-client.ts) the band is tall and pinned; the active step is lit on the left and its screen shows on the right. */
 .steps__grid { display: grid; gap: clamp(2rem, 5vw, 3.5rem); }

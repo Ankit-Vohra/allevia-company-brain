@@ -27,7 +27,7 @@ export function problem(): string {
   const r = rng(11);
   type Kind = "people" | "tools" | "memory" | "alerts";
   const pool: { kind: Kind; html: string }[] = [];
-  NOISE.people.forEach((t, i) => pool.push({ kind: "people", html: `<span class="nz__dot" style="--c:${["#9a5232", "#4f5433", "#a1743a", "#6e7447", "#7a5a3a", "#8a6a2a"][i % 6]}">${esc(t[0]!)}</span><span>${esc(t)}</span>` }));
+  NOISE.people.forEach((t, i) => pool.push({ kind: "people", html: `<span class="nz__dot" style="--c:${["#9a5232", "#7a5a3a", "#a1743a", "#6b4a2e", "#8a6a2a", "#8a4a2a"][i % 6]}">${esc(t[0]!)}</span><span>${esc(t)}</span>` }));
   TOOL_TABS.forEach(([id, name], i) => pool.push({ kind: "tools", html: `${logoMarkup(id, 18)}<span>${esc(name)}</span><span class="nz__badge">${BADGES[i]}</span>` }));
   NOISE.memory.forEach((t) => pool.push({ kind: "memory", html: `<span>${esc(t)}</span>` }));
   NOISE.alerts.forEach((t) => pool.push({ kind: "alerts", html: `<span>${esc(t)}</span>` }));
@@ -172,9 +172,9 @@ export function grow(): string {
   <div class="grow__copy on-ink">
     <h2 id="grow-h" class="h2 h2--split"><span class="t1">It keeps growing.</span> <span class="t2">The longer you use it, the more it knows.</span></h2>
     <ul class="grow__points">
-      <li><b>Everything is kept.</b> Every decision, conversation and number, with where it came from.</li>
-      <li><b>Everything is connected.</b> Your team follows a few links to the answer, so it stays quick.</li>
-      <li><b>Kept in a graph.</b> The links live in <a href="https://www.falkordb.com" rel="noopener">FalkorDB</a>, a graph database.</li>
+      <li>It keeps every decision, conversation and number, with where it came from.</li>
+      <li>It links them, so your team reaches an answer in a few hops and stays quick as the brain grows.</li>
+      <li>The links live in <a href="https://www.falkordb.com" rel="noopener">FalkorDB</a>, a graph database.</li>
     </ul>
   </div>
   <div class="grow__viz">
@@ -189,7 +189,7 @@ export function grow(): string {
       <button type="button" class="grow__b" data-grow-stage="1" aria-pressed="false">Month 3</button>
       <button type="button" class="grow__b" data-grow-stage="2" aria-pressed="false">Year 1</button>
     </div>
-    <p class="grow__ask"><span>Why did sign-ups drop?</span> <b>4 hops, every time</b></p>
+    <p class="grow__ask"><span>Why did sign-ups drop?</span> <b>The answer is 4 hops away</b></p>
   </div>
   </div>
   <script type="application/json" id="grow-data">${growJson()}</script>
