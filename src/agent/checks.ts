@@ -65,6 +65,7 @@ const IGNORED: RegExp[] = [
   /\b\d{4}[/.]\d{1,2}[/.]\d{1,2}\b/g,                                                  // 2026/10/12
   /\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b/g,                                              // 05/10/2026
   /\b\d{4}-?W\d{1,2}\b/g,                                                              // 2026-W41
+  new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s?(?:[–-]|to|and)\\s?\\d{1,2}(?:st|nd|rd|th)?\\s+${MONTH}\\b`, "g"), // 12 to 16 Oct, 12–16 October
   new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s+${MONTH}\\b\\.?(?:,?\\s+\\d{4})?`, "g"),   // 5 Oct, 5th October 2026
   new RegExp(`\\b${MONTH}\\b\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?\\b(?:,?\\s+\\d{4})?`, "g"), // Oct 5, October 5, 2026
   new RegExp(`\\b${MONTH}\\b\\.?,?\\s+\\d{4}\\b`, "g"),                               // Oct 2026, Oct, 2026
@@ -188,8 +189,22 @@ export function checkTurn(answer: string, touched: TouchedSet, opts: CheckOpts =
   const real = [...[...touched.realNumbers()].map(Number).filter(Number.isFinite), ...asked];
   const mentions = findNumbers(answer);
   const ungroundedNumbers: string[] = [];
+  // A total the team added up from figures it cites ("289 visits": 214 + 68 + 3 + 2 + 2, each grounded) is grounded too:
+  // whole, non-percent numbers only, from at most 12 of the answer's grounded figures.
+  const parts = mentions.filter((m) => !m.percent && Number.isInteger(m.value) && m.value > 0 && isGrounded(m, data)).map((m) => m.value).slice(0, 12);
+  const isSumOfParts = (v: number): boolean => {
+    for (let mask = 1; mask < 1 << parts.length; mask++) {
+      if ((mask & (mask - 1)) === 0) continue; // two or more parts
+      let sum = 0;
+      for (let i = 0; i < parts.length; i++) if (mask & (1 << i)) sum += parts[i]!;
+      if (sum === v) return true;
+    }
+    return false;
+  };
   for (const m of mentions) {
-    if (!isGrounded(m, data) && !ungroundedNumbers.includes(m.raw)) ungroundedNumbers.push(m.raw);
+    if (isGrounded(m, data)) continue;
+    if (!m.percent && Number.isInteger(m.value) && m.value > 0 && isSumOfParts(m.value)) continue;
+    if (!ungroundedNumbers.includes(m.raw)) ungroundedNumbers.push(m.raw);
   }
 
   // Simulated data needs saying only when the answer USES it: it cites a simulated node, or one of its numbers is

@@ -300,3 +300,19 @@ describe("checkTurn: the review's probe cases", () => {
     });
   }
 });
+
+describe("checkTurn: totals and day ranges (17 Oct: a right answer was marked FAIL on '289' and '12')", () => {
+  const t = touched({ direct: 214, ai: 68, unassigned: 3, google: 2, referral: 2, daily: [73, 72, 67, 59, 18] });
+  it("a total of figures the answer cites is grounded", () => {
+    const c = checkTurn("289 visits in the last 30 days: direct 214, AI assistants 68, unassigned 3, Google 2, links 2.", t, { now: NOW });
+    expect(c.ungroundedNumbers).toEqual([]);
+  });
+  it("a day range is a date, not a number", () => {
+    const c = checkTurn("Daily figures exist only for 12 to 16 Oct: 73, 72, 67, 59 and 18 visits.", t, { now: NOW });
+    expect(c.ungroundedNumbers).toEqual([]);
+  });
+  it("a made-up number is still caught", () => {
+    const c = checkTurn("300 visits: direct 214 and AI assistants 68.", t, { now: NOW });
+    expect(c.ungroundedNumbers).toEqual(["300"]);
+  });
+});
