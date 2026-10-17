@@ -333,7 +333,6 @@ export function OfficePage() {
                             <AgentAvatar id={w.agent} size={22} />
                             <span className="home-standup-text">
                               <span className="home-standup-title">{w.title}</span>
-                              <span className="home-standup-why">{w.matters}</span>
                             </span>
                             <Icon name="chevron-right" size={14} />
                           </Link>
@@ -351,7 +350,6 @@ export function OfficePage() {
                           <AgentAvatar id={i.agent} size={22} />
                           <span className="home-standup-text">
                             <span className="home-standup-title">{agentDef(i.agent)?.name ?? "Your team"} drafted {lowerFirst(i.title)}</span>
-                            <span className="home-standup-why">{i.why}</span>
                           </span>
                           <Icon name="chevron-right" size={14} />
                         </Link>
@@ -371,19 +369,19 @@ export function OfficePage() {
                 <Icon name="chevron-right" size={15} />
               </Link>
             ) : (
-              <p className="home-calm">Nothing right now. Nice.</p>
+              <p className="home-calm">Nothing right now.</p>
             )}
           </div>
           <div className="home-row">
             <p className="home-label">Next step</p>
             {standup.data?.waiting?.[0] ? (
-              <Link to={`/approvals#${encodeURIComponent(standup.data.waiting[0].approvalId)}`} className="home-next">Say OK to the biggest fix first: {lowerFirst(standup.data.waiting[0].title)}<Icon name="chevron-right" size={15} /></Link>
+              <Link to={`/approvals#${encodeURIComponent(standup.data.waiting[0].approvalId)}`} className="home-next">Biggest fix first: {lowerFirst(standup.data.waiting[0].title)}<Icon name="chevron-right" size={15} /></Link>
             ) : drafted[0] ? (
               <Link to={`/approvals#${encodeURIComponent(drafted[0].approvalId!)}`} className="home-next">Say OK or change: {lowerFirst(drafted[0].title)}<Icon name="chevron-right" size={15} /></Link>
             ) : topIdea ? (
               <Link to="/insights" className="home-next">{topIdea.title}<Icon name="chevron-right" size={15} /></Link>
             ) : (
-              <p className="home-calm">Ask your team a question below.</p>
+              <p className="home-calm">Ask your team below.</p>
             )}
           </div>
         </section>
@@ -401,7 +399,7 @@ export function OfficePage() {
         {!running && sessions.data?.length ? (
           <button type="button" className="btn btn-quiet btn-sm office-replay" onClick={replayLatest}><Icon name="replay" size={14} /> Replay the last request</button>
         ) : null}
-        <p className="office-cast">{AGENTS.length} people, three dogs and two cats. Point at a dog to see how many documents it has carried today.</p>
+        <p className="office-cast" title="Point at a dog to see how many documents it has carried today.">{AGENTS.length} people · 3 dogs · 2 cats</p>
       </aside>
       </div>
 
