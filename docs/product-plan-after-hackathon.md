@@ -81,6 +81,42 @@ pricing goes public.
 - **Files to S3**, not the server's disk: uploads, Studio pictures and videos, exports and backups. Lifecycle rules
   delete old drafts. The ledger already records cost per job.
 
+**Measured on 17 October** (FalkorDB Cloud, `db:usage` and a read-only probe; `graph:story aamdani`):
+
+| Business | Things | Links | Memory, all in |
+|---|---|---|---|
+| AVS Atelier (website + Instagram) | 544 | 2,222 | about 5 MB |
+| A café from its website only (test) | 612 | 2,497 | about 6 MB |
+| Shiftly demo | 758 | 3,103 | about 7 MB |
+| Aamdani (website, documents, code, ops, 2 days of use) | 4,084 | 16,831 | about 40 MB |
+
+- **All in** means about 10 KB per thing, once links, search vectors, indexes and the server's own overhead are shared out.
+  The server held 64 MB for 6,352 things, and an empty server uses about 3 MB. The graphs' own data is only 19 MB of
+  that; vectors, indexes and the server's working memory are the rest.
+- **What grows:**
+  - numbers from connected tools: 40% of Aamdani's things;
+  - the team's work log of what it touched while answering: 26% of its links;
+  - documents and their search vectors.
+- **How fast:** Aamdani's first load was 3,799 things. A heavy day of use then added 283 things and 4,911 links, about
+  3–5 MB.
+  - An active business: about 20–30 MB a month.
+  - A quiet one (daily stand-up and tool numbers): 3–8 MB a month.
+- **After a year:**
+  - Untouched, an active business would reach about 400 MB and a quiet one about 80 MB.
+  - With housekeeping, about 100–150 MB and 30 MB: daily numbers rolled up into weeks after 90 days, old work-log links
+    trimmed to a summary, vectors only on text worth searching, and closed facts and old versions archived to S3.
+
+**How storage scales.** About 75 MB per business on average, with housekeeping:
+
+| Businesses | Memory | Where | Cost a month | Per business |
+|---|---|---|---|---|
+| 10 | under 1 GB | FalkorDB Cloud Startup, 1 GB | $73 | about $7 |
+| 100 | about 7.5 GB | FalkorDB Cloud Pro, 8 GB | $350 | about $3.50 |
+| 1,000 | about 75 GB | Several servers (each business is its own graph, so businesses spread across servers without changes), self-hosted at about $5 per GB of memory, or FalkorDB Enterprise | about $400–600 self-hosted | under $1 |
+
+FalkorDB keeps everything in memory, so a business on Pause ($29) can have its brain saved to S3 and loaded back when it
+returns. Storage stays at 1–7% of even the $99 plan's price. Each plan gets a storage budget, with an alert at 80%.
+
 ### 3.3 Hosting and running it
 
 **Today:** one EC2 t4g.large in Mumbai, not reachable from the internet, plus the founder's Mac doing backups.
