@@ -14,7 +14,15 @@ export default function AccountPage() {
     return (
       <div className="page-pad account-page">
         <h1 className="page-title">Your account</h1>
-        <p className="page-lede">Sign-in is not switched on for this server, so there is no account to show.</p>
+        {authRequired ? (
+          // looking at the demo without signing in: the way in, not a sentence about the server
+          <>
+            <p className="page-lede">You are looking at the demo without an account.</p>
+            <p className="auth-small"><a href="/login">Sign in</a> or <a href="/signup">create a free account</a> to set up your own business.</p>
+          </>
+        ) : (
+          <p className="page-lede">Sign-in is not switched on for this server, so there is no account to show.</p>
+        )}
       </div>
     );
   }
