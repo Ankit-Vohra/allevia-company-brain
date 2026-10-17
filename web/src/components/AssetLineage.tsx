@@ -39,7 +39,8 @@ export function LineageCard({ tenant, story }: { tenant: string; story: LineageS
                 <ul className="lineage-pics">
                   {s.assets.map((a) => (
                     <li key={a.id} className={a.chosen ? "is-chosen" : a.check && a.check !== "ok" ? "is-held" : ""}>
-                      <img src={thumb(tenant, a.id)} alt={a.label ? (a.label === "Your photo" ? "Your photo" : `Option ${a.label}`) : "Picture"} loading="lazy" width={44} height={44} />
+                      <img src={thumb(tenant, a.id)} alt={a.label ? (a.label === "Your photo" ? "Your photo" : `Option ${a.label}`) : "Picture"} loading="lazy" width={44} height={44}
+                        onError={(e) => { const li = e.currentTarget.closest("li"); if (li) li.hidden = true; }} /* a picture whose file is gone: leave it out, not a broken frame */ />
                       {a.label && a.label !== "Your photo" && <b>{a.label}</b>}
                       {a.check && <small>{a.chosen ? "Your pick" : CHECK_WORD[a.check]}</small>}
                     </li>
