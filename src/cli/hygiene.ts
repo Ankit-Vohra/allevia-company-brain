@@ -4,6 +4,7 @@
 // writes nothing. With --apply it first exports each business with tenant:export to ~/allevia-db-backups/pre-split-<tenant>-<date>.export
 // (checked to read back whole), then loads allevia_reference once, then splits each business. A business whose backup fails is
 // left alone.
+// `graph:hygiene <tenant>`: a report of what a business graph holds and what phase 2 could tidy (src/graph/hygiene.ts); read-only.
 import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +14,7 @@ import { graphName, listGraphs, openGraph } from "../graph/client.js";
 import { listTenants } from "../graph/tenants.js";
 import { ensureReference, referenceGraphName } from "../graph/reference.js";
 import { formatSplit, splitReference, type SplitReport } from "../graph/reference-split.js";
+import { formatHygiene, graphHygiene } from "../graph/hygiene.js";
 import { exportTenant, verifyTenantExport } from "../tenant/lifecycle.js";
 import { isoDate } from "../util/time.js";
 import type { Command } from "./_command.js";
@@ -75,6 +77,20 @@ export async function runReferenceSplit(o: {
 }
 
 export const commands: Command[] = [
+  {
+    name: "graph:hygiene",
+    usage: "graph:hygiene <tenant> [--json]",
+    summary: "How a business graph grows: things by kind (business vs general know-how), old closed facts and versions, chunks of superseded documents, cold things (a report; nothing is changed)",
+    async run(args) {
+      const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { json: { type: "boolean" } } });
+      const [slug] = positionals;
+      if (!slug || positionals.length > 1) { console.error("Usage: npm run cli -- graph:hygiene <tenant> [--json]"); return 2; }
+      if (!(await listGraphs()).includes(graphName(slug))) { console.error(`no graph for ${slug} (${graphName(slug)})`); return 1; }
+      const r = await graphHygiene(await openGraph(slug));
+      console.log(values.json ? JSON.stringify(r, null, 1) : formatHygiene(slug, r));
+      return 0;
+    },
+  },
   {
     name: "graph:reference-split",
     usage: "graph:reference-split [--apply] [--json] [tenant…]",
