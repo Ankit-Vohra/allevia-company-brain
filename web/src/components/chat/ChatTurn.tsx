@@ -16,6 +16,7 @@ import { OutOfCreditsMessage } from "../Credits";
 import { isOutOfCreditsSentence } from "../../lib/credits";
 import { CHIEF, TEAM, type Who, checksPass, contributions, doorWords, howWeGotThis, teamTalk, workingNow } from "../../lib/chat";
 import { kindWords } from "../../lib/approval-words";
+import type { PhotoChange } from "../../lib/library";
 import { humanDates, plain } from "../../lib/words";
 import type { RunView } from "../../state/derive";
 import type { Approval } from "../../types-ext";
@@ -39,6 +40,8 @@ export interface TurnProps {
   onApprovalChanged: (a: Approval) => void;
   onPrefill: (text: string) => void;
   onSend: (text: string) => void;
+  /** A change to a photo's card (Change, or the clip the owner said yes to), sent as a turn in this thread. */
+  onStudio?: (change: PhotoChange, label?: string) => void;
   onReplay: () => void;
   onRetry: () => void;
 }
@@ -128,7 +131,7 @@ export function ChatTurn(p: TurnProps) {
             </article>
           )}
 
-          {view.final && view.made.map((m) => <MadeCard key={m.approvalId} tenant={p.tenantId} made={m} onChange={p.onPrefill} />)}
+          {view.final && view.made.map((m) => <MadeCard key={`${m.approvalId}|${m.options[0]?.assetId ?? ""}`} tenant={p.tenantId} made={m} onChange={p.onPrefill} {...(p.onStudio ? { onStudio: p.onStudio } : {})} />)}
           {view.final && latest && view.questions && <QuickReplies q={view.questions} onAnswer={p.onSend} />}
           {proposals.map((x) => (
             <ApprovalInline key={x.approvalId} tenantId={p.tenantId} id={x.approvalId} title={x.title} by={x.agent} approval={p.approvals.get(x.approvalId)} onChanged={p.onApprovalChanged} />

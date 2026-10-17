@@ -1,0 +1,8 @@
+/* ---------- a photo's card (MadeCard) and the Library sheet: "What to change?" and "Make a 5-second clip", each with its cost ---------- */
+.made-change { display: grid; gap: 4px; margin-top: 12px; }
+.made-change-row { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.made-change-row .field { flex: 1; min-width: 0; }
+.made-change-row .btn { flex: none; }
+.made-cost { margin: 0; font-size: var(--text-xs); color: var(--color-muted); }
+.made-clip { display: grid; gap: 4px; justify-items: start; }
+.made-clip .made-cost[role="status"] { color: var(--color-ink-2); }

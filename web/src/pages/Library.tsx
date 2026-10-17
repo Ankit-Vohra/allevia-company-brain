@@ -2,7 +2,8 @@
 // newest first, so nothing made is lost in a chat thread. Making things happens in Chat (attach a photo, say what you want); this
 // page keeps them. A tile shows the picture, what it is, where it stands and what it cost; a tap opens a sheet with the big
 // picture, "How this was made", Download, Make a variation and Ask about it (both open Chat with the words typed), and OK or Look
-// while it waits. Brand holds the brand files the team puts on posters. Words: web/src/lib/library.ts.
+// while it waits. A picture from a photo's card that waits also has "What to change?" and "Make a 5-second clip" (priced first),
+// which run the Studio's own routes as a turn in the photo's thread. Brand holds the brand files the team puts on posters. Words: web/src/lib/library.ts.
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import type { LibraryItem } from "@shared/contracts";
@@ -13,7 +14,8 @@ import { Icon } from "../components/Icon";
 import { Sheet } from "../components/Sheet";
 import { APPROVALS_CHANGED } from "../components/TopBar";
 import { chatPath, TEAM } from "../lib/chat";
-import { EMPTY, emptyFor, FILTERS, filterItems, isFilter, sheetActions, tileWords, type LibraryFilter } from "../lib/library";
+import { ChangeField, ClipOffer } from "../components/MadeCard";
+import { EMPTY, emptyFor, FILTERS, filterItems, isFilter, sheetActions, sheetChange, tileWords, type LibraryFilter, type PhotoChange } from "../lib/library";
 import { useApp, useAsync } from "../state/app";
 import "./library.css";
 
@@ -113,6 +115,7 @@ function Tile({ item, onOpen }: { item: LibraryItem; onOpen: () => void }) {
 function ItemSheet({ tenant, item, onChanged }: { tenant: string; item: LibraryItem; onChanged: () => void }) {
   const w = tileWords(item);
   const a = sheetActions(item);
+  const edit = sheetChange(item);
   const nav = useNavigate();
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
@@ -150,6 +153,8 @@ function ItemSheet({ tenant, item, onChanged }: { tenant: string; item: LibraryI
       )}
       {said && <p className={`lib-said${said.ok ? "" : " is-bad"}`} role="status">{said.ok && <Icon name="check" size={14} />} {said.text}</p>}
 
+      {edit.change && !said?.ok && <SheetChange tenant={tenant} item={item} clip={edit.clip} onChanged={onChanged} />}
+
       <div className="lib-actions">
         <a className="btn btn-ghost btn-sm" href={a.download.href} download={a.download.filename}><Icon name="download" size={14} /> Download</a>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => nav(a.variation)}><Icon name="sparkle" size={14} /> Make a variation</button>
@@ -158,5 +163,38 @@ function ItemSheet({ tenant, item, onChanged }: { tenant: string; item: LibraryI
 
       <AssetLineage tenant={tenant} rootId={item.id} refreshKey={`${item.state ?? ""}|${said?.text ?? ""}`} />
     </article>
+  );
+}
+
+// Change this picture, or make a 5 second clip from it: the Studio's own routes (POST /chat/photo/change), as a turn in the thread
+// the photo was sent in, so the new option is a card there and a tile here. The work keeps going on the server if the sheet closes.
+function SheetChange({ tenant, item, clip, onChanged }: { tenant: string; item: LibraryItem; clip: boolean; onChanged: () => void }) {
+  const [run, setRun] = useState<{ busy: boolean; lines: string[]; answer: string | null; bad: boolean; sessionId: string | null }>({ busy: false, lines: [], answer: null, bad: false, sessionId: null });
+  const send = async (change: PhotoChange) => {
+    setRun({ busy: true, lines: [], answer: null, bad: false, sessionId: null });
+    let answer = "";
+    let bad = false;
+    try {
+      await api.changePhoto(tenant, change, (e) => {
+        if (e.type === "session") setRun((r) => ({ ...r, sessionId: e.sessionId }));
+        else if (e.type === "agent_status") setRun((r) => ({ ...r, lines: [...r.lines.slice(-3), e.text] }));
+        else if (e.type === "final") answer = e.answer;
+        else if (e.type === "error") { answer = e.message; bad = true; }
+      });
+    } catch (e) {
+      answer = (e as Error).message || "That didn't go through. Try again in a moment.";
+      bad = true;
+    }
+    setRun((r) => ({ ...r, busy: false, answer, bad }));
+    onChanged();
+  };
+  return (
+    <section className="lib-change" aria-label="Change it">
+      <ChangeField approvalId={item.approvalId!} variantId={item.id} busy={run.busy} onSend={(c) => void send(c)} />
+      {clip && <ClipOffer tenant={tenant} approvalId={item.approvalId!} variantId={item.id} {...(item.label ? { label: item.label } : {})} busy={run.busy} onYes={(c) => void send(c)} />}
+      {run.busy && run.lines.length > 0 && <ol className="lib-change-log" aria-live="polite">{run.lines.map((l, i) => <li key={i}>{l}</li>)}</ol>}
+      {run.answer && <p className={`lib-said${run.bad ? " is-bad" : ""}`} role="status">{run.answer}</p>}
+      {run.sessionId && !run.busy && <Link className="btn btn-quiet btn-sm" to={chatPath(TEAM, run.sessionId)}><Icon name="chat" size={14} /> See it in Chat</Link>}
+    </section>
   );
 }

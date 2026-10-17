@@ -118,3 +118,45 @@ export const photoQuestion = (text: string): string => text.trim() || DEFAULT_PH
 
 /** The box's hint while a photo is attached. */
 export const PHOTO_PLACEHOLDER = "Say what you want: a Diwali post, a premium ad…";
+
+// ---------- changing a photo's card: the chat's card and the Library sheet ----------
+// Both call the Studio's own routes through POST /chat/photo/change (the change in the owner's words; the clip the owner said yes
+// to), so the new option comes back as a card in the photo's thread. A clip is priced first on POST /studio/clip (nothing is made).
+
+/** What a change asks for: words for the Studio's change path, or the 5 second clip from one option. */
+export type PhotoChange =
+  | { approvalId: string; instruction: string; variantId?: string; sessionId?: string; target?: string }
+  | { approvalId: string; clip: true; variantId: string; sessionId?: string; target?: string };
+
+/** The words a change shows as the owner's message in the thread (the server says the same: routes/chat-photo.ts changeQuestion). */
+export function changeQuestion(c: PhotoChange, label?: string): string {
+  const which = label ? `option ${label}` : "the picture";
+  if ("clip" in c) return `Make a 5 second clip from ${which}`;
+  return label ? `Change option ${label}: ${c.instruction.trim()}` : c.instruction.trim();
+}
+
+/** The change to send for what the owner typed; null when there is nothing to send. */
+export function changeFrom(text: string, o: { approvalId: string; variantId?: string; sessionId?: string; target?: string }): PhotoChange | null {
+  const instruction = text.trim().slice(0, 400);
+  if (!instruction || !o.approvalId) return null;
+  return { approvalId: o.approvalId, instruction, ...(o.variantId ? { variantId: o.variantId } : {}), ...(o.sessionId ? { sessionId: o.sessionId } : {}), ...(o.target ? { target: o.target } : {}) };
+}
+
+/** What the Change field says about cost: light and colour are free; the AI editor says its price as it starts, within the limit. */
+export const CHANGE_COST = "Light and colour changes are free. An AI edit says its price as it starts and never goes over your limit.";
+export const CHANGE_PLACEHOLDER = "What to change? For example: make it warmer";
+/** What the clip button says: before the price, and once it is known. */
+export const clipWords = (words?: string | null): string => (words ? `Make the clip (${words})` : "Make a 5-second clip");
+export const CLIP_COST = "Priced first: nothing is made until you say yes.";
+
+interface CardLike { studio?: boolean; kind: string }
+/** The chat's card offers Change and the clip only on a photo's card (the Studio's), and not on a clip card. */
+export const canChangeCard = (m: CardLike): boolean => m.studio === true && m.kind !== "clip";
+/** A clip comes only from an option Fact Checker checked and passed. */
+export const canClipOption = (m: CardLike, o: { badge: string }): boolean => canChangeCard(m) && o.badge === "ok";
+
+/** The Library sheet: Change and the clip on a picture from a photo's card that still waits for the OK (not a poster, not the owner's photo). */
+export function sheetChange(item: LibraryItem): { change: boolean; clip: boolean } {
+  const change = item.state === "waiting" && !!item.approvalId && !item.mine && item.media === "image" && item.kind !== "poster";
+  return { change, clip: change && item.check === "ok" };
+}

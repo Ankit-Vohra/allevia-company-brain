@@ -75,3 +75,7 @@
   .lib-filters { margin-inline: -16px; padding-inline: 16px; }
   .lib-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-md) var(--space-sm); }
 }
+/* a picture that waits: "What to change?" and the 5 second clip (the fields are made-card.css), with what the team is doing and the answer */
+.lib-change { display: grid; gap: var(--space-xs); justify-items: stretch; }
+.lib-change > .btn { justify-self: start; gap: 6px; }
+.lib-change-log { margin: 0; padding-left: 18px; font-size: var(--text-xs); color: var(--color-muted); }

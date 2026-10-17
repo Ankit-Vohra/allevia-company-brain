@@ -16,7 +16,7 @@ import { MicButton } from "../components/MicButton";
 import { APPROVALS_CHANGED } from "../components/TopBar";
 import { CHIEF, TEAM, type Who, chatPath, dotOf, dotWords, meetingPrefill, startersFor, threadsFor, whoFrom, whoOfThread, workingNow } from "../lib/chat";
 import { groupThreads } from "../lib/group";
-import { PHOTO_PLACEHOLDER, photoQuestion } from "../lib/library";
+import { changeQuestion, PHOTO_PLACEHOLDER, photoQuestion, type PhotoChange } from "../lib/library";
 import { useMedia } from "../lib/useMedia";
 import { useApp, useAsync } from "../state/app";
 import { runStore, useRunStore } from "../state/runs";
@@ -125,6 +125,13 @@ export default function ChatPage() {
     setText("");
     if (withPhoto) setPhoto(null);
   }, [thread.running, thread.detail, thread.loading, resting, tenant.id, sessionId, who]);
+  // a change on a photo's card (Change, or the clip the owner said yes to): the Studio's own routes, as a turn in this thread
+  const sendChange = useCallback((change: PhotoChange, label?: string) => {
+    if (thread.running || resting) return;
+    // without an address yet, the server finds the thread the photo was sent in
+    const key = runStore.start(tenant.id, changeQuestion(change, label), { ...(sessionId ? { sessionId } : {}), ...(who !== TEAM ? { target: who } : {}), change });
+    if (!sessionId) setPendingKey(key);
+  }, [thread.running, resting, tenant.id, sessionId, who]);
   // Home's ask box lands here as /chat/team?ask=…: the question is sent at once, and the address is cleaned so a reload does not
   // ask twice (the ref also covers React's double run of effects in development)
   const asked = useRef<string | null>(null);
@@ -280,6 +287,7 @@ export default function ChatPage() {
                   onApprovalChanged={(a) => setDecided((m) => ({ ...m, [a.id]: a }))}
                   onPrefill={setText}
                   onSend={send}
+                  onStudio={sendChange}
                   onReplay={() => thread.replay(t, { paced: !reducedMotion, speed: () => Math.max(speed, 2) })}
                   onRetry={() => send(t.question)}
                 />

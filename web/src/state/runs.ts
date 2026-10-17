@@ -11,6 +11,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import type { AgentEvent } from "@shared/contracts";
 import { api, getMode, getPublicMode } from "../api";
 import { ApiError, CREDITS_CHANGED } from "../lib/sse";
+import type { PhotoChange } from "../lib/library";
 import type { LiveStatus, LiveTurn } from "../types-ext";
 import { type RunView, deriveRun } from "./derive";
 
@@ -105,15 +106,18 @@ class RunStore {
   }
 
   /** Ask the team. With `photo`, the photo goes up with the words (POST /chat/photo): Miss Influencer makes it into a post as a turn
-   *  in the same conversation, so it streams, re-attaches and stops like any other. */
-  start(tenant: string, question: string, opts: { sessionId?: string; seekMs?: number; target?: string; photo?: Blob } = {}): string {
+   *  in the same conversation, so it streams, re-attaches and stops like any other. With `change`, a change to a photo's card
+   *  (POST /chat/photo/change: the Studio's change path, or the clip the owner said yes to) runs the same way. */
+  start(tenant: string, question: string, opts: { sessionId?: string; seekMs?: number; target?: string; photo?: Blob; change?: PhotoChange } = {}): string {
     const key = `run-${++this.seq}`;
     const ctrl = new AbortController();
     this.controllers.set(key, ctrl);
     this.put({ key, tenant, question, sessionId: opts.sessionId, ...(opts.target ? { target: opts.target } : {}), events: [], status: "running", kind: "live", startedAt: Date.now() - (opts.seekMs ?? 0) });
     let following = false;
     const onEvent = (e: AgentEvent) => this.append(key, e);
-    (opts.photo
+    (opts.change
+      ? api.changePhoto(tenant, { ...opts.change, ...(opts.sessionId ? { sessionId: opts.sessionId } : {}), ...(opts.target ? { target: opts.target } : {}) }, onEvent, { signal: ctrl.signal })
+      : opts.photo
       ? api.askWithPhoto(tenant, { photo: opts.photo, note: question, sessionId: opts.sessionId, ...(opts.target ? { target: opts.target } : {}) }, onEvent, { signal: ctrl.signal })
       : api.ask(tenant, { question, sessionId: opts.sessionId, ...(opts.target ? { target: opts.target } : {}) }, onEvent, { signal: ctrl.signal, seekMs: opts.seekMs }))
       .then(() => {

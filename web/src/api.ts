@@ -8,6 +8,7 @@ import type { PlanId } from "@shared/plans";
 import type { WeekDto } from "@shared/week";
 import { consumeLinkInAddressBar } from "./lib/link";
 import { accountApi, type Account } from "./lib/account";
+import type { PhotoChange } from "./lib/library";
 
 import { mockConnections } from "./mock/connections";
 const CONNECT_LIVE_ONLY = "Connecting Search Console needs the live server.";
@@ -353,6 +354,19 @@ export const api = {
     if (body.sessionId) form.append("sessionId", body.sessionId);
     if (body.target) form.append("target", body.target);
     return postSseForm<AgentEvent>(`/api/${enc(t)}/chat/photo`, form, onEvent, opts.signal);
+  },
+  /** POST /api/:t/chat/photo/change: a change to a photo's card (the Studio's change path, or the clip the owner said yes to), as a
+   *  turn in the photo's thread; streams back like an ask. */
+  async changePhoto(t: string, body: PhotoChange, onEvent: (e: AgentEvent) => void, opts: { signal?: AbortSignal } = {}): Promise<void> {
+    if (mode === "mock") throw new ApiError(STUDIO_LIVE_ONLY, 501);
+    return postSse<AgentEvent>(`/api/${enc(t)}/chat/photo/change`, body, onEvent, opts.signal);
+  },
+  /** POST /api/:t/studio/clip without confirm: the price of a 5 second clip from one option (nothing is made). */
+  async studioClipQuote(t: string, body: { approvalId: string; variantId?: string }): Promise<{ ok: boolean; message: string; words?: string; credits?: number; variantId?: string }> {
+    if (mode === "mock") throw new ApiError(STUDIO_LIVE_ONLY, 501);
+    return getJson(`/api/${enc(t)}/studio/clip`, {
+      method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ ...body, confirm: false }),
+    });
   },
   /** GET /api/:t/library: everything the team made and every photo the owner sent, newest first. */
   async library(t: string): Promise<LibraryDto> {
