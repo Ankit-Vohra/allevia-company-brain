@@ -626,7 +626,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 
 ## Tests and evals
 
-- **About 3,000 tests** (the last full run, on 16 October, passed 2,991 in 269 files; 5 more were added after it and pass), vitest, run against a real FalkorDB in throwaway graphs: unit tests,
+- **About 3,400 tests** (the last full run, on 17 October, passed 3,405 in 307 files, 3 skipped), vitest, run against a real FalkorDB in throwaway graphs: unit tests,
   integration tests for every tool and algorithm, the API, SSE, the Discord and MCP surfaces, a static scan that
   holds every Cypher string in `src/` to the crash rules, the Entity-label and parallel-edge rules, an `EXPLAIN` of every
   query the suite sends (it fails the run if one looks a node up by id and still scans a label), and a regression that runs every tool, detector and read
