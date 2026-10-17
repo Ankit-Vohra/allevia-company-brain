@@ -7,6 +7,7 @@ import type { RunView } from "../state/derive";
 import { AgentAvatar, ChecksBadges, agentDef, fmtMs } from "./bits";
 import { Icon } from "./Icon";
 import { Markdown } from "./Markdown";
+import { citeSources, stepsOf } from "../lib/cites";
 
 type Entry =
   | { k: "recall"; brief: string; n: number }
@@ -188,7 +189,7 @@ function FeedItem({ en, view, nodes }: { en: Entry; view?: RunView; nodes?: Reco
           <AgentAvatar id={AGENTS[0]!.id} size={24} ring={!view?.final} />
           <div>
             <b>{name(AGENTS[0]!.id)}</b> {view?.final ? "answered" : "is writing the answer"}
-            <Markdown text={view?.answer ?? ""} nodes={nodes} className="feed-md feed-answer-md" />
+            <Markdown text={view?.answer ?? ""} nodes={nodes} sources={view?.final ? citeSources(stepsOf(view.lanes), view.sources) : undefined} className="feed-md feed-answer-md" sourcesRow={!!view?.final} />
           </div>
         </li>
       );

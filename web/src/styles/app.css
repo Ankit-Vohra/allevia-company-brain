@@ -173,17 +173,43 @@
 .agent-chip-sub { color: var(--color-muted); font-size: var(--text-xs); }
 
 /* ---------- citations ---------- */
-.cite {
-  display: inline-flex; align-items: center; gap: 4px; max-width: 22ch; vertical-align: 0.05em;
-  margin: 0 1px; padding: 0 6px 0 5px; height: 20px;
-  border: 1px solid var(--color-rule); border-radius: 3px; background: var(--color-card);
-  font: 500 11.5px/1 var(--font-body); color: var(--color-ink-2); cursor: pointer; white-space: nowrap;
-  transition: border-color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out);
+/* A small muted superscript number at the end of the clause, the way Claude and Gemini cite; the hit area is bigger than
+   the glyph (padding plus a negative margin) so a thumb finds it without the line spacing moving. */
+.cite-sup { line-height: 0; vertical-align: super; font-size: 0.72em; margin-left: 1px; }
+.cite-mark {
+  position: relative; display: inline; padding: 1px 2px; margin: 0;
+  border: 0; border-radius: 3px; background: none; cursor: pointer; white-space: nowrap;
+  font: 600 1em/1 var(--font-body); font-variant-numeric: tabular-nums; color: var(--color-muted);
+  transition: color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out);
 }
-.cite:hover { border-color: var(--color-ink-2); }
-.cite.is-active { border-color: var(--color-accent); background: var(--color-accent-soft); color: var(--color-ink); }
+.cite-mark::before { content: ""; position: absolute; inset: -10px -7px; }
+.cite-mark:hover, .cite-mark.is-open { color: var(--color-ink); background: var(--color-paper-2); }
+.cite-mark.is-active { color: var(--color-accent-ink, var(--color-ink)); background: var(--color-accent-soft); }
+.cite-pop {
+  position: fixed; z-index: 60; width: min(300px, calc(100vw - 32px)); display: grid; gap: 10px; padding: 12px 14px;
+  background: var(--color-card); color: var(--color-ink); border: var(--rule); border-radius: var(--radius-md); box-shadow: var(--shadow-lift);
+  font-size: var(--text-sm); line-height: 1.4; text-align: left; vertical-align: baseline; white-space: normal;
+  animation: fade-in var(--dur-short) var(--ease-out);
+}
+.cite-pop-item, .cite-list-item { display: grid; grid-template-columns: 1.4em minmax(0, 1fr); gap: 6px; align-items: start; }
+.cite-pop-item + .cite-pop-item { padding-top: 10px; border-top: 1px solid var(--color-rule-2); }
+.cite-pop-n { color: var(--color-muted); font: 600 var(--text-xs)/1.6 var(--font-body); font-variant-numeric: tabular-nums; }
+.cite-detail { display: grid; gap: 2px; min-width: 0; }
+.cite-detail p { margin: 0; }
+.cite-kind { display: flex; align-items: center; gap: 6px; color: var(--color-muted); font-size: var(--text-xs); }
 .cite-dot { width: 6px; height: 6px; border-radius: 1.5px; flex: none; background: oklch(60% 0.11 var(--hue)); }
-.cite-name { overflow: hidden; text-overflow: ellipsis; }
+.cite-name { font-weight: 600; color: var(--color-ink); overflow-wrap: anywhere; }
+.cite-from { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; color: var(--color-ink-2); font-size: var(--text-xs); }
+.cite-open {
+  margin: 0 -5px; padding: 3px 5px; border: 0; border-radius: 4px; background: none; cursor: pointer;
+  font: 500 var(--text-xs)/1.3 var(--font-body); color: var(--color-focus); text-decoration: none;
+}
+.cite-open:hover { background: var(--color-paper-2); text-decoration: underline; }
+.md .cite-sources { margin-top: 0.9em; }
+.cite-sources .reveal-btn { font-size: var(--text-xs); }
+.cite-list { list-style: none; padding: 0 !important; display: grid; gap: 8px !important; }
+.cite-list .cite-kind { display: none; } /* the list stays a quiet list: name, then where and when */
+.cite-list-item { font-size: var(--text-sm); line-height: 1.35; }
 
 /* ---------- markdown ---------- */
 .md { line-height: 1.6; overflow-wrap: anywhere; }
@@ -195,7 +221,7 @@
 .md code { background: var(--color-paper-2); padding: 0 4px; border-radius: 3px; }
 .md table { border-collapse: collapse; font-size: var(--text-sm); }
 .md th, .md td { border-bottom: 1px solid var(--color-rule-2); padding: 4px 8px; text-align: left; }
-.md a:not(.cite) { color: var(--color-focus); }
+.md a:not(.cite-open) { color: var(--color-focus); }
 
 .checks { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
 

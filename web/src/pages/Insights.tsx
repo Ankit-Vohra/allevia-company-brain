@@ -125,10 +125,7 @@ function TodayNote({ brief, loading, names, onOpen }: { brief?: string; loading:
         <>
           <p className="note-line">{firstLine(brief)}</p>
           <Reveal label="Read it all">
-            <Markdown className="note-md" text={withoutCites(brief)} />
-            <Reveal label="How we know" summary="the sources">
-              <Markdown className="note-md note-md-cited" text={brief} onCite={onOpen} nodes={names} />
-            </Reveal>
+            <Markdown className="note-md" text={brief} onCite={onOpen} nodes={names} sourcesRow />
           </Reveal>
         </>
       )}

@@ -42,7 +42,6 @@
 .brief-lines li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 6px; align-items: start; font-size: var(--text-sm); color: var(--color-ink-2); }
 .brief-lines li:not(.is-numbered):not([class^="pulse-"])::before { content: ""; width: 4px; height: 4px; margin: 9px 0 0 4px; border-radius: 50%; background: var(--color-muted); opacity: 0.6; }
 .brief-line-md { line-height: 1.5; }
-.brief-line-md .cite { max-width: 18ch; }
 .brief-n { font-family: var(--font-display); font-size: var(--text-sm); color: var(--color-muted); line-height: 1.5; }
 .pulse-dot { width: 9px; height: 9px; margin-top: 6px; border-radius: 50%; border: 2px solid var(--color-muted); }
 .pulse-ok .pulse-dot { background: var(--color-ok); border-color: var(--color-ok); }

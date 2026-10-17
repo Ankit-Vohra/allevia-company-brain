@@ -8,6 +8,7 @@ import { api } from "../../api";
 import { agentDef, AgentAvatar, SimBadge, fmtDate, fmtMs } from "../bits";
 import { Icon } from "../Icon";
 import { Markdown } from "../Markdown";
+import { citeSources, stepsOf } from "../../lib/cites";
 import { MadeCard, QuickReplies } from "../MadeCard";
 import { Reveal } from "../Reveal";
 import { APPROVALS_CHANGED } from "../TopBar";
@@ -117,7 +118,7 @@ export function ChatTurn(p: TurnProps) {
                 <AgentAvatar id={answerBy} size={26} ring={!view.final} />
                 <span><b>{nameOf(answerBy)}</b><span className="ct-role">{jobOf(answerBy)}</span></span>
               </header>
-              <Markdown text={humanDates(view.answer)} nodes={view.nodes} onCite={cite} className="ct-md" />
+              <Markdown text={humanDates(view.answer)} nodes={view.nodes} sources={view.final ? citeSources(stepsOf(view.lanes), view.sources) : undefined} onCite={cite} className="ct-md" sourcesRow={!!view.final} />
               {view.final && (
                 <p className={`ct-assure${ok ? "" : " is-warn"}`}>
                   <Icon name={ok ? "check" : "warn"} size={14} />

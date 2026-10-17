@@ -9,6 +9,7 @@ import { AgentAvatar, ChecksBadges, agentDef, fmtAgo, fmtDate, fmtMs } from "../
 import { AnswerModes } from "../components/Capabilities";
 import { Icon, type IconName } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
+import { citeSources, stepsOf } from "../lib/cites";
 import { MadeCard, QuickReplies } from "../components/MadeCard";
 import { Reveal } from "../components/Reveal";
 import { quickReplies } from "@shared/quick-replies";
@@ -420,7 +421,7 @@ function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onRe
                 <AgentAvatar id="chief-of-staff" size={24} ring={!view.final} />
                 <span><b>The Chief</b></span>
               </div>
-              <Markdown text={view.answer} nodes={view.nodes} onCite={(id) => { onCite(id); }} activeId={activeCite} className="answer-md" />
+              <Markdown text={view.answer} nodes={view.nodes} sources={view.final ? citeSources(stepsOf(view.lanes), view.sources) : undefined} onCite={(id) => { onCite(id); }} activeId={activeCite} className="answer-md" sourcesRow={!!view.final} />
               {view.final && latest && quickReplies(view.answer).map((q) => (
                 <div key={q.question} className="quick-replies" role="group" aria-label={q.question}>
                   <span className="quick-q">{q.question}</span>
