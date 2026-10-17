@@ -198,12 +198,26 @@ export function grow(): string {
 
 // ---------- the team at work: the real office, running ----------
 
+/** The zones of the office floor as the app lays them out (web/src/office/layout.ts, landscape: 570 by 244 logical px). `x` and `y` are where each zone's hanging sign
+ *  sits, as fractions of the floor, so the label lands in the same place on the clip at any size. The name is the one the owner knows (the roster's "Center of
+ *  Excellence" is the numbers team). */
+const ZONES: [string, number, number][] = [
+  ["Library", 42, 22], ["Analytics", 118, 22], ["Chief of Staff", 209, 22], ["Numbers", 300, 22], ["Sales", 376, 22], ["Cafeteria", 490, 22],
+  ["Marketing", 41, 154], ["Content Studio", 144, 154], ["Tech", 276, 154], ["Operations", 379, 154], ["Game room", 545, 154],
+];
+
 export function office(): string {
+  const labels = ZONES.map(([name, x, y]) => `<li class="office__zone" style="--x:${(x / 570).toFixed(4)};--y:${(y / 244).toFixed(4)}">${esc(name)}</li>`).join("");
   return `<section class="office sec band band--ink" id="team-works" aria-labelledby="office-h">
   <div class="wrap office__in">
     <h2 id="office-h" class="h2 h2--wide h2--split on-ink"><span class="t1">See what your team is working on,</span> <span class="t2">right now.</span></h2>
     <figure class="office__frame">
-      <video class="office__video" muted loop playsinline preload="none" poster="/shared/img/office-live-poster.webp" src="/shared/img/office-live.mp4" width="2236" height="932" aria-label="The Allevia office: your team at their desks, working, with three office dogs."></video>
+      <div class="office__scroll">
+        <div class="office__stage">
+          <video class="office__video" muted loop playsinline preload="none" poster="/shared/img/office-live-poster.webp" src="/shared/img/office-live.mp4" width="2236" height="932" aria-label="The Allevia office: your team at their desks, working, with three office dogs."></video>
+          <ul class="office__zones" aria-label="The teams on the floor">${labels}</ul>
+        </div>
+      </div>
     </figure>
   </div>
 </section>`;

@@ -97,10 +97,19 @@
 .gpanel--dark .gpanel__cap { background: rgb(255 255 255 / 0.1); color: var(--on-ink); box-shadow: 0 0 0 1px rgb(255 255 255 / 0.16); }
 
 /* ---------- the office (dark) ---------- */
-.office__in { display: grid; gap: clamp(1.6rem, 4vw, 3rem); }
+.office__in { display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(1.6rem, 4vw, 3rem); }
 .office__frame { margin: 0; padding: 6px; border-radius: 22px; background: linear-gradient(160deg, rgb(255 255 255 / 0.16), rgb(255 255 255 / 0.04)); box-shadow: 0 0 0 1px rgb(255 255 255 / 0.16), 0 40px 90px -36px rgb(0 0 0 / 0.75); }
-.office__video { width: 100%; aspect-ratio: 2236 / 932; object-fit: cover; border-radius: 17px; background: var(--color-paper-2); image-rendering: auto; }
-@media (max-width: 40rem) { .office__video { aspect-ratio: 1.5 / 1; object-position: 86% 100%; } }
+.office__scroll { border-radius: 17px; overflow: hidden; }
+.office__stage { position: relative; container-type: inline-size; }
+.office__video { display: block; width: 100%; aspect-ratio: 2236 / 932; object-fit: cover; background: var(--color-paper-2); image-rendering: auto; }
+/* the name of each team's zone, set in the page (crisp at any size) over the clip: small deep-brown pills on the floor, parked on the wall side of each zone so they stay off the people */
+.office__zones { position: absolute; inset: 0; pointer-events: none; }
+.office__zone { position: absolute; left: calc(var(--x) * 100%); top: calc(var(--y) * 100%); translate: -50% -50%; padding: 0.22em 0.75em 0.26em; border-radius: var(--r-pill); background: rgb(47 38 33 / 0.92); color: var(--on-ink); font-size: clamp(11px, 1.06cqw, 14px); font-weight: 500; line-height: 1.2; white-space: nowrap; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14), 0 6px 14px -6px rgb(0 0 0 / 0.5); }
+/* on a phone the whole floor is a strip to swipe along, wide enough that every name stays readable */
+@media (max-width: 40rem) {
+  .office__scroll { overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  .office__stage { width: 1000px; }
+}
 
 /* ---------- a rough photo made into an ad (paper) ---------- */
 .makes__in { display: grid; gap: clamp(2rem, 5vw, 3.5rem); align-items: center; }
