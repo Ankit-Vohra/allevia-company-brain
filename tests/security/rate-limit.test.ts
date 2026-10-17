@@ -86,11 +86,11 @@ describe("clientKey", () => {
     req: { header: (n: string) => headers[n.toLowerCase()] }, env: remote ? { incoming: { socket: { remoteAddress: remote } } } : undefined,
   }) as never;
   it("is the connection's address, and believes no header unless a proxy is trusted", () => {
-    expect(clientKey(ctx({ "x-forwarded-for": "6.6.6.6" }, "10.0.0.5"), false)).toBe("10.0.0.5");
+    expect(clientKey(ctx({ "x-forwarded-for": "203.0.113.66" }, "10.0.0.5"), false)).toBe("10.0.0.5");
     expect(clientKey(ctx({}), false)).toBe("unknown");
   });
   it("with a proxy trusted, is the last address in X-Forwarded-For (the one the proxy added), else X-Real-IP, else the connection", () => {
-    expect(clientKey(ctx({ "x-forwarded-for": "6.6.6.6, 203.0.113.9" }, "10.0.0.5"), true)).toBe("203.0.113.9");
+    expect(clientKey(ctx({ "x-forwarded-for": "203.0.113.66, 203.0.113.9" }, "10.0.0.5"), true)).toBe("203.0.113.9");
     expect(clientKey(ctx({ "x-real-ip": "203.0.113.7" }, "10.0.0.5"), true)).toBe("203.0.113.7");
     expect(clientKey(ctx({}, "10.0.0.5"), true)).toBe("10.0.0.5");
   });

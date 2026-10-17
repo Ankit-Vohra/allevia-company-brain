@@ -38,7 +38,10 @@ let publicMode = false;
 let speed = 1;
 export const getMode = () => mode;
 /** The server is the public read-only demo: approvals and onboarding are refused, Ask replays recorded threads. */
-export const getPublicMode = () => publicMode;
+let tenantReadOnly = false;
+/** The business on screen is a read-only demo for this browser (owner links on, no link for it): set whenever the business shown changes. */
+export const setTenantReadOnly = (on: boolean): void => { tenantReadOnly = on; };
+export const getPublicMode = () => publicMode || tenantReadOnly;
 export const getSpeed = () => speed;
 export const setSpeed = (s: number) => { speed = s; };
 

@@ -190,11 +190,53 @@ defaults come from code.
 9. **Recorded Studio edits are keyed by the photo's hash only.** They are demo recordings from the founder's runs; a
    customer who sent the identical file would get that edit (and its recorded prompt). Harmless today; give live
    Higgsfield jobs a per-business ledger and never reuse another business's output.
-10. **One volume holds every business.** Backups of the data volume and the FalkorDB volume contain all businesses.
-   Erasing one business is "drop its graph and delete its five folders" (assets, drafts, cache, onboard, runs); there is
-   no single command for that yet, and no per-business export.
+10. **One volume holds every business.** Backups of the data volume and the FalkorDB volume contain all businesses, so
+   a business erased with `tenant:erase` is still in the backups taken before (expire them on a schedule you can state to a
+   customer). The erase command itself exists since 17 October (see "Taking one business out, or removing it" below); it
+   leaves the Studio credit ledger and the public-data spend ledger as they are (counts for billing, no content), and it
+   cannot reach the Discord channels or the grants at a provider, which it names for a person to do.
 11. **The registry is cached for 5 seconds,** so marking a demo, or a business appearing, takes up to 5 seconds. Revoking
     a link is immediate.
+
+## Taking one business out, or removing it
+
+```
+npm run cli -- tenant:export kestrel_oak ./kestrel-oak.jsonl                  # one file, checked when it is written
+npm run cli -- tenant:erase kestrel_oak --confirm kestrel_oak                 # exports first, then removes it
+npm run cli -- tenant:erase demo_seed --confirm demo_seed --force             # a public demo, or the founder's own business, needs --force
+npm run cli -- tenant:erase kestrel_oak --confirm kestrel_oak --export-to /secure/kestrel-oak.jsonl
+```
+
+**Export** is one JSON-lines file (mode 0600): the business's registry rows (its Tenant, its owner links with their dates and
+labels but never a hash, its Discord mapping without the join codes), its whole graph (the `db:export` format: every node,
+edge, vector, index and constraint), and every file in its data folders (photos, drafts, run reports, caches, the connection
+audit log), in 4 MB chunks. The sealed connection tokens are left out: they are encrypted with the server's key and mean
+nothing to anyone else. The file is read back and checked (counts, graph digest, every file's size and hash) before the
+command says it is done, and an export is never written over another file.
+
+**Erase** exports first (to `<data>/exports/<id>-<time>.jsonl`, or `--export-to`), reads the export back, and stops without
+touching anything if it is not whole. Then it removes: the graph `allevia_<id>` (and its projections); the registry rows
+(the Tenant, every owner link, the Discord area, channel mapping, invites and post records: the Discord channels
+themselves are not touched); the folders `assets`, `drafts`, `cache/<kind>`, `onboard`, `runs`, `snapshots`, `studio-demo`
+and `connectors` (the sealed connection tokens and the audit log), by the business's id alone, never following a link. It
+looks again afterwards and says plainly if anything is left. It needs `--confirm <the same id>`, refuses a public demo and
+the founder's own businesses (`aamdani`, `avs_atelier`) unless `--force`, and writes one line to `<data>/erasures.jsonl`
+(the id and the time, nothing of the business's). The export it leaves is the customer's to be handed and then deleted.
+It cannot do three things, and prints them as a to-do: remove the Discord channels from Discord, revoke the grants at the
+providers (Composio, Google) whose sealed tokens it deleted, and expire the old backups.
+(`src/tenant/lifecycle.ts`, `src/cli/tenant.ts`, `tests/security/tenant-lifecycle.test.ts`.)
+
+## A hosted demo
+
+A deployment that shows one business to the public and keeps the rest private:
+
+1. `ALLEVIA_AUTH=1` (and `ALLEVIA_TRUST_PROXY=1` behind a reverse proxy, so the rate limits see each visitor's address).
+2. `npm run cli -- auth:demo <slug>` for the demo business only; `auth:issue <slug>` for each customer, and
+   `auth:issue --operator` for the person who sets businesses up.
+3. A stranger then sees only the demo: it lists as `readOnly`, every change is a 403 that says it is the public demo, a
+   question replays a recorded thread (or says live chat is off), and the web app turns its change buttons off. Everything
+   else, and the business list, needs a link. An owner link for the demo makes its holder the owner.
+`tests/security/hosted-demo.test.ts` runs the real server over HTTP through exactly this.
 
 ## Running it
 

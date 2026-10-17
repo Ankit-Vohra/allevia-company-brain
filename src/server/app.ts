@@ -258,7 +258,7 @@ export function createApp(deps: ServerDeps): Hono {
   }
   const tenantOf = (c: Context): Promise<{ reg: RegistryTenant; g: GraphHandle }> => tenantBySlug(c.req.param("t") ?? "");
 
-  async function tenantDto(reg: RegistryTenant, g?: GraphHandle): Promise<TenantDto> {
+  async function tenantDto(reg: RegistryTenant, g?: GraphHandle, readOnly = false): Promise<TenantDto> {
     let biz: reads.BusinessProps = {};
     try { if (g) biz = await reads.businessProps(g, reg.businessId); } catch { biz = {}; }
     const pick = (k: keyof reads.BusinessProps & keyof RegistryTenant) => reg[k] ?? biz[k];
@@ -268,6 +268,7 @@ export function createApp(deps: ServerDeps): Hono {
       if (v) t[k] = v;
     }
     if (t.timeZone && !validTimeZone(t.timeZone)) delete t.timeZone;
+    if (readOnly) t.readOnly = true;
     return t;
   }
 
@@ -348,15 +349,18 @@ export function createApp(deps: ServerDeps): Hono {
 
   app.get("/api/tenants", async (c) => {
     let list = await registry();
+    let held: Set<string> | undefined;
     if (authOn) {
       // a stranger sees the demo businesses, an owner also their own, the operator all of them
       const scopes = await scopesOf(deps.auth!, c);
       list = list.filter((t) => scopes.has(OPERATOR_SCOPE) || scopes.has(t.slug) || t.demo === true);
+      held = scopes;
     }
     const out = await Promise.all(list.slice(0, 200).map(async (reg) => {
       let g: GraphHandle | undefined;
       try { g = await deps.openGraph(reg.slug); } catch { g = undefined; }
-      return tenantDto(reg, g);
+      // with owner links on, a business the caller holds no link for is a demo they may only read: say so, so the app turns its buttons off
+      return tenantDto(reg, g, !!held && !held.has(OPERATOR_SCOPE) && !held.has(reg.slug));
     }));
     return c.json(out);
   });
@@ -473,7 +477,7 @@ export function createApp(deps: ServerDeps): Hono {
   app.get("/api/:t/overview", async (c) => {
     const { reg, g } = await tenantOf(c);
     const [tenant, counts, freshness, brief, recs, pending] = await Promise.all([
-      tenantDto(reg, g), reads.labelCounts(g), reads.freshness(g, now()), reads.latestBrief(g), reads.recommendations(g, 3), reads.pendingApprovals(g),
+      tenantDto(reg, g, authOn && isPublic()), reads.labelCounts(g), reads.freshness(g, now()), reads.latestBrief(g), reads.recommendations(g, 3), reads.pendingApprovals(g),
     ]);
     return c.json({ tenant, counts, freshness, brief: brief?.text ?? "", recommendations: recs, approvalsPending: pending });
   });
