@@ -204,8 +204,9 @@ describe("pricing copy follows shared/plans.ts, in US dollars only", () => {
     expect(read("pricing/index.html")).not.toMatch(/currency/i);
   });
 
-  it("the one-line price on the home page and the start line quote the growth plan and the three-month plan", () => {
-    expect(priceLine()).toContain(`$${PLANS.find((p) => p.id === "growth")!.price.monthly.USD}`);
+  it("the one-line price on the home page and the start line quote the starter plan and the three-month plan", () => {
+    expect(priceLine()).toContain(`$${PLANS.find((p) => p.id === "starter")!.price.monthly.USD}`);
+    expect(priceLine()).toContain("30% less when paid yearly");
     expect(startLine()).toContain("$1,490");
   });
 

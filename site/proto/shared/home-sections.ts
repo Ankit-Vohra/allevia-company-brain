@@ -136,7 +136,7 @@ export function pricingTeaser(): string {
   const cards = PLAN_CARDS.map((c) => `<li class="pmini ${c.lead ? "pmini--lead" : ""}"><h3 class="pmini__name">${esc(c.name)}</h3><p class="pmini__note">${esc(c.note)}</p><p class="pmini__price"><span class="money">$${c.price.toLocaleString("en-US")}</span><span class="per"> a month</span></p></li>`).join("");
   return `<section class="ptease sec" id="plans" aria-labelledby="pt-h">
   <div class="wrap">
-    <h2 id="pt-h" class="h2 h2--split"><span class="t1">Simple monthly plans.</span> <span class="t2">Start at $100.</span></h2>
+    <h2 id="pt-h" class="h2 h2--split"><span class="t1">Simple monthly plans.</span> <span class="t2">Start at $${PLAN_CARDS[0]!.price}.</span></h2>
     <ul class="pmini-row">${cards}</ul>
     <p class="ptease__more"><a class="link" href="/pricing/">See what is in each plan</a></p>
   </div>

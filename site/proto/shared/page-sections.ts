@@ -2,7 +2,7 @@
 // Visual first: real screens from the running app on the sample business, the real tool list (shared/connection-map.ts), the real plans
 // (shared/plans.ts) with the new Starter plan marked "to finalise later". Two colours only: paper sections and the one dark band.
 import { TOOLKIT_CATALOG } from "../../../shared/connection-map.ts";
-import { CREDIT_COSTS, PLANS } from "../../../shared/plans.ts";
+import { ANNUAL_DISCOUNT, CREDIT_COSTS, PLAN_BY_ID, yearlyMonthly } from "../../../shared/plans.ts";
 import { COMPANY } from "../../src/company.ts";
 import { PLAN_SAMPLE } from "../../src/home-content.ts";
 import { AGENTS, BRAIN } from "./assets.generated.ts";
@@ -184,32 +184,33 @@ export function productPlan(): string {
 
 // ---------- Pricing ----------
 
-const growth = PLANS.find((p) => p.id === "growth")!, pro = PLANS.find((p) => p.id === "pro")!;
+const starter = PLAN_BY_ID.starter, growth = PLAN_BY_ID.growth, pro = PLAN_BY_ID.pro;
 const planLines = (p: typeof growth) => {
   const a = p.allowances;
   const out = [p.id === "growth" ? "Everything in Starter" : "Everything in Growth", `Up to ${Math.floor(a.studioCreditsPerMonth / CREDIT_COSTS.static_post)} posts or ${Math.floor(a.studioCreditsPerMonth / CREDIT_COSTS.reel)} reels a month`, `${a.answersPerMonth} questions a month`, a.locations && a.locations > 1 ? `Up to ${a.locations} locations, ${a.seats} seats` : `${a.locations} location, ${a.seats} seats`];
-  out.push(p.id === "growth" ? "A named person reviews your plan each month" : "A strategist two hours a month");
+  out.push(p.id === "growth" ? "A setup call with a person from our team" : "A strategist an hour a month");
   return out;
 };
-/** The three plans the site shows. Growth and Pro are the plans in shared/plans.ts; Starter ($100) is defined here only, so shared/plans.ts needs it before the app can sell it. */
-export const PLAN_CARDS: { name: string; note: string; price: number; lines: string[]; lead: boolean }[] = [
-  { name: "Starter", note: "All your tools, working together", price: 100, lines: ["All your tools connected together", "A note every morning and your team’s advice", "Questions answered from your brain", "Approvals in the app or in Discord", "Posters, ads and reels start on Growth"], lead: true },
-  { name: "Growth", note: "The whole team", price: growth.price.monthly.USD, lines: planLines(growth), lead: false },
-  { name: "Pro", note: "More places, more help", price: pro.price.monthly.USD, lines: planLines(pro), lead: false },
+/** The three plans the site shows, priced from shared/plans.ts; `year` is the monthly price when paid yearly (30% off). */
+export const PLAN_CARDS: { name: string; note: string; price: number; year: number; lines: string[]; lead: boolean }[] = [
+  { name: "Starter", note: "All your tools, working together", price: starter.price.monthly.USD, year: yearlyMonthly(starter.price.monthly).USD, lines: ["All your tools connected together", "A note every morning and your team’s advice", "Questions answered from your brain", "Approvals in the app or in Discord", "Posters, ads and reels start on Growth"], lead: true },
+  { name: "Growth", note: "The whole team", price: growth.price.monthly.USD, year: yearlyMonthly(growth.price.monthly).USD, lines: planLines(growth), lead: false },
+  { name: "Pro", note: "More places, more help", price: pro.price.monthly.USD, year: yearlyMonthly(pro.price.monthly).USD, lines: planLines(pro), lead: false },
 ];
 
 export function pricing(): string {
   const card = (c: (typeof PLAN_CARDS)[number]) => `<article class="plan ${c.lead ? "plan--lead" : ""}" aria-labelledby="plan-${c.name}">
     <h2 id="plan-${c.name}" class="plan__name">${esc(c.name)}</h2><p class="plan__note">${esc(c.note)}</p>
     <p class="plan__price"><span class="money">${usd(c.price)}</span><span class="per"> a month</span></p>
+    <p class="fine">or ${usd(c.year)} a month paid yearly</p>
     <ul class="plan__lines">${c.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
     <a class="btn ${c.lead ? "btn-gold" : "btn-ghost"}" href="/contact/#snapshot">Get started<span class="visually-hidden"> with ${esc(c.name)}</span></a>
   </article>`;
   return `<section class="sec pricing" aria-labelledby="pr-h"><div class="wrap">
   <h1 id="pr-h" class="page-h1"><span class="t1">Simple monthly plans.</span> <span class="t2">Start with your tools connected.</span></h1>
-  <p class="draft">Prices in US dollars, excluding tax.</p>
+  <p class="draft">Prices in US dollars, excluding tax. Pay yearly and save ${Math.round(ANNUAL_DISCOUNT * 100)}%.</p>
   <div class="plans">${PLAN_CARDS.map(card).join("")}</div>
-  <p class="fine">After the three-month growth plan, Essentials is ${usd(PLANS.find((p) => p.id === "essentials")!.price.monthly.USD)} a month, and Pause is ${usd(PLANS.find((p) => p.id === "pause")!.price.monthly.USD)} a month. The three-month plan has a 14-day refund.</p>
+  <p class="fine">More locations or regulated work: Scale, from ${usd(PLAN_BY_ID.scale.price.monthly.USD)} a month, after a call. Taking a break: Pause, ${usd(PLAN_BY_ID.pause.price.monthly.USD)} a month. Monthly plans have a 14-day refund.</p>
 </div></section>`;
 }
 

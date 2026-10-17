@@ -1,7 +1,23 @@
 # Allevia pricing research and plan recommendation
 
-Issue #45. Prices checked on **17 October 2026**. Research and one document: no product code was changed
-(`shared/plans.ts` still holds the old plans; section 5 lists what would change).
+Issue #45. Prices checked on **17 October 2026**.
+
+**Decided, 17 October 2026 (the founder):** the ladder below (Starter $99, Growth $249, Pro $499, Scale from $999, Pause
+kept, Essentials retired), and **every paid plan 30% off when paid yearly**, instead of the two months free (17%)
+suggested in 4.2. It is now in `shared/plans.ts` (`ANNUAL_DISCOUNT`, `yearlyMonthly`, `yearly`). The pricing page is
+still hidden.
+
+| Paid yearly | USD a month | USD a year | GBP / AED / AUD a month | Margin light / typical / heavy (capped) |
+|---|---|---|---|---|
+| Starter | 69 | 828 | 53 / 258 / 102 | 75 / 52 / 30% |
+| Growth | 174 | 2,088 | 132 / 643 / 251 | 81 / 61 / 31% |
+| Pro | 349 | 4,188 | 265 / 1,287 / 503 | 78 / 56 / 24% |
+| Scale, from | 699 | 8,388 | 524 / 2,568 / 1,014 | 80 / 59 / 29% |
+
+Margins use the costs in 3.4, with one card payment a year instead of twelve. At 30% off a heavy yearly owner still
+leaves a margin only because the hidden model budget caps the model bill. Still open on #45: credit packs on Starter,
+the founding offer (Growth's founding price is set to $199 in `shared/plans.ts` until decided), Snapshot guardrails,
+and testing $99 against $129.
 
 Confidence tags used in every table: **[V]** read on the vendor's own page today; **[S]** from a third party (blog,
 review, search summary) and not confirmed by the vendor; **[U]** unverified or the sources disagree; **[M]** measured

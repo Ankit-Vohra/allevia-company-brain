@@ -4,7 +4,7 @@
 // business's currency (US dollars, labelled, when we do not price in it yet); credits and answers are GET /api/:t/usage.
 // Billing is not connected, so nothing here is an invoice: it is what the plan would include.
 import { Link } from "react-router";
-import { ALLEVIA_90, CREDIT_RULES, PLANS, PLAN_BY_ID, isCurrency, type Currency, type Plan } from "@shared/plans";
+import { ALLEVIA_90, ANNUAL_DISCOUNT, CREDIT_RULES, PLANS, PLAN_BY_ID, isCurrency, yearlyMonthly, type Currency, type Plan } from "@shared/plans";
 import { api } from "../api";
 import { ShowDetails } from "../components/ShowDetails";
 import { currentLocale, fmtDate, fmtMoney, fmtNum } from "../lib/format";
@@ -67,8 +67,8 @@ export default function PlanPage() {
                 <tr><th scope="col"><span className="visually-hidden">Plan</span></th>{PLANS.map((p) => <th scope="col" key={p.id} className={p.id === plan.id ? "is-current" : ""}>{p.name}</th>)}</tr>
               </thead>
               <tbody>
-                <tr><th scope="row">Who it’s for</th>{PLANS.map((p) => <td key={p.id}>{p.who}{p.graduatesOnly ? ". Open once you’ve finished the growth plan" : ""}</td>)}</tr>
-                <tr><th scope="row">Each month</th>{PLANS.map((p) => <td key={p.id} className="num">{money(p.price.monthly)}{p.price.yearly ? <span className="detail-sub">or {money(p.price.yearly)} a year, 2 months free</span> : null}</td>)}</tr>
+                <tr><th scope="row">Who it’s for</th>{PLANS.map((p) => <td key={p.id}>{p.who}</td>)}</tr>
+                <tr><th scope="row">Each month</th>{PLANS.map((p) => <td key={p.id} className="num">{p.fromPrice ? "from " : ""}{money(p.price.monthly)}{p.price.yearly ? <span className="detail-sub">or {money(yearlyMonthly(p.price.monthly))} a month paid yearly ({money(p.price.yearly)} a year, {Math.round(ANNUAL_DISCOUNT * 100)}% off)</span> : null}</td>)}</tr>
                 <tr><th scope="row">Studio credits</th>{PLANS.map((p) => <td key={p.id} className="num">{fmtNum(p.allowances.studioCreditsPerMonth)}</td>)}</tr>
                 <tr><th scope="row">Answers</th>{PLANS.map((p) => <td key={p.id} className="num">{fmtNum(p.allowances.answersPerMonth)}</td>)}</tr>
                 <tr><th scope="row">What it reads</th>{PLANS.map((p) => <td key={p.id}>{sourcesText(p)}</td>)}</tr>

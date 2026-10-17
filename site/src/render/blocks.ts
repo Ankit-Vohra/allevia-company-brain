@@ -2,7 +2,7 @@
 // security promises. vite.config.ts swaps each `<!-- @render name -->` comment in the pages for the matching block below,
 // so the shipped HTML is complete without JavaScript and a price can never drift from shared/plans.ts. Prices are shown
 // in US dollars only.
-import { ALLEVIA_90, CREDIT_COSTS, PLANS, PLAN_BY_ID, type Plan } from "../../../shared/plans.ts";
+import { ALLEVIA_90, ANNUAL_DISCOUNT, CREDIT_COSTS, PLANS, PLAN_BY_ID, type Plan } from "../../../shared/plans.ts";
 import { AGENTS, numberWord } from "../../../shared/roster.ts";
 import { COMMITMENTS } from "../company.ts";
 import { CONTACT_URL } from "../config.ts";
@@ -36,28 +36,27 @@ export function startLine(): string {
 
 /** One line for the home page: the price and the way in. */
 export function priceLine(): string {
-  const g = PLAN_BY_ID.growth;
-  return `<p class="priceline">Plans from <span class="money">${usd(g.price.monthly.USD)}</span> a month after a three-month start. ${P90.guarantees.refundDays}-day full refund.</p>`;
+  const s = PLAN_BY_ID.starter;
+  return `<p class="priceline">Plans from <span class="money">${usd(s.price.monthly.USD)}</span> a month, ${Math.round(ANNUAL_DISCOUNT * 100)}% less when paid yearly. ${P90.guarantees.refundDays}-day full refund.</p>`;
 }
 
 /** What each plan includes, as short lines. */
 function planLines(p: Plan): string[] {
   const a = p.allowances;
   if (p.id === "pause") return ["Weekly summary", "Review alerts", `${a.answersPerMonth} questions a month`];
-  const lines = [postsAndReels(a.studioCreditsPerMonth), `${a.answersPerMonth} questions a month`];
+  const lines = [a.studioCreditsPerMonth ? postsAndReels(a.studioCreditsPerMonth) : "Posters, ads and reels start on Growth", `${a.answersPerMonth} questions a month`];
   lines.push(a.locations && a.locations > 1 ? `Up to ${a.locations} locations, ${a.seats} seats` : `${a.locations} location, ${a.seats} seats`);
-  if (p.id === "growth") lines.push("A named person reviews your plan each month");
-  if (p.id === "pro") lines.push("A strategist two hours a month");
+  if (p.human) lines.push(p.human);
   return lines;
 }
 
 export function plans(): string {
   const cols = PLANS.map((p) => {
-    const note = p.isDefault ? "Most people start here" : p.graduatesOnly ? "After the three-month plan" : "&nbsp;";
+    const note = p.isDefault ? "Most people start here" : p.fromPrice ? "Quoted after a call" : "&nbsp;";
     return `<article class="plan${p.isDefault ? " plan--default" : ""}" aria-labelledby="plan-${p.id}">
   <h3 class="plan__name" id="plan-${p.id}">${esc(p.name)}</h3>
   <p class="plan__note">${note}</p>
-  <p class="plan__price"><span class="money">${usd(p.price.monthly.USD)}</span><span class="per"> a month</span></p>
+  <p class="plan__price">${p.fromPrice ? '<span class="per">from </span>' : ""}<span class="money">${usd(p.price.monthly.USD)}</span><span class="per"> a month</span></p>${p.price.yearly ? `<p class="plan__year">or ${usd(p.price.yearly.USD / 12)} a month paid yearly</p>` : ""}
   <ul class="plan__lines">${planLines(p).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
   <a class="btn ${p.isDefault ? "btn-gold" : "btn-ghost"}" href="${CONTACT_URL}">Get started<span class="visually-hidden"> with ${esc(p.name)}</span></a>
 </article>`;
