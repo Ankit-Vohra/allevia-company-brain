@@ -10,6 +10,7 @@ import "@fontsource/ibm-plex-mono/latin-500.css";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/app.css";
+import "./styles/theme.css";
 import { detectMode } from "./api";
 import { App } from "./App";
 import { AUTH_PATH, wantsDemo } from "./lib/account";

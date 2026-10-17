@@ -91,10 +91,7 @@ export default function TeamPage() {
     <div className="team-page">
       <header className="tm-head">
         <h1 className="page-title">Your team</h1>
-        <p className="page-lede">
-          {team.data ? <><b>{working} of {list.length}</b> are working for you. </> : null}
-          Tell them what you want in your own words, or open anyone to change how they work.
-        </p>
+        {team.data && <p className="page-lede"><b>{working} of {list.length}</b> are working for you.</p>}
       </header>
 
       <TellYourTeam tenantId={tenant.id} prefill={prefill} onApplied={() => { team.reload(); changed(); }} />

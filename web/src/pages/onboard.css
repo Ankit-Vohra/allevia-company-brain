@@ -29,7 +29,7 @@ select.field { appearance: none; padding-right: 2em; background-image: linear-gr
   transition: background-color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
 }
 .ob-step.is-done .ob-dot { background: var(--color-ink); border-color: var(--color-ink); color: var(--color-paper); }
-.ob-step.is-active .ob-dot { background: var(--color-accent); border-color: var(--color-accent); color: oklch(23% 0.07 270); animation: ob-pulse 1.6s var(--ease-out) infinite; }
+.ob-step.is-active .ob-dot { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-on-accent); animation: ob-pulse 1.6s var(--ease-out) infinite; }
 @keyframes ob-pulse { 0% { box-shadow: 0 0 0 0 oklch(from var(--color-accent) l c h / 0.5); } 70%, 100% { box-shadow: 0 0 0 9px oklch(from var(--color-accent) l c h / 0); } }
 .ob-step-label { font-size: var(--text-xs); line-height: 1.25; text-align: center; color: var(--color-muted); }
 .ob-step.is-active .ob-step-label { color: var(--color-ink); font-weight: 600; }

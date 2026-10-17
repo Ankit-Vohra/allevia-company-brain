@@ -17,10 +17,11 @@ export function Tile({ id, to, label, icon, avatar, busy, children }: {
   );
 }
 
-export function NoteTile({ standup }: { standup: StandupLike | null | undefined }) {
+/** Ideas: the best one in a line; today's note and the rest are on the Ideas page. */
+export function IdeasTile({ top, standup }: { top: string | null | undefined; standup: StandupLike | null | undefined }) {
   return (
-    <Tile id="note" to="/insights" label="Today's note" avatar={<AgentAvatar id="chief-of-staff" size={18} />} busy={standup === undefined}>
-      <span className="hm-tile-line is-note">{noteLine(standup)}</span>
+    <Tile id="ideas" to="/insights" label="Ideas" avatar={<AgentAvatar id="chief-of-staff" size={18} />} busy={top === undefined && standup === undefined}>
+      <span className="hm-tile-line is-note">{top || noteLine(standup)}</span>
     </Tile>
   );
 }

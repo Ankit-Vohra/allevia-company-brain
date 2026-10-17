@@ -229,6 +229,10 @@ describe("today's note in one line (Insights)", () => {
     const brief = "Today's note, Shiftly (synthetic demo), 17 Oct 2026\n\nYour team met this morning\n- Nothing new worth your time today.\n\nYour goals\n- Weekly signups: Goal: 20. [[goal:weekly-signups]]";
     expect(briefFirstLine(brief)).toBe("Your team met this morning: Nothing new worth your time today.");
   });
+  it("says a numbered list by its heading alone, not as one long paragraph", () => {
+    const brief = "Today's note, Aamdani, 17 Oct 2026\n\nTwo big things are waiting for your OK; here's why they matter this week\n1. Seekers signup funnel: 80% drop: Only 16 of 80 seekers apply. [[approval:x]]\n2. Seekers signup funnel: 72.7% drop. [[approval:y]]";
+    expect(briefFirstLine(brief)).toBe("Two big things are waiting for your OK; here's why they matter this week");
+  });
   it("keeps a prose opening whole, without marks or [[ids]]", () => {
     expect(briefFirstLine("**Good morning.** Reels are carrying Instagram [[observation:ig]].\n\nMore later.")).toBe("Good morning. Reels are carrying Instagram.");
   });

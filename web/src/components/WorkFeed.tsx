@@ -172,7 +172,7 @@ function FeedItem({ en, view, nodes }: { en: Entry; view?: RunView; nodes?: Reco
       return (
         <li className="feed-item feed-proposal">
           <span className="feed-icon is-gold"><Icon name="approvals" size={15} /></span>
-          <div><b>{name(en.agent)}</b> proposed an action for your approval<p className="feed-sub">{en.title} · <Link to="/approvals">Approvals</Link></p></div>
+          <div><b>{name(en.agent)}</b> proposed an action for your approval<p className="feed-sub">{en.title} · <Link to="/approvals">Needs your OK</Link></p></div>
         </li>
       );
     case "done":

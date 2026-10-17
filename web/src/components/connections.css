@@ -6,6 +6,7 @@
 .cx-never { display: flex; align-items: flex-start; gap: 8px; padding: 10px var(--space-md); border-radius: var(--radius-md); background: var(--color-ok-soft); color: var(--color-ink-2); font-size: var(--text-sm); line-height: 1.45; text-wrap: pretty; }
 .cx-never svg { flex: none; margin-top: 2px; color: var(--color-ok); }
 .cx-never-tail { color: var(--color-muted); }
+.cx-never.is-foot { margin-top: var(--space-md); padding: 0; background: none; color: var(--color-muted); font-size: var(--text-xs); }
 .cx-progress { list-style: none; display: grid; gap: 4px; padding: 0; font-size: var(--text-sm); }
 .cx-progress li::before { content: "✓ "; color: var(--color-ok); font-weight: 700; }
 

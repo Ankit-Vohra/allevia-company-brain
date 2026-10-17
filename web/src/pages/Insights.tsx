@@ -1,7 +1,8 @@
-// What we noticed: the team's ideas, best first, one line each (what it is, who suggests it, how big). A tap opens the idea in a
+// Ideas: the team's ideas, best first, one line each (what it is, who suggests it, how big). The same idea found on several
+// mornings is one row with "×2" (the newest leads), the top five show, and anything over a week old folds under "Older". A tap opens the idea in a
 // sheet: why, what is at stake, the one next step, and the reasoning (the sources and the chain of facts) behind "Why we think
 // this". Today's note from Meera sits on top in one line, the whole note one tap away; where the numbers come from is at the
-// bottom, and sample numbers are always said out loud (docs/owner-words.md).
+// bottom, and sample numbers are said beside the idea they belong to (docs/owner-words.md).
 import { useMemo, useState } from "react";
 import type { NodeRef } from "@shared/contracts";
 import { Link, useNavigate } from "react-router";
@@ -14,6 +15,7 @@ import { Markdown } from "../components/Markdown";
 import { Reveal } from "../components/Reveal";
 import { Sheet } from "../components/Sheet";
 import { fmtMoney } from "../lib/format";
+import { groupIdeas, splitOlder } from "../lib/group";
 import { briefFirstLine } from "../lib/home";
 import { useApp, useAsync } from "../state/app";
 import type { Approval, Freshness, Recommendation } from "../types-ext";
@@ -44,28 +46,20 @@ export default function InsightsPage() {
   }, [graph.data, recs.data]);
   const byApproval = useMemo(() => new Map((approvals.data ?? []).map((a) => [a.id, a])), [approvals.data]);
   const sorted = useMemo(() => [...(recs.data ?? [])].sort((a, b) => b.score - a.score), [recs.data]);
-  const shown = all ? sorted : sorted.slice(0, TOP);
-  const waiting = sorted.filter((r) => r.approvalId && byApproval.get(r.approvalId)?.status === "pending").length;
-  const samples = (overview.data?.freshness ?? []).filter((f) => f.note === "simulated").map((f) => f.source);
-  const hasSamples = samples.length > 0 || sorted.some((r) => r.simulated);
+  // one row per idea (repeats folded, best first); this week's on top, the rest under Older
+  const { recent, older } = useMemo(() => splitOlder(groupIdeas(sorted), (r) => r.createdAt), [sorted]);
+  const shown = all ? recent : recent.slice(0, TOP);
+  const rowsInOrder = [...recent, ...older].map((g) => g.lead);
   const open = sorted.find((r) => r.id === look);
-  const openRank = open ? sorted.indexOf(open) + 1 : 0;
+  const openRank = open ? Math.max(0, rowsInOrder.indexOf(open)) + 1 : 0;
 
   const openNode = (id: string) => nav(`/brain?node=${encodeURIComponent(id)}`);
 
   return (
     <div className="insights-page">
       <header className="ins-head">
-        <h1 className="page-title">What we noticed</h1>
-        <p className="ins-tally">
-          {sorted.length ? (
-            <span>
-              <b className="num">{sorted.length}</b> {sorted.length === 1 ? "idea" : "ideas"}
-              {waiting > 0 && <> · <Link to="/approvals"><b className="num">{waiting}</b> waiting for your OK</Link></>}
-            </span>
-          ) : <span>{recs.loading ? "Looking at the latest numbers…" : "Nothing to suggest yet."}</span>}
-          {hasSamples && <span className="sample-tag" title={samples.length ? `Sample numbers from ${samples.join(", ")}` : "Some numbers are samples"}>sample numbers</span>}
-        </p>
+        <h1 className="page-title">Ideas</h1>
+        {!sorted.length && <p className="ins-tally">{recs.loading ? "Looking at the latest numbers…" : "Nothing to suggest yet."}</p>}
       </header>
 
       <TodayNote brief={overview.data?.brief} loading={overview.loading && !overview.data} names={names} onOpen={openNode} />
@@ -78,15 +72,24 @@ export default function InsightsPage() {
       {sorted.length > 0 && (
         <section aria-label="Ideas, best first">
           <ol className="ideas">
-            {shown.map((r, i) => (
-              <IdeaRow key={r.id} rec={r} rank={i + 1} approval={r.approvalId ? byApproval.get(r.approvalId) : undefined} onOpen={() => setLook(r.id)} />
+            {shown.map(({ lead: r, items }, i) => (
+              <IdeaRow key={r.id} rec={r} rank={i + 1} repeats={items.length} approval={r.approvalId ? byApproval.get(r.approvalId) : undefined} onOpen={() => setLook(r.id)} />
             ))}
           </ol>
-          {sorted.length > TOP && (
+          {recent.length > TOP && (
             <button type="button" className="ideas-more" onClick={() => setAll((v) => !v)} aria-expanded={all}>
-              {all ? `Show the top ${TOP}` : `See all ${sorted.length}`}
+              {all ? `Show the top ${TOP}` : "See all"}
               <Icon name="chevron" size={16} className={all ? "is-up" : undefined} />
             </button>
+          )}
+          {older.length > 0 && (
+            <Reveal className="ins-older" tone="row" label={`Older (${older.length})`} defaultOpen={recent.length === 0}>
+              <ol className="ideas">
+                {older.map(({ lead: r, items }, i) => (
+                  <IdeaRow key={r.id} rec={r} rank={recent.length + i + 1} repeats={items.length} approval={r.approvalId ? byApproval.get(r.approvalId) : undefined} onOpen={() => setLook(r.id)} />
+                ))}
+              </ol>
+            </Reveal>
           )}
         </section>
       )}
@@ -144,8 +147,11 @@ function SourceRow({ f, tz, locale }: { f: Freshness; tz?: string; locale?: stri
   );
 }
 
+/** The idea rests on sample numbers: flagged by the server, or said in its own title or size line. */
+const isSample = (r: Recommendation) => !!r.simulated || /\((?:simulated|sample numbers)\)/i.test(`${r.title} ${r.impact}`);
+
 /** One idea in one line: the rank, what it is, who suggests it and how big. */
-function IdeaRow({ rec: r, rank, approval, onOpen }: { rec: Recommendation; rank: number; approval?: Approval; onOpen: () => void }) {
+function IdeaRow({ rec: r, rank, repeats, approval, onOpen }: { rec: Recommendation; rank: number; repeats?: number; approval?: Approval; onOpen: () => void }) {
   const s = stakeOf(r, fmtMoney);
   const waiting = approval?.status === "pending";
   return (
@@ -159,7 +165,8 @@ function IdeaRow({ rec: r, rank, approval, onOpen }: { rec: Recommendation; rank
             <span>{agentDef(r.by)?.name ?? "Your team"}</span>
             {s.big && <b className="idea-size">{s.big}{s.small ? ` ${s.small}` : ""}</b>}
             {waiting && <span className="ap-badge">Draft waiting</span>}
-            {r.simulated && <span className="ap-sample">sample</span>}
+            {isSample(r) && <span className="ap-sample">sample</span>}
+            {(repeats ?? 0) > 1 && <span className="ap-repeat" aria-label={`noticed ${repeats} times`}>×{repeats}</span>}
           </span>
         </span>
         <Icon name="chevron-right" size={16} className="idea-go" />
@@ -188,7 +195,7 @@ function IdeaView({ rec: r, rank, approval, onOpen, names, tz, locale }: { rec: 
         <span className="idea-stake-k">{s.label}</span>
         <span className="idea-stake-v">{s.big}</span>
         {s.small && <span className="idea-stake-s">{s.small}</span>}
-        {r.simulated && <span className="sample-tag">sample numbers</span>}
+        {isSample(r) && <span className="sample-tag">sample numbers</span>}
       </p>
       <div className="idea-actions">
         {waiting ? (

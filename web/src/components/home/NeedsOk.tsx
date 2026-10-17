@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { getPublicMode } from "../../api";
+import { type Group, splitOlder } from "../../lib/group";
 import { firstFew, plainTitle, type WaitingItem } from "../../lib/home";
 import type { Approval, Tenant } from "../../types-ext";
 import { ApprovalRow, Decided } from "../approval/ApprovalRow";
@@ -12,9 +13,10 @@ import { DraftView } from "../approval/Draft";
 import { Icon } from "../Icon";
 import { Sheet } from "../Sheet";
 
-export function NeedsOk({ tenant, items, stakes, loading, error }: {
+export function NeedsOk({ tenant, groups, stakes, loading, error }: {
   tenant: Tenant;
-  items: WaitingItem<Approval>[];
+  /** The drafts waiting, with repeats of one idea folded into one group (lib/group.ts). */
+  groups: Group<WaitingItem<Approval>>[];
   /** The idea's figure for each draft that came from one, by approval id. */
   stakes: ReadonlyMap<string, string>;
   loading: boolean;
@@ -23,7 +25,10 @@ export function NeedsOk({ tenant, items, stakes, loading, error }: {
   const [done, setDone] = useState<Done[]>([]);
   const [look, setLook] = useState<string | null>(null);
   useEffect(() => { setDone([]); setLook(null); }, [tenant.id]);
-  const { shown } = firstFew(items, 3);
+  const items = groups.map((g) => g.lead);
+  // this week's first; a group whose newest draft is over a week old waits on the Needs your OK page, under Older
+  const { recent, older } = splitOlder(groups, (w) => w.approval.createdAt);
+  const { shown } = firstFew([...recent, ...older], 3);
   const readOnly = getPublicMode();
   const open = items.find((w) => w.approval.id === look);
 
@@ -37,16 +42,17 @@ export function NeedsOk({ tenant, items, stakes, loading, error }: {
   return (
     <section className="hm-sec" aria-labelledby="hm-ok-h" aria-busy={loading && !items.length || undefined} data-home-card="waiting">
       <header className="hm-sec-head">
-        <h2 id="hm-ok-h" className="hm-sec-title">Needs your OK{items.length > 0 && <span className="count" aria-label={`${items.length}`}>{items.length}</span>}</h2>
-        {items.length > 0 && <Link to="/approvals" className="hm-sec-link">{items.length > 3 ? `See all ${items.length}` : "See all"}<Icon name="chevron-right" size={14} /></Link>}
+        {/* the count is in the status line above and in the top bar; it is not said a third time here */}
+        <h2 id="hm-ok-h" className="hm-sec-title">Needs your OK</h2>
+        {items.length > 0 && <Link to="/approvals" className="hm-sec-link">See all<Icon name="chevron-right" size={14} /></Link>}
       </header>
       {error && <p className="notice notice-bad" role="alert">Your drafts did not load: {error}</p>}
       {loading && !items.length && !done.length && <div className="hm-skel" aria-hidden="true"><span className="skeleton" /><span className="skeleton" /></div>}
       {shown.length > 0 && (
         <ul className="ap-list">
-          {shown.map((w) => (
+          {shown.map(({ lead: w, items: copies }) => (
             <ApprovalRow
-              key={w.approval.id} a={w.approval} big={w.big} stake={stakes.get(w.approval.id)} readOnly={readOnly}
+              key={w.approval.id} a={w.approval} big={w.big} stake={stakes.get(w.approval.id)} readOnly={readOnly} repeats={copies.length}
               onOk={(a) => decide(a, "approve")} onLook={(a) => setLook(a.id)}
             />
           ))}
