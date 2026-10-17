@@ -376,7 +376,7 @@ export class ComposioConnector implements Connector {
       return out.data;
     };
     const proxy = async (req: ProxyRequest): Promise<unknown> => {
-      const where = (() => { try { const u = new URL(req.endpoint); return `${u.host.split(".")[0]}${u.pathname}`; } catch { return "a bad address"; } })();
+      const where = (() => { try { const u = new URL(req.endpoint); return `${u.host.split(".")[0]}${u.pathname.replace(/^\/v\d+\w*(?=\/)/, "")}`; } catch { return "a bad address"; } })();
       const op = `proxy ${req.method} ${where}`;
       if (!proxyIsRead(req.method, req.endpoint)) {
         await ctx.audit(op, false, "refused: the proxy only reads");

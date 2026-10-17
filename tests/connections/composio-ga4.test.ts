@@ -75,8 +75,8 @@ describe("Google Analytics through Composio's proxy", () => {
     expect(sys).toEqual({ property: "properties/222", dataThrough: "2026-10-14", factCount: 12 }); // 2 days x 4 + 3 channel groups + the snapshot
 
     const audited = (await h.audit.recent("kestrel", { connector: "google-analytics" })).map((e) => e.op);
-    expect(audited).toContain("proxy GET analyticsadmin/v1beta/accountSummaries");
-    expect(audited.some((op) => op.startsWith("proxy POST analyticsdata/v1beta/properties/222:runReport"))).toBe(true);
+    expect(audited).toContain("proxy GET analyticsadmin/accountSummaries");
+    expect(audited.some((op) => op.startsWith("proxy POST analyticsdata/properties/222:runReport"))).toBe(true);
     expect(audited).toContain("daily read");
   });
 
@@ -85,7 +85,7 @@ describe("Google Analytics through Composio's proxy", () => {
     const run = (req: ProxyRequest) => h.svc.port("kestrel").run<{ proxy(r: ProxyRequest): Promise<unknown> }, unknown>("google-analytics", "try a change", (s) => s.proxy(req));
     await expect(run({ endpoint: `${ADMIN}/properties/222`, method: "POST", body: { displayName: "x" } })).rejects.toThrow(/can only be read/);
     expect(h.composio.proxied().length).toBe(before);
-    expect((await h.audit.recent("kestrel", { connector: "google-analytics" }))[1]).toMatchObject({ op: "proxy POST analyticsadmin/v1beta/properties/222", ok: false });
+    expect((await h.audit.recent("kestrel", { connector: "google-analytics" }))[1]).toMatchObject({ op: "proxy POST analyticsadmin/properties/222", ok: false });
     // Google saying no is a failed read, not an empty one
     h.composio.proxies.set(`${ADMIN}/properties/999`, () => ({ status: 403, data: { error: { message: "denied" } } }));
     await expect(run({ endpoint: `${ADMIN}/properties/999`, method: "GET" })).rejects.toThrow(/answered 403/);
