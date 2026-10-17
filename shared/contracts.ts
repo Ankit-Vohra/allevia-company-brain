@@ -209,6 +209,16 @@ export interface ProgramGoal {
   progress: number | null;    // 0 at the baseline, 1 at the target
   status: GoalState;
   dueAt: string | null;
+  aimed?: GoalAim;            // what is aimed at it now (current ADVANCES edges); absent on older answers
+}
+
+// What the team has aimed at a goal: everything that ADVANCES it now, grouped by what it is (the node's label, what kind of card or
+// post, and its status), the posts with how they are doing (their newest reading), and the plan's one plain line about it.
+export interface GoalAim {
+  total: number;
+  groups: Array<{ kind: string; what: string | null; status: string | null; count: number }>;
+  content: Array<{ id: string; name: string; status: string | null; latest: { metric: string; value: number; unit: string | null; at: string | null; obsId: string } | null }>;
+  sentence: string | null;    // "2 approved drafts and 1 fix are aimed at \"Enquiries per month\"."
 }
 
 export interface ProgramCheckpoint { day: 0 | 30 | 60 | 90; dueDate: string; status: "done" | "due" | "upcoming"; id?: string; at?: string; summary?: string }

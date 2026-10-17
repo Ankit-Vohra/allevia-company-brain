@@ -9,9 +9,10 @@
 // Props read that the crawler (M5) is expected to write on a Page: indexed (false), noindex (true), indexStatus or
 // coverageState ("…not indexed", "Excluded…"), statusCode (>= 400).
 import type { ActionKind } from "../../shared/contracts.js";
-import type { GraphHandle } from "../graph/client.js";
+import { pageRank } from "../graph/algorithms.js";
+import { GraphHandle } from "../graph/client.js";
 import { typeOfLabels, type EntityType } from "../graph/schema.js";
-import { DAY_MS, addDays, cap1, clip, dayMs, dayOf, fmt, humanise, list, median, money, pageLabel, pct, plural, round, shortDate, times } from "./text.js";
+import { DAY_MS, addDays, cap1, clip, dayMs, dayOf, fmt, humanise, list, median, money, pageLabel, pct, plural, round, shortDate, times, unownedSystemText } from "./text.js";
 
 export type Area = "seo" | "content" | "funnel" | "ads" | "knowledge" | "tech";
 
@@ -37,6 +38,7 @@ export interface Candidate {
   numbers: Record<string, number>;
   metrics?: string[];                // metric keys involved (recommend.ts matches Goals on them)
   simulated?: boolean;
+  src?: string;                      // what the Recommendation's own links name as their source ("detector:<name>"); recommend.ts stamps it
   score: number;                     // 0..1, for ranking
   confidence: number;                // 0..1
   suggestedAction?: SuggestedAction;
@@ -52,6 +54,7 @@ export interface DetectorOpts {
   minSessions?: number;      // crash and release checks need at least this many sessions behind them (default 30)
   reviewWaitDays?: number;   // an app update waiting for Apple's review this long is flagged (default 3)
   releaseDropPoints?: number; // crash-free sessions falling this many percentage points after a build is flagged (default 2)
+  unownedMin?: number;       // a tool nobody is named to look after is flagged when this many things rely on it (default 3)
 }
 
 type Read = Pick<GraphHandle, "roQuery">;
@@ -1082,6 +1085,125 @@ const techReleaseHealth: Detector = {
   },
 };
 
+// ---------- structure: what many things rely on and nobody looks after (Arjun) ----------
+
+const UNOWNED_MIN = 3;              // at least this many things rely on it, directly or through up to two others
+const UNOWNED_MAX = 3;              // at most this many cards at once
+const UNOWNED_EVIDENCE = 8;         // the dependents named as evidence
+const UNOWNED_HOPS = 3;             // how far a reliance reaches
+const EDGE_PAGE = 50_000;           // current edges read for the walk (a business with more has a structure no card could explain)
+const RANK_BUDGET_MS = 10_000;
+
+interface Reliance { id: string; hops: number }
+
+// The things that reach `to` through current DEPENDS_ON edges, one to UNOWNED_HOPS steps away, each once with the fewest steps it takes.
+// A walk over the edges read once, not a path query: counting paths over a hub with thousands of dependents is the one shape that
+// makes FalkorDB slow, and this is the same answer (a thing reaches the tool through a path of up to three edges if and only if its
+// shortest path is that short).
+function reliance(by: ReadonlyMap<string, readonly string[]>, to: string): Reliance[] {
+  const seen = new Map<string, number>([[to, 0]]);
+  let frontier = [to];
+  for (let hop = 1; hop <= UNOWNED_HOPS && frontier.length; hop++) {
+    const next: string[] = [];
+    for (const id of frontier) for (const from of by.get(id) ?? []) if (!seen.has(from)) { seen.set(from, hop); next.push(from); }
+    frontier = next;
+  }
+  seen.delete(to);
+  return [...seen].map(([id, hops]) => ({ id, hops })).sort((a, b) => a.hops - b.hops || a.id.localeCompare(b.id));
+}
+
+// A tool or service (System) that things rely on, through DEPENDS_ON edges that still hold (one, two or three steps away), and that no
+// person, team or agent OWNS, directly or through the System it is PART_OF. Several can qualify; the most leaned on come first, by
+// PageRank over the System-to-System DEPENDS_ON edges that hold now (algo.pageRank on the current-edges projection: a tool that the
+// most-leaned-on tools lean on ranks above one only a leaf uses), then by how many things rely on it. A Business owning it does not
+// count: a business is not someone who can be asked. The finding says "nobody is named", never "nobody looks after it": the records
+// may simply not say.
+const techUnownedCriticalSystem: Detector = {
+  area: "tech",
+  async run(g, opts) {
+    const min = opts.unownedMin ?? UNOWNED_MIN;
+    // the current edges, read once: who relies on what, which of those are tools, who owns a tool, which tool is part of which
+    const edges = await ro<{ from: string; to: string; kinds: string[] }>(g,
+      "MATCH (a:Entity)-[d:DEPENDS_ON]->(b:Entity) WHERE d.until IS NULL RETURN a.id AS from, b.id AS to, labels(b) AS kinds ORDER BY from, to LIMIT $limit", { limit: EDGE_PAGE });
+    const tools = new Set(edges.filter((e) => e.kinds.includes("System")).map((e) => e.to));
+    if (!tools.size) return [];
+    const by = new Map<string, string[]>();
+    for (const e of edges) if (e.from !== e.to) by.set(e.to, [...(by.get(e.to) ?? []), e.from]);
+    const owners = await ro<{ id: string }>(g,
+      "MATCH (o:Entity)-[w:OWNS]->(s:System) WHERE w.until IS NULL AND (o:Person OR o:Agent OR o:Team) RETURN DISTINCT s.id AS id ORDER BY id LIMIT $limit", { limit: EDGE_PAGE });
+    const parents = await ro<{ id: string; parent: string }>(g,
+      "MATCH (s:System)-[p:PART_OF]->(t:System) WHERE p.until IS NULL RETURN s.id AS id, t.id AS parent ORDER BY id, parent LIMIT $limit", { limit: EDGE_PAGE });
+    const owned = new Set(owners.map((r) => r.id));
+    const up = new Map<string, string[]>();
+    for (const p of parents) up.set(p.id, [...(up.get(p.id) ?? []), p.parent]);
+    // owned directly, or through the tool it is part of (up to three steps)
+    const isOwned = (id: string): boolean => {
+      let level = [id];
+      for (let hop = 0; hop <= UNOWNED_HOPS && level.length; hop++) {
+        if (level.some((x) => owned.has(x))) return true;
+        level = level.flatMap((x) => up.get(x) ?? []);
+      }
+      return false;
+    };
+    const open = [...tools].filter((id) => !isOwned(id)).map((id) => ({ id, path: reliance(by, id) })).filter((x) => x.path.length >= min);
+    if (!open.length) return [];
+
+    // PageRank over the tools themselves. Without it (a read-only handle, a projection that will not settle) the count orders them.
+    // Tools with the same score tie, and a tie is not a place: the place is 1 + how many score strictly higher, and it is only
+    // claimed in words when the tool stands alone at it.
+    const score = new Map<string, number>();
+    const tally = new Map<number, number>();
+    if (g instanceof GraphHandle) {
+      try {
+        for (const r of await pageRank(g, "System", "DEPENDS_ON", { timeoutMs: RANK_BUDGET_MS })) score.set(r.id, Math.round(r.score * 1e9));
+        for (const v of score.values()) tally.set(v, (tally.get(v) ?? 0) + 1);
+      } catch { score.clear(); tally.clear(); }
+    }
+    const standing = (id: string): { place: number; alone: boolean } | undefined => {
+      const v = score.get(id);
+      if (v === undefined) return undefined;
+      let above = 0;
+      for (const [k, c] of tally) if (k > v) above += c;
+      return { place: above + 1, alone: tally.get(v) === 1 };
+    };
+    const order = open.slice().sort((a, b) => (score.get(b.id) ?? -1) - (score.get(a.id) ?? -1) || b.path.length - a.path.length || a.id.localeCompare(b.id)).slice(0, UNOWNED_MAX);
+
+    const named = await ro<{ id: string; name: string | null; simulated: boolean | null }>(g,
+      "MATCH (n:Entity) WHERE n.id IN $ids RETURN n.id AS id, n.name AS name, n.simulated AS simulated ORDER BY id",
+      { ids: [...new Set(order.flatMap((o) => [o.id, ...o.path.slice(0, UNOWNED_EVIDENCE).map((r) => r.id)]))] });
+    const info = new Map(named.map((n) => [n.id, n]));
+    const out: Candidate[] = [];
+    for (const s of order) {
+      const nearest = s.path.slice(0, UNOWNED_EVIDENCE);
+      const relying = s.path.length;
+      const directly = s.path.filter((r) => r.hops === 1).length;
+      const name = info.get(s.id)?.name ?? s.id;
+      const st = standing(s.id);
+      const text = unownedSystemText({
+        id: s.id, name, relying, directly, names: nearest.map((r) => ({ name: info.get(r.id)?.name ?? r.id, hops: r.hops })),
+        ...(st?.alone && st.place <= 3 ? { rank: st.place, of: score.size } : {}),
+      });
+      out.push({
+        key: `tech.unowned_critical_system:${s.id}`, detector: "tech.unowned_critical_system", area: "tech", agent: "tech-lead",
+        title: text.title, why: text.why, impact: text.impact,
+        evidence: uniq([s.id, ...nearest.map((r) => r.id)]),
+        numbers: { things_relying_on_it: relying, relying_directly: directly, ...(st ? { rank_among_tools: st.place, tools_ranked: score.size } : {}) },
+        ...(info.get(s.id)?.simulated ? { simulated: true } : {}), src: "detector:tech.unowned_critical_system",
+        score: round(0.5 + cap(0.02 * (relying - min), 0.2) + (st && st.place <= 3 && st.alone ? 0.1 : 0)), confidence: 0.8,
+        suggestedAction: {
+          kind: "github_issue",
+          payload: {
+            title: `Name who looks after ${clip(name, 80)}`,
+            body: [`${text.why}`, "", ...text.steps.map((t) => `- [ ] ${t}`), "", `Evidence: ${s.id}`].join("\n"),
+            target: "Your records", targetId: s.id,
+          },
+        },
+      });
+    }
+    return out;
+  },
+};
+
 // ---------- registry ----------
 
 export const DETECTORS = {
@@ -1105,6 +1227,7 @@ export const DETECTORS = {
   "tech.play_vitals": techPlayVitals,
   "tech.app_review_waiting": techAppReviewWaiting,
   "tech.release_health": techReleaseHealth,
+  "tech.unowned_critical_system": techUnownedCriticalSystem,
 } satisfies Record<string, Detector>;
 
 export type DetectorName = keyof typeof DETECTORS;

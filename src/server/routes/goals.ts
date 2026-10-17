@@ -5,11 +5,18 @@
 //                              Either way the goal is confirmed. Refused in public mode.
 // The target is written with upsertNode on the Goal, the same write the day-0 baseline uses (program.ts baselinesWrite),
 // so the scorecard's progress follows it and the old target stays a Version. `confirmedAt` is the only new property.
+// The owner's choice is also a decision about the business: a Decision {kind:'goal_target'} DECIDED by the owner, AFFECTing the goal and
+// BASED_ON the Observation its starting number was locked from (src/program/target-decision.ts), and the Goal's update names that decision
+// as its source, with the time, so trace_decision answers "why is the target 150?". A change of number, or the first OK, writes one; saying
+// OK again changes nothing.
 import type { Hono } from "hono";
 import { z } from "zod";
+import { ensureActor } from "../../actions/shared.js";
 import type { GraphHandle } from "../../graph/client.js";
 import { upsertNode } from "../../graph/upsert.js";
-import { currentProgram, programGoals, type GoalRow } from "../../program/program.js";
+import { baselineObsId, currentProgram, programGoals, type GoalRow } from "../../program/program.js";
+import { ownerPerson, recordTargetDecision } from "../../program/target-decision.js";
+import { toIso } from "../../util/time.js";
 import { HttpError, readBody, type RouteCtx } from "../http.js";
 
 export interface GoalSetupDto {
@@ -21,6 +28,7 @@ export interface GoalSetupDto {
   target: number | null;     // the suggestion, or the owner's own number once changed
   why: string | null;        // one line on what the goal is
   confirmed: boolean;
+  decisionId?: string;       // the decision behind the number, when this answer wrote one
 }
 
 const Body = z.object({ confirm: z.literal(true).optional(), target: z.number().finite().positive().max(1_000_000_000).optional() })
@@ -54,7 +62,26 @@ export function registerGoalRoutes(app: Hono, ctx: RouteCtx): void {
     const goal = (await setupGoals(g, reg.businessId)).find((x) => x.id === id);
     if (!goal) throw new HttpError(404, "No such goal in your growth plan.");
     const target = body.target ?? goal.target;
-    await upsertNode(g, { type: "Goal", id, name: goal.name, props: { ...(target !== null ? { target } : {}), confirmedAt: ctx.now() } }, ctx.now());
-    return c.json({ ...goal, target, confirmed: true } satisfies GoalSetupDto);
+    const now = ctx.now();
+    const changed = body.target !== undefined && body.target !== goal.target;
+    if (!changed && goal.confirmed) return c.json({ ...goal, confirmed: true } satisfies GoalSetupDto); // saying OK again changes nothing
+    const owner = (await ownerPerson(g)) ?? (await ensureActor(g, "person:owner", now));
+    let decisionId: string | undefined;
+    if (target !== null) {
+      const program = await currentProgram(g, reg.businessId);
+      const row = program ? (await programGoals(g, program.id)).find((x) => x.id === id) : undefined;
+      // the Observation the starting number was locked from, when there is one
+      const obs = row && row.baseline !== null && row.metricKey ? baselineObsId(row.metricKey, id) : null;
+      const found = obs ? await g.roQuery<{ id: string }>("MATCH (x:Entity:Observation {id:$id}) RETURN x.id AS id", { id: obs }) : [];
+      decisionId = await recordTargetDecision(g, {
+        goalId: id, goalName: goal.name, unit: goal.unit, period: goal.period, metricKey: row?.metricKey ?? "", target, previous: goal.target, baseline: goal.baseline,
+        baselineObs: found.length ? obs : null, basis: row?.targetBasis === "baseline" || row?.targetBasis === "template" ? row.targetBasis : null, changed, owner, now,
+      });
+    }
+    await upsertNode(g, {
+      type: "Goal", id, name: goal.name, props: { ...(target !== null ? { target } : {}), confirmedAt: now },
+      src: decisionId ?? owner, asOf: toIso(now),
+    }, now);
+    return c.json({ ...goal, target, confirmed: true, ...(decisionId ? { decisionId } : {}) } satisfies GoalSetupDto);
   });
 }

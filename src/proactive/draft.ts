@@ -155,7 +155,7 @@ async function draftPoster(g: GraphHandle, p: Picked, ctx: DraftCtx, skill: Text
       headline: clip(headline.text.replace(/[.\s।]+$/u, ""), 60), ...(eyebrow ? { eyebrow } : {}),
       ...(ctx.domain ? { cta: ctx.domain } : {}), caption: [caption.text, caption.hashtags.join(" ")].filter(Boolean).join("\n\n"), paid,
     });
-    await tagCard(g, p, made, ctx.now);
+    await tagCard(g, p, made, ctx.now, ctx.log);
     return { paidTried: paid, item: {
       key: p.key, kind: "poster", agent: p.agent, title: p.title, why: p.why, purpose: p.purpose, status: "drafted", approvalId: made.approvalId,
       recommendationId: made.recommendationId, paid: made.hfCredits > 0, paidTried: paid, hfCredits: made.hfCredits, notes: [...made.notes, ...caption.warnings].slice(0, 4),
@@ -167,21 +167,31 @@ async function draftPoster(g: GraphHandle, p: Picked, ctx: DraftCtx, skill: Text
 }
 
 // The creating tools' own card, marked as this stand-up's (so it is deduped and learned from like the rest).
-async function tagCard(g: GraphHandle, p: Picked, made: PosterDraft, now: number): Promise<void> {
+async function tagCard(g: GraphHandle, p: Picked, made: PosterDraft, now: number, log?: (line: string) => void): Promise<void> {
   const [a] = await g.roQuery<{ name: string }>("MATCH (a:Entity:Approval {id:$id}) RETURN a.name AS name", { id: made.approvalId });
   const [r] = await g.roQuery<{ name: string }>("MATCH (r:Entity:Recommendation {id:$id}) RETURN r.name AS name", { id: made.recommendationId });
   if (a) await upsertNode(g, { type: "Approval", id: made.approvalId, name: a.name, props: { standup: true, standupKey: p.key, standupKind: "poster", by: p.agent } }, now);
   if (r) {
     await upsertNode(g, { type: "Recommendation", id: made.recommendationId, name: r.name, summary: p.why, props: { source: STANDUP_SOURCE, standupKey: p.key, standupKind: "poster", purpose: p.purpose } }, now);
-    await link(g, made.recommendationId, p, now);
+    await link(g, made.recommendationId, p, now, log);
   }
 }
 
-async function link(g: GraphHandle, recId: string, p: Picked, now: number): Promise<void> {
+const errText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+// The idea's evidence and the goals it moves, as edges. A node that is not in the graph, or an edge that could not be written, is
+// said through the stand-up's log: a card with no evidence or no goal is a thing the next reader should be able to find out about.
+async function link(g: GraphHandle, recId: string, p: Picked, now: number, log?: (line: string) => void): Promise<void> {
   const asOf = isoDate(now);
   const present = await existingIds(g, [...p.evidence, ...p.goals]);
-  for (const e of p.evidence.slice(0, 8)) if (present.has(e)) await upsertEdge(g, { from: recId, type: "EVIDENCED_BY", to: e, asOf }, now).catch(() => undefined);
-  for (const gl of p.goals) if (present.has(gl)) await upsertEdge(g, { from: recId, type: "ADVANCES", to: gl }, now).catch(() => undefined);
+  for (const e of p.evidence.slice(0, 8)) {
+    if (!present.has(e)) { log?.(`stand-up: "${p.title}" is not linked to its evidence ${e}: it is not in the graph`); continue; }
+    await upsertEdge(g, { from: recId, type: "EVIDENCED_BY", to: e, asOf }, now).catch((err: unknown) => log?.(`stand-up: "${p.title}" could not be linked to its evidence ${e}: ${errText(err)}`));
+  }
+  for (const gl of p.goals) {
+    if (!present.has(gl)) { log?.(`stand-up: "${p.title}" is not linked to its goal ${gl}: it is not in the graph`); continue; }
+    await upsertEdge(g, { from: recId, type: "ADVANCES", to: gl }, now).catch((err: unknown) => log?.(`stand-up: "${p.title}" could not be linked to its goal ${gl}: ${errText(err)}`));
+  }
 }
 
 function bodyOf(kind: Plain, t: TextDraft, p: Picked): string {
@@ -210,7 +220,7 @@ async function writeCard(g: GraphHandle, p: Picked, kind: Plain, t: TextDraft, c
     asOf,
   }, now);
   await upsertEdge(g, { from: agentId, type: "PRODUCED", to: recId }, now);
-  await link(g, recId, p, now);
+  await link(g, recId, p, now, ctx.log);
 
   const page = p.facts.find((f) => f.startsWith("Address: "))?.slice(9);
   let payload: Record<string, string | string[] | boolean> = {
@@ -239,7 +249,9 @@ async function writeCard(g: GraphHandle, p: Picked, kind: Plain, t: TextDraft, c
   }, now);
   if (actionKind === "content_draft") await guideCards(g, [recId, approvalId], shaped, now, recId);
   await upsertEdge(g, { from: recId, type: "PROPOSES", to: approvalId }, now);
-  for (const gl of p.goals) await upsertEdge(g, { from: approvalId, type: "ADVANCES", to: gl }, now).catch(() => undefined);
+  for (const gl of p.goals) {
+    await upsertEdge(g, { from: approvalId, type: "ADVANCES", to: gl }, now).catch((err: unknown) => ctx.log?.(`stand-up: the card for "${p.title}" could not be linked to its goal ${gl}: ${errText(err)}`));
+  }
   return { approvalId, recommendationId: recId };
 }
 
@@ -283,7 +295,7 @@ async function draftSales(g: GraphHandle, p: Picked, ctx: DraftCtx, skill: TextJ
     asOf: date,
   }, now);
   await upsertEdge(g, { from: agentId, type: "PRODUCED", to: recId }, now);
-  await link(g, recId, p, now);
+  await link(g, recId, p, now, ctx.log);
   const body = [t.text.trim(), ...(t.warnings.length ? ["", `Check before you use it: ${t.warnings.slice(0, 3).join("; ")}.`] : [])].join("\n");
   let payload: Record<string, string | string[] | boolean> = email
     ? { title: subject, subject, to: [email], body, send: true, target: `Email to ${email}`, standup: true }

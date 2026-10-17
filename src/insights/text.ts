@@ -98,3 +98,42 @@ export function humanise(key: string): string {
   const s = key.replace(/[_.-]+/g, " ").trim().replace(/\bsignup funnel\b/gi, "sign-up").replace(/\botp\b/gi, "sign-up code").replace(/\bctr\b/gi, "CTR").replace(/\bcpa\b/gi, "CPA");
   return s ? s[0]!.toUpperCase() + s.slice(1) : s;
 }
+
+// ---------- a tool or service that many things rely on and nobody looks after ----------
+
+// 1 -> "1st", 2 -> "2nd", 11 -> "11th", 23 -> "23rd"
+export function ordinal(n: number): string {
+  const m100 = n % 100;
+  const s = m100 >= 11 && m100 <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th");
+  return `${fmt(n)}${s}`;
+}
+
+export interface UnownedFacts {
+  id: string;
+  name: string;                                  // the tool or service, as the records name it
+  relying: number;                               // how many things rely on it, directly or through something else (up to three steps)
+  directly: number;                              // how many of those rely on it directly
+  names: ReadonlyArray<{ name: string; hops: number }>;  // some of them, the nearest first
+  rank?: number;                                 // where it stands alone among the business's tools by how much they lean on it (1 = most)
+  of?: number;                                   // how many tools that ranks
+}
+
+// The card for it, in the owner's words (docs/owner-words.md): no "system", "node", "graph" or "dependency". Every number is one the
+// detector counted.
+export function unownedSystemText(f: UnownedFacts): { title: string; why: string; impact: string; steps: string[] } {
+  const some = list(f.names.slice(0, 3).map((x) => x.name));
+  const through = f.relying - f.directly;
+  const verb = f.relying === 1 ? "relies" : "rely";
+  const standing = f.rank !== undefined && f.of !== undefined && f.of > 1
+    ? ` It is the ${f.rank === 1 ? "" : `${ordinal(f.rank)} `}most leaned on of your ${fmt(f.of)} tools and services.` : "";
+  return {
+    title: `Nobody is named to look after ${f.name}, and ${plural(f.relying, "thing")} ${verb} on it`,
+    why: `${plural(f.relying, "thing")} ${verb} on ${f.name}${through > 0 ? ` (${fmt(f.directly)} directly, the rest through something else)` : ""}${some ? `, such as ${some}` : ""}, and no one is named as looking after it.${standing}`,
+    impact: "When something many things lean on has no owner, a problem with it is noticed late and nobody is sure whose job it is to fix it.",
+    steps: [
+      "Pick one person or team to look after it.",
+      "Write them down as its owner, so the next time someone asks who looks after it, there is an answer.",
+      `Tell them what leans on it${some ? `: ${some}` : ""}.`,
+    ],
+  };
+}

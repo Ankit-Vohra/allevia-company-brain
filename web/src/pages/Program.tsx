@@ -75,7 +75,7 @@ function Started({ p, caps, suggested, onSet }: { p: ProgramScorecard; caps?: Ca
         <section className="owner-block" aria-labelledby="goals-h">
           <h2 id="goals-h" className="owner-h">Your goals</h2>
           {top.length ? (
-            <ul className="owner-cards">{top.map(({ g, v }) => <GoalCard key={g.id} v={v} />)}</ul>
+            <ul className="owner-cards">{top.map(({ g, v }) => <GoalCard key={g.id} v={v} aimed={g.aimed?.sentence ?? null} />)}</ul>
           ) : (
             <p className="owner-quiet">Your team will suggest two or three goals once it has had a first look at your business.</p>
           )}
@@ -107,7 +107,8 @@ function Started({ p, caps, suggested, onSet }: { p: ProgramScorecard; caps?: Ca
   );
 }
 
-function GoalCard({ v }: { v: GoalView }) {
+// `aimed`: what the team has pointed at this goal, in one plain line ("2 approved drafts and 1 fix are aimed at ..."); null when nothing is.
+function GoalCard({ v, aimed }: { v: GoalView; aimed: string | null }) {
   return (
     <li className={`owner-card${v.status ? ` tone-${v.status.tone}` : ""}`}>
       <div className="owner-card-top">
@@ -129,6 +130,7 @@ function GoalCard({ v }: { v: GoalView }) {
       >
         {v.progress !== null && <span style={{ width: `${Math.max(2, v.progress * 100)}%` }} />}
       </span>
+      {aimed && <p className="owner-card-owner">{aimed}</p>}
       {v.owner && <p className="owner-card-owner">Looked after by {v.owner}</p>}
     </li>
   );

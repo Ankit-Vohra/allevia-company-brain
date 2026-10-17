@@ -247,7 +247,7 @@ running), give the owner a team instead of a tool, and make every answer carry i
 - **One-tap approvals.** Anything that would change the outside world becomes an approval card: a GitHub issue, a
   content draft, a (simulated) ad pause, a Discord post. Approve, edit or reject, from the web or Discord. GitHub
   issues and Discord posts are dry runs unless `ALLEVIA_ACTIONS_LIVE=1`; drafts are never published.
-- **Insights without model guesswork.** 20 deterministic Cypher detectors (SEO, content, funnel, simulated ads,
+- **Insights without model guesswork.** 21 deterministic Cypher detectors (SEO, content, funnel, simulated ads,
   knowledge gaps, and on-call and release health for the app) produce findings with evidence ids and numbers from the
   graph; Today's note (the morning brief) is a goal pulse built from them, with an "On call" section only when Zoya or
   Imran has something open ([`src/insights/`](src/insights)).
@@ -603,7 +603,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 | `npm run onboard -- --name "…" --slug … --url https://…` | Onboard a business from its website (crawl, brand kit, SEO checks, understanding, program) |
 | `enroll <tenant>` | Enrol a business already in the graph in Allevia 90: country defaults, goals, Day-0 baselines, capabilities |
 | `ask <tenant> "<question>"` | Ask the agent company and watch every agent's steps in the terminal |
-| `insights <tenant>` | Run the 20 detectors; write recommendations and approval cards |
+| `insights <tenant>` | Run the 21 detectors; write recommendations and approval cards |
 | `brief <tenant>` | Write today's note (goals, what changed, what we noticed, on call, waiting for your OK, next step) |
 | `standup <tenant>` | Run today's team stand-up now: Meera picks at most 3 things worth doing, the team drafts them for your OK, and today's note leads with them (the server runs it each business's morning; see docs/proactive-trials.md) |
 | `approvals <tenant> [approve\|reject <id>]` | List or decide approval cards (`--edit <file>` teaches a learned rule) |

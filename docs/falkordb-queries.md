@@ -483,7 +483,112 @@ RETURN v.props AS was, v.until AS until ORDER BY v.until, v.id
 Plan note: every one of these anchors on an id or scans one label on purpose (the first, the second and the third are surveys of leads,
 goals and their edges, a handful per business); `tests/graph/explain.test.ts` holds the id-anchored ones to an index lookup.
 
-## 16. How the brain grew: nodes and edges per day, by kind (`graph:story`)
+## 16. The stand-up's evidence: what each pick stands on, as edges
+
+| | |
+|---|---|
+| Code | `src/proactive/standup.ts:140` (the note's `MENTIONS`), `src/proactive/standup.ts:60` (`evidenceOf`), `src/proactive/festivals.ts:19` (`writeFestivals`), `src/proactive/draft.ts:184` (`link`) |
+| Answers | "Why did the team bring this up today?" and "which of our ideas were for Diwali?" |
+| Why a graph | A pick's reason is a set of nodes (a number that moved, a goal that slipped, a festival, a check that failed), and the same node can be the reason for two picks on two days. As a JSON list inside the note, nothing could ask which notes stood on a given reading. |
+
+The stand-up is a `Document{kind:'standup'}`. Besides the cards, ideas and people it already mentioned, it now `MENTIONS` each node a pick is
+`EVIDENCED_BY` (edge props `role: 'evidence'`, `pickKey`, and `pickKeys` when two picks share the node) and the biggest like-for-like moves in
+the numbers it read (`role: 'signal'`; a move that also backs a pick stays `'evidence'`). A festival is an `Event{kind:'festival', date}` the
+stand-up writes for the dates it is about to use (a fixed table in code, `src/proactive/calendar.ts`; edges to it are `src: allevia:festival-calendar`
+dated by when that table was last checked), so a seasonal pick is `EVIDENCED_BY` a node too. A link that could not be written (the node is not
+in the graph, the write failed) is said through the stand-up's log, no longer swallowed.
+
+For every pick, what the note says it stood on:
+
+```cypher
+MATCH (d:Entity:Document {id:$id})-[m:MENTIONS]->(x:Entity) WHERE m.until IS NULL AND m.role IS NOT NULL
+RETURN m.role AS role, m.pickKey AS pick, x.id AS node, labels(x) AS kinds ORDER BY node
+```
+
+Which ideas were for a festival, and when it falls:
+
+```cypher
+MATCH (r:Recommendation)-[e:EVIDENCED_BY]->(x:Event) WHERE e.until IS NULL AND x.kind = 'festival'
+RETURN r.id AS recommendation, r.standupKey AS pick, x.id AS festival, x.date AS date ORDER BY recommendation, festival
+```
+
+## 17. A tool many things rely on and nobody looks after (`tech.unowned_critical_system`)
+
+| | |
+|---|---|
+| Code | `src/insights/detectors.ts:1121` (`techUnownedCriticalSystem`), `src/graph/algorithms.ts:147` (`pageRank`), `src/insights/text.ts:123` (`unownedSystemText`) |
+| Answers | "Which tool or service would hurt most if it broke and has no one named to look after it?" |
+| Why a graph | Both halves are structure: reliance is a path (a feature relies on checkout, which relies on the payment gateway: two steps), and "owned" can be inherited (a cache is part of the platform, which a team owns). A table of tools with an `owner` column holds neither. |
+
+Reliance: the `DEPENDS_ON` edges that still hold, read once (`reliance` in the detector walks them: the things that reach a tool in one to
+three steps, each counted once with the fewest steps it takes, which is what `DEPENDS_ON*1..3` with every edge tested would count). The walk
+is in code because counting paths over a hub with thousands of dependents is the one shape that made this slow (14.8 s on the degenerate
+test graph, 5 ms now); the answer is the same:
+
+```cypher
+MATCH (a:Entity)-[d:DEPENDS_ON]->(b:Entity) WHERE d.until IS NULL RETURN a.id AS from, b.id AS to, labels(b) AS kinds ORDER BY from, to LIMIT $limit
+```
+
+Owned: a person, team or agent with a current `OWNS` edge into the tool, or into a tool it is `PART_OF` (up to three steps). A business owning
+it does not count, and neither does an `OWNS` edge that was closed when the owner left:
+
+```cypher
+MATCH (o:Entity)-[w:OWNS]->(s:System) WHERE w.until IS NULL AND (o:Person OR o:Agent OR o:Team) RETURN DISTINCT s.id AS id ORDER BY id LIMIT $limit
+```
+
+```cypher
+MATCH (s:System)-[p:PART_OF]->(t:System) WHERE p.until IS NULL RETURN s.id AS id, t.id AS parent ORDER BY id, parent LIMIT $limit
+```
+
+Ranking: `algo.pageRank('System', 'DEPENDS_ON')` on the projection of the edges that hold now (`src/graph/projection.ts`): a tool that the most
+relied-on tools rely on ranks above one only a leaf uses. Scores that tie are not a place (the card says "the most leaned on of your 5 tools"
+only for a tool that stands alone in the top three); ties fall back to the number of things that rely on it. The evidence is the dependency
+path: the tool, then what relies on it, the nearest first, at most eight.
+
+## 18. What moved a goal, and why its target is what it is
+
+| | |
+|---|---|
+| Code | `src/program/aimed.ts:49` (`goalAims`), `src/program/aimed.ts:29` (`aimSentence`), `src/program/target-decision.ts:62` (`recordTargetDecision`), `src/server/routes/goals.ts:57` (`POST /api/:t/goals/:id`) |
+| Answers | "What is aimed at my enquiries goal?" ("2 approved drafts and 1 fix") and "why is the target 150?" |
+| Why a graph | The plan's aims are the current `ADVANCES` edges into a goal: a card, the idea behind it, a post, a lead, a deal. They are written by five different features, so only a traversal over the edge sees them together; and "why 150" is a decision with an owner and the reading it stood on, not a number someone changed. |
+
+Everything that advances the goals, grouped by what it is (the edge is bound and tested under the count; the status and the kind can be missing,
+so the grouping is in a `WITH`):
+
+```cypher
+MATCH (x:Entity)-[a:ADVANCES]->(gl:Goal) WHERE ID(a) >= 0 AND a.until IS NULL AND gl.id IN $ids
+WITH gl.id AS goalId, labels(x) AS kinds, x.status AS status, coalesce(x.kind, x.format) AS what, count(x) AS n
+RETURN goalId, kinds, status, what, n
+```
+
+Each post that advances a goal, with its newest reading (`Observation -MEASURES-> Content`, the baseline Observation never counted):
+
+```cypher
+MATCH (c:Entity:Content)-[a:ADVANCES]->(gl:Goal) WHERE a.until IS NULL AND gl.id IN $ids
+OPTIONAL MATCH (o:Observation)-[m:MEASURES]->(c) WHERE m.until IS NULL AND coalesce(o.baseline, false) = false
+WITH gl, c, o ORDER BY coalesce(o.windowEnd, o.asOf) DESC, o.id DESC
+WITH gl, c, collect(o)[0] AS o
+RETURN gl.id AS goalId, c.id AS id, c.name AS name, c.status AS status, o.id AS obsId, o.metric AS metric, o.value AS value, o.unit AS unit,
+       coalesce(o.windowEnd, o.asOf) AS at ORDER BY goalId, id LIMIT 200
+```
+
+The plan's line counts the owner's cards (the Approvals) once: the idea behind a card advances the same goal and would say everything twice.
+It is part of `GET /api/:t/program` as `goals[].aimed` (`sentence`, `groups`, `content`).
+
+When the owner changes a target, or says OK to the suggestion, the route writes a `Decision{kind:'goal_target'}`: `DECIDED` by the owner,
+`AFFECTS` the goal, `BASED_ON` the Observation the goal's starting number was locked from (when it has one), and `SUPERSEDES` the decision
+about the same goal's target before it (which becomes `superseded`, a Version keeping `accepted`). The Goal's own update carries the decision
+as `src` and the time as `asOf`, so the old target stays a `Version` with where it came from. `trace_decision {id: <goal>}` returns the latest
+decision that affects it. To read them without the tool:
+
+```cypher
+MATCH (p:Person)-[d:DECIDED]->(x:Decision)-[a:AFFECTS]->(gl:Goal {id:$goal}) WHERE d.until IS NULL AND a.until IS NULL AND x.kind = 'goal_target'
+OPTIONAL MATCH (x)-[b:BASED_ON]->(o:Observation) WHERE b.until IS NULL
+RETURN x.id AS decision, x.target AS target, x.previousTarget AS before, x.status AS status, p.id AS owner, o.id AS startedFrom ORDER BY decision
+```
+
+## 19. How the brain grew: nodes and edges per day, by kind (`graph:story`)
 
 | | |
 |---|---|
@@ -508,7 +613,7 @@ RETURN d, k, count(*) AS c ORDER BY d, k
 On 17 October 2026 the real business's graph read: 3,799 nodes and 11,897 edges recorded on 15 October (the first ingest), then 283 nodes and
 4,911 edges on 16 October from use alone (conversations, findings, approvals, what the team learned): `npm run cli -- graph:story <tenant>`.
 
-## 17. How a Studio picture was made: the lineage (`graph:lineage`)
+## 20. How a Studio picture was made: the lineage (`graph:lineage`)
 
 | | |
 |---|---|
