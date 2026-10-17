@@ -593,6 +593,7 @@ const funnelBiggestDrop: Detector = {
         evidence: uniq([from.id, from.obsId, to.obsId]),
         numbers: { from_users: from.value, to_users: to.value, drop_pct: dropPct, lost: from.value - to.value, top_users: top.value, bottom_users: bottom.value, steps: steps.length },
         metrics: [from.metric, to.metric, prefix],
+        ...(from.simulated === true || to.simulated === true ? { simulated: true } : {}), // sample numbers stay marked on the card
         score: round(0.5 + 0.4 * best.drop), confidence: 0.8,
         suggestedAction: {
           kind: "github_issue",
