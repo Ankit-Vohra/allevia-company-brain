@@ -19,6 +19,7 @@ import {
 } from "../../connectors/google/searchconsole.js";
 import { NOT_CONFIGURED_WORDS, NotConfiguredError } from "../../connectors/google/settings.js";
 import { HttpError, readBody, type RouteCtx } from "../http.js";
+import { requireOwner } from "../roles.js";
 
 export interface GoogleWiring { deps: GoogleDeps; webBaseUrl: string }
 
@@ -51,6 +52,7 @@ export function registerConnectorRoutes(app: Hono, ctx: RouteCtx, h: { google?: 
   app.post("/api/:t/connectors/search-console/connect", async (c) => {
     const { reg } = await ctx.tenantOf(c);
     ctx.refuseInPublicMode();
+    requireOwner(); // the business's accounts are the owner's to connect (src/server/roles.ts)
     const w = await need();
     return c.json({ url: authorizationUrl(w.deps, reg.slug) });
   });
@@ -84,6 +86,7 @@ export function registerConnectorRoutes(app: Hono, ctx: RouteCtx, h: { google?: 
   app.post("/api/:t/connectors/search-console/property", async (c) => {
     const { reg, g } = await ctx.tenantOf(c);
     ctx.refuseInPublicMode();
+    requireOwner();
     const w = await need();
     const body = await readBody(c, Property);
     await wrap(() => chooseProperty(w.deps, g, reg.slug, body.siteUrl));
@@ -101,6 +104,7 @@ export function registerConnectorRoutes(app: Hono, ctx: RouteCtx, h: { google?: 
   app.post("/api/:t/connectors/search-console/disconnect", async (c) => {
     const { reg, g } = await ctx.tenantOf(c);
     ctx.refuseInPublicMode();
+    requireOwner();
     const w = await need();
     await wrap(() => disconnectSearchConsole(w.deps, g, reg.slug));
     return c.json(await connectionStatus(w.deps, g, reg.slug, reg.businessId));

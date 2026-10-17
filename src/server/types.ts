@@ -17,6 +17,8 @@ export interface TenantDto {
   timeZone?: string;
   /** With owner links on (ALLEVIA_AUTH=1): this business is shown to the caller as a public demo, read-only. The web app turns its change buttons off. */
   readOnly?: boolean;
+  /** With sign-in on: the caller's role in this business (an owner link or the operator's makes them the owner). Absent for a demo they only read, and with sign-in off. */
+  role?: "owner" | "member";
 }
 
 export interface FreshnessDto { source: string; asOf: string; status: "ok" | "stale" | "error"; note?: string }

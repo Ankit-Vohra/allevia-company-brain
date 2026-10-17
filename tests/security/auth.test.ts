@@ -249,9 +249,16 @@ describe("opening a business with its link", () => {
     expect((await app.request("/api/tenant_b/overview", { headers: { cookie: jar } })).status).toBe(401);
   });
 
-  it("is Secure when the site is served over https", async () => {
-    const res = await open(tokenA, { headers: { "content-type": "application/json", "x-forwarded-proto": "https" } });
-    expect(res.headers.get("set-cookie")).toMatch(/Secure/i);
+  it("is Secure when the site is served over https: its public address, or a trusted proxy's X-Forwarded-Proto, never a visitor's header", async () => {
+    const https = { headers: { "content-type": "application/json", "x-forwarded-proto": "https" } };
+    const viaProxy = make({ rateLimit: { ...NO_LIMITS, trustProxy: true } });
+    const openOn = (a: Hono, init: RequestInit = {}) => a.request("/api/auth/open", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: tokenA }), ...init });
+    expect((await openOn(viaProxy, https)).headers.get("set-cookie")).toMatch(/;\s*Secure/i);
+    expect((await openOn(viaProxy)).headers.get("set-cookie")).not.toMatch(/Secure/i);
+    // no trusted proxy: the header is anybody's to send, so it is not believed
+    expect((await open(tokenA, https)).headers.get("set-cookie")).not.toMatch(/Secure/i);
+    // the public address is https (ALLEVIA_WEB_URL): Secure even though the proxy talks plain http to the app
+    expect((await openOn(make({ webBaseUrl: "https://app.example" }))).headers.get("set-cookie")).toMatch(/;\s*Secure/i);
   });
 
   it("refuses a wrong, revoked, malformed or missing token with the same plain sentence", async () => {

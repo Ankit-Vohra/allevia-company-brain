@@ -20,6 +20,7 @@ import { agentChangeRefusal, listAgentsWithSettings, setAgentSettings } from "..
 import * as reads from "../reads.js";
 import type { AgentSummaryDto } from "../types.js";
 import { HttpError, errorMessage, readBody, type RouteCtx } from "../http.js";
+import { requireOwner } from "../roles.js";
 
 export type AgentViewDto = AgentSummaryDto & AgentSettings & {
   learnedRules: Array<Pick<LearnedRuleDto, "id" | "text" | "confidence" | "appliedCount" | "learnedAt">>;
@@ -57,6 +58,7 @@ export function registerTeamRoutes(app: Hono, ctx: RouteCtx, o: { directiveLlm?:
   app.patch("/api/:t/agents/:id", async (c) => {
     const { g } = await ctx.tenantOf(c);
     ctx.refuseInPublicMode();
+    requireOwner(); // who works and how freely is the owner's call (src/server/roles.ts)
     const id = c.req.param("id");
     if (!agentById(id)) throw new HttpError(404, "No such agent on the team.");
     const body = await readBody(c, AgentPatch);
@@ -93,6 +95,7 @@ export function registerTeamRoutes(app: Hono, ctx: RouteCtx, o: { directiveLlm?:
   app.post("/api/:t/directives/:id/apply", async (c) => {
     const { g } = await ctx.tenantOf(c);
     ctx.refuseInPublicMode();
+    requireOwner(); // an instruction can switch people off or free them up: the owner applies it
     const id = c.req.param("id");
     if (!(await getDirective(g, id))) throw new HttpError(404, "No such directive preview.");
     return c.json(await applyDirective(g, id, { now: ctx.now() }));

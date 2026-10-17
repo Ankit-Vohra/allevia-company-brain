@@ -49,8 +49,10 @@ export function productionDeps(o: { model?: string; publicMode: boolean; authReq
   let hub: Promise<import("../discord/hub-service.js").HubService | null> | undefined;
   return {
     publicMode: o.publicMode,
-    ...(o.authRequired ? { auth: { enabled: true, verify: (token: string) => verifyToken(token) } } : {}),
+    // ALLEVIA_AUTH=1: accounts (email and password) and owner links; the registry graph holds both (src/auth)
+    ...(o.authRequired ? { auth: { enabled: true, verify: (token: string) => verifyToken(token), accounts: {} } } : {}),
     rateLimit: { trustProxy: o.trustProxy ?? loadConfig().trustProxy }, // the limits' defaults are on; ALLEVIA_TRUST_PROXY=1 behind a reverse proxy
+    webBaseUrl: loadConfig().webBaseUrl, // https there (ALLEVIA_WEB_URL): every cookie is Secure
     // The Discord hub, when DISCORD_HUB_GUILD_ID (and the rest) is set; built once and shared with the retry loop below.
     discordHub: () => (hub ??= o.publicMode ? Promise.resolve(null) : import("../discord/hub-service.js").then((m) => m.productionHub())),
     listTenants: () => listTenants(),
@@ -119,7 +121,7 @@ export async function startServer(opts: ServeOpts = {}): Promise<{ server: Serve
   });
   const url = `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}`;
   for (const w of exposureWarnings({ host, publicMode, authRequired, hubEnabled: !!hub })) console.error(`WARNING: ${w}`);
-  console.error(`Allevia on ${url}${publicMode ? " (public read-only mode)" : ""}${authRequired ? " (owner links required)" : ""}${staticDir ? "" : " (API only: build the web app with `cd web && npm run build`)"}`);
+  console.error(`Allevia on ${url}${publicMode ? " (public read-only mode)" : ""}${authRequired ? " (sign-in or owner links required)" : ""}${staticDir ? "" : " (API only: build the web app with `cd web && npm run build`)"}`);
   // the daily Search Console read, for every business that connected it (only when Google is set up, never in public mode)
   const google = productionGoogle();
   const stopSchedule = !publicMode && google.deps.settings.configured && !opts.over?.google
