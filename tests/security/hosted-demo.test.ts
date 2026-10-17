@@ -8,6 +8,7 @@ import { ensureRoster } from "../../src/agent/memory.js";
 import { FakeRuntime } from "../../src/agent/runtime.js";
 import { createAskDeps } from "../../src/agent/wiring.js";
 import { issueToken, revokeToken } from "../../src/auth/tokens.js";
+import { getSubscription } from "../../src/billing/subscription.js";
 import { closeAll, openGraph, openGraphByName, type GraphHandle } from "../../src/graph/client.js";
 import { ensureTenant, listTenants, setDemo } from "../../src/graph/tenants.js";
 import { startServer } from "../../src/server/main.js";
@@ -203,10 +204,12 @@ describe("a judge with an account, on the real server", () => {
     expect((await get("/api/judge_bakery/overview", { cookie })).status).toBe(200);
     expect((await get("/api/judge_bakery/overview")).status).toBe(401);
     expect((await send("/api/demo_co/approvals/approval:t-001-1", { decision: "approve" }, { cookie })).status).toBe(403);
-    // the production trial adapter recorded the trial's end on the business
-    const meta = await openGraphByName(metaGraph);
-    const [row] = await meta.roQuery<{ e: number | null }>("MATCH (t:Tenant {slug:'judge_bakery'}) RETURN t.trialEndsAt AS e");
-    expect(row!.e).toBeGreaterThan(Date.now() + 13 * 86_400_000);
+    // the production wiring started the trial through the server's credits ledger: 100 credits, ending in 14 days
+    const sub = await getSubscription("judge_bakery", opts);
+    expect(sub?.status).toBe("trial");
+    expect(sub!.trialEndsAt!).toBeGreaterThan(Date.now() + 13 * 86_400_000);
+    const credits = await (await get("/api/judge_bakery/credits", { cookie })).json() as { balance: Record<string, unknown> };
+    expect(credits.balance).toMatchObject({ status: "trial", trial: 100, left: 100 });
     expect((await send("/api/auth/logout", {}, { cookie })).status).toBe(200);
     expect((await get("/api/judge_bakery/overview", { cookie })).status).toBe(401);
   });

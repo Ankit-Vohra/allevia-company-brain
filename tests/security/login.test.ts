@@ -9,6 +9,7 @@ import { ensureRoster } from "../../src/agent/memory.js";
 import { FakeRuntime } from "../../src/agent/runtime.js";
 import { createAskDeps } from "../../src/agent/wiring.js";
 import { addMember, createResetCode, createUser, setDisabled, type MemberRole } from "../../src/auth/accounts.js";
+import { getSubscription } from "../../src/billing/subscription.js";
 import { issueToken, verifyToken } from "../../src/auth/tokens.js";
 import { closeAll, openGraph, openGraphByName, type GraphHandle } from "../../src/graph/client.js";
 import { upsertNode } from "../../src/graph/upsert.js";
@@ -88,6 +89,7 @@ function deps(meta: string, graphs: Record<string, GraphHandle>, over: Partial<S
     actions: { config: { dataDir: "/nonexistent-allevia-login-test" } },
     directiveLlm: null, heartbeatMs: 0, replaySpeed: 0, now: () => clock, tenantCacheMs: 0, log: () => {},
     rateLimit: NO_LIMITS,
+    registry: o, // the credits ledger's subscriptions in the same throwaway registry
     ...over,
   };
 }
@@ -129,7 +131,7 @@ describe("a judge on a fresh deployment (only the demo business): sign up, set u
   let judge: { cookie: string; id: string; email: string };
   let slug = "";
   beforeAll(() => {
-    // the production trial adapter (src/auth/trial.ts), not a stand-in: no credits module here, so it records the trial's end only
+    // the production trial adapter (src/auth/trial.ts) over the server's own credits ledger, not a stand-in
     const dep = deps(freshGraph, { demo_co: d });
     fresh = createApp({ ...dep, auth: { ...dep.auth!, accounts: { metaGraph: freshGraph } } });
   });
@@ -177,9 +179,10 @@ describe("a judge on a fresh deployment (only the demo business): sign up, set u
     const members = await read(await get(fresh, `/api/${slug}/members`, { cookie: judge.cookie }));
     expect(members).toMatchObject({ members: [{ id: judge.id, role: "owner", you: true }], seats: 5, invited: 0, canInvite: true });
     expect((await get(fresh, `/api/${slug}/overview`, { cookie: judge.cookie })).status).toBe(200);
-    // the trial: its end is recorded on the business in the registry (14 days); the credits are the credits module's to grant
-    const meta = await openGraphByName(freshGraph);
-    expect(await meta.roQuery("MATCH (t:Tenant {slug:$s}) RETURN t.trialEndsAt AS e, t.trialStartedBy AS by", { s: slug })).toEqual([{ e: clock + 14 * DAY, by: judge.id }]);
+    // the trial, granted through the server's own ledger: a trial subscription ending in 14 days, and 100 credits to spend
+    expect(await getSubscription(slug, { metaGraph: freshGraph })).toMatchObject({ status: "trial", trialEndsAt: clock + 14 * DAY });
+    const credits = await read(await get(fresh, `/api/${slug}/credits`, { cookie: judge.cookie }));
+    expect(credits.balance).toMatchObject({ status: "trial", trial: 100, left: 100 });
   });
 
   it("the demo stays read-only for them, and nobody else can open their business", async () => {

@@ -9,7 +9,8 @@ import {
   setDisabled, touchSession, useResetCode,
 } from "../../src/auth/accounts.js";
 import { TRIAL_SEATS, planOf, seatsFor } from "../../src/auth/seats.js";
-import { startTrial } from "../../src/auth/trial.js";
+import { loadGrant, startTrial } from "../../src/auth/trial.js";
+import { putSubscription } from "../../src/billing/subscription.js";
 import { closeAll, openGraph, openGraphByName } from "../../src/graph/client.js";
 import { ensureTenant, getTenant } from "../../src/graph/tenants.js";
 import { testGraphName } from "../helpers/graph.js";
@@ -250,31 +251,38 @@ describe("the plan's seats and the trial", () => {
     expect(await planOf(A, opts)).toBe("trial");
     expect(await seatsFor(A, opts)).toBe(TRIAL_SEATS);
     expect(TRIAL_SEATS).toBe(5);
-    const meta = await openGraphByName(metaGraph);
-    await meta.query("MATCH (t:Tenant {slug:$s}) CREATE (t)-[:HAS_SUBSCRIPTION]->(:Subscription {plan:'starter', status:'active', startedAt:1})", { s: B });
+    await putSubscription({ slug: B, plan: "starter", cycle: "monthly", status: "active", startedAt: 1, provider: "test", updatedAt: 1 }, opts);
+    expect(await planOf(B, opts)).toBe("starter");
     expect(await seatsFor(B, opts)).toBe(2);
+    await putSubscription({ slug: B, plan: null, cycle: "monthly", status: "trial", startedAt: 1, trialEndsAt: 2, provider: "test", updatedAt: 2 }, opts);
+    expect(await seatsFor(B, opts)).toBe(TRIAL_SEATS);
   });
 
-  it("starts the trial: 100 credits through the credits module when it is there, and the end in 14 days, once", async () => {
+  it("starts the trial through the credits ledger's grant (which keeps the trial's end), and nothing else", async () => {
     const grants: unknown[][] = [];
     const t0 = Date.now();
     const r = await startTrial(A, "usr_x", { ...opts, now: t0, grant: async (...a) => { grants.push(a); }, log: () => {} });
-    expect(grants).toEqual([[A, 100, "trial", `trial:${A}`]]);
+    expect(grants).toEqual([[A, 100, "trial", "usr_x"]]);
     expect(r).toEqual({ credits: 100, trialEndsAt: t0 + 14 * DAY_MS, granted: true });
-    const again = await startTrial(A, "usr_x", { ...opts, now: t0 + DAY_MS, grant: null, log: () => {} });
-    expect(again.trialEndsAt).toBe(t0 + 14 * DAY_MS); // the end does not move
     const meta = await openGraphByName(metaGraph);
-    expect(await meta.roQuery("MATCH (t:Tenant {slug:$s}) RETURN t.trialEndsAt AS e", { s: A })).toEqual([{ e: t0 + 14 * DAY_MS }]);
+    expect(await meta.roQuery("MATCH (t:Tenant {slug:$s}) RETURN t.trialEndsAt AS e", { s: A })).toEqual([{ e: null }]);
   });
 
-  it("without the credits module, says so in the log and still records the end", async () => {
+  it("without the credits ledger (or when it fails), says so in the log and keeps the trial's end on the business, once", async () => {
     const lines: string[] = [];
-    const r = await startTrial(B, "usr_y", { ...opts, grant: null, log: (l) => lines.push(l) });
-    expect(r.granted).toBe(false);
+    const t0 = Date.now();
+    const r = await startTrial(B, "usr_y", { ...opts, now: t0, grant: null, log: (l) => lines.push(l) });
+    expect(r).toEqual({ credits: 100, trialEndsAt: t0 + 14 * DAY_MS, granted: false });
     expect(lines.join("\n")).toMatch(/credits module .* not installed/);
-    expect((await getTenant(B, opts))?.slug).toBe(B);
-    const failing = await startTrial(B, "usr_y", { ...opts, grant: async () => { throw new Error("ledger down"); }, log: (l) => lines.push(l) });
-    expect(failing.granted).toBe(false);
+    const failing = await startTrial(B, "usr_y", { ...opts, now: t0 + DAY_MS, grant: async () => { throw new Error("ledger down"); }, log: (l) => lines.push(l) });
+    expect(failing).toEqual({ credits: 100, trialEndsAt: t0 + 14 * DAY_MS, granted: false }); // the end does not move
     expect(lines.join("\n")).toMatch(/ledger down/);
+    const meta = await openGraphByName(metaGraph);
+    expect(await meta.roQuery("MATCH (t:Tenant {slug:$s}) RETURN t.trialEndsAt AS e, t.trialStartedBy AS by", { s: B })).toEqual([{ e: t0 + 14 * DAY_MS, by: "usr_y" }]);
+    expect((await getTenant(B, opts))?.slug).toBe(B);
+  });
+
+  it("finds the credits module on this branch", async () => {
+    expect(typeof (await loadGrant())).toBe("function");
   });
 });

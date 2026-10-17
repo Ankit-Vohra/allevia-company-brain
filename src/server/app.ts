@@ -301,7 +301,9 @@ export function createApp(deps: ServerDeps): Hono {
   const accounts = authOn ? deps.auth?.accounts ?? null : null;
   // Secure on the cookies when the browser is on https: the public address says so, or the request, or a trusted proxy's header
   const secure = (c: Context): boolean => cookieSecure(c, { trustProxy: limits.trustProxy, ...(deps.webBaseUrl ? { webBaseUrl: deps.webBaseUrl } : {}) });
-  const accountOpts = (): AccountOpts => ({ ...(accounts?.metaGraph ? { metaGraph: accounts.metaGraph } : {}), now: now() });
+  // the accounts live in the registry graph the rest of the server uses (deps.registry), unless the wiring names its own
+  const accountMeta = accounts?.metaGraph ?? deps.registry?.metaGraph;
+  const accountOpts = (): AccountOpts => ({ ...(accountMeta ? { metaGraph: accountMeta } : {}), now: now() });
   const seats = (slug: string): Promise<number> => (accounts?.seats ?? ((s: string) => seatsFor(s, accountOpts())))(slug);
   const maxOwned = accounts?.maxOwned ?? 1;
   const privateMessage = accounts ? PRIVATE_SIGN_IN_MESSAGE : PRIVATE_MESSAGE;
@@ -541,7 +543,10 @@ export function createApp(deps: ServerDeps): Hono {
               return;
             }
             try {
-              await (accounts?.startTrial ?? ((s: string, by: string) => startTrial(s, by, { ...accountOpts(), log })))(slug, owner);
+              // the trial (100 credits, 14 days) through this server's own ledger (src/credits), as the trial's grant
+              await (accounts?.startTrial ?? ((s: string, by: string) => startTrial(s, by, {
+                ...accountOpts(), log, grant: (slug2, n, reason, ref) => credits.grant(slug2, n, reason, ref),
+              })))(slug, owner);
             } catch (e) {
               log(`[api] the trial for ${slug} did not start: ${e instanceof Error ? e.message : String(e)}`);
             }

@@ -1,32 +1,19 @@
-// How many people a business's plan lets in (shared/plans.ts `seats`), for invites. The plan is read from the subscription
-// record in the registry, (:Tenant)-[:HAS_SUBSCRIPTION]->(:Subscription {plan, status}) (the subscription work, design
-// section 3). Until a business has one it is on the trial, which gets the seats of the default plan (Growth: 5), so an owner
-// trying Allevia can bring their team in. Every open invite holds a seat (accounts.ts createInvite).
-import { openGraphByName } from "../graph/client.js";
-import { metaName, type TenantOpts } from "../graph/tenants.js";
+// How many people a business's plan lets in (shared/plans.ts `seats`), for invites. The plan is the business's subscription
+// (src/billing/subscription.ts). On the trial, and with no subscription record (the businesses set up before credits, which
+// run on Growth), it is the default plan's seats (Growth: 5), so an owner trying Allevia can bring their team in. Every open
+// invite holds a seat (accounts.ts createInvite).
+import { getSubscription } from "../billing/subscription.js";
+import type { TenantOpts } from "../graph/tenants.js";
 import { PLANS, PLAN_BY_ID, type PlanId } from "../../shared/plans.js";
 
 const DEFAULT_PLAN = PLANS.find((p) => p.isDefault) ?? PLANS[0]!;
-/** Seats while a business is on the trial (no subscription record yet, or its status is "trial"). */
+/** Seats on the trial, and with no subscription record. */
 export const TRIAL_SEATS = DEFAULT_PLAN.allowances.seats ?? 1;
 
-const isPlanId = (s: unknown): s is PlanId => typeof s === "string" && Object.hasOwn(PLAN_BY_ID, s);
-
-/** The business's plan, or "trial" when it has no subscription record yet. */
+/** The business's plan, or "trial" on the trial and when it has no subscription record. */
 export async function planOf(slug: string, opts?: TenantOpts): Promise<PlanId | "trial"> {
-  const meta = await openGraphByName(metaName(opts));
-  let rows: Array<{ plan: unknown; status: unknown }>;
-  try {
-    rows = await meta.roQuery(
-      "MATCH (t:Tenant {slug:$slug})-[:HAS_SUBSCRIPTION]->(s:Subscription) RETURN s.plan AS plan, s.status AS status ORDER BY s.startedAt DESC, id(s) DESC LIMIT 1",
-      { slug });
-  } catch (e) {
-    if (/empty key/i.test(String((e as Error)?.message))) return "trial";
-    throw e;
-  }
-  const r = rows[0];
-  if (!r || r.status === "trial" || !isPlanId(r.plan)) return "trial";
-  return r.plan;
+  const sub = await getSubscription(slug, opts);
+  return !sub || sub.status === "trial" || !sub.plan ? "trial" : sub.plan;
 }
 
 /** People (owner included, open invites counted) the business may have. A plan that states none (Pause) has the owner only. */
