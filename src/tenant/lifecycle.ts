@@ -10,6 +10,8 @@
 //           the Discord area, channel mapping, invites and post records: the Discord channels themselves stay on Discord), and the
 //           data folders, sealed connection tokens included. Refuses a public demo unless --force. Leaves a line in
 //           <data>/erasures.jsonl (the id and when, nothing else) and the export, which is the customer's to be handed and then deleted.
+//   import  the mirror of export, on another server: checks the file whole, refuses a business that is already there unless
+//           --replace, then writes the graph, the registry rows and the files, and counts them all again (see "import" below).
 //
 // The file is JSON lines, one object a line:
 //   {"kind":"tenant-export", ...}     first: format, version, the business id, when
@@ -18,14 +20,16 @@
 //   {"kind":"file", path, bytes, sha256, chunks}  then `chunks` lines {"kind":"chunk", path, n, b64}, for each file
 //   {"kind":"export-end", files, bytes}          last: a file without it did not finish
 import { createHash } from "node:crypto";
-import { createReadStream, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync, appendFileSync } from "node:fs";
+import { createReadStream, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync, appendFileSync } from "node:fs";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { GraphHandle, connect, graphName, openGraphByName } from "../graph/client.js";
 import { assertTenantSlug } from "../graph/slug.js";
-import { getTenant, metaName, type TenantOpts } from "../graph/tenants.js";
-import { readGraph, summarize, type EdgeLine, type ExportHeader, type NodeLine } from "../graph/transfer.js";
+import { loadConfig } from "../config.js";
+import { ensureIndexes } from "../graph/indexes.js";
+import { getTenant, linkRegistry, metaName, type TenantOpts } from "../graph/tenants.js";
+import { importDump, readGraph, summarize, type EdgeLine, type EndLine, type ExportHeader, type GraphDump, type NodeLine } from "../graph/transfer.js";
 import { TENANT_CONFIGS } from "../tenant-config.js";
 import { tenantCacheDirs } from "../util/cache.js";
 import { slugify } from "../util/ids.js";
@@ -380,5 +384,215 @@ export async function eraseTenant(slug: string, o: EraseOpts): Promise<EraseRepo
     slug: s, exportFile, export: exported,
     graph: exported.graph ? { name, nodes: exported.graph.nodes, edges: exported.graph.edges, dropped } : null,
     registry: registryCounts(registry), folders: removed, sealedConnections: connections, leftovers,
+  };
+}
+
+// ---------- import ----------
+//
+// The mirror of export: one business's file, read into this server's database and data folder (moving a business from one server
+// to another, e.g. the founder's Mac on FalkorDB Cloud to the public server). In this order, and only after the whole file has
+// been read back and checked (verifyTenantExport):
+//   1. refuse when the business is already here (a registry row, a graph or files), unless `replace`: then its graph, its Tenant
+//      row and Discord mapping and its files are cleared first (its owner links, accounts and sealed connection tokens stay);
+//   2. the graph, through the same import `db:import` uses (src/graph/transfer.ts importDump: labels in order, typed values,
+//      vectors, indexes and constraints), which reads the graph back and holds it to the file's digest;
+//   3. the registry rows: the Tenant (its demo and showcase flags too) and, under its own id, the Discord area, channels and post
+//      records. Not carried, because the export never holds what makes them work: owner links (no hash: issue new ones with
+//      `auth:issue`) and Discord invites (no join code);
+//   4. the files, each written to a temporary name, checked against its size and hash, then put in place. Only into the
+//      business's own folders (a file elsewhere in the export is refused), never a sealed token;
+//   5. counts again: the graph's nodes and edges, the registry entry field by field, the Discord rows, every file's size and
+//      hash on disk.
+// `as` imports it under another id: the graph is named for the new id and the folders too (a path segment that is the old id
+// becomes the new one); the Business node inside keeps its id, which the Tenant row's businessId names, and the Discord mapping
+// is left out (its channels belong to the old id's area). Connections are not in the file: the operator copies
+// <data>/connectors/<id>/ and runs the server with the same ALLEVIA_CONNECTOR_KEY (and COMPOSIO_API_KEY); a sealed token opens
+// only under the id it was sealed for (docs/tenant-isolation.md).
+
+export interface ImportTenantOpts extends LifecycleOpts {
+  /** Import under this id instead of the one in the file. */
+  as?: string;
+  /** Overwrite a business that is already here. */
+  replace?: boolean;
+}
+
+export interface ImportTenantReport {
+  slug: string;
+  from: string;
+  graph: { name: string; nodes: number; edges: number } | null;
+  registry: { tenants: number; discordAreas: number; discordChannels: number; discordPosts: number; ownerLinksLeftOut: number; discordLeftOut: number };
+  files: number;
+  bytes: number;
+  replaced: boolean;
+  /** What did not match when it was all counted again (empty when everything did). */
+  problems: string[];
+}
+
+const TENANT_ROOTS = new Set(["assets", "drafts", "onboard", "runs", "snapshots", "studio-demo", "connectors"]);
+const SEGMENT = /^[a-z0-9_-]+$/;
+
+// Where a file of the export goes here: under one of the business's own folders (tenantFolders), the old id swapped for the new
+// one; undefined for a path anywhere else.
+export function importTarget(path: string, from: string, to: string): string | undefined {
+  const parts = path.split("/");
+  if (parts.some((p) => !p || p === "." || p === "..")) return undefined;
+  const swap = (seg: string): string => (seg === from ? to : seg === slugify(from) ? slugify(to) : seg);
+  const at = parts[0] === "cache" ? 2 : 1; // cache/<kind>/<id>/..., or <folder>/<id>/...
+  if (parts.length <= at + 1) return undefined;
+  if (parts[0] === "cache" ? !SEGMENT.test(parts[1]!) : !TENANT_ROOTS.has(parts[0]!)) return undefined;
+  const id = swap(parts[at]!);
+  if (id !== to && !(parts[0] === "drafts" && id === slugify(to))) return undefined;
+  return [...parts.slice(0, at), id, ...parts.slice(at + 1)].join("/");
+}
+
+async function readExport(file: string): Promise<{ registry: RegistryRows; dump: GraphDump | null }> {
+  let registry: RegistryRows | undefined;
+  let header: ExportHeader | undefined;
+  let end: EndLine | undefined;
+  const nodes: NodeLine[] = [];
+  const edges: EdgeLine[] = [];
+  const lines = createInterface({ input: createReadStream(file, { encoding: "utf8" }), crlfDelay: Infinity });
+  for await (const line of lines) {
+    if (!line.trim() || line.startsWith('{"kind":"chunk"')) continue;
+    const o = JSON.parse(line) as Record<string, unknown>;
+    if (o.kind === "registry") registry = { tenant: o.tenant, tokens: o.tokens, discord: o.discord } as RegistryRows;
+    else if (o.kind === "header") header = o as unknown as ExportHeader;
+    else if (o.kind === "node") nodes.push(o as unknown as NodeLine);
+    else if (o.kind === "edge") edges.push(o as unknown as EdgeLine);
+    else if (o.kind === "end") end = o as unknown as EndLine;
+  }
+  if (!registry) throw new Refused(`${file} has no registry line`);
+  return { registry, dump: header && end ? { header, nodes, edges, end } : null };
+}
+
+// The registry rows that describe a business here and are replaced with the file's (never owner links, accounts or invites).
+const REPLACED_ROWS: Array<{ label: string; key: string }> = [
+  { label: "DiscordPost", key: "slug" }, { label: "DiscordChannel", key: "slug" }, { label: "DiscordArea", key: "slug" }, { label: "Tenant", key: "slug" },
+];
+
+export async function importTenant(file: string, o: ImportTenantOpts): Promise<ImportTenantReport> {
+  const log = o.log ?? (() => undefined);
+  if (!existsSync(file)) throw new Refused(`There is no file ${file}.`);
+  const check = await verifyTenantExport(file);
+  if (!check.ok) throw new Refused(`${file} does not read back whole, so nothing was imported: ${check.problems.join("; ")}`);
+  const from = assertTenantSlug(check.slug ?? "");
+  const s = assertTenantSlug(o.as ?? from);
+  const renamed = s !== from;
+  const name = graphName(s);
+  for (const p of check.paths) {
+    if (isSealed(p)) throw new Refused(`${file} holds a sealed connection token (${p}); an export never does, so nothing was imported.`);
+    if (!importTarget(p, from, s)) throw new Refused(`${file} holds a file outside the business's own folders (${p}), so nothing was imported.`);
+  }
+  const { registry, dump } = await readExport(file);
+  if (!registry.tenant) throw new Refused(`${file} has no registry entry for ${from}; an import needs one.`);
+
+  // 1. already here?
+  const db = await connect();
+  const hasGraph = (await db.list()).includes(name);
+  const here = await getTenant(s, o);
+  const withFiles = existingFolders(o.dataDir, s).filter((f) => isLink(f) || filesUnder(f).some((p) => !isSealed(p)));
+  const replaced = !!(here || hasGraph || withFiles.length);
+  if (replaced && !o.replace) {
+    const what = [here ? "a registry entry" : "", hasGraph ? "a graph" : "", withFiles.length ? "files" : ""].filter(Boolean).join(", ");
+    throw new Refused(`${s} is already on this server (${what}). Nothing was changed. Add --replace to overwrite it with the file.`);
+  }
+  const meta = await openGraphByName(metaName(o));
+  if (replaced) {
+    for (const { label, key } of REPLACED_ROWS) {
+      try { await meta.query(`MATCH (n:${label} {${key}:$slug}) DETACH DELETE n`, { slug: s }); } catch (e) { if (!missingGraph(e)) throw e; }
+    }
+    // the files go, except the sealed connection tokens (never in the file: the operator copied them on purpose). A link is unlinked.
+    for (const f of existingFolders(o.dataDir, s)) {
+      const p = inside(o.dataDir, f);
+      if (isLink(p)) { unlinkSync(p); continue; }
+      for (const x of filesUnder(p)) if (!isSealed(x)) rmSync(x, { force: true });
+    }
+    log(`cleared what was here of ${s}`);
+  }
+
+  // 2. the graph (importDump drops the one that is here, and reads the new one back against the file)
+  let graph: ImportTenantReport["graph"] = null;
+  if (dump) {
+    const r = await importDump(dump, loadConfig().falkordbUrl, { graph: name, replace: true, log });
+    if (!r.verify.ok) throw new Error(`the graph ${name} was written but does not match the file: ${r.verify.problems.slice(0, 3).join("; ")}`);
+    graph = { name, nodes: r.nodes, edges: r.edges };
+  } else if (hasGraph) {
+    await new GraphHandle(name, db.selectGraph(name), db).drop(); // the business had no graph when it was exported
+  }
+
+  // 3. the registry rows
+  await ensureIndexes(meta, [{ label: "Tenant", prop: "slug", type: "RANGE" }]);
+  await meta.query("CREATE (t:Tenant) SET t = $p", { p: { ...registry.tenant, slug: s, graph: name } });
+  const discord = renamed ? { area: null, channels: [], posts: [] } : registry.discord;
+  if (discord.area) await meta.query("CREATE (n:DiscordArea) SET n = $p", { p: discord.area });
+  for (const p of discord.channels) await meta.query("CREATE (n:DiscordChannel) SET n = $p", { p });
+  for (const p of discord.posts) await meta.query("CREATE (n:DiscordPost) SET n = $p", { p });
+  await linkRegistry(o);
+  log("registry rows written");
+
+  // 4. the files: each to a temporary name, checked, then moved into place
+  const written = new Map<string, { bytes: number; sha256: string }>();
+  let cur: { tmp: string; final: string; bytes: number; sha256: string; hash: ReturnType<typeof createHash>; out: ReturnType<typeof createWriteStream> } | undefined;
+  const close = async (): Promise<void> => {
+    if (!cur) return;
+    const c = cur;
+    cur = undefined;
+    c.out.end();
+    await once(c.out, "finish");
+    if (c.hash.digest("hex") !== c.sha256) { rmSync(c.tmp, { force: true }); throw new Error(`${rel(o.dataDir, c.final)}: what was written does not match its hash`); }
+    renameSync(c.tmp, c.final);
+    written.set(c.final, { bytes: c.bytes, sha256: c.sha256 });
+  };
+  const lines = createInterface({ input: createReadStream(file, { encoding: "utf8" }), crlfDelay: Infinity });
+  for await (const line of lines) {
+    if (line.startsWith('{"kind":"file"')) {
+      await close();
+      const f = JSON.parse(line) as { path: string; bytes: number; sha256: string };
+      const final = inside(o.dataDir, join(o.dataDir, importTarget(f.path, from, s)!));
+      mkdirSync(dirname(final), { recursive: true });
+      const tmp = `${final}.import-${process.pid}.tmp`;
+      cur = { tmp, final, bytes: f.bytes, sha256: f.sha256, hash: createHash("sha256"), out: createWriteStream(tmp, { mode: 0o600 }) };
+    } else if (line.startsWith('{"kind":"chunk"') && cur) {
+      const buf = Buffer.from((JSON.parse(line) as { b64: string }).b64, "base64");
+      cur.hash.update(buf);
+      if (!cur.out.write(buf)) await once(cur.out, "drain");
+    } else if (line.startsWith('{"kind":"export-end"')) await close();
+  }
+  await close();
+  log(`${written.size} files written`);
+
+  // 5. counted again
+  const problems: string[] = [];
+  if (dump) {
+    const g = new GraphHandle(name, db.selectGraph(name), db);
+    const [n] = await g.roQuery<{ c: number }>("MATCH (n) RETURN count(n) AS c");
+    const [e] = await g.roQuery<{ c: number }>("MATCH ()-[r]->() WHERE ID(r) >= 0 RETURN count(r) AS c");
+    if (n?.c !== check.nodes || e?.c !== check.edges) problems.push(`the graph has ${n?.c ?? 0} nodes and ${e?.c ?? 0} edges; the file has ${check.nodes} and ${check.edges}`);
+  }
+  const back = await readRegistryRows(s, o);
+  if (!back.tenant) problems.push("the registry entry is missing");
+  else {
+    for (const [k, v] of Object.entries(registry.tenant)) {
+      if (k !== "slug" && k !== "graph" && JSON.stringify(back.tenant[k]) !== JSON.stringify(v)) problems.push(`the registry entry's ${k} differs from the file`);
+    }
+  }
+  if (!!back.discord.area !== !!discord.area || back.discord.channels.length !== discord.channels.length || back.discord.posts.length !== discord.posts.length) {
+    problems.push("the Discord mapping's rows do not match the file");
+  }
+  if (written.size !== check.files) problems.push(`${written.size} files written; the file has ${check.files}`);
+  let bytes = 0;
+  for (const [p, w] of written) {
+    const buf = readFileSync(p);
+    bytes += buf.length;
+    if (buf.length !== w.bytes || sha256(buf) !== w.sha256) problems.push(`${rel(o.dataDir, p)} does not match the file`);
+  }
+  const counts = registryCounts(back);
+  return {
+    slug: s, from, graph, replaced, files: written.size, bytes, problems,
+    registry: {
+      tenants: counts.tenants, discordAreas: counts.discordAreas, discordChannels: counts.discordChannels, discordPosts: counts.discordPosts,
+      ownerLinksLeftOut: registry.tokens.length,
+      discordLeftOut: registry.discord.invites.length + (renamed ? (registry.discord.area ? 1 : 0) + registry.discord.channels.length + registry.discord.posts.length : 0),
+    },
   };
 }

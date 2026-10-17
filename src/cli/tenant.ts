@@ -1,9 +1,9 @@
-// `tenant:export` and `tenant:erase`: take one business's data out of Allevia, or remove it (src/tenant/lifecycle.ts, docs/tenant-isolation.md).
-// Both run on the operator's machine against the database in ALLEVIA_FALKORDB_URL and the data folder in ALLEVIA_DATA_DIR; no URL, no
+// `tenant:export`, `tenant:import` and `tenant:erase`: take one business's data out of Allevia, bring it into another server, or
+// remove it (src/tenant/lifecycle.ts, docs/tenant-isolation.md). All three run on the operator's machine against the database in ALLEVIA_FALKORDB_URL and the data folder in ALLEVIA_DATA_DIR; no URL, no
 // token and no secret is printed.
 import { parseArgs } from "node:util";
 import { loadConfig } from "../config.js";
-import { Refused, eraseTenant, exportTenant, verifyTenantExport } from "../tenant/lifecycle.js";
+import { Refused, eraseTenant, exportTenant, importTenant, verifyTenantExport } from "../tenant/lifecycle.js";
 import type { Command } from "./_command.js";
 
 const n = (x: number): string => x.toLocaleString("en-US");
@@ -29,6 +29,37 @@ export const commands: Command[] = [
         console.log(`  files: ${r.files} (${mb(r.bytes)})`);
         if (r.sealedLeftOut.length) console.log(`  not exported: the sealed connection tokens (${r.sealedLeftOut.join(", ")}); they only open on this server`);
         console.log("  the file reads back whole. It holds the customer's data: hand it over, keep it private, delete it when it is no longer needed.");
+        return 0;
+      } catch (e) {
+        if (e instanceof Refused) { console.error(e.message); return 1; }
+        throw e;
+      }
+    },
+  },
+  {
+    name: "tenant:import",
+    usage: "tenant:import <file> [--as <tenant>] [--replace]",
+    summary: "Read one business's export into this server (registry rows, the whole graph, its files), check it, and count it all again",
+    async run(args) {
+      const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { as: { type: "string" }, replace: { type: "boolean" } } });
+      const [file] = positionals;
+      if (!file || positionals.length > 1) { console.error("Usage: npm run cli -- tenant:import <file> [--as <tenant>] [--replace]"); return 2; }
+      const cfg = loadConfig();
+      try {
+        const r = await importTenant(file, {
+          dataDir: cfg.dataDir, ...(values.as ? { as: values.as } : {}), ...(values.replace ? { replace: true } : {}),
+          log: (l) => console.log(`  ${l}`),
+        });
+        console.log(`${file} -> ${r.slug}${r.slug !== r.from ? ` (exported as ${r.from})` : ""}${r.replaced ? ", replacing what was here" : ""}`);
+        console.log(`  graph: ${r.graph ? `${n(r.graph.nodes)} nodes, ${n(r.graph.edges)} edges, read back against the file` : "none in the file"}`);
+        console.log(`  registry: ${r.registry.tenants} business, ${r.registry.discordAreas} Discord area, ${r.registry.discordChannels} channels, ${r.registry.discordPosts} post records`);
+        console.log(`  files: ${r.files} (${mb(r.bytes)})`);
+        if (r.problems.length) { console.error(`It does NOT all match: ${r.problems.join("; ")}`); return 1; }
+        console.log("  counted again: the graph, the registry entry and every file match the file.");
+        console.log("Still for a person to do:");
+        console.log(`  - owner links are not carried${r.registry.ownerLinksLeftOut ? ` (${r.registry.ownerLinksLeftOut} in the file)` : ""}: issue new ones with auth:issue ${r.slug}`);
+        if (r.registry.discordLeftOut) console.log(`  - ${r.registry.discordLeftOut} Discord rows were left out (join codes are never exported${r.slug !== r.from ? ", and a new id has no Discord area yet" : ""})`);
+        console.log(`  - connections: copy <data>/connectors/${r.from}/ from the old server and run this one with the same ALLEVIA_CONNECTOR_KEY and COMPOSIO_API_KEY${r.slug !== r.from ? " (tokens sealed for the old id do not open under the new one: connect again)" : ""}`);
         return 0;
       } catch (e) {
         if (e instanceof Refused) { console.error(e.message); return 1; }
