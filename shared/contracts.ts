@@ -50,8 +50,9 @@ export type AgentEvent =
   | { type: "learned"; ruleId: string; text: string; fromApprovalId: string }
   // An agent loaded one of its skills (how it does this kind of work here): "Miss Influencer is using: Instagram post craft".
   | { type: "skill_used"; agent: AgentId; skillId: string; name: string; source: "code" | "business" }
-  // Something the team made on request (a poster, an image, a clip): the options, each checked, with a card waiting for the owner's OK
-  | { type: "deliverable"; agent: AgentId; kind: DeliverableKind; title: string; approvalId: string; recommended: string; options: DeliverableOption[]; notes: string[]; credits?: number }
+  // Something the team made on request (a poster, an image, a clip): the options, each checked, with a card waiting for the owner's OK.
+  // `studio`: a card made from the owner's photo, whose options the Studio changes (POST /chat/photo/change) and makes 5 second clips from.
+  | { type: "deliverable"; agent: AgentId; kind: DeliverableKind; title: string; approvalId: string; recommended: string; options: DeliverableOption[]; notes: string[]; credits?: number; studio?: boolean }
   // The team needs a few answers before it can make something well: at most three short questions, each with tap-to-answer
   // options (an empty list means a typed answer). Discord shows buttons, the web app chips; an answer is sent as the next message.
   | { type: "quick_replies"; agent: AgentId; questions: Array<{ field: string; question: string; options: string[] }> }

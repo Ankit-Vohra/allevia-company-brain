@@ -76,6 +76,66 @@ export function studioErrorMessage(e: unknown): string {
   return "The Studio stopped on an unexpected problem; nothing was posted. Try again in a moment.";
 }
 
+/** What one change in the owner's words made: the answer the owner reads, and the new option when there is one. */
+export interface StudioChangeResult { answer: string; made?: { assetId: string; label: string; passed: boolean } }
+
+// A change in the owner's words to one Studio card: POST /studio/revise, and a change asked for on the chat's card or the Library
+// (routes/chat-photo.ts). The same routing as the Discord thread (studio/request.ts): light and colour are free and local; "make it
+// festive", "change the background", "make this into an ad saying ..." and "try again" go to the AI editor, quoted and capped; "a
+// clip" answers with the clip's price (nothing is made). Streams status lines, the new option (asset) and Fact Checker's check
+// (review) through `send`; the caller says the answer.
+export async function changeStudioOption(
+  g: GraphHandle, ids: { tenant: string; businessId: string; approvalId: string }, ask: { instruction: string; retryOf?: string },
+  w: StudioWiring, now: () => number, send: (e: AgentEvent) => void,
+): Promise<StudioChangeResult> {
+  const { instruction, retryOf } = ask;
+  const t0 = now();
+  const done = (answer: string, made?: StudioChangeResult["made"]): StudioChangeResult => ({ answer, ...(made ? { made } : {}) });
+  const req = retryOf ? { kind: "retry" as const } : routeRequest(instruction);
+  send({ type: "agent_start", agent: TARA, task: "Make the change you asked for" });
+  const status = (text: string) => send({ type: "agent_status", agent: TARA, text });
+  if (req.kind === "chat") {
+    send({ type: "agent_done", agent: TARA, ms: 0, ok: true });
+    return done("Tell me what you would like changed, for example \"make it warmer\", \"make it festive\", \"a different background\", \"make this a premium UGC ad\", or \"make this into an ad saying ...\".");
+  }
+  if (req.kind === "clip") {
+    send({ type: "agent_done", agent: TARA, ms: 0, ok: true });
+    return done(w.clip ? (await w.clip.offer(ids)).message : "I can't make video clips here yet. I can make photos: ask for a change, or an ad.");
+  }
+  if (req.kind === "adjust") {
+    const r = await reviseVariant(g, { ...ids, instruction }, { ...w.deps, now: now() });
+    send({ type: "agent_done", agent: TARA, ms: Math.max(0, now() - t0), ok: r.ok });
+    if (!r.ok) return done(r.message);
+    const passed = r.fidelity.badge === "unchanged";
+    send({ type: "asset", agent: TARA, assetId: r.variant.id, kind: "variant", parentId: "", thumb: assetUrl(ids.tenant, r.variant.id, 640) });
+    send({ type: "review", agent: NISHA, findingId: r.variant.id, verdict: passed ? "ok" : "reject", note: `Variant ${r.variant.label}: ${r.fidelity.note}` });
+    return done(`Option ${r.variant.label}: ${r.adjustment.label} (free, made with the team's own light and colour tools).`, { assetId: r.variant.id, label: r.variant.label, passed });
+  }
+  if (req.kind === "premium") {
+    const r = await makePremiumAd(g, { ...ids, request: { words: req.words, ...(req.headline ? { headline: req.headline } : {}), ...(req.sub ? { sub: req.sub } : {}) } }, { ...w.deps, now: now(), status });
+    send({ type: "agent_done", agent: TARA, ms: Math.max(0, now() - t0), ok: r.ok });
+    if (!r.ok) return done(r.message);
+    send({ type: "asset", agent: TARA, assetId: r.variant.id, kind: "variant", parentId: "", thumb: assetUrl(ids.tenant, r.variant.id, 640) });
+    send({ type: "review", agent: NISHA, findingId: r.variant.id, verdict: r.passed ? "ok" : "reject", note: `Variant ${r.variant.label}: ${r.fidelity.note}` });
+    const cost = r.variant.credits !== undefined && r.variant.credits > 0 ? ` It used ${creditsWords(r.variant.credits, { about: true })}.` : "";
+    const made = { assetId: r.variant.id, label: r.variant.label, passed: r.passed };
+    return done(r.passed
+      ? `Option ${r.variant.label} is your premium ad picture, and Fact Checker checked that the product is unchanged.${cost} Ask for "a clip" and I will price a 5 second vertical clip from it first.`
+      : `Option ${r.variant.label} was held back: ${r.fidelity.note}${cost} You can ask for it again in other words, or pick another option.`, made);
+  }
+  const request = req.kind === "retry" ? { kind: "retry" as const, ...(retryOf ? { of: retryOf } : {}) }
+    : req.kind === "ad" ? { kind: "ad" as const, words: req.words, ...(req.headline ? { headline: req.headline } : {}), ...(req.sub ? { sub: req.sub } : {}) }
+    : { kind: "request" as const, words: req.words };
+  const r = await generateVariant(g, { ...ids, request }, { ...w.deps, now: now(), status });
+  send({ type: "agent_done", agent: TARA, ms: Math.max(0, now() - t0), ok: r.ok });
+  if (!r.ok) return done(r.message);
+  send({ type: "asset", agent: TARA, assetId: r.variant.id, kind: "variant", parentId: "", thumb: assetUrl(ids.tenant, r.variant.id, 640) });
+  send({ type: "review", agent: NISHA, findingId: r.variant.id, verdict: r.passed ? "ok" : "reject", note: `Variant ${r.variant.label}: ${r.fidelity.note}` });
+  const cost = r.variant.credits !== undefined ? ` It used ${creditsWords(r.variant.credits, { about: true })}.` : "";
+  return done(r.passed ? `Option ${r.variant.label} is ready and Fact Checker checked it.${cost}` : `Option ${r.variant.label} was held back: ${r.fidelity.note}${cost}${r.canRetry ? ` I can try once more${r.retryQuote ? ` (${r.retryQuote})` : ""}.` : ""}`,
+    { assetId: r.variant.id, label: r.variant.label, passed: r.passed });
+}
+
 export function mountStudio(app: Hono, h: StudioHelpers): void {
   let busy = false;
   const wiring = async (): Promise<StudioWiring> => {
@@ -151,47 +211,8 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
         const t0 = h.now();
         const say = (answer: string) => send({ type: "final", turnId: approvalId, answer, citations: [], checks: CHECKS_NA, agents: [TARA], ms: Math.max(0, h.now() - t0) });
         try {
-          const req = retryOf ? { kind: "retry" as const } : routeRequest(instruction);
-          const ids = { tenant: reg.slug, businessId: reg.businessId, approvalId };
-          send({ type: "agent_start", agent: TARA, task: "Make the change you asked for" });
-          const status = (text: string) => send({ type: "agent_status", agent: TARA, text });
-          if (req.kind === "chat") {
-            send({ type: "agent_done", agent: TARA, ms: 0, ok: true });
-            return say("Tell me what you would like changed, for example \"make it warmer\", \"make it festive\", \"a different background\", \"make this a premium UGC ad\", or \"make this into an ad saying ...\".");
-          }
-          if (req.kind === "clip") {
-            send({ type: "agent_done", agent: TARA, ms: 0, ok: true });
-            return say(w.clip ? (await w.clip.offer(ids)).message : "I can't make video clips here yet. I can make photos: ask for a change, or an ad.");
-          }
-          if (req.kind === "adjust") {
-            const r = await reviseVariant(g, { ...ids, instruction }, { ...w.deps, now: h.now() });
-            send({ type: "agent_done", agent: TARA, ms: Math.max(0, h.now() - t0), ok: r.ok });
-            if (!r.ok) return say(r.message);
-            send({ type: "asset", agent: TARA, assetId: r.variant.id, kind: "variant", parentId: "", thumb: assetUrl(reg.slug, r.variant.id, 640) });
-            send({ type: "review", agent: NISHA, findingId: r.variant.id, verdict: r.fidelity.badge === "unchanged" ? "ok" : "reject", note: `Variant ${r.variant.label}: ${r.fidelity.note}` });
-            return say(`Option ${r.variant.label}: ${r.adjustment.label} (free, made with the team's own light and colour tools).`);
-          }
-          if (req.kind === "premium") {
-            const r = await makePremiumAd(g, { ...ids, request: { words: req.words, ...(req.headline ? { headline: req.headline } : {}), ...(req.sub ? { sub: req.sub } : {}) } }, { ...w.deps, now: h.now(), status });
-            send({ type: "agent_done", agent: TARA, ms: Math.max(0, h.now() - t0), ok: r.ok });
-            if (!r.ok) return say(r.message);
-            send({ type: "asset", agent: TARA, assetId: r.variant.id, kind: "variant", parentId: "", thumb: assetUrl(reg.slug, r.variant.id, 640) });
-            send({ type: "review", agent: NISHA, findingId: r.variant.id, verdict: r.passed ? "ok" : "reject", note: `Variant ${r.variant.label}: ${r.fidelity.note}` });
-            const cost = r.variant.credits !== undefined && r.variant.credits > 0 ? ` It used ${creditsWords(r.variant.credits, { about: true })}.` : "";
-            return say(r.passed
-              ? `Option ${r.variant.label} is your premium ad picture, and Fact Checker checked that the product is unchanged.${cost} Ask for "a clip" and I will price a 5 second vertical clip from it first.`
-              : `Option ${r.variant.label} was held back: ${r.fidelity.note}${cost} You can ask for it again in other words, or pick another option.`);
-          }
-          const request = req.kind === "retry" ? { kind: "retry" as const, ...(retryOf ? { of: retryOf } : {}) }
-            : req.kind === "ad" ? { kind: "ad" as const, words: req.words, ...(req.headline ? { headline: req.headline } : {}), ...(req.sub ? { sub: req.sub } : {}) }
-            : { kind: "request" as const, words: req.words };
-          const r = await generateVariant(g, { ...ids, request }, { ...w.deps, now: h.now(), status });
-          send({ type: "agent_done", agent: TARA, ms: Math.max(0, h.now() - t0), ok: r.ok });
-          if (!r.ok) return say(r.message);
-          send({ type: "asset", agent: TARA, assetId: r.variant.id, kind: "variant", parentId: "", thumb: assetUrl(reg.slug, r.variant.id, 640) });
-          send({ type: "review", agent: NISHA, findingId: r.variant.id, verdict: r.passed ? "ok" : "reject", note: `Variant ${r.variant.label}: ${r.fidelity.note}` });
-          const cost = r.variant.credits !== undefined ? ` It used ${creditsWords(r.variant.credits, { about: true })}.` : "";
-          return say(r.passed ? `Option ${r.variant.label} is ready and Fact Checker checked it.${cost}` : `Option ${r.variant.label} was held back: ${r.fidelity.note}${cost}${r.canRetry ? ` I can try once more${r.retryQuote ? ` (${r.retryQuote})` : ""}.` : ""}`);
+          const r = await changeStudioOption(g, { tenant: reg.slug, businessId: reg.businessId, approvalId }, { instruction, ...(retryOf ? { retryOf } : {}) }, w, h.now, send);
+          return say(r.answer);
         } catch (e) {
           if (!signal.aborted) {
             h.log(`[studio] ${reg.slug}: ${e instanceof Error ? e.message : String(e)}`);
