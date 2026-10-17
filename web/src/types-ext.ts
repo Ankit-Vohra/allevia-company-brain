@@ -13,6 +13,7 @@ export interface Tenant {
   locale?: string;       // BCP 47, how the owner reads dates and numbers: "en-GB", "en-US", "en-AU"
   timeZone?: string;     // IANA, the owner's clock: "Asia/Kolkata", "Europe/London", "America/New_York"
   readOnly?: boolean;    // owner links are on and this browser holds none for this business: it is a public demo, to look at only
+  role?: "owner" | "member"; // with sign-in on: your role in this business (an owner link makes you the owner)
 }
 
 export interface Freshness { source: string; asOf: string; status: "ok" | "stale" | "error"; note?: string }

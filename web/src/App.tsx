@@ -1,8 +1,9 @@
 import { Suspense, lazy, useEffect } from "react";
-import { Route, Routes, useLocation } from "react-router";
+import { Navigate, Route, Routes, useLocation } from "react-router";
 import { TopBar, TabBar } from "./components/TopBar";
 import { OutOfCreditsNotice } from "./components/Credits";
 import HomePage from "./pages/Home";
+import { useApp } from "./state/app";
 
 const OfficePage = lazy(() => import("./pages/Office").then((m) => ({ default: m.OfficePage })));
 const AskPage = lazy(() => import("./pages/Ask"));
@@ -17,14 +18,17 @@ const StudioPage = lazy(() => import("./pages/Studio"));
 const TeamPage = lazy(() => import("./pages/Team"));
 const ConnectionsPage = lazy(() => import("./pages/Connections"));
 const ConnectedPage = lazy(() => import("./pages/Connections").then((m) => ({ default: m.ConnectedPage })));
+const AccountPage = lazy(() => import("./pages/Account"));
 
 const TITLES: Record<string, string> = {
   "/": "Home", "/office": "Office", "/chat": "Chat", "/ask": "Ask", "/brain": "Brain", "/insights": "Insights", "/approvals": "Approvals", "/onboard": "Add a business",
   "/studio": "Studio", "/team": "Your team", "/plan": "Plan and credits", "/program": "Your growth plan", "/connections": "Your tools", "/connected": "Connected",
+  "/account": "Your account",
 };
 
 export function App() {
   const loc = useLocation();
+  const { tenant } = useApp();
   useEffect(() => {
     const base = "/" + (loc.pathname.split("/")[1] ?? "");
     document.title = `${TITLES[base] ?? "Allevia"} · Allevia`;
@@ -36,6 +40,14 @@ export function App() {
       <TopBar />
       <main id="main" className="main" tabIndex={-1}>
         <Suspense fallback={<div className="page-loading" aria-busy="true"><span className="skeleton" /></div>}>
+          {!tenant.id ? (
+            // signed in, no business yet and no demo to look at: setting one up (and the account) is all there is
+            <Routes>
+              <Route path="/onboard" element={<OnboardPage />} />
+              <Route path="/account" element={<AccountPage />} />
+              <Route path="*" element={<Navigate to="/onboard" replace />} />
+            </Routes>
+          ) : (
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/office" element={<OfficePage />} />
@@ -54,8 +66,10 @@ export function App() {
             <Route path="/program" element={<ProgramPage />} />
             <Route path="/connections" element={<ConnectionsPage />} />
             <Route path="/connected" element={<ConnectedPage />} />
+            <Route path="/account" element={<AccountPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          )}
         </Suspense>
       </main>
       <OutOfCreditsNotice />

@@ -6,6 +6,7 @@ import { ApiError, errorFrom, postSse, postSseForm } from "./lib/sse";
 import type { BillingCycle, BillingResultDto, CreditsDto, SubscriptionDto } from "@shared/credits";
 import type { PlanId } from "@shared/plans";
 import { consumeLinkInAddressBar } from "./lib/link";
+import { accountApi, type Account } from "./lib/account";
 
 import { mockConnections } from "./mock/connections";
 const CONNECT_LIVE_ONLY = "Connecting Search Console needs the live server.";
@@ -51,8 +52,13 @@ type MockApi = typeof import("./mock").mockApi;
 let mockPromise: Promise<MockApi> | null = null;
 const mock = () => (mockPromise ??= import("./mock").then((m) => m.mockApi));
 
+/** Called when the server stops recognising this browser's sign-in (signed out elsewhere, expired): the app goes to sign in. */
+let onSignedOut: (() => void) | null = null;
+export const setSignedOutHandler = (fn: (() => void) | null): void => { onSignedOut = fn; };
+
 async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { headers: { accept: "application/json" }, ...init });
+  if (res.status === 401 && onSignedOut) onSignedOut();
   if (!res.ok) throw await errorFrom(res, path);
   const type = res.headers.get("content-type") ?? "";
   if (!type.includes("json")) throw new ApiError(`${path} did not return JSON`, res.status);
@@ -86,8 +92,9 @@ async function withTimeout<T>(ms: number, fn: (signal: AbortSignal) => Promise<T
   }
 }
 
-/** What the app starts with. `needsLink`: the server asks for an owner link (ALLEVIA_AUTH=1) and none is open in this browser. */
-export interface Startup { mode: ApiMode; tenants: Tenant[]; needsLink?: { failed: boolean } }
+/** What the app starts with. With sign-in on (ALLEVIA_AUTH=1): `authRequired`, and `account` when this browser is signed in.
+ *  `needsLink`: an owner link was tried in the address bar and did not open. */
+export interface Startup { mode: ApiMode; tenants: Tenant[]; needsLink?: { failed: boolean }; authRequired?: boolean; account?: Account | null }
 
 /** Decide live vs mock once, at startup: live unless ?mock=1, or the API's health check fails. */
 export async function detectMode(): Promise<Startup> {
@@ -104,16 +111,19 @@ export async function detectMode(): Promise<Startup> {
     if (!health.ok) throw new Error("unhealthy");
     publicMode = health.publicMode === true;
     const tenants = await withTimeout(8000, (signal) => getJson<Tenant[]>("/api/tenants", { signal }));
-    // With owner links on, a browser that has opened none sees only the demo businesses; with none at all it is asked for its link.
-    if (health.authRequired && (!Array.isArray(tenants) || tenants.length === 0)) {
+    // With sign-in on, the app starts from who this browser is: an account (or none), the businesses it may open, and the demos.
+    // main.tsx sends a stranger to the sign-in page, unless they asked to look at the demo.
+    if (health.authRequired) {
       mode = "live";
-      return { mode, tenants: [], needsLink: { failed: link.seen && !link.opened } };
+      const account = await withTimeout(8000, () => accountApi.me()).catch(() => null);
+      return {
+        mode, tenants: Array.isArray(tenants) ? tenants : [], authRequired: true, account,
+        ...(link.seen && !link.opened ? { needsLink: { failed: true } } : {}),
+      };
     }
     // A live server with no business yet still needs one to show: the demo data stands in until onboarding adds one.
     if (!Array.isArray(tenants) || tenants.length === 0) return useMock();
     mode = "live";
-    // Still no business of its own and a link was tried and failed: say so rather than quietly showing the demo.
-    if (health.authRequired && link.seen && !link.opened) return { mode, tenants, needsLink: { failed: true } };
     return { mode, tenants };
   } catch {
     return useMock();

@@ -109,6 +109,21 @@
 
 .tabbar { display: none; }
 
+/* the account menu (with sign-in on): a round initial at the right of the bar */
+.account-btn {
+  display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--color-band-rule); background: var(--color-paper-2); color: var(--color-band-ink);
+  font-family: var(--font-display); font-size: 1rem; line-height: 1; cursor: pointer;
+}
+.account-btn:hover, .account-btn[aria-expanded="true"] { border-color: var(--color-band-ink); }
+.account-menu { left: auto; right: 0; min-width: 260px; max-width: calc(100vw - 24px); }
+.account-who { display: grid; gap: 2px; padding: 8px 8px 10px; border-bottom: 1px solid var(--color-rule-2); margin-bottom: 4px; min-width: 0; }
+.account-who b { font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-who span { font-size: var(--text-xs); color: var(--color-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-menu-label { padding: 6px 8px 2px; font-size: var(--text-2xs); font-weight: 600; color: var(--color-muted); }
+.account-role { margin-left: auto; font-size: var(--text-2xs); color: var(--color-muted); }
+.account-signup { white-space: nowrap; }
+
 @media (max-width: 1240px) {
   .topnav-link { padding: 0 8px; }
   .topnav-add { display: none; }
