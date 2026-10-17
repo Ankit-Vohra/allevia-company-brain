@@ -268,7 +268,7 @@ running), give the owner a team instead of a tool, and make every answer carry i
   credits and capped; the owner's photo goes in as the reference), Nisha checks that the *product* is unchanged, and a 5 second vertical clip
   from it (about 5 credits) waits on the same card, web and Discord. The job, its cost, the rules it was built from and the chain from the
   photo are in the graph ([`src/studio/premium.ts`](src/studio/premium.ts), [`lineage.ts`](src/studio/lineage.ts); live check on 17 October:
-  [`docs/creative-live/premium-ad/`](docs/creative-live/premium-ad), 11.5 credits). People in a photo are kept as they
+  the founder's private run notes, 11.5 credits). People in a photo are kept as they
   are unless the business turns on "Blur people's faces in my content"; a photo with a child gets the free clean-up only.
   Dev writes the caption and the owner approves ([`src/studio/`](src/studio)). Spend and the live check are in
   [`docs/higgsfield-spend.md`](docs/higgsfield-spend.md).
