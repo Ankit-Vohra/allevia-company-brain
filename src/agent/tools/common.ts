@@ -15,6 +15,7 @@ import { currentEdge } from "../../graph/read.js";
 import { MissingEndpoint } from "../../graph/errors.js";
 import { REL_TYPES, SEARCHABLE, typeOfLabels, type EntityType, type RelType } from "../../graph/schema.js";
 import { toIso } from "../../util/time.js";
+import { displayName } from "../../../shared/legacy-names.js";
 
 export const READ_TIMEOUT_MS = 8_000;
 export const DEFAULT_ROWS = 25;
@@ -146,7 +147,8 @@ export function typeOf(row: Pick<NodeRow, "labels">): string {
 }
 
 export function toRef(row: NodeRow): NodeRef {
-  const ref: NodeRef = { id: row.id, label: typeOf(row), name: row.name ?? row.id };
+  const label = typeOf(row);
+  const ref: NodeRef = { id: row.id, label, name: displayName(row.id, label, row.name ?? row.id) };
   if (typeof row.asOf === "string") ref.asOf = row.asOf;
   if (typeof row.simulated === "boolean") ref.simulated = row.simulated;
   return ref;
@@ -156,7 +158,7 @@ export function toEdge(row: EdgeRow): EdgeRef {
   return { from: row.from, type: row.type, to: row.to, ...(typeof row.since === "number" ? { since: row.since } : {}), until: row.until ?? null };
 }
 
-export const brief = (row: NodeRow): Brief => ({ id: row.id, type: typeOf(row), name: row.name ?? row.id });
+export const brief = (row: NodeRow): Brief => ({ id: row.id, type: typeOf(row), name: displayName(row.id, typeOf(row), row.name ?? row.id) });
 export const edgeText = (e: EdgeRow | EdgeRef): string => `${e.from} -[${e.type}]-> ${e.to}`;
 
 // Collects the nodes and edges a tool touched (deduplicated, in first-seen order) and builds the ToolResult.

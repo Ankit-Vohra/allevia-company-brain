@@ -11,6 +11,7 @@ import { agentNodeId, answersThrough } from "../agent/memory.js";
 import { TouchedSet, type ToolContext } from "../agent/tool.js";
 import { search } from "../agent/tools/search.js";
 import { NODE, toRef, type NodeRow } from "../agent/tools/common.js";
+import { currentNames } from "../../shared/legacy-names.js";
 import { localCommunities, localPageRank } from "./local-graph.js";
 import { previewOf } from "./preview.js";
 import { plainName } from "../util/plain.js";
@@ -110,7 +111,7 @@ export async function latestBrief(g: GraphHandle): Promise<BriefDto | null> {
      ORDER BY coalesce(d.asOf, '') DESC, coalesce(d.createdAt, 0) DESC, d.id LIMIT 1`);
   const r = rows[0];
   if (!r) return null;
-  return { id: str(r.id), title: str(r.title, "Today's note"), ...(typeof r.asOf === "string" ? { asOf: r.asOf } : {}), text: str(r.text) };
+  return { id: str(r.id), title: str(r.title, "Today's note"), ...(typeof r.asOf === "string" ? { asOf: r.asOf } : {}), text: currentNames(str(r.text)) };
 }
 
 // ---------- sessions and turns ----------
@@ -154,7 +155,7 @@ function turnRecord(r: Record<string, unknown>): TurnRecordDto {
   const checks = parseJson(r.checks);
   const error = typeof r.error === "string" && r.error ? r.error : undefined;
   return {
-    id: str(r.id), question: str(r.question), answer: str(r.answer), at: iso(r.at) ?? new Date(0).toISOString(), ms: numOr(r.ms, 0),
+    id: str(r.id), question: str(r.question), answer: currentNames(str(r.answer)), at: iso(r.at) ?? new Date(0).toISOString(), ms: numOr(r.ms, 0),
     ...(r.source === "web" || r.source === "discord" || r.source === "cli" ? { source: r.source } : {}),
     ...(typeof r.target === "string" && agentById(r.target) ? { target: r.target } : {}),
     agents: strList(r.agents), ...(strList(r.skills).length ? { skills: strList(r.skills) } : {}), citations: strList(r.citations), checks: { ...DEFAULT_CHECKS, ...(isObj(checks) ? (checks as Partial<TurnChecks>) : {}) },
@@ -167,7 +168,7 @@ export async function turnEvents(g: GraphHandle, turnId: string, o: { showcaseOn
     "MATCH (t:Entity:Turn {id:$id}) RETURN t.events AS e, t.showcase AS showcase LIMIT 1", { id: turnId });
   const r = rows[0];
   if (!r || (o.showcaseOnly && r.showcase !== true)) return null;
-  const events = parseJson(r.e);
+  const events = parseJson(typeof r.e === "string" ? currentNames(r.e) : r.e); // the work log as the team is named today
   return Array.isArray(events) ? (events as AgentEvent[]) : null;
 }
 
@@ -181,7 +182,7 @@ export async function storedTurn(g: GraphHandle, turnId: string, o: { showcaseOn
        t.showcase AS showcase LIMIT 1`, { id: turnId });
   const r = rows[0];
   if (!r || (o.showcaseOnly && r.showcase !== true)) return null;
-  const events = parseJson(r.e);
+  const events = parseJson(typeof r.e === "string" ? currentNames(r.e) : r.e); // the work log as the team is named today
   return {
     id: turnId, sessionId: str(r.sid), question: str(r.q), status: r.status === "failed" ? "failed" : "ok", error: r.error ?? null,
     events: Array.isArray(events) ? (events as AgentEvent[]) : [],
@@ -485,13 +486,13 @@ async function agentFindings(g: GraphHandle, aid: string, rosterId: string): Pro
      ORDER BY at DESC, id`,
     { aid, limit: LIMITS.findings });
   return rows.map((r) => ({
-    id: str(r.id), agent: rosterId, text: str(r.text), citations: strList(r.citations), turnId: str(r.turnId), question: str(r.question),
+    id: str(r.id), agent: rosterId, text: currentNames(str(r.text)), citations: strList(r.citations), turnId: str(r.turnId), question: str(r.question),
     at: iso(r.at) ?? new Date(0).toISOString(),
     verdicts: (Array.isArray(r.verdicts) ? r.verdicts : []).flatMap((v: unknown) => {
       if (!isObj(v)) return [];
       const by = rosterIdOf(v.by);
       const verdict = v.verdict === "ok" || v.verdict === "fix" || v.verdict === "reject" ? v.verdict : undefined;
-      return by && verdict ? [{ by, verdict, note: str(v.note) }] : [];
+      return by && verdict ? [{ by, verdict, note: currentNames(str(v.note)) }] : [];
     }),
   }));
 }

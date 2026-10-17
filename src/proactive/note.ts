@@ -1,5 +1,6 @@
 // Reading and wording a day's stand-up, apart from running it (Today's note and the API read it without pulling in the
 // signals and drafting code).
+import { currentNames } from "../../shared/legacy-names.js"; // a note saved before the rename reads with the names of today
 import type { GraphHandle } from "../graph/client.js";
 import { plural } from "../insights/text.js";
 import { entityId } from "../util/ids.js";
@@ -23,14 +24,14 @@ export interface Standup {
   generatedAt: number;
   quiet: boolean;
   by: "meera" | "rules";
-  items: DraftedItem[];         // drafted (and failed) items, in Meera's order
+  items: DraftedItem[];         // drafted (and failed) items, in The Chief's order
   heading: string;              // "Your team noticed 2 things and drafted them"
   lines: string[];              // the note's lines under the heading
   reviewed: Reviewed;
   considered: number;
   skipped: Skipped[];
   lessons: string[];
-  attendees: string[];          // roster ids at the stand-up: Meera and whoever got work
+  attendees: string[];          // roster ids at the stand-up: The Chief and whoever got work
   paidUsed: number;
   waiting: Waiting[];           // the big problems already waiting for the owner's OK, led with in the note
   waitingHeading: string;       // "Two big things are waiting for your OK; here's why they matter this week" ("" when none)
@@ -72,10 +73,10 @@ export function standupFrom(r: DocRow): Standup {
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   return {
     id: r.id, tenant: String(p.tenant ?? ""), date: String(p.date ?? ""), localDate: String(p.localDate ?? p.date ?? ""), generatedAt: num(p.generatedAt),
-    quiet: p.quiet === true, by: p.by === "meera" ? "meera" : "rules", items: parse<DraftedItem[]>(p.items, []), heading: String(p.heading ?? ""),
-    lines: parse<string[]>(p.lines, []), reviewed: parse<Reviewed>(p.reviewed, {} as Reviewed), considered: num(p.considered),
+    quiet: p.quiet === true, by: p.by === "meera" ? "meera" : "rules", items: parse<DraftedItem[]>(p.items, []), heading: currentNames(String(p.heading ?? "")),
+    lines: parse<string[]>(p.lines, []).map((l) => currentNames(l)), reviewed: parse<Reviewed>(p.reviewed, {} as Reviewed), considered: num(p.considered),
     skipped: parse<Skipped[]>(p.skipped, []), lessons: parse<string[]>(p.lessons, []), attendees: parse<string[]>(p.attendees, []), paidUsed: num(p.paidUsed),
-    waiting: parse<Waiting[]>(p.waiting, []), waitingHeading: String(p.waitingHeading ?? ""), waitingLines: parse<string[]>(p.waitingLines, []),
+    waiting: parse<Waiting[]>(p.waiting, []), waitingHeading: currentNames(String(p.waitingHeading ?? "")), waitingLines: parse<string[]>(p.waitingLines, []).map((l) => currentNames(l)),
   };
 }
 
