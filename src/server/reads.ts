@@ -13,9 +13,10 @@ import { search } from "../agent/tools/search.js";
 import { NODE, toRef, type NodeRow } from "../agent/tools/common.js";
 import { localCommunities, localPageRank } from "./local-graph.js";
 import { previewOf } from "./preview.js";
+import { plainName } from "../util/plain.js";
 import {
   APPROVAL_STATUSES, REC_AREAS, type AgentDetailDto, type AgentStatsDto, type AgentSummaryDto, type ApprovalDto, type ApprovalPayload,
-  type ApprovalStatus, type BriefDto, type Channel, type FindingRecordDto, type FreshnessDto, type GraphDataDto, type GraphNodeDto,
+  type ApprovalStatus, type BrainMapDto, type BrainMapNodeDto, type BriefDto, type Channel, type FindingRecordDto, type FreshnessDto, type GraphDataDto, type GraphNodeDto,
   type NodeDetailDto, type RecArea, type RecommendationDto, type SearchHitDto, type SessionDetailDto, type SessionSummaryDto,
   type TurnRecordDto, type VersionRecordDto,
 } from "./types.js";
@@ -23,7 +24,7 @@ import {
 export const READ_MS = 10_000;
 export const LIMITS = {
   sessions: 50, turns: 100, search: 25, neighbors: 40, versions: 20, sources: 10, focusNodes: 150, overviewNodes: 400,
-  overviewEdges: 3000, recommendations: 50, approvals: 100, findings: 6, knows: 25, knowledgeEdges: 200, playbooks: 6, answers: 10,
+  overviewEdges: 3000, mapNodes: 400, mapEdges: 3000, recommendations: 50, approvals: 100, findings: 6, knows: 25, knowledgeEdges: 200, playbooks: 6, answers: 10,
 } as const;
 
 // Props never returned: vectors, write bookkeeping, and a Turn's raw event log (served by the replay endpoint).
@@ -329,19 +330,75 @@ export async function overviewGraph(g: GraphHandle, limit: number = LIMITS.overv
      RETURN ${NODE("n")} AS n, n.summary AS summary, n.rank AS rank, n.community AS community, deg
      ORDER BY coalesce(n.rank, 0) DESC, deg DESC, n.id LIMIT $limit`,
     { types: SEARCHABLE, skip: MAP_SKIP_RELS, limit: cap });
+  const edges = await edgesAmong(g, rows.map((r) => r.n.id), LIMITS.overviewEdges);
+  const rankOf = ranker(rows, edges);
+  const nodes: GraphNodeDto[] = rows.map((r) => {
+    const { rank, community } = rankOf(r);
+    return { ...toRef(r.n), rank, ...(community !== undefined ? { community } : {}), ...(r.summary ? { summary: r.summary.slice(0, 280) } : {}) };
+  });
+  return { nodes, edges };
+}
+
+// Importance 0–1 (stored PageRank over its top value) and topic, or both computed on this subgraph when the librarian
+// has not stored them yet.
+type RankRow = { n: NodeRow; rank: number | null; community: number | null };
+function ranker(rows: RankRow[], edges: EdgeRef[]): (r: RankRow) => { rank: number; community: number | undefined } {
   const ids = rows.map((r) => r.n.id);
-  const edges = await edgesAmong(g, ids, LIMITS.overviewEdges);
   const storedRank = rows.some((r) => typeof r.rank === "number");
   const storedCommunity = rows.some((r) => typeof r.community === "number");
   const maxRank = Math.max(0, ...rows.map((r) => (typeof r.rank === "number" ? r.rank : 0))) || 1;
   const pr = storedRank ? undefined : localPageRank(ids, edges);
   const comm = storedCommunity ? undefined : localCommunities(ids, edges);
-  const nodes: GraphNodeDto[] = rows.map((r) => {
-    const rank = storedRank ? (typeof r.rank === "number" ? Math.round((r.rank / maxRank) * 1000) / 1000 : 0) : pr!.get(r.n.id) ?? 0;
-    const community = storedCommunity ? (typeof r.community === "number" ? r.community : undefined) : comm!.get(r.n.id);
-    return { ...toRef(r.n), rank, ...(community !== undefined ? { community } : {}), ...(r.summary ? { summary: r.summary.slice(0, 280) } : {}) };
+  return (r) => ({
+    rank: storedRank ? (typeof r.rank === "number" ? Math.round((r.rank / maxRank) * 1000) / 1000 : 0) : pr!.get(r.n.id) ?? 0,
+    community: storedCommunity ? (typeof r.community === "number" ? r.community : undefined) : comm!.get(r.n.id),
   });
-  return { nodes, edges };
+}
+
+// The Brain map and Home's living brain: the same top things as the overview, made light for a phone (no summaries, the
+// links as index triples), with when each was learned and the size of the whole brain. Three reads, all GRAPH.RO_QUERY:
+// the ranked things (the last sort key is the id, so no two rows tie), the links among them, and two counts.
+export async function mapGraph(g: GraphHandle, limit: number = LIMITS.mapNodes): Promise<BrainMapDto> {
+  const cap = Math.max(1, Math.min(Math.floor(limit), LIMITS.mapNodes));
+  const [rows, counts, linkCount] = await Promise.all([
+    ro<RankRow & { learnedAt: number | null; deg: number }>(g,
+      `MATCH (n:Entity) WHERE any(l IN labels(n) WHERE l IN $types)
+       OPTIONAL MATCH (n)-[r]-() WHERE r.until IS NULL AND NOT type(r) IN $skip
+       WITH n, count(r) AS deg
+       RETURN ${NODE("n")} AS n, n.rank AS rank, n.community AS community, n.createdAt AS learnedAt, deg
+       ORDER BY coalesce(n.rank, 0) DESC, deg DESC, n.id LIMIT $limit`,
+      { types: SEARCHABLE, skip: MAP_SKIP_RELS, limit: cap }),
+    labelCounts(g),
+    ro<{ c: number }>(g,
+      `MATCH (:Entity)-[r]->(:Entity) WHERE ID(r) >= 0 AND r.until IS NULL AND NOT type(r) IN $skip RETURN count(r) AS c`,
+      { skip: MAP_SKIP_RELS }),
+  ]);
+  const edges = await edgesAmong(g, rows.map((r) => r.n.id), LIMITS.mapEdges);
+  const rankOf = ranker(rows, edges);
+  const index = new Map(rows.map((r, i) => [r.n.id, i]));
+  const types: string[] = [];
+  const typeIndex = new Map<string, number>();
+  const seen = new Set<string>();
+  const links: Array<[number, number, number]> = [];
+  for (const e of edges) {
+    const a = index.get(e.from), b = index.get(e.to);
+    const key = `${e.from}|${e.type}|${e.to}`;
+    if (a === undefined || b === undefined || a === b || seen.has(key)) continue;
+    seen.add(key);
+    let t = typeIndex.get(e.type);
+    if (t === undefined) { t = types.length; types.push(e.type); typeIndex.set(e.type, t); }
+    links.push([a, b, t]);
+  }
+  const nodes: BrainMapNodeDto[] = rows.map((r) => {
+    const { rank, community } = rankOf(r);
+    const ref = toRef(r.n);
+    return {
+      ...ref, ...(ref.name.includes("[redacted:") ? { name: plainName(ref.name) } : {}), rank,
+      ...(community !== undefined ? { community } : {}), ...(typeof r.learnedAt === "number" ? { learnedAt: r.learnedAt } : {}),
+    };
+  });
+  const things = Object.entries(counts).reduce((s, [label, c]) => (PLUMBING.includes(label) ? s : s + c), 0);
+  return { nodes, types, links, counts, totals: { things, links: linkCount[0]?.c ?? 0 }, capped: rows.length >= cap };
 }
 
 // ---------- agents ----------

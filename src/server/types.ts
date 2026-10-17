@@ -76,6 +76,20 @@ export interface SearchHitDto { node: NodeRef; score: number; snippet?: string }
 export interface GraphNodeDto extends NodeRef { rank?: number; community?: number; summary?: string }
 export interface GraphDataDto { nodes: GraphNodeDto[]; edges: EdgeRef[] }
 
+/** The Brain map and Home's living brain (GET /api/:t/graph/map): the most important things, light enough for a phone.
+ *  No summaries (a tap reads the card); `learnedAt` is when the team learned it (epoch ms, for "Watch it grow"); `links`
+ *  are [from, to, type] indexes into `nodes` and `types`. `counts` are things by kind in the whole brain and `totals` its
+ *  size, plumbing (versions, passages, read logs) left out. `capped`: there are more things than `nodes`. */
+export interface BrainMapNodeDto extends NodeRef { rank: number; community?: number; learnedAt?: number }
+export interface BrainMapDto {
+  nodes: BrainMapNodeDto[];
+  types: string[];
+  links: Array<[number, number, number]>;
+  counts: Record<string, number>;
+  totals: { things: number; links: number };
+  capped: boolean;
+}
+
 export interface VersionRecordDto { since: string; until: string | null; props: Record<string, unknown>; src?: string }
 
 export interface NodeDetailDto {

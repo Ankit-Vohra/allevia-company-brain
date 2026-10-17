@@ -1,4 +1,6 @@
 // "The graph at work" on the Brain page, read-only:
+//   GET /api/:t/graph/map[?limit=N]: the map (the most important things, light for a phone; see reads.mapGraph)
+//   GET /api/:t/graph/story: how the brain grew
 //   GET /api/:t/graph/at-work[?focus=<id or exact name>]
 // What only a graph gives, from the same tools the agents call (src/agent/tools), on the selected business's graph:
 // - for one system (the one with most dependents, or `focus`): "what breaks if this stops" at depth 1 and at depth 4,
@@ -18,6 +20,7 @@ import { whoOwns } from "../../agent/tools/people.js";
 import { important, topics } from "../../agent/tools/ranking.js";
 import { plainName } from "../../util/plain.js";
 import { graphStory, type StoryAxis, type StoryBucket } from "../../graph/story.js";
+import { LIMITS, mapGraph } from "../reads.js";
 import { HttpError, errorMessage, type RouteCtx } from "../http.js";
 
 export type AtWorkStatus = "impact" | "nothing_depends" | "not_mapped" | "not_in_records";
@@ -89,6 +92,16 @@ export function registerGraphWorkRoutes(app: Hono, rc: RouteCtx): void {
       rc.log(`[api] graph story for ${reg.slug}: ${errorMessage(e)}`);
       throw new HttpError(503, "The growth story could not be read just now.");
     }
+  });
+
+  // The Brain page's map and Home's living brain: the top things by importance (?limit=1..400), when each was learned,
+  // the links between them as index triples, and the size of the whole brain. Read-only.
+  app.get("/api/:t/graph/map", async (c) => {
+    const { g } = await rc.tenantOf(c);
+    const raw = c.req.query("limit");
+    const limit = raw === undefined ? LIMITS.mapNodes : Number(raw);
+    if (!Number.isFinite(limit) || limit < 1) throw new HttpError(400, `limit is a number from 1 to ${LIMITS.mapNodes}.`);
+    return c.json(await mapGraph(g, limit));
   });
 
   app.get("/api/:t/graph/at-work", async (c) => {
