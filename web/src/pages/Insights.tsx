@@ -157,7 +157,7 @@ function IdeaRow({ rec: r, rank, approval, onOpen }: { rec: Recommendation; rank
           <span className="idea-meta">
             <AgentAvatar id={r.by} size={16} />
             <span>{agentDef(r.by)?.name ?? "Your team"}</span>
-            <b className="idea-size">{s.big}{s.small ? ` ${s.small}` : ""}</b>
+            {s.big && <b className="idea-size">{s.big}{s.small ? ` ${s.small}` : ""}</b>}
             {waiting && <span className="ap-badge">Draft waiting</span>}
             {r.simulated && <span className="ap-sample">sample</span>}
           </span>
