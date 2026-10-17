@@ -1,7 +1,7 @@
-// What we noticed: the team's best ideas, strongest first. Each one says who suggests it, what it is, why, what is at
-// stake and the one next step. The reasoning (the sources and the chain of facts) sits behind "Why we think this", the
-// way Claude keeps its thinking one tap away. Today's note from Meera sits on top; where the numbers come from is at
-// the bottom, and sample numbers are always said out loud (docs/owner-words.md).
+// What we noticed: the team's ideas, best first, one line each (what it is, who suggests it, how big). A tap opens the idea in a
+// sheet: why, what is at stake, the one next step, and the reasoning (the sources and the chain of facts) behind "Why we think
+// this". Today's note from Meera sits on top in one line, the whole note one tap away; where the numbers come from is at the
+// bottom, and sample numbers are always said out loud (docs/owner-words.md).
 import { useMemo, useState } from "react";
 import type { NodeRef } from "@shared/contracts";
 import { Link, useNavigate } from "react-router";
@@ -9,23 +9,20 @@ import { api } from "../api";
 import { AgentAvatar, agentDef } from "../components/bits";
 import { EvidenceChain } from "../components/EvidenceChain";
 import { Icon } from "../components/Icon";
-import { firstSentence, likelihood, whenWords, withoutCites, withoutSim } from "../components/insights-words";
+import { firstSentence, likelihood, stakeOf, whenWords, withoutCites, withoutSim } from "../components/insights-words";
 import { Markdown } from "../components/Markdown";
 import { Reveal } from "../components/Reveal";
+import { Sheet } from "../components/Sheet";
 import { fmtMoney } from "../lib/format";
 import { useApp, useAsync } from "../state/app";
 import type { Approval, Freshness, Recommendation } from "../types-ext";
+import "../components/approval/approval.css";
 import "./insights.css";
 
-const PER: Record<string, string> = { week: "a week", month: "a month", year: "a year" };
-const TOP = 3;
+const TOP = 5;
 
-function stake(r: Recommendation) {
-  if (r.value) {
-    return { label: "What's at stake", big: fmtMoney(r.value.amount, r.value.currency), small: r.value.per ? PER[r.value.per] : r.value.note };
-  }
-  return { label: "What you could gain", big: withoutSim(r.impact), small: undefined };
-}
+/** The note's first paragraph as plain words, for the one line on top. */
+const firstLine = (md: string) => withoutCites(md.split(/\n\s*\n/)[0] ?? "").replace(/\*\*|__|[*_`#>]/g, "").replace(/\s+/g, " ").trim();
 
 export default function InsightsPage() {
   const { tenant } = useApp();
@@ -35,6 +32,7 @@ export default function InsightsPage() {
   const approvals = useAsync(() => api.approvals(tenant.id), [tenant.id]);
   const graph = useAsync(() => api.graphOverview(tenant.id), [tenant.id]);
   const [all, setAll] = useState(false);
+  const [look, setLook] = useState<string | null>(null);
 
   // names for source chips: the graph overview, plus every node a recommendation already carries
   const names = useMemo(() => {
@@ -49,6 +47,8 @@ export default function InsightsPage() {
   const waiting = sorted.filter((r) => r.approvalId && byApproval.get(r.approvalId)?.status === "pending").length;
   const samples = (overview.data?.freshness ?? []).filter((f) => f.note === "simulated").map((f) => f.source);
   const hasSamples = samples.length > 0 || sorted.some((r) => r.simulated);
+  const open = sorted.find((r) => r.id === look);
+  const openRank = open ? sorted.indexOf(open) + 1 : 0;
 
   const openNode = (id: string) => nav(`/brain?node=${encodeURIComponent(id)}`);
 
@@ -56,23 +56,18 @@ export default function InsightsPage() {
     <div className="insights-page">
       <header className="ins-head">
         <h1 className="page-title">What we noticed</h1>
-        <p className="page-lede">
+        <p className="ins-tally">
           {sorted.length ? (
-            <>
-              {sorted.length === 1 ? "One idea" : `${sorted.length} ideas`} for {tenant.name}, best first.
-              {waiting > 0 && <> {waiting === 1 ? "One has a draft" : `${waiting} have a draft`} waiting for your OK.</>}
-            </>
-          ) : recs.loading ? "Looking at the latest numbers…" : `Nothing to suggest for ${tenant.name} yet.`}
+            <span>
+              <b className="num">{sorted.length}</b> {sorted.length === 1 ? "idea" : "ideas"}
+              {waiting > 0 && <> · <Link to="/approvals"><b className="num">{waiting}</b> waiting for your OK</Link></>}
+            </span>
+          ) : <span>{recs.loading ? "Looking at the latest numbers…" : "Nothing to suggest yet."}</span>}
+          {hasSamples && <span className="sample-tag" title={samples.length ? `Sample numbers from ${samples.join(", ")}` : "Some numbers are samples"}>sample numbers</span>}
         </p>
-        {hasSamples && (
-          <p className="sample-note">
-            <span className="sample-dot" aria-hidden="true" />
-            Includes sample numbers{samples.length ? ` (${samples.join(", ")})` : ""}. They are always marked.
-          </p>
-        )}
       </header>
 
-      <TodayNote brief={overview.data?.brief} loading={overview.loading && !overview.data} pending={overview.data?.approvalsPending ?? 0} names={names} onOpen={openNode} />
+      <TodayNote brief={overview.data?.brief} loading={overview.loading && !overview.data} names={names} onOpen={openNode} />
 
       {recs.error && <p className="notice notice-bad" role="alert">Ideas did not load: {recs.error}</p>}
       {recs.loading && !recs.data && (
@@ -83,12 +78,12 @@ export default function InsightsPage() {
         <section aria-label="Ideas, best first">
           <ol className="ideas">
             {shown.map((r, i) => (
-              <Idea key={r.id} rec={r} rank={i + 1} approval={r.approvalId ? byApproval.get(r.approvalId) : undefined} onOpen={openNode} names={names} tz={tenant.timeZone} locale={tenant.locale} />
+              <IdeaRow key={r.id} rec={r} rank={i + 1} approval={r.approvalId ? byApproval.get(r.approvalId) : undefined} onOpen={() => setLook(r.id)} />
             ))}
           </ol>
           {sorted.length > TOP && (
             <button type="button" className="ideas-more" onClick={() => setAll((v) => !v)} aria-expanded={all}>
-              {all ? "Show only the top 3" : `See all ${sorted.length}`}
+              {all ? `Show the top ${TOP}` : `See all ${sorted.length}`}
               <Icon name="chevron" size={16} className={all ? "is-up" : undefined} />
             </button>
           )}
@@ -100,39 +95,36 @@ export default function InsightsPage() {
           <ul className="source-list">
             {overview.data.freshness.map((f) => <SourceRow key={f.source} f={f} tz={tenant.timeZone} locale={tenant.locale} />)}
           </ul>
-          <p className="small muted">Every number your team quotes names where it came from and how fresh it is.</p>
         </Reveal>
       )}
+
+      <Sheet open={!!open} onClose={() => setLook(null)} label={open ? withoutSim(open.title) : "Idea"}>
+        {open && <IdeaView rec={open} rank={openRank} approval={open.approvalId ? byApproval.get(open.approvalId) : undefined} onOpen={openNode} names={names} tz={tenant.timeZone} locale={tenant.locale} />}
+      </Sheet>
     </div>
   );
 }
 
-function TodayNote({ brief, loading, pending, names, onOpen }: { brief?: string; loading: boolean; pending: number; names: Record<string, NodeRef>; onOpen: (id: string) => void }) {
+function TodayNote({ brief, loading, names, onOpen }: { brief?: string; loading: boolean; names: Record<string, NodeRef>; onOpen: (id: string) => void }) {
   if (!loading && !brief) return null;
   return (
     <section className="note" aria-labelledby="note-title">
       <div className="note-head">
-        <AgentAvatar id="chief-of-staff" size={30} />
-        <div>
-          <h2 id="note-title" className="note-title">Today’s note</h2>
-          <p className="small muted">From Meera, your chief of staff</p>
-        </div>
+        <AgentAvatar id="chief-of-staff" size={26} />
+        <h2 id="note-title" className="note-title">Today’s note</h2>
+        <span className="small muted">from Meera</span>
       </div>
       {loading || !brief ? (
-        <span className="skeleton" style={{ display: "block", height: 96 }} />
+        <span className="skeleton" style={{ display: "block", height: 44 }} />
       ) : (
         <>
-          <Markdown className="note-md" text={withoutCites(brief)} />
-          <div className="note-foot">
-            {pending > 0 && (
-              <Link className="btn btn-ghost btn-sm" to="/approvals">
-                <Icon name="approvals" size={15} /> {pending} waiting for your OK
-              </Link>
-            )}
+          <p className="note-line">{firstLine(brief)}</p>
+          <Reveal label="Read it all">
+            <Markdown className="note-md" text={withoutCites(brief)} />
             <Reveal label="How we know" summary="the sources">
               <Markdown className="note-md note-md-cited" text={brief} onCite={onOpen} nodes={names} />
             </Reveal>
-          </div>
+          </Reveal>
         </>
       )}
     </section>
@@ -151,62 +143,78 @@ function SourceRow({ f, tz, locale }: { f: Freshness; tz?: string; locale?: stri
   );
 }
 
-function Idea({ rec: r, rank, approval, onOpen, names, tz, locale }: { rec: Recommendation; rank: number; approval?: Approval; onOpen: (id: string) => void; names: Record<string, NodeRef>; tz?: string; locale?: string }) {
+/** One idea in one line: the rank, what it is, who suggests it and how big. */
+function IdeaRow({ rec: r, rank, approval, onOpen }: { rec: Recommendation; rank: number; approval?: Approval; onOpen: () => void }) {
+  const s = stakeOf(r, fmtMoney);
+  const waiting = approval?.status === "pending";
+  return (
+    <li className={`idea-row${r.status === "dismissed" ? " is-dismissed" : ""}`}>
+      <button type="button" className="idea-line" onClick={onOpen}>
+        <span className="idea-rank" aria-label={`Number ${rank}`}>{rank}</span>
+        <span className="idea-text">
+          <span className="idea-title">{withoutSim(r.title)}</span>
+          <span className="idea-meta">
+            <AgentAvatar id={r.by} size={16} />
+            <span>{agentDef(r.by)?.name ?? "Your team"}</span>
+            <b className="idea-size">{s.big}{s.small ? ` ${s.small}` : ""}</b>
+            {waiting && <span className="ap-badge">Draft waiting</span>}
+            {r.simulated && <span className="ap-sample">sample</span>}
+          </span>
+        </span>
+        <Icon name="chevron-right" size={16} className="idea-go" />
+      </button>
+    </li>
+  );
+}
+
+/** The idea in full, in the sheet: why, what is at stake, the next step, and the reasoning behind "Why we think this". */
+function IdeaView({ rec: r, rank, approval, onOpen, names, tz, locale }: { rec: Recommendation; rank: number; approval?: Approval; onOpen: (id: string) => void; names: Record<string, NodeRef>; tz?: string; locale?: string }) {
   const a = agentDef(r.by);
-  const s = stake(r);
+  const s = stakeOf(r, fmtMoney);
   const waiting = approval?.status === "pending";
   const decided = approval && approval.status !== "pending";
   const askQ = `${withoutSim(r.title)}: what would it take, and what could go wrong?`;
   return (
-    <li className={`idea${r.status === "dismissed" ? " is-dismissed" : ""}`} aria-labelledby={`idea-${rank}`}>
-      <span className="idea-rank" aria-label={`Number ${rank}`}>{rank}</span>
-      <div className="idea-body">
-        <p className="idea-by">
-          <AgentAvatar id={r.by} size={24} />
-          <span><b>{a?.name ?? "Your team"}</b>{a ? `, ${a.title.toLowerCase()}` : ""} · {whenWords(r.createdAt, tz, locale)}</span>
-        </p>
-        <h2 id={`idea-${rank}`} className="idea-title">{withoutSim(r.title)}</h2>
-        <p className="idea-why">{withoutCites(firstSentence(r.why))}</p>
-
-        <p className="idea-stake">
-          <span className="idea-stake-k">{s.label}</span>
-          <span className="idea-stake-v">{s.big}</span>
-          {s.small && <span className="idea-stake-s">{s.small}</span>}
-          {r.simulated && <span className="sample-tag">sample numbers</span>}
-        </p>
-
-        <div className="idea-actions">
-          {waiting ? (
-            <Link className="btn btn-gold" to={`/approvals#${encodeURIComponent(approval!.id)}`}>
-              Review the draft
-            </Link>
-          ) : decided ? (
-            <span className={`idea-decided${approval!.status === "rejected" ? " is-no" : ""}`}>
-              <Icon name={approval!.status === "rejected" ? "x" : "check"} size={14} />
-              {approval!.status === "rejected" ? "You said no to the draft" : "You said OK"}
-            </span>
-          ) : (
-            <Link className="btn btn-ghost" to={`/ask?q=${encodeURIComponent(askQ)}`}>
-              Ask {a?.name ?? "your team"} about it
-            </Link>
+    <article className="idea" aria-labelledby="idea-sheet-t">
+      <p className="idea-by">
+        <span className="idea-rank-sm num">#{rank}</span>
+        <AgentAvatar id={r.by} size={22} />
+        <span><b>{a?.name ?? "Your team"}</b> · {whenWords(r.createdAt, tz, locale)}</span>
+      </p>
+      <h2 id="idea-sheet-t" className="idea-title-lg">{withoutSim(r.title)}</h2>
+      <p className="idea-why">{withoutCites(firstSentence(r.why))}</p>
+      <p className="idea-stake">
+        <span className="idea-stake-k">{s.label}</span>
+        <span className="idea-stake-v">{s.big}</span>
+        {s.small && <span className="idea-stake-s">{s.small}</span>}
+        {r.simulated && <span className="sample-tag">sample numbers</span>}
+      </p>
+      <div className="idea-actions">
+        {waiting ? (
+          <Link className="btn btn-gold" to={`/approvals#${encodeURIComponent(approval!.id)}`}>Review the draft</Link>
+        ) : decided ? (
+          <span className={`idea-decided${approval!.status === "rejected" ? " is-no" : ""}`}>
+            <Icon name={approval!.status === "rejected" ? "x" : "check"} size={14} />
+            {approval!.status === "rejected" ? "You said no to the draft" : "You said OK"}
+          </span>
+        ) : (
+          <Link className="btn btn-ghost" to={`/ask?q=${encodeURIComponent(askQ)}`}>Ask {a?.name ?? "your team"} about it</Link>
+        )}
+      </div>
+      <Reveal className="idea-reveal" label="Why we think this" summary={`${likelihood(r.confidence)} · ${r.evidence.length} ${r.evidence.length === 1 ? "source" : "sources"}`}>
+        <div className="idea-proof">
+          <Markdown className="idea-proof-md" text={r.why} onCite={onOpen} nodes={names} />
+          {r.evidence.length > 0 && (
+            <>
+              <p className="idea-proof-h">How the facts connect</p>
+              <EvidenceChain nodes={r.evidence} edges={r.evidenceEdges} onOpen={onOpen} label={`How we know: ${withoutSim(r.title)}`} />
+              <button type="button" className="btn btn-quiet btn-sm" onClick={() => onOpen(r.evidence[0]?.id ?? "")}>
+                <Icon name="brain" size={15} /> Open in your company brain
+              </button>
+            </>
           )}
         </div>
-
-        <Reveal className="idea-reveal" label="Why we think this" summary={`${likelihood(r.confidence)} · ${r.evidence.length} ${r.evidence.length === 1 ? "source" : "sources"}`}>
-          <div className="idea-proof">
-            <Markdown className="idea-proof-md" text={r.why} onCite={onOpen} nodes={names} />
-            {r.evidence.length > 0 && (
-              <>
-                <p className="idea-proof-h">How the facts connect</p>
-                <EvidenceChain nodes={r.evidence} edges={r.evidenceEdges} onOpen={onOpen} label={`How we know: ${withoutSim(r.title)}`} />
-                <button type="button" className="btn btn-quiet btn-sm" onClick={() => onOpen(r.evidence[0]?.id ?? "")}>
-                  <Icon name="brain" size={15} /> Open in your company brain
-                </button>
-              </>
-            )}
-          </div>
-        </Reveal>
-      </div>
-    </li>
+      </Reveal>
+    </article>
   );
 }
