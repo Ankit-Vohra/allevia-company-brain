@@ -62,7 +62,11 @@ export function AppProvider({ mode, initialTenants, authRequired = false, accoun
   const params = new URLSearchParams(location.search);
   const [tenantId, setTenantId] = useState(() => {
     const want = params.get("tenant") ?? read("allevia.tenant");
-    return initialTenants.find((t) => t.id === want)?.id ?? initialTenants[0]?.id ?? (authRequired ? "" : "aamdani");
+    const found = initialTenants.find((t) => t.id === want)?.id;
+    // a link with ?tenant= picks the business for this tab from then on: the address loses the parameter as the owner moves
+    // around, and a reload must not land on another business (where the open conversation does not exist)
+    if (found && params.get("tenant")) write("allevia.tenant", found);
+    return found ?? initialTenants[0]?.id ?? (authRequired ? "" : "aamdani");
   });
   const [theme, setThemeState] = useState<ThemeChoice>(() => {
     const t = params.get("theme") ?? read("allevia.theme");
