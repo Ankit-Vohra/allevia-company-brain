@@ -1,0 +1,110 @@
+/* The app in the website's clothes (site/proto/shared/base.css): two base colours, warm peach paper (#f4eee3) and one dark
+ * warm brown (#2f2621), white cards with a whisper shadow, gold only on things you press, Newsreader headings and IBM Plex
+ * Sans body, pill buttons. Loaded after tokens.css, so every page that reads the tokens follows; the marketing site imports
+ * tokens.css on its own and is not touched by this file. The night theme is the site's dark warm brown, not indigo. */
+
+:root {
+  color-scheme: light;
+  --color-paper: #f4eee3;
+  --color-paper-2: #ece4d5;
+  --color-card: #ffffff;
+  --color-rule: #ddd3c2;
+  --color-rule-2: #e8e0d1;
+  --color-ink: #1f1a14;
+  --color-ink-2: #463d33;
+  --color-muted: #675b4e;
+  /* the top bar is paper, like the site's */
+  --color-band: #f4eee3;
+  --color-band-ink: #1f1a14;
+  --color-band-muted: #5b4f43;
+  --color-band-rule: #ddd3c2;
+  --color-accent: #d1a43a;
+  --color-accent-hover: #dbb04a;
+  --color-accent-soft: #f4e7c4;
+  --color-accent-ink: #6f520f;
+  --color-on-accent: #1f1a14;
+  --color-focus: #3f4a2a;
+  --color-ok: #276b45;
+  --color-ok-soft: #e4efe6;
+  --color-warn: #8f5a12;
+  --color-warn-soft: #f6ead2;
+  --color-bad: #9a3d2a;
+  --color-bad-soft: #f6e3dc;
+
+  --radius-md: 12px;
+  --radius-frame: 18px;
+  --radius-pill: 999px;
+  --shadow-whisper: 0 1px 2px rgb(60 44 24 / 0.06);
+  --shadow-lift: 0 2px 4px rgb(60 44 24 / 0.05), 0 18px 40px -16px rgb(60 44 24 / 0.22);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* the night office: the site's dark warm band, with cards a step lighter */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-paper: #241d19;
+  --color-paper-2: #2f2621;
+  --color-card: #33291f;
+  --color-rule: #4b3e33;
+  --color-rule-2: #3c3129;
+  --color-ink: #f6efe3;
+  --color-ink-2: #e2d9ca;
+  --color-muted: #bfb4a4;
+  --color-band: #2f2621;
+  --color-band-ink: #f6efe3;
+  --color-band-muted: #cdbd9c;
+  --color-band-rule: #4b3e33;
+  --color-accent: #d9ad45;
+  --color-accent-hover: #e3ba57;
+  --color-accent-soft: #4a3a1c;
+  --color-accent-ink: #e8c46a;
+  --color-on-accent: #1f1a14;
+  --color-focus: #e2c27a;
+  --color-ok: #7fc79a;
+  --color-ok-soft: #26362b;
+  --color-warn: #e7b765;
+  --color-warn-soft: #3d3020;
+  --color-bad: #e79a85;
+  --color-bad-soft: #3d2622;
+  --room-l: 30%;
+  --room-c: 0.03;
+  --shadow-whisper: 0 1px 2px rgb(0 0 0 / 0.35);
+  --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.3), 0 18px 40px -12px rgb(0 0 0 / 0.55);
+}
+
+/* "Follows the office clock": after golden hour the peach dims a touch, like a room with the lamps on */
+:root[data-dusk="1"]:not([data-theme="dark"]) {
+  --color-paper: #eee5d6;
+  --color-paper-2: #e5dac8;
+  --color-card: #fdfaf4;
+  --color-band: #eee5d6;
+  --color-rule: #d6cab6;
+  --color-rule-2: #e1d6c4;
+}
+
+/* ---------- type: calm Newsreader headings ---------- */
+h1, h2, h3, h4 { font-optical-sizing: auto; }
+.page-title { font-size: clamp(1.75rem, 1.4rem + 1vw, 2.25rem); font-weight: 380; letter-spacing: -0.018em; line-height: 1.1; }
+.section-title { font-weight: 420; letter-spacing: -0.01em; }
+
+/* ---------- buttons: the site's pills ---------- */
+.btn { border-radius: var(--radius-pill); font-weight: 500; padding: 0 1.1em; transition: transform 160ms var(--ease-out), background-color 160ms ease, border-color 160ms ease, color 160ms ease; }
+.btn:active { transform: scale(0.97); }
+.btn-gold { background: var(--color-accent); color: var(--color-on-accent); box-shadow: 0 1px 0 rgb(255 255 255 / 0.5) inset, 0 6px 18px -8px rgb(111 82 15 / 0.55); }
+.btn-gold:hover { background: var(--color-accent-hover); }
+.btn-gold:disabled, .btn-gold[aria-disabled="true"] { box-shadow: none; }
+.btn-ghost { border-color: rgb(31 26 20 / 0.28); }
+:root[data-theme="dark"] .btn-ghost { border-color: rgb(246 239 227 / 0.3); }
+.btn-ghost:hover { background: rgb(255 255 255 / 0.5); border-color: var(--color-ink); }
+:root[data-theme="dark"] .btn-ghost:hover { background: rgb(255 255 255 / 0.06); }
+.btn-sm { padding: 0 0.85em; font-size: var(--text-sm); }
+.btn-quiet { padding-inline: 0.75em; }
+.btn-icon, .btn-icon.btn-sm { padding: 0; }
+
+/* ---------- cards: white, rounded, a whisper of shadow ---------- */
+.panel, .office-card {
+  background: var(--color-card); border: 1px solid var(--color-rule-2); border-radius: var(--radius-md); box-shadow: var(--shadow-whisper);
+}
+.switcher-menu { border-radius: var(--radius-md); border-color: var(--color-rule-2); }
+.count { color: var(--color-on-accent); }
+.chat-chip, .suggest-chip { border-radius: var(--radius-pill); }

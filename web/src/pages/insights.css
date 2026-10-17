@@ -14,7 +14,7 @@
 .sample-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--color-warn); }
 
 /* Today's note: one line, the rest one tap away */
-.note { display: grid; gap: 6px; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); background: var(--color-paper-2); }
+.note { display: grid; gap: 6px; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); background: var(--color-card); border: 1px solid var(--color-rule-2); box-shadow: var(--shadow-whisper); }
 .note-head { display: flex; align-items: center; gap: 8px; }
 .note-title { font-family: var(--font-display); font-size: var(--text-md); font-weight: 500; line-height: 1.2; }
 /* one line; the whole note is behind "Read it all" */

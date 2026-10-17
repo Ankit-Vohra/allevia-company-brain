@@ -4,7 +4,7 @@ dialog.bsheet {
   border-radius: 16px 16px 0 0; background: var(--color-card); color: var(--color-ink); box-shadow: var(--shadow-lift); overflow: hidden;
 }
 dialog.bsheet[open] { display: flex; flex-direction: column; animation: bsheet-up var(--dur-long) var(--ease-out); }
-dialog.bsheet::backdrop { background: oklch(20% 0.06 270 / 0.32); animation: fade-in var(--dur-short) var(--ease-out); }
+dialog.bsheet::backdrop { background: oklch(24% 0.025 50 / 0.32); animation: fade-in var(--dur-short) var(--ease-out); }
 .bsheet-top { position: relative; display: flex; justify-content: center; align-items: center; min-height: 36px; padding: 6px 8px 0; flex: none; }
 .bsheet-grip { width: 40px; height: 4px; border-radius: 2px; background: var(--color-rule); }
 .bsheet-close { position: absolute; right: 8px; top: 6px; }
