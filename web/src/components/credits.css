@@ -15,7 +15,8 @@
   .credits-chip { height: 26px; padding: 0 8px; }
   .credits-chip-left { display: none; }
 }
-@media (max-width: 340px) {
+/* on a phone the number alone (the layers icon and the Plan page say what it is), so the business name has room */
+@media (max-width: 420px) {
   .credits-chip-word { display: none; }
 }
 
