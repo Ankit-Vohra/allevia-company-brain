@@ -59,7 +59,9 @@ pricing goes public.
 ### 3.2 Database
 
 **Today:**
-- FalkorDB Cloud free tier: 100 MB, 64 MB used, no TLS, no backups the provider keeps.
+- Since 17 October the live demo runs on **self-hosted FalkorDB 6.0.2** on the EC2 server, with a password, a nightly
+  backup to S3 and daily disk snapshots. The Mac's development copy still uses the FalkorDB Cloud free tier (100 MB, no
+  TLS, no provider backups).
 - About 13 MB for an active business (aamdani), and it grows every day.
 - 100 active businesses would need about **1.5 to 2 GB**.
 
