@@ -19,7 +19,7 @@ import type { ConnectionsPort } from "../connections/service.js";
 import type { PublishRuntime } from "../publish/executor.js";
 import { toDto } from "../publish/dto.js";
 import { postOfApproval } from "../publish/record.js";
-import { demoConnections, isSalesDemo } from "../sales/demo.js";
+import { demoPortFor, isSalesDemo } from "../sales/demo.js";
 import type { LlmRunner } from "../ingest/llm.js";
 import { loadConfig } from "../config.js";
 import type { GraphHandle } from "../graph/client.js";
@@ -66,7 +66,7 @@ export function executorsFor(tenant: string, a: ActionOpts = {}): Omit<ExecutorD
   return {
     dryRun: !(a.live ?? loadConfig().actionsLive),
     ...(a.gh ? { gh: a.gh } : {}), ...(a.http ? { http: a.http } : {}), ...(a.drafter ? { drafter: a.drafter } : {}), ...(a.config ? { config: a.config } : {}),
-    ...(a.connections?.(tenant) ? { connections: a.connections(tenant)! } : isSalesDemo(tenant) ? { connections: demoConnections(tenant) } : {}),
+    ...(a.connections?.(tenant) ? { connections: a.connections(tenant)! } : isSalesDemo(tenant) ? { connections: demoPortFor(tenant) } : {}),
     ...(a.publish?.(tenant) ? { publish: a.publish(tenant)! } : {}),
   };
 }

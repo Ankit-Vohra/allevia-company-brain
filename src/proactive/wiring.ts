@@ -25,7 +25,7 @@ import { cleanVoice } from "../studio/caption.js";
 import { loadStudioContext } from "../studio/context.js";
 import { VisionError, visionForGraph, type VisionRunner } from "../studio/vision.js";
 import type { CreativeDeps } from "../creative/ports.js";
-import { demoConnections, isSalesDemo } from "../sales/demo.js";
+import { demoPortFor, isSalesDemo } from "../sales/demo.js";
 import { proposeTimes } from "../sales/times.js";
 import type { Drafters, TextJob, TextKind } from "./draft.js";
 import { runStandup, type Standup, type StandupOpts } from "./standup.js";
@@ -130,7 +130,7 @@ export function productionDrafters(g: GraphHandle, tenant: string, businessId: s
 export function standupTimes(g: GraphHandle, tenant: string): NonNullable<Drafters["times"]> {
   return async (job) => {
     const [b] = await g.roQuery<{ tz: string | null }>("MATCH (b:Entity:Business) RETURN b.timeZone AS tz ORDER BY b.id LIMIT 1").catch(() => []);
-    const port = isSalesDemo(tenant) ? demoConnections(tenant) : (await import("../connections/production.js")).productionConnections().port(tenant);
+    const port = isSalesDemo(tenant) ? demoPortFor(tenant) : (await import("../connections/production.js")).productionConnections().port(tenant);
     return proposeTimes(port, job.now, { tz: job.timeZone ?? b?.tz ?? "UTC" });
   };
 }
