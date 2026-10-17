@@ -27,7 +27,10 @@ export default function BrainLive({ tenant, height = 220 }: BrainLiveProps) {
     if (!map.data) return undefined;
     const have = new Set(map.data.nodes.map((n) => n.id));
     const extra = reading.nodes.filter((n) => !have.has(n.id)).map((n) => ({ ...n, rank: 0.05 }));
-    return pickForMap([...map.data.nodes, ...extra], [...map.data.edges, ...reading.edges], { cap: SMALL + extra.length, hidden: HIDDEN_AT_FIRST, keep: new Set(reading.ids) });
+    const picked = pickForMap([...map.data.nodes, ...extra], [...map.data.edges, ...reading.edges], { cap: SMALL + extra.length, hidden: HIDDEN_AT_FIRST, keep: new Set(reading.ids) });
+    // only things with a link: a lone dot far from the rest makes the fit zoom out until the brain is a small knot
+    const linked = new Set(picked.edges.flatMap((e) => [e.from, e.to]));
+    return { ...picked, nodes: picked.nodes.filter((n) => linked.has(n.id) || reading.ids.includes(n.id)) };
   }, [map.data, reading]);
   const centre = useMemo(() => (map.data ? centreOf(map.data.nodes) : undefined), [map.data]);
 
@@ -54,7 +57,7 @@ export default function BrainLive({ tenant, height = 220 }: BrainLiveProps) {
               dark={effectiveTheme === "dark"}
               reducedMotion={reducedMotion}
               fitPadding={14}
-              maxFitZoom={1.6}
+              maxFitZoom={5}
               ariaLabel=""
             />
           </Suspense>
