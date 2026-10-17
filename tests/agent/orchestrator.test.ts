@@ -626,7 +626,7 @@ describe("runTurn: failures and proposals", () => {
     });
     const out = await run();
     expect(out.ok).toBe(false);
-    expect(events.find(is("error", "chief-of-staff"))).toMatchObject({ message: "The Chief of Staff could not write the answer: overloaded." });
+    expect(events.find(is("error", "chief-of-staff"))).toMatchObject({ message: "The Chief of Staff could not write the answer just now." }); // the cause ("overloaded") stays in the server log
     expect(out.answer).toContain("**Techie:** The sitemap is broken [[system:sitemap]].");
     expect(events.filter(is("text")).map((e) => (e as { delta: string }).delta).join("")).toBe(out.answer);
   });

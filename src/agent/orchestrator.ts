@@ -1159,7 +1159,9 @@ class Turn {
     // The Chief failed: answer with what the desks found, so the owner isn't left with nothing.
     const findings = this.planFindings(plan);
     const who = chief.id === CHIEF ? "The Chief of Staff" : chief.name;
-    this.emit({ type: "error", agent: chief.id, message: `${who} could not write the answer${failure ? `: ${failure}` : ""}.` });
+    // the cause is for the server log, never for the owner (it once showed "Native CLI binary for linux-arm64 not found")
+    if (failure) console.error(`[agent] ${who} could not write the answer: ${failure}`);
+    this.emit({ type: "error", agent: chief.id, message: `${who} could not write the answer just now.` });
     const fallback = findings.length
       ? `I couldn't finish writing the full answer. Here is what the team found:\n\n${findings.map((f) => `**${nameOf(f.agent)}:** ${f.text}`).join("\n\n")}`
       : "I couldn't answer this one just now. Please ask again in a moment.";
