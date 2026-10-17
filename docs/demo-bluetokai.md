@@ -64,6 +64,20 @@ Also worth asking: "Reply to the wholesale enquiry" (Deal Closer reads the sampl
 calendar, waits for OK), "How many orders did Shopify show this week?" (sample Shopify), "Who complained about payments?".
 Approving the email or a meeting is a dry run unless `ALLEVIA_ACTIONS_LIVE=1`, and even then it reaches nobody.
 
+### Remember a meeting (sample call)
+
+In Chat, **Remember a meeting** (top right, whole team) fills the box with the sample tasting call with Kettle & Crumb
+(`shared/sample-meeting.ts`: made-up people at `.example` addresses, the roaster's side a role, marked as a sample in its first
+line). Send it, or paste the same text on Discord after "Remember this meeting:". What to look for:
+
+- Memory Keeper reads it; Taskmaster files four tasks with owners and due dates; Deal Closer's follow-up email to Ritika and
+  Aman waits for your OK (a dry run on approval).
+- The answer: what was saved as counts, the four decisions, the tasks with owners, the card; "saved as sample data"; the two
+  email addresses taken out of the saved text. "How we got this" shows the notes, the meeting, its decisions and tasks.
+- It links into what is already there: Ritika from the sample inbox (her lead and deal), the dark roast product when the crawl
+  found one, the business.
+- Then ask "What did we decide with Kettle & Crumb?" and "What's pending from the meeting on 16 October?".
+
 ## Building it on a fresh server
 
 On the server (its own FalkorDB on 127.0.0.1:6390, Claude logged in, Chromium installed), from the repository:

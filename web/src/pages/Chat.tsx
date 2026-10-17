@@ -13,7 +13,7 @@ import { useThread } from "../components/chat/useThread";
 import { Icon } from "../components/Icon";
 import { MicButton } from "../components/MicButton";
 import { APPROVALS_CHANGED } from "../components/TopBar";
-import { CHIEF, TEAM, type Who, chatPath, dotOf, dotWords, startersFor, threadsFor, whoFrom, whoOfThread, workingNow } from "../lib/chat";
+import { CHIEF, TEAM, type Who, chatPath, dotOf, dotWords, meetingPrefill, startersFor, threadsFor, whoFrom, whoOfThread, workingNow } from "../lib/chat";
 import { groupThreads } from "../lib/group";
 import { useMedia } from "../lib/useMedia";
 import { useApp, useAsync } from "../state/app";
@@ -147,6 +147,12 @@ export default function ChatPage() {
   // keep the newest words in view while a reply streams
   const scrollRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // "Remember a meeting": the request goes in the box with room to paste the notes or the transcript under it
+  const rememberMeeting = () => {
+    setText((t) => (t.trim() ? `${meetingPrefill("")}${t}` : meetingPrefill(tenant.id)));
+    requestAnimationFrame(() => { const el = inputRef.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
+  };
   const last = thread.views[thread.views.length - 1];
   useEffect(() => {
     const el = scrollRef.current;
@@ -213,6 +219,11 @@ export default function ChatPage() {
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setProfile(true)}>Profile</button>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCustomise(true)} disabled={!person}><Icon name="pen" size={14} /> Customise</button>
               </>
+            )}
+            {who === TEAM && !getPublicMode() && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={rememberMeeting} disabled={thread.running} title="Paste meeting notes or a transcript: the team saves what was agreed, files the tasks and drafts the follow-up">
+                <Icon name="file" size={14} /> Remember a meeting
+              </button>
             )}
             {who === TEAM && <Link to="/team" className="btn btn-quiet btn-sm">Manage</Link>}
           </div>
@@ -285,7 +296,7 @@ export default function ChatPage() {
           <form className="chat-composer" onSubmit={onSubmit} aria-label={who === TEAM ? "Ask your team" : `Message ${nameOf(who)}`}>
             <label htmlFor="chat-q" className="visually-hidden">{who === TEAM ? "Your message to the team" : `Your message to ${nameOf(who)}`}</label>
             <textarea
-              id="chat-q" className="chat-input" rows={1} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
+              id="chat-q" ref={inputRef} className="chat-input" rows={1} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
               placeholder={who === TEAM ? (sessionId ? "Ask a follow-up…" : `Ask ${tenant.name}'s team…`) : `Message ${nameOf(who)}…`}
               disabled={thread.running}
             />
