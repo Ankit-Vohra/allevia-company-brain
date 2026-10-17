@@ -1,0 +1,22 @@
+/* The microphone on the ask box and the chat box: a quiet round button; while listening it turns gold and breathes. */
+.mic { position: relative; display: inline-grid; flex: none; }
+.mic-btn {
+  position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid transparent; background: transparent; color: var(--color-muted); cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+}
+.mic-btn:hover:not(:disabled) { color: var(--color-ink); background: var(--color-paper-2); }
+.mic-btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.mic-btn:disabled { opacity: 0.45; cursor: default; }
+.mic-btn.is-listening { color: var(--color-accent-ink); background: var(--color-accent-soft); border-color: var(--color-accent); }
+.mic-btn.is-listening::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--color-accent);
+  animation: mic-breathe 1.4s var(--ease-out) infinite; pointer-events: none;
+}
+.mic-dot { position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--color-bad); }
+.mic-problem {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 5; width: max-content; max-width: 240px; padding: 6px 10px; border-radius: 8px;
+  background: var(--color-ink); color: var(--color-paper); font-size: var(--text-xs); line-height: 1.35; box-shadow: var(--shadow-whisper);
+}
+@keyframes mic-breathe { 0% { opacity: 0.8; transform: scale(0.92); } 100% { opacity: 0; transform: scale(1.25); } }
+@media (prefers-reduced-motion: reduce) { .mic-btn.is-listening::after { animation: none; opacity: 0.6; } }

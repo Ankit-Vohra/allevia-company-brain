@@ -11,6 +11,7 @@ import { ChatTurn } from "../components/chat/ChatTurn";
 import { Customise } from "../components/chat/Customise";
 import { useThread } from "../components/chat/useThread";
 import { Icon } from "../components/Icon";
+import { MicButton } from "../components/MicButton";
 import { APPROVALS_CHANGED } from "../components/TopBar";
 import { CHIEF, TEAM, type Who, chatPath, dotOf, dotWords, startersFor, threadsFor, whoFrom, whoOfThread, workingNow } from "../lib/chat";
 import { groupThreads } from "../lib/group";
@@ -288,6 +289,7 @@ export default function ChatPage() {
               placeholder={who === TEAM ? (sessionId ? "Ask a follow-up…" : `Ask ${tenant.name}'s team…`) : `Message ${nameOf(who)}…`}
               disabled={thread.running}
             />
+            <MicButton locale={tenant.locale} value={text} onText={setText} disabled={thread.running} />
             {thread.running && thread.liveRun ? (
               <button type="button" className="btn btn-ghost" onClick={() => runStore.stop(thread.liveRun!.key)} disabled={thread.liveRun.stopping}>
                 <Icon name="stop" size={14} /> {thread.liveRun.stopping ? "Stopping…" : "Stop"}

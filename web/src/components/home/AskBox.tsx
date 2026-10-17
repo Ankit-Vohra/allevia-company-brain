@@ -1,11 +1,13 @@
 // Home's ask box: one line to start a chat with the whole team. It is the same chat as /chat (the question is sent at once
-// and the conversation opens there); on Discord the same thing is /ask.
+// and the conversation opens there); on Discord the same thing is /ask. The microphone (where the browser can listen)
+// writes the spoken question into the box.
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { askPath } from "../../lib/chat";
 import { Icon } from "../Icon";
+import { MicButton } from "../MicButton";
 
-export function AskBox({ suggestions }: { suggestions: string[] }) {
+export function AskBox({ suggestions, locale }: { suggestions: string[]; locale?: string | undefined }) {
   const [text, setText] = useState("");
   const nav = useNavigate();
   const go = (q: string) => {
@@ -22,6 +24,7 @@ export function AskBox({ suggestions }: { suggestions: string[] }) {
           id="hm-ask-q" className="hm-ask-input" placeholder="Ask your team anything…" value={text} autoComplete="off" enterKeyHint="send"
           onChange={(e) => setText(e.target.value)}
         />
+        <MicButton locale={locale} value={text} onText={setText} />
         <button type="submit" className="btn btn-gold hm-ask-go" disabled={!text.trim()}>Ask <Icon name="send" size={16} /></button>
       </form>
       {suggestions.length > 0 && (
