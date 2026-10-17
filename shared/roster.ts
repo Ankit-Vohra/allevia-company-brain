@@ -15,7 +15,7 @@ export interface DepartmentDef {
 
 export interface AgentDef {
   id: string;
-  name: string;            // a person-like name so the office reads as a team
+  name: string;            // a role name that says the job ("Data Detective"), shown with the department beside it
   title: string;
   department: string;      // DepartmentDef.id
   persona: string;         // one line: how it works
@@ -48,72 +48,72 @@ export const DEPARTMENTS: DepartmentDef[] = [
 
 export const AGENTS: AgentDef[] = ([
   {
-    id: "chief-of-staff", name: "Meera", title: "Chief of Staff", department: "leadership", model: "sonnet",
+    id: "chief-of-staff", name: "The Chief", title: "Chief of Staff", department: "leadership", model: "sonnet",
     persona: "Reads the request, checks what we already know, sends work to the right people, then writes one clear answer with sources.",
     handles: ["every request", "morning brief", "final answers"],
     toolkits: ["lookup", "explore", "memory", "answer", "proposals", "creative", "brand", "copywriting", "posting", "research", "calendar", "inbox", "connections"],
     sprite: { skin: "#C68B59", hair: "#1B1B2F", shirt: "#1F2A6B", accent: "#C8A23D" },
   },
   {
-    id: "coe-lead", name: "Isha", title: "CoE Lead", department: "coe", model: "sonnet",
+    id: "coe-lead", name: "Number Cruncher", title: "CoE Lead", department: "coe", model: "sonnet",
     persona: "Owns the numbers: how the business is doing overall, trends, and whether a figure is real before it reaches the owner.",
     handles: ["how is the business doing", "key numbers", "weekly numbers", "number checks"],
     toolkits: ["lookup", "sql", "numbers", "live-analytics", "connections"], extras: ["important"], reviews: ["data-analyst", "growth-marketer"],
     sprite: { skin: "#8D5524", hair: "#2B1B17", shirt: "#C8A23D", accent: "#1F2A6B" },
   },
   {
-    id: "data-analyst", name: "Kabir", title: "Data Analyst", department: "analytics", model: "sonnet",
+    id: "data-analyst", name: "Data Detective", title: "Data Analyst", department: "analytics", model: "sonnet",
     persona: "Joins Search Console, GA4, Instagram and signups to explain why a number moved.",
     handles: ["traffic", "signups", "where people drop off", "search performance", "where customers come from", "does AI know us", "keywords to rank for"],
     toolkits: ["numbers", "sql", "seo", "website", "keywords", "content-stats", "research", "public-profiles", "competitors", "live-analytics", "live-ads", "connections"], extras: ["find_paths", "search"],
     sprite: { skin: "#E0AC69", hair: "#3B2F2F", shirt: "#3D5A98", accent: "#E8E8F0" },
   },
   {
-    id: "growth-marketer", name: "Rohan", title: "Growth Marketer", department: "marketing", model: "sonnet",
+    id: "growth-marketer", name: "Growth Hacker", title: "Growth Marketer", department: "marketing", model: "sonnet",
     persona: "Turns evidence into channel, campaign and budget moves, and proposes them for approval.",
     handles: ["ads", "budget", "channels", "campaigns", "SEO strategy"],
     toolkits: ["ads", "seo", "website", "content-stats", "playbooks", "numbers", "proposals", "research", "competitors", "public-profiles", "live-analytics", "live-ads", "connections"], extras: ["search"],
     sprite: { skin: "#C68B59", hair: "#0F0F0F", shirt: "#B5542D", accent: "#F2D16B" },
   },
   {
-    id: "content-strategist", name: "Tara", title: "Content Strategist", department: "content", model: "sonnet",
+    id: "content-strategist", name: "Miss Influencer", title: "Content Strategist", department: "content", model: "sonnet",
     persona: "Writes briefs from who the audience is, what they need, and which hooks actually worked for this business.",
     handles: ["reel ideas", "post ideas", "content briefs", "content calendar"],
     toolkits: ["content-stats", "playbooks", "lookup", "proposals", "copywriting", "posting", "brand", "research", "public-profiles", "competitors", "connections"], extras: ["neighbors"],
     sprite: { skin: "#F1C27D", hair: "#5A3825", shirt: "#A23B72", accent: "#FFFFFF" },
   },
   {
-    id: "copy-editor", name: "Dev", title: "Brand & Copy Editor", department: "content", model: "haiku",
+    id: "copy-editor", name: "Wordsmith", title: "Brand & Copy Editor", department: "content", model: "haiku",
     persona: "Holds every draft to the brand's voice rules and strips AI-sounding writing; Hindi or English.",
     handles: ["voice check", "copy polish"], reviews: ["content-strategist"],
     toolkits: ["playbooks", "lookup"],
     sprite: { skin: "#8D5524", hair: "#1B1B1B", shirt: "#6B2E5F", accent: "#C8A23D" },
   },
   {
-    id: "fact-checker", name: "Nisha", title: "Fact Checker", department: "content", model: "haiku",
+    id: "fact-checker", name: "Fact Checker", title: "Fact Checker", department: "content", model: "haiku",
     persona: "Checks every claim in a draft against what we know about the business; anything unsupported goes back.",
     handles: ["claim checks"], reviews: ["content-strategist", "growth-marketer", "data-analyst"],
     toolkits: ["lookup", "sql"], extras: ["find_paths"],
     sprite: { skin: "#E0AC69", hair: "#2E1A12", shirt: "#4A4E69", accent: "#F2E9E4" },
   },
   {
-    id: "tech-lead", name: "Arjun", title: "Tech Lead", department: "tech", model: "sonnet",
+    id: "tech-lead", name: "Techie", title: "Tech Lead", department: "tech", model: "sonnet",
     persona: "Knows the systems and what depends on what; finds the technical cause and files the fix.",
     handles: ["site or app broken", "what breaks if", "technical SEO", "what to improve on the website", "issues"],
     toolkits: ["tech", "lookup", "sql", "seo", "website", "keywords", "proposals"], extras: ["neighbors"],
     sprite: { skin: "#C68B59", hair: "#1C1C1C", shirt: "#2D6A4F", accent: "#B7E4C7" },
   },
   // The founder, 2026-10-15: "we need a bigger tech team, one to observe issues from sentry and all who would be tech
-  // on call person". Zoya watches errors, crashes and uptime; Imran owns releases and the app stores.
+  // on call person". The Firefighter watches errors, crashes and uptime; the Bug Hunter owns releases and the app stores.
   {
-    id: "oncall-engineer", name: "Zoya", title: "On-call Engineer", department: "tech", model: "sonnet",
+    id: "oncall-engineer", name: "Firefighter", title: "On-call Engineer", department: "tech", model: "sonnet",
     persona: "Watches errors, crashes and uptime around the clock; triages each new issue, ties it to what changed, and tells the right person.",
     handles: ["app errors", "crashes", "Sentry error alerts", "is the app or site down", "incidents"],
     toolkits: ["numbers", "tech", "history", "lookup", "sql", "proposals"], extras: ["neighbors", "find_paths"],
     sprite: { skin: "#8D5524", hair: "#120E0B", shirt: "#1B4332", accent: "#F28482" },
   },
   {
-    id: "qa-release", name: "Imran", title: "QA & Release Manager", department: "tech", model: "haiku",
+    id: "qa-release", name: "Bug Hunter", title: "QA & Release Manager", department: "tech", model: "haiku",
     persona: "Owns every app release: build status, Play and App Store review, store ratings, and whether crashes went up or down after each release.",
     handles: ["releases", "app store review", "play store", "ratings", "did the last release break anything"],
     toolkits: ["numbers", "history", "lookup", "sql", "proposals"], extras: ["neighbors", "find_paths"],
@@ -121,21 +121,21 @@ export const AGENTS: AgentDef[] = ([
     sprite: { skin: "#E0AC69", hair: "#2B2B2B", shirt: "#40916C", accent: "#FFE8A3" },
   },
   {
-    id: "ops-manager", name: "Vikram", title: "Ops Manager", department: "ops", model: "haiku",
+    id: "ops-manager", name: "Taskmaster", title: "Ops Manager", department: "ops", model: "haiku",
     persona: "Tracks what's pending, who owns it, and what is waiting on the owner.",
     handles: ["what's pending", "who owns", "approvals", "follow-ups"],
     toolkits: ["ops", "lookup", "sql", "proposals", "calendar", "inbox", "connections"], extras: ["recall"],
     sprite: { skin: "#F1C27D", hair: "#3B3B3B", shirt: "#1D5C7A", accent: "#E0E1DD" },
   },
   {
-    id: "sales-lead", name: "Neel", title: "Sales Lead", department: "sales", model: "sonnet",
+    id: "sales-lead", name: "Deal Closer", title: "Sales Lead", department: "sales", model: "sonnet",
     persona: "Answers every new enquiry fast, offers real times from the calendar, books the call once you say OK, and follows up so no lead goes quiet.",
     handles: ["new enquiries", "leads", "reply to a customer", "book a call", "meetings", "follow up", "stalled deals", "pipeline"],
     toolkits: ["lookup", "sql", "proposals", "history", "sales", "calendar", "inbox", "connections"], extras: ["recall", "neighbors"],
     sprite: { skin: "#B5764A", hair: "#1A1210", shirt: "#2F7D4F", accent: "#F6E27F" },
   },
   {
-    id: "librarian", name: "Sara", title: "Librarian", department: "knowledge", model: "haiku",
+    id: "librarian", name: "Memory Keeper", title: "Librarian", department: "knowledge", model: "haiku",
     persona: "Traces decisions to their sources, knows who knows what, and keeps facts current.",
     handles: ["why did we", "who knows", "history", "sources"],
     toolkits: ["library", "history"], extras: ["find_paths", "search"],
@@ -143,17 +143,20 @@ export const AGENTS: AgentDef[] = ([
   },
 ] as AgentInput[]).map(staff);
 
-// How the owner reads a person on the team: the name and the job in a word or two ("Tara, content"). The owner never
-// reads "agent", "desk" or a roster id (docs/owner-words.md).
-const ROLE_WORD: Record<string, string> = {
-  "chief-of-staff": "chief of staff", "coe-lead": "numbers", "data-analyst": "analytics", "growth-marketer": "marketing",
-  "content-strategist": "content", "copy-editor": "writing", "fact-checker": "fact checks", "tech-lead": "tech",
-  "oncall-engineer": "on call", "qa-release": "app releases", "ops-manager": "follow-ups", "sales-lead": "sales", librarian: "records",
-};
-/** "Tara, content" for a roster id; the id itself when it is not on the roster. */
+// How the owner reads a person on the team: the role name and the department beside it ("Data Detective · Analytics"),
+// so which team someone is on is never a guess. The founder, 2026-10-17: "Now I don't know Data Detective belongs to which team."
+// The owner never reads "agent", "desk" or a roster id (docs/owner-words.md).
+/** The department a roster id works in ("Analytics"), or undefined when it is not on the roster. */
+export function teamOf(id: string): string | undefined {
+  const a = AGENTS.find((x) => x.id === id);
+  return a ? DEPARTMENTS.find((d) => d.id === a.department)?.name : undefined;
+}
+/** "Data Detective · Analytics" for a roster id; the id itself when it is not on the roster. */
 export function plainWho(id: string): string {
   const a = AGENTS.find((x) => x.id === id);
-  return a ? `${a.name}, ${ROLE_WORD[a.id] ?? a.title.toLowerCase()}` : id;
+  if (!a) return id;
+  const team = teamOf(id);
+  return team && team !== a.name ? `${a.name} · ${team}` : a.name;
 }
 
 export const agentById = (id: string): AgentDef | undefined => AGENTS.find((a) => a.id === id);

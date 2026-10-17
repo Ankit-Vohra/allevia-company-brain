@@ -14,18 +14,18 @@ describe("roster", () => {
 
   it("the tech department is three people: the Tech Lead, the On-call Engineer and the QA & Release Manager", () => {
     expect(AGENTS.filter((a) => a.department === "tech").map((a) => [a.id, a.name])).toEqual([
-      ["tech-lead", "Arjun"], ["oncall-engineer", "Zoya"], ["qa-release", "Imran"],
+      ["tech-lead", "Techie"], ["oncall-engineer", "Firefighter"], ["qa-release", "Bug Hunter"],
     ]);
     expect(agentById("qa-release")!.reviews).toEqual(["tech-lead"]);
     expect(agentById("oncall-engineer")!.handles).toContain("Sentry error alerts");
   });
 
-  it("the sales department is one person: Neel, the Sales Lead", () => {
+  it("the sales department is one person: Deal Closer, the Sales Lead", () => {
     const sales = AGENTS.filter((a) => a.department === "sales");
-    expect(sales.map((a) => [a.id, a.name, a.title])).toEqual([["sales-lead", "Neel", "Sales Lead"]]);
+    expect(sales.map((a) => [a.id, a.name, a.title])).toEqual([["sales-lead", "Deal Closer", "Sales Lead"]]);
     expect(DEPARTMENTS.find((d) => d.id === "sales")!.hue).toBe(120);
     expect(new Set(DEPARTMENTS.map((d) => d.hue)).size).toBe(DEPARTMENTS.length);
-    expect(plainWho("sales-lead")).toBe("Neel, sales");
+    expect(plainWho("sales-lead")).toBe("Deal Closer · Sales");
   });
 
   it("says its own size: counts and words come from the roster, so copy can't drift", () => {
