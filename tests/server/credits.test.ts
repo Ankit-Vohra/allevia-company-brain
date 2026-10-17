@@ -123,7 +123,7 @@ describe("server: credits and the plan (integration)", () => {
   });
 
   it("a teammate cannot see or change the plan; the owner's change waits for the Allevia team in test mode", async () => {
-    const asMember = <T>(fn: () => Promise<T>) => requestView.run({ publicView: false, role: "member", userId: "user:asha" }, fn);
+    const asMember = <T>(fn: () => T): T => requestView.run({ publicView: false, role: "member", userId: "user:asha" }, fn);
     for (const [path, body] of [["/api/mini/subscription/change", { plan: "pro" }], ["/api/mini/credits/packs", {}], ["/api/mini/subscription/pause", {}], ["/api/mini/subscription/cancel", {}]] as const) {
       const res = await asMember(() => post(app, path, body));
       expect(res.status, path).toBe(403);
