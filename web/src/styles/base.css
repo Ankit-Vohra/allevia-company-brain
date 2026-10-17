@@ -101,7 +101,7 @@ button.chip:hover { border-color: var(--color-ink-2); }
 .field {
   width: 100%; min-height: 40px; padding: 0.55em 0.8em;
   border: 1px solid var(--color-rule); border-radius: var(--radius-sm);
-  background: var(--color-card); color: var(--color-ink);
+  background: var(--color-card); color: var(--color-ink); font-weight: 400; /* inside a bold label, the text and its placeholder looked filled in */
   transition: border-color var(--dur-short) var(--ease-out), box-shadow var(--dur-short) var(--ease-out);
 }
 .field::placeholder { color: var(--color-muted); opacity: 1; }
