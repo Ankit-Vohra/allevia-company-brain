@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { Link } from "react-router";
 import { api, getMode } from "../api";
 import type { ConnectionRow, ConnectionsPage } from "../types-ext";
+import { Icon } from "./Icon";
 import "./connections.css";
 
 // The Connections list, on its own page and as the "Connect your tools" step of setting up a business. Calm and plain: a tool,
-// one line on what the team does with it, what it reads, what it may do (always after the owner's OK), "Read only" or "Read and
-// act", and one button. Nothing about tokens, scopes or APIs. docs/owner-words.md governs every word.
+// "Read only" or "Read and act", one line on what the team does with it, and one button. What it reads and what it may do
+// (always after the owner's OK) open from that line. Nothing about tokens, scopes or APIs. docs/owner-words.md governs every word.
 
 const GROUP_LABEL: Record<ConnectionRow["group"], string> = { google: "Google", meta: "Meta", commerce: "Commerce and money", customers: "Customers", team: "Team" };
 
@@ -21,6 +22,11 @@ const REASON: Record<string, string> = {
   no_refresh: "The sign-in didn't give us lasting access. Remove Allevia from the apps with access in your account, then connect again.",
   not_active: "That sign-in didn't finish. Try connecting again.",
 };
+
+/** The tools shown at once: the best fits, plus any tool that is connected or needs attention. The rest wait behind "N more tools". */
+const FIRST = 6;
+/** "Your team reads …" on every row is a repeated label: the row says "Reads …". */
+const blurbWords = (s: string) => { const t = s.replace(/^Your team\s+/i, ""); return t.charAt(0).toUpperCase() + t.slice(1); };
 
 /** When the owner comes back from a provider's page: which tool, and what to say. Reads and removes the address's ?connect=&result=. */
 export function comingBack(): { id: string; text: string } | undefined {
@@ -61,6 +67,7 @@ interface RowProps {
 function Row({ row, busy, live, focus, onConnect, onDisconnect, onSelect, onRead }: RowProps) {
   const ref = useRef<HTMLLIElement>(null);
   const [pick, setPick] = useState("");
+  const [open, setOpen] = useState(false);
   useEffect(() => { if (focus) ref.current?.scrollIntoView({ block: "center", behavior: "smooth" }); }, [focus]);
   const connected = row.state === "connected";
   const attention = row.state === "needs_attention";
@@ -72,9 +79,11 @@ function Row({ row, busy, live, focus, onConnect, onDisconnect, onSelect, onRead
           <h3 className="cx-name">{row.name}</h3>
           <span className={`cx-pill ${row.access === "read" ? "is-read" : "is-act"}`}>{row.access === "read" ? "Read only" : "Read and act"}</span>
         </div>
-        <p className="cx-line">{row.blurb}</p>
-        {row.reads[0] && <p className="cx-meta"><span>It reads</span> {row.reads[0]}</p>}
-        {row.acts[0] && <p className="cx-meta"><span>It may</span> {row.acts[0]}</p>}
+        <button type="button" className="cx-line" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          <span className="cx-line-text">{blurbWords(row.blurb)}</span><Icon name="chevron" size={14} className="cx-line-chev" />
+        </button>
+        {open && row.reads[0] && <p className="cx-meta"><span>It reads</span> {row.reads[0]}</p>}
+        {open && row.acts[0] && <p className="cx-meta"><span>It may</span> {row.acts[0]}</p>}
         {(connected || attention) && <p className={`cx-status ${attention ? "is-bad" : "is-ok"}`} role="status">{row.message}</p>}
         {!row.available && <p className="cx-status">{row.soon ? "Coming soon." : row.unavailableWords}</p>}
         {row.choose && (
@@ -90,7 +99,7 @@ function Row({ row, busy, live, focus, onConnect, onDisconnect, onSelect, onRead
         {row.id === "gmail" && connected && !row.extras?.length && (
           <p className="cx-meta"><button type="button" className="cx-link" disabled={busy} onClick={() => onConnect(row, { inbox: true })}>Let your team read your inbox too</button> (optional)</p>
         )}
-        {row.extras?.map((x) => <p key={x} className="cx-meta"><span>Also allowed</span> {x}</p>)}
+        {open && row.extras?.map((x) => <p key={x} className="cx-meta"><span>Also allowed</span> {x}</p>)}
       </div>
       <div className="cx-act">
         {!connected && !attention && row.available && (
@@ -114,7 +123,7 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
   const [q, setQ] = useState("");
   const [found, setFound] = useState<Array<{ id: string; name: string; description: string }> | null>(null);
   const [showMore, setShowMore] = useState(false);
-  const seen = useRef(0);
+  const seen = useRef(-1); // -1: tell the page the first count too, even when it is 0
 
   const load = useCallback(async () => {
     try {
@@ -171,13 +180,15 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
   const focusId = new URLSearchParams(typeof location === "undefined" ? "" : location.search).get("connect") ?? note?.id;
 
   // groups ordered by how well their best tool fits this business; tools inside keep the recommended order
-  const groups = useMemo(() => {
-    if (!data) return [];
+  const { groups, rest } = useMemo(() => {
+    if (!data) return { groups: [], rest: [] as ConnectionRow[] };
     const order = new Map(data.recommended.map((r, i) => [r.id, i]));
+    const shown = data.recommended.filter((r, i) => i < FIRST || r.state !== "not_connected" || r.id === focusId);
+    const rest = [...data.recommended.filter((r) => !shown.includes(r)), ...data.more];
     const by = new Map<ConnectionRow["group"], ConnectionRow[]>();
-    for (const r of data.recommended) by.set(r.group, [...(by.get(r.group) ?? []), r]);
-    return [...by.entries()].sort((a, b) => Math.min(...a[1].map((r) => order.get(r.id)!)) - Math.min(...b[1].map((r) => order.get(r.id)!)));
-  }, [data]);
+    for (const r of shown) by.set(r.group, [...(by.get(r.group) ?? []), r]);
+    return { groups: [...by.entries()].sort((a, b) => Math.min(...a[1].map((r) => order.get(r.id)!)) - Math.min(...b[1].map((r) => order.get(r.id)!))), rest };
+  }, [data, focusId]);
 
   const connectedRows = data ? [...data.recommended, ...data.more].filter((r) => r.state === "connected") : [];
   const never = data?.never ?? "We never post, send, spend or book without your OK, and your data stays in your own space.";
@@ -189,10 +200,8 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
   return (
     <div className={`cx cx-${variant}`}>
       {note?.text && <p className={`notice ${note.text.startsWith("Connected") ? "notice-ok" : ""}`} role="status">{note.text}</p>}
-      {!live && <p className="cx-quiet">This is the list of what your team can connect. Connecting works in the live app.</p>}
-      <section className="cx-never" aria-label="What we never do">
-        <p><b>What we never do.</b> {never} <span>Disconnect any time.</span></p>
-      </section>
+      <p className="cx-never"><Icon name="check" size={15} /><span>{never} <span className="cx-never-tail">Disconnect any time.</span></span></p>
+      {!live && <p className="cx-quiet">Connecting works in the live app.</p>}
       {error && <p className="notice notice-bad" role="alert">{error}</p>}
       {waiting.size > 0 && <p className="cx-quiet" role="status">Waiting for you to finish in the other tab. This updates by itself.</p>}
 
@@ -209,10 +218,10 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
         </section>
       ))}
 
-      {data && data.more.length > 0 && (
+      {rest.length > 0 && (
         <section className="cx-group">
-          <button type="button" className="cx-more" aria-expanded={showMore} onClick={() => setShowMore((s) => !s)}>{showMore ? "Fewer tools" : `${data.more.length} more tools you can connect`}</button>
-          {showMore && <ul className="cx-list">{data.more.map((r) => <Row key={r.id} {...rowProps(r)} />)}</ul>}
+          <button type="button" className="cx-more" aria-expanded={showMore} onClick={() => setShowMore((s) => !s)}>{showMore ? "Fewer tools" : `${rest.length} more tools`}</button>
+          {showMore && <ul className="cx-list">{rest.map((r) => <Row key={r.id} {...rowProps(r)} />)}</ul>}
         </section>
       )}
 
@@ -239,7 +248,7 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
 
       {variant === "page" && data && data.starters.length > 0 && (
         <section className="cx-group" aria-labelledby="cx-starters">
-          <h2 id="cx-starters" className="cx-group-h">Your team can do these now</h2>
+          <h2 id="cx-starters" className="cx-group-h">Try these now</h2>
           <ul className="cx-chips">
             {data.starters.map((s) => (
               <li key={s.id}><Link className="chat-chip" to={`/chat?q=${encodeURIComponent(s.ask)}`} title={s.ask}>{s.label}{s.needsOk ? <span className="cx-ok"> · after your OK</span> : null}</Link></li>

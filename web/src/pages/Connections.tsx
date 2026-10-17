@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ConnectionsPanel } from "../components/ConnectionsPanel";
 import { useApp } from "../state/app";
 import "./owner-page.css";
@@ -5,14 +6,14 @@ import "./owner-page.css";
 /** Connections: the tools the team works with. One calm list; connecting is one tap; disconnecting is always there. */
 export default function ConnectionsPage() {
   const { tenant } = useApp();
+  const [connected, setConnected] = useState<number | null>(null);
   return (
-    <div className="owner-page">
+    <div className="owner-page is-tight">
       <header className="owner-head">
-        <p className="owner-eyebrow">Connections</p>
         <h1 className="owner-title">Your tools</h1>
-        <p className="owner-lede">Your team works better with your real numbers and your real tools. Connect what you use. Reading is straight away; anything that sends, posts, books or spends waits for your OK.</p>
+        <p className="owner-quiet">{connected === null ? " " : connected === 0 ? "None connected yet · connect what you use" : `${connected} connected`}</p>
       </header>
-      <ConnectionsPanel tenantId={tenant.id} variant="page" />
+      <ConnectionsPanel tenantId={tenant.id} variant="page" onChanged={setConnected} />
     </div>
   );
 }
