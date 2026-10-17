@@ -1,5 +1,5 @@
 // A fake Composio: makes connect links, holds connected accounts per user id, runs scripted tools, records every call.
-import type { ComposioAccount, ComposioClient, ComposioToolInfo, ComposioToolkitInfo, ProxyRequest, ProxyResponse } from "../../src/connections/composio.js";
+import type { ComposioAccount, ComposioClient, ComposioToolInfo, ComposioToolkitInfo, ProxyRequest, ProxyResponse, ToolkitAuth } from "../../src/connections/composio.js";
 
 export class FakeComposio implements ComposioClient {
   calls: Array<{ op: string; args: unknown }> = [];
@@ -14,7 +14,36 @@ export class FakeComposio implements ComposioClient {
     override set(k: string, v: (args: Record<string, unknown>, n: number) => unknown) { counts.delete(k); return super.set(k, v); }
   })())(this.perTool);
   private n = 0;
-  async authConfigId(toolkit: string): Promise<string> { this.calls.push({ op: "authConfigId", args: toolkit }); return `ac_${toolkit}`; }
+  async authConfigId(toolkit: string, custom?: string): Promise<string> {
+    this.calls.push({ op: "authConfigId", args: custom ? { toolkit, custom } : toolkit });
+    const e = this.failNext.get("authConfigId");
+    if (e) { this.failNext.delete("authConfigId"); throw e; }
+    return `ac_${toolkit}`;
+  }
+  /** toolkit slug -> how it signs in; a toolkit not listed has Composio's own sign-in (managed OAuth). */
+  auth = new Map<string, ToolkitAuth | null>();
+  async authInfo(toolkit: string): Promise<ToolkitAuth | null> {
+    this.calls.push({ op: "authInfo", args: toolkit });
+    return this.auth.has(toolkit) ? this.auth.get(toolkit)! : { name: toolkit, managed: ["OAUTH2"], schemes: [{ mode: "OAUTH2", needsConfig: false, fields: [] }] };
+  }
+  /** Keys a toolkit accepts (toolkit slug -> the values that work); a toolkit not listed takes any key. */
+  goodKeys = new Map<string, Record<string, string>>();
+  /** op -> an Error the next call to it throws (Composio itself failing). */
+  failNext = new Map<string, Error>();
+  async createAccount(o: { authConfigId: string; userId: string; scheme: string; values: Record<string, string> }) {
+    this.calls.push({ op: "createAccount", args: { authConfigId: o.authConfigId, userId: o.userId, scheme: o.scheme, fields: Object.keys(o.values) } }); // the fake keeps no key either
+    this.received.push(o.values);
+    const e = this.failNext.get("createAccount");
+    if (e) { this.failNext.delete("createAccount"); throw e; }
+    const toolkit = o.authConfigId.replace(/^ac_/, "");
+    const want = this.goodKeys.get(toolkit);
+    const ok = !want || Object.entries(want).every(([k, v]) => o.values[k] === v);
+    const id = `ca_${++this.n}`;
+    this.accounts.set(id, { id, status: ok ? "ACTIVE" : "FAILED", userId: o.userId, toolkit });
+    return { id, status: ok ? "ACTIVE" : "FAILED" };
+  }
+  /** What each createAccount was given, so a test can check the key reached Composio (and only Composio). */
+  received: Array<Record<string, string>> = [];
   async link(o: { authConfigId: string; userId: string; callbackUrl: string }) {
     this.calls.push({ op: "link", args: o });
     const accountId = `ca_${++this.n}`;

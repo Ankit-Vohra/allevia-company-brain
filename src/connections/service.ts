@@ -3,6 +3,7 @@
 //   list / view          what each connection says to an owner (state, one line, what the team does with it)
 //   connect / complete   the owner's trip to the provider and back; the `state` that carries it is signed, expires in 10 minutes,
 //                        works once, names the business and the connection, and holds a PKCE verifier on the server only
+//   connectWithKey       a tool with no sign-in page: the key the owner pasted is passed on, never kept, logged or shown again
 //   connectLink / redeemLink   a short one-time address (/c/<code>) for Discord: it names the business and the connection and works once
 //   port                 what a tool or an executor uses: `google(id, op, fn)` runs a call for one business with the token handled,
 //                        the call audited and a refusal in plain words when the connection is missing or stopped working
@@ -15,7 +16,7 @@ import type { SealedVault } from "../connectors/google/store.js";
 import type { GraphHandle } from "../graph/client.js";
 import type { AuditLog } from "./audit.js";
 import {
-  GROUP_ORDER, NeedsAttentionError, NotAllowedError, NotConfiguredError, NotConnectedError,
+  ConnectProblem, GROUP_ORDER, NeedsAttentionError, NotAllowedError, NotConfiguredError, NotConnectedError,
   type CompleteOutcome, type ConnectionHealth, type ConnectionStatus, type ConnectionView, type Connector, type ConnectorCtx,
 } from "./types.js";
 
@@ -174,6 +175,24 @@ export class ConnectionsService {
     const start = await c.connect(ctx, options);
     await ctx.audit("connect started", true);
     return start;
+  }
+
+  /** Connects a tool with the key the owner pasted on the sheet. The key goes to the connector and on to the provider's service;
+   *  the audit line says only that it happened, never what was pasted. */
+  async connectWithKey(tenant: string, id: string, values: Record<string, string>): Promise<{ message: string; view: ConnectionView }> {
+    const { c, ctx } = await this.ctxFor(tenant, id);
+    const a = c.availability();
+    if (!a.ok) throw new NotConfiguredError(id, a);
+    if (!this.keyOk()) throw new NotConfiguredError(id, { ok: false, message: "Connecting isn't switched on yet.", missing: [{ setting: "ALLEVIA_CONNECTOR_KEY", words: "the key that locks stored connections (at least 32 characters)" }] });
+    if (!c.connectWithKey) throw new ConnectProblem(id, `${c.info.name} doesn't take a key here. Tap Connect and sign in instead.`);
+    try {
+      const r = await c.connectWithKey(ctx, values);
+      await ctx.audit("connected with a key", true);
+      return { message: r.message, view: await this.view(tenant, id) };
+    } catch (e) {
+      await ctx.audit("connected with a key", false, e instanceof ConnectProblem ? e.message : "failed");
+      throw e;
+    }
   }
 
   /** A short address that starts the connection when opened, once, for 10 minutes: for Discord, where there is no web session. */

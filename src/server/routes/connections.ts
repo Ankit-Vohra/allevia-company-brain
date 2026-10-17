@@ -2,7 +2,9 @@
 //   GET  /api/:t/connections                    every connection grouped as the page shows it, the recommended ones first and ordered for
 //                                               this kind of business, what is connected, and the everyday jobs that unlocks
 //   GET  /api/:t/connections/search?q=          Composio's wider catalogue, searched by words
-//   POST /api/:t/connections/:id/connect        { inbox?, returnTo? } -> { url }: where the owner says yes
+//   POST /api/:t/connections/:id/connect        { inbox?, returnTo? } -> { url, key? }: where the owner says yes; with `key`, a tool
+//                                               with no sign-in page, and the page asks for its key instead
+//   POST /api/:t/connections/:id/key            { values } -> { message, view }: the key the owner pasted, passed on to Composio
 //   POST /api/:t/connections/:id/select         { value }: which website, property or account, when there is more than one
 //   POST /api/:t/connections/:id/pull           read it now
 //   POST /api/:t/connections/:id/disconnect     forget it and ask the provider to revoke it
@@ -16,7 +18,8 @@ import type { Hono } from "hono";
 import { z } from "zod";
 import { entryById, fitOf, recommendedFor, startersFor, TOOLKIT_CATALOG } from "../../../shared/connection-map.js";
 import type { ConnectionsService } from "../../connections/service.js";
-import { GROUP_LABELS, GROUP_ORDER, NotConfiguredError, type ConnectionView } from "../../connections/types.js";
+import { ComposioError } from "../../connections/composio.js";
+import { ConnectProblem, GROUP_LABELS, GROUP_ORDER, NotConfiguredError, type ConnectionView } from "../../connections/types.js";
 import { HttpError, readBody, type RouteCtx } from "../http.js";
 import { requireOwner } from "../roles.js";
 import { businessProps } from "../reads.js";
@@ -40,6 +43,8 @@ async function sampleViews(w: ConnectionsWiring | null, tenant: string): Promise
 
 const Connect = z.object({ inbox: z.boolean().optional(), returnTo: z.enum(["connections", "onboard", "popup", "home"]).optional() });
 const Select = z.object({ value: z.string().trim().min(1).max(300) });
+// field name -> what the owner pasted; a few fields at most, each a key's length (the connector says which fields it needs)
+const Key = z.object({ values: z.record(z.string().regex(/^[A-Za-z0-9_]{1,60}$/), z.string().max(2000)).refine((v) => Object.keys(v).length <= 8, "has too many fields") });
 
 const RETURN_PATH: Record<string, string> = { connections: "/connections", onboard: "/onboard", popup: "/connected", home: "/" };
 
@@ -61,7 +66,10 @@ export function registerConnectionRoutes(app: Hono, ctx: RouteCtx, h: { connecti
       return await fn();
     } catch (e) {
       if (e instanceof NotConfiguredError) throw new HttpError(503, e.message);
+      if (e instanceof ConnectProblem) throw new HttpError(e.status, e.message);
       if (e instanceof Error && e.name === "ConnectError") throw new HttpError(400, e.message);
+      // anything Composio refused that a connector did not put in words: still a sentence, never "something went wrong on the server"
+      if (e instanceof ComposioError) throw new HttpError(400, `Composio couldn't do that just now (it answered ${e.status}). Try again in a minute.`);
       throw e;
     }
   };
@@ -109,6 +117,19 @@ export function registerConnectionRoutes(app: Hono, ctx: RouteCtx, h: { connecti
     known(w, id);
     const body = c.req.header("content-length") === "0" ? {} : await readBody(c, Connect).catch(() => ({}) as z.infer<typeof Connect>);
     return c.json(await wrap(() => w.service.connect(reg.slug, id, { ...(body.inbox ? { inbox: "1" } : {}), ...(body.returnTo ? { returnTo: body.returnTo } : {}) })));
+  });
+
+  // The paste-your-key sheet: the key goes from this request to Composio and nowhere else (not the log, not the store, not the answer).
+  app.post("/api/:t/connections/:id/key", async (c) => {
+    const { reg } = await ctx.tenantOf(c);
+    ctx.refuseInPublicMode();
+    requireOwner();
+    if (isSampleTenant(reg.slug)) throw new HttpError(400, SAMPLE_REFUSAL);
+    const w = await need();
+    const id = c.req.param("id");
+    known(w, id);
+    const body = await readBody(c, Key);
+    return c.json(await wrap(() => w.service.connectWithKey(reg.slug, id, body.values)));
   });
 
   app.post("/api/:t/connections/:id/select", async (c) => {
@@ -159,7 +180,7 @@ export function registerConnectionRoutes(app: Hono, ctx: RouteCtx, h: { connecti
       const { url } = await w.service.connect(link.tenant, link.id, { ...link.options, returnTo: "connections" });
       return c.redirect(url, 302);
     } catch (e) {
-      const words = e instanceof NotConfiguredError ? e.message : "We couldn't start that connection just now. Try again in a minute.";
+      const words = e instanceof NotConfiguredError || e instanceof ConnectProblem ? e.message : "We couldn't start that connection just now. Try again in a minute.";
       return c.html(page("Not ready yet", words), 503);
     }
   });

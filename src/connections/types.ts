@@ -57,8 +57,14 @@ export interface ConnectionStatus {
 
 export interface ConnectionHealth { ok: boolean; message: string }
 
-/** Where the owner goes to say yes. */
-export interface ConnectStart { url: string }
+/** One box on the "paste your key" sheet. `secret`: a password-type box. Never carries a value. */
+export interface KeyField { name: string; label: string; help?: string; secret: boolean }
+/** A tool with no sign-in page: the owner pastes its key on our sheet instead. `hint` is where the key is found. */
+export interface KeyForm { tool: string; fields: KeyField[]; hint?: string }
+
+/** Where the owner goes to say yes. With `key`, the web app opens the paste-your-key sheet instead (and `url` is our own
+ *  Connections page with that tool picked, for a link opened from Discord). */
+export interface ConnectStart { url: string; key?: KeyForm }
 
 export type CompleteResult = "connected" | "choose" | "denied" | "problem";
 export interface CompleteOutcome { result: CompleteResult; reason?: string }
@@ -85,6 +91,9 @@ export interface Connector {
   /** Finishes it when the provider sends the owner back. `data` is what beginAuth remembered. */
   complete(ctx: ConnectorCtx, params: Record<string, string>, data: Record<string, string>): Promise<CompleteOutcome>;
   select?(ctx: ConnectorCtx, value: string): Promise<void>;
+  /** For a tool connected with a key the owner pastes (see KeyForm): passes it on and keeps only the connection's id. The values
+   *  are never stored, logged or returned. Answers the line the owner reads ("Higgsfield connected: 1,200 credits left."). */
+  connectWithKey?(ctx: ConnectorCtx, values: Record<string, string>): Promise<{ message: string }>;
   /** Forgets the connection and asks the provider to revoke it. */
   disconnect(ctx: ConnectorCtx): Promise<void>;
   health(ctx: ConnectorCtx): Promise<ConnectionHealth>;
@@ -109,6 +118,14 @@ export class NotConfiguredError extends Error {
   override name = "NotConfiguredError";
   constructor(readonly connector: string, readonly availability: Availability) {
     super(availability.message);
+  }
+}
+/** Connecting did not work, for a reason the owner can read and often fix ("Higgsfield needs your API key"). `status` is the
+ *  HTTP status the page gets: 400 for what to do differently, 422 for a key the tool did not accept. */
+export class ConnectProblem extends Error {
+  override name = "ConnectProblem";
+  constructor(readonly connector: string, message: string, readonly status: 400 | 422 = 400) {
+    super(message);
   }
 }
 /** The grant is there, but the owner did not allow this particular thing (booking, reading the inbox). */

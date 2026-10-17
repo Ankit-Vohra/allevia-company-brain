@@ -22,7 +22,7 @@ import { noteConnection, type ConnectionEvent } from "./graph.js";
 import type { GoogleApis } from "./google/apis.js";
 import type { GoogleSession } from "./google/product.js";
 import {
-  NeedsAttentionError, NotConfiguredError, NotConnectedError,
+  ConnectProblem, NeedsAttentionError, NotConfiguredError, NotConnectedError,
   type Availability, type CompleteOutcome, type ConnectionHealth, type ConnectionStatus, type Connector, type ConnectorCtx, type ConnectorInfo, type ConnectStart,
 } from "./types.js";
 
@@ -33,9 +33,21 @@ export interface ComposioAccount { id: string; status: string; userId: string; t
 export interface ComposioToolInfo { slug: string; name: string; description: string; params?: { required: string[]; properties: string[] } }
 export interface ComposioToolkitInfo { slug: string; name: string; description: string }
 
+/** One thing the owner pastes to connect a toolkit that has no sign-in page (Composio's connected_account_initiation fields). */
+export interface KeyFieldSpec { name: string; label: string; description: string; secret: boolean }
+/** One way a toolkit signs in: `mode` is Composio's auth scheme (API_KEY, BEARER_TOKEN, OAUTH2, DCR_OAUTH ...). `needsConfig`: making
+ *  an auth config for it needs our own app's details (a client id), which no owner can paste. */
+export interface AuthScheme { mode: string; needsConfig: boolean; fields: KeyFieldSpec[]; hint?: string }
+/** How a toolkit authenticates: `managed` lists the schemes Composio runs its own app for (OAuth with nothing to set up). */
+export interface ToolkitAuth { name: string; managed: string[]; schemes: AuthScheme[]; hint?: string }
+
 export interface ComposioClient {
-  /** Finds or makes the auth config for a toolkit (Composio's own app until ours is approved). */
-  authConfigId(toolkit: string): Promise<string>;
+  /** Finds or makes the auth config for a toolkit: Composio's own app, or (`custom`: an auth scheme) one for keys the owner pastes. */
+  authConfigId(toolkit: string, custom?: string): Promise<string>;
+  /** How a toolkit signs in (GET /toolkits/{slug}); null when Composio does not know it. */
+  authInfo(toolkit: string): Promise<ToolkitAuth | null>;
+  /** Makes a connected account from what the owner pasted (an API key). The values go to Composio and nowhere else. */
+  createAccount(o: { authConfigId: string; userId: string; scheme: string; values: Record<string, string> }): Promise<{ id: string; status: string }>;
   link(o: { authConfigId: string; userId: string; callbackUrl: string }): Promise<{ redirectUrl: string; accountId: string }>;
   account(id: string): Promise<ComposioAccount | null>;
   deleteAccount(id: string): Promise<void>;
@@ -56,7 +68,8 @@ export interface ProxyResponse { status: number; data: unknown }
 
 export class ComposioError extends Error {
   override name = "ComposioError";
-  constructor(message: string, readonly status: number) {
+  /** `reason`: Composio's own short explanation, when it gave one; `slug`: its error code (e.g. ConnectedAccount_CredentialValidationRejected). */
+  constructor(message: string, readonly status: number, readonly reason?: string, readonly slug?: string) {
     super(message);
   }
 }
@@ -77,21 +90,55 @@ export function realComposioClient(apiKey: string, fetchFn: FetchFn = realFetch)
     if (!res.ok && res.status !== 404) {
       const err = asRecord(body.error);
       if (res.status === 403 && err.slug === "APIKey_InsufficientPermissions") throw new ComposioError("The Composio key does not have the access this needs (it needs write access to auth configs, connected accounts and tool execution). Make a key with full access in Composio and set it as COMPOSIO_API_KEY.", 403);
-      throw new ComposioError(`Composio answered ${res.status}.`, res.status);
+      const said = typeof err.message === "string" ? err.message.replace(/\s+/g, " ").trim().slice(0, 160) : "";
+      throw new ComposioError(`Composio answered ${res.status}.`, res.status, said || undefined, typeof err.slug === "string" ? err.slug : undefined);
     }
     return { status: res.status, body };
   };
   const str = (v: unknown) => (typeof v === "string" ? v : "");
   const items = (b: Record<string, unknown>): Record<string, unknown>[] => (Array.isArray(b.items) ? b.items : Array.isArray(b.data) ? b.data : []).map(asRecord);
   return {
-    async authConfigId(toolkit) {
-      const found = await call(`/auth_configs?toolkit_slug=${encodeURIComponent(toolkit)}`);
-      const first = items(found.body).find((i) => str(i.id));
-      if (first) return str(first.id);
-      const made = await call("/auth_configs", { method: "POST", body: { toolkit: { slug: toolkit }, auth_config: { type: "use_composio_managed_auth" } } });
+    async authConfigId(toolkit, custom) {
+      const found = items((await call(`/auth_configs?toolkit_slug=${encodeURIComponent(toolkit)}`)).body).filter((i) => str(i.id) && str(i.status).toUpperCase() !== "DISABLED");
+      const scheme = (i: Record<string, unknown>) => (str(i.auth_scheme) || str(i.authScheme)).toUpperCase();
+      const have = custom
+        ? found.find((i) => scheme(i) === custom.toUpperCase() && i.is_composio_managed !== true)
+        : found.find((i) => i.is_composio_managed === true) ?? found[0];
+      if (have) return str(have.id);
+      const auth_config = custom ? { type: "use_custom_auth", authScheme: custom, credentials: {} } : { type: "use_composio_managed_auth" };
+      const made = await call("/auth_configs", { method: "POST", body: { toolkit: { slug: toolkit }, auth_config } });
       const id = str(asRecord(made.body.auth_config).id) || str(made.body.id);
       if (!id) throw new ComposioError("Composio did not make an auth config.", 502);
       return id;
+    },
+    async authInfo(toolkit) {
+      const r = await call(`/toolkits/${encodeURIComponent(toolkit)}`);
+      if (r.status === 404) return null;
+      const https = (v: unknown) => { const u = str(v); return /^https:\/\/[^\s"<>]+$/.test(u) ? u : undefined; };
+      const managed = (Array.isArray(r.body.composio_managed_auth_schemes) ? r.body.composio_managed_auth_schemes : []).filter((x): x is string => typeof x === "string" && !!x).map((x) => x.toUpperCase());
+      const schemes = (Array.isArray(r.body.auth_config_details) ? r.body.auth_config_details : []).map(asRecord).map((d): AuthScheme => {
+        const fields = asRecord(d.fields);
+        const required = (k: string) => { const v = asRecord(fields[k]).required; return Array.isArray(v) ? v.map(asRecord) : []; };
+        const hint = https(d.auth_hint_url);
+        return {
+          mode: str(d.mode).toUpperCase(), needsConfig: required("auth_config_creation").length > 0,
+          fields: required("connected_account_initiation").filter((f) => str(f.name)).map((f) => ({
+            name: str(f.name), label: (str(f.displayName) || str(f.name)).slice(0, 60), description: str(f.description).slice(0, 300), secret: f.is_secret !== false,
+          })),
+          ...(hint ? { hint } : {}),
+        };
+      }).filter((x) => x.mode);
+      const hint = https(r.body.auth_guide_url);
+      return { name: str(r.body.name) || toolkit, managed, schemes, ...(hint ? { hint } : {}) };
+    },
+    async createAccount(o) {
+      const r = await call("/connected_accounts", {
+        method: "POST",
+        body: { auth_config: { id: o.authConfigId }, connection: { user_id: o.userId, state: { authScheme: o.scheme, val: { status: "ACTIVE", ...o.values } } } },
+      });
+      const id = str(r.body.id) || str(asRecord(r.body.connected_account).id);
+      if (!id) throw new ComposioError("Composio did not make the connection.", 502);
+      return { id, status: str(r.body.status) || str(asRecord(r.body.connectionData).status) };
     },
     async link(o) {
       const r = await call("/connected_accounts/link", { method: "POST", body: { auth_config_id: o.authConfigId, user_id: o.userId, callback_url: o.callbackUrl } });
@@ -282,7 +329,57 @@ export function composioUserId(connectorKey: string, tenant: string): string {
   return `al_${createHmac("sha256", connectorKey).update(`composio-user\u0000${tenant}`).digest("hex").slice(0, 24)}`;
 }
 
-interface Stored { accountId: string; userId: string; at: number; headline?: string; readAt?: number; property?: string }
+/** `name`: the tool's own name as Composio gives it (for a tool found by search). Never a key: a key the owner pasted went to Composio only. */
+interface Stored { accountId: string; userId: string; at: number; headline?: string; readAt?: number; property?: string; name?: string }
+
+// ---------- tools connected with a key the owner pastes ----------
+
+/** Schemes where the owner signs in on the provider's own page; everything else (API_KEY, BEARER_TOKEN, BASIC ...) is pasted. */
+const SIGN_IN = /OAUTH/;
+const KEY_ORDER = ["API_KEY", "BEARER_TOKEN"];
+
+/** The scheme an owner can connect by pasting a key: one that needs nothing of ours set up first, API keys first. */
+export function keyScheme(a: ToolkitAuth): AuthScheme | undefined {
+  const ok = a.schemes.filter((s) => !SIGN_IN.test(s.mode) && !s.needsConfig && s.mode !== "NO_AUTH");
+  return [...ok].sort((x, y) => rank(x.mode) - rank(y.mode))[0];
+}
+const rank = (m: string) => { const i = KEY_ORDER.indexOf(m); return i < 0 ? KEY_ORDER.length : i; };
+/** The fields to paste for a scheme; a key scheme with none listed takes one API key. */
+const keyFields = (s: AuthScheme): KeyFieldSpec[] => (s.fields.length ? s.fields : [{ name: s.mode === "BEARER_TOKEN" ? "token" : "generic_api_key", label: s.mode === "BEARER_TOKEN" ? "Token" : "API key", description: "", secret: true }]);
+
+// The check right after a key is pasted: a harmless read (a balance, the credits left, who the key belongs to) so the owner sees it works.
+const CHECK_FIRST = /(BALANCE|CREDIT)/;
+const CHECK_NEXT = /(GET_ME\b|_ME$|CURRENT_USER|WHOAMI|GET_USER|GET_ACCOUNT|ACCOUNT_INFO|PROFILE)/;
+const AMOUNT_KEYS = ["credits_left", "remaining_credits", "available_credits", "credit_balance", "credits", "balance", "remaining"];
+
+function amountIn(v: unknown, depth = 0): { key: string; n: number } | null {
+  if (!v || typeof v !== "object" || depth > 5) return null;
+  const o = v as Record<string, unknown>;
+  for (const k of AMOUNT_KEYS) {
+    const x = o[k];
+    const n = typeof x === "number" ? x : typeof x === "string" && x.trim() !== "" ? Number(x) : NaN;
+    if (Number.isFinite(n)) return { key: k, n };
+  }
+  for (const x of Object.values(o)) { const r = amountIn(x, depth + 1); if (r) return r; }
+  return null;
+}
+
+/** "1,200 credits left" from what a balance tool answered; undefined when it carries no amount. */
+export function checkHeadline(tool: string, data: unknown): string | undefined {
+  const a = amountIn(data);
+  if (!a) return undefined;
+  const n = a.n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  return /credit/i.test(a.key) || /CREDIT/.test(tool.toUpperCase()) ? `${n} ${a.n === 1 ? "credit" : "credits"} left` : `balance ${n}`;
+}
+
+/** Composio's own words, short, with anything the owner pasted taken out. */
+function shortReason(e: ComposioError, secrets: string[]): string {
+  let why = (e.reason ?? "").replace(/\s+/g, " ").trim();
+  for (const s of secrets) if (s.length >= 4) why = why.split(s).join("…");
+  why = why.replace(/[.\s]+$/, "").slice(0, 140);
+  if (!why) return `it answered ${e.status}`;
+  return /^[A-Z][a-z]/.test(why) ? why.charAt(0).toLowerCase() + why.slice(1) : why; // "Invalid key" -> "invalid key", "API key ..." stays
+}
 
 export const COMPOSIO_OFF_WORDS = (what: string) => `Connecting ${what} isn't switched on yet. Your team is setting up the connection service and will let you know when it's ready.`;
 
@@ -306,13 +403,44 @@ export function infoOf(e: ToolkitEntry): ConnectorInfo {
 }
 
 export class ComposioConnector implements Connector {
-  readonly info: ConnectorInfo;
-  /** The daily read (and the first one, right after connecting), for toolkits that have a reader (firstread.ts). */
+  /** A tool found by search takes Composio's own name for it ("Higgsfield") once Composio has said it. */
+  info: ConnectorInfo;
+  /** The daily read (and the first one, right after connecting), for toolkits that have a reader (firstread.ts). A tool found by
+   *  search has the harmless check instead (a balance, the credits left), so "Read now" says how it stands. */
   readonly pull?: (ctx: ConnectorCtx) => Promise<{ ok: boolean; message: string }>;
   constructor(readonly entry: ToolkitEntry, private deps: ComposioDeps) {
     this.info = infoOf(entry);
     const reader = readerFor(entry);
     if (reader) this.pull = (ctx) => once(`${ctx.tenant}\u0000${entry.id}`, () => this.readNow(ctx, reader));
+    else if (this.dynamic) this.pull = (ctx) => once(`${ctx.tenant}\u0000${entry.id}`, () => this.checkNow(ctx));
+  }
+
+  private get dynamic(): boolean { return this.entry.id.startsWith("app-"); }
+  private named(name: string | undefined): void {
+    if (this.dynamic && name && name !== this.info.name) this.info = { ...this.info, name: name.slice(0, 60) };
+  }
+
+  // How this toolkit signs in, asked once per server run (a failure is not kept, so the next try asks again).
+  private authAsked?: Promise<ToolkitAuth | null>;
+  private async auth(): Promise<ToolkitAuth | null> {
+    this.authAsked ??= this.client().authInfo(this.entry.toolkit).then((a) => { this.named(a?.name); return a; });
+    try { return await this.authAsked; } catch (e) { this.authAsked = undefined; throw e; }
+  }
+
+  /** Any failure while connecting, as one sentence the owner reads on the card. Values the owner pasted never appear in it. */
+  private problem(e: unknown, secrets: string[] = []): Error {
+    if (e instanceof ConnectProblem || e instanceof NotConfiguredError || e instanceof NotConnectedError) return e;
+    const name = this.info.name;
+    if (e instanceof ComposioError) {
+      if (e.slug === "ConnectedAccount_CredentialValidationRejected" || (secrets.length && (e.status === 401 || e.status === 403) && e.slug?.startsWith("ConnectedAccount"))) {
+        return new ConnectProblem(this.info.id, `${name} didn't accept that key. Check it and paste it again.`, 422);
+      }
+      if (e.status === 403 && e.slug === "APIKey_InsufficientPermissions") {
+        return new NotConfiguredError(this.info.id, { ok: false, message: COMPOSIO_OFF_WORDS(name), missing: [{ setting: "COMPOSIO_API_KEY", words: e.message }] });
+      }
+      return new ConnectProblem(this.info.id, `Composio couldn't set up ${name}: ${shortReason(e, secrets)}.`);
+    }
+    return new ConnectProblem(this.info.id, `Composio couldn't set up ${name}: it didn't answer. Try again in a minute.`);
   }
 
   private async readNow(ctx: ConnectorCtx, reader: Reader): Promise<{ ok: boolean; message: string }> {
@@ -351,22 +479,96 @@ export class ComposioConnector implements Connector {
   async status(ctx: ConnectorCtx): Promise<ConnectionStatus> {
     const r = await this.stored(ctx);
     if (!r) return { state: "not_connected", message: this.info.blurb };
+    this.named(r.name);
     if (r.userId !== this.user(ctx)) return { state: "needs_attention", message: `We can't use the saved ${this.info.name} connection any more. Connect it again.` };
     return { state: "connected", message: r.headline ? `${this.info.name} connected: ${r.headline}.` : `${this.info.name} is connected.`, lastReadAt: new Date(r.readAt ?? r.at).toISOString() };
   }
 
+  // Connecting, three ways, by how the toolkit signs in (Composio's GET /toolkits/{slug}):
+  //   Composio runs a sign-in app for it        the owner goes to Composio's hosted page (as before)
+  //   it takes a key (API_KEY, BEARER_TOKEN...)  the web app opens the paste-your-key sheet; connectWithKey finishes it
+  //   a sign-in needing nothing of ours set up  an auth config of our own for that scheme, then the hosted page
+  // Anything else is said plainly: it needs its own app registered first.
   async connect(ctx: ConnectorCtx): Promise<ConnectStart> {
+    try {
+      const a = await this.auth();
+      if (!a) throw new ConnectProblem(this.info.id, `Composio doesn't know ${this.info.name} any more, so it can't be connected.`);
+      if (!a.managed.length) {
+        const key = keyScheme(a);
+        if (key) {
+          return {
+            url: `${ctx.webBaseUrl}/connections?${new URLSearchParams({ connect: this.info.id })}`,
+            key: { tool: this.info.name, fields: keyFields(key).map((f) => ({ name: f.name, label: f.label, ...(f.description ? { help: f.description } : {}), secret: f.secret })), ...(key.hint ?? a.hint ? { hint: key.hint ?? a.hint } : {}) },
+          };
+        }
+        const own = a.schemes.find((s) => SIGN_IN.test(s.mode) && !s.needsConfig);
+        if (!own) throw new ConnectProblem(this.info.id, `Composio couldn't set up ${this.info.name}: it needs its own sign-in app registered first, which your team has to do.`);
+        return await this.hosted(ctx, await this.client().authConfigId(this.entry.toolkit, own.mode));
+      }
+      return await this.hosted(ctx, await this.client().authConfigId(this.entry.toolkit));
+    } catch (e) {
+      throw this.problem(e);
+    }
+  }
+
+  private async hosted(ctx: ConnectorCtx, authConfigId: string): Promise<ConnectStart> {
     const state = ctx.beginAuth({});
     const callbackUrl = `${ctx.webBaseUrl}/api/connectors/google/callback?${new URLSearchParams({ state })}`; // one callback address for every provider
+    const l = await this.client().link({ authConfigId, userId: this.user(ctx), callbackUrl });
+    return { url: l.redirectUrl };
+  }
+
+  /** The owner pasted a key on the sheet: it goes to Composio, which keeps it; only the connected account's id is sealed here. */
+  async connectWithKey(ctx: ConnectorCtx, values: Record<string, string>): Promise<{ message: string }> {
+    const pasted = Object.values(values).filter((v) => typeof v === "string" && v.length > 0);
     try {
-      const authConfigId = await this.client().authConfigId(this.entry.toolkit);
-      const l = await this.client().link({ authConfigId, userId: this.user(ctx), callbackUrl });
-      return { url: l.redirectUrl };
-    } catch (e) {
-      if (e instanceof ComposioError && e.status === 403) {
-        throw new NotConfiguredError(this.info.id, { ok: false, message: COMPOSIO_OFF_WORDS(this.info.name), missing: [{ setting: "COMPOSIO_API_KEY", words: e.message }] });
+      const a = await this.auth();
+      const scheme = a && !a.managed.length ? keyScheme(a) : undefined;
+      if (!scheme) throw new ConnectProblem(this.info.id, `${this.info.name} doesn't take a key here. Tap Connect and sign in instead.`);
+      const fields = keyFields(scheme);
+      const clean: Record<string, string> = {};
+      for (const f of fields) {
+        const v = (values[f.name] ?? "").trim();
+        if (!v) throw new ConnectProblem(this.info.id, `${this.info.name} needs your ${fields.length === 1 ? "API key" : f.label}.`);
+        if (v.length > 2000 || /[\r\n\0]/.test(v)) throw new ConnectProblem(this.info.id, `That doesn't look like a ${this.info.name} key. Copy it again and paste just the key.`);
+        clean[f.name] = v;
       }
-      throw e;
+      const client = this.client();
+      const userId = this.user(ctx);
+      const authConfigId = await client.authConfigId(this.entry.toolkit, scheme.mode);
+      const made = await client.createAccount({ authConfigId, userId, scheme: scheme.mode, values: clean });
+      // the account must be this business's own, for this toolkit, and active before its id is kept
+      const acct = made.status.toUpperCase() === "ACTIVE" ? { id: made.id, userId, toolkit: this.entry.toolkit, status: "ACTIVE" } : await client.account(made.id);
+      if (!acct || acct.userId !== userId || acct.toolkit.toLowerCase() !== this.entry.toolkit || acct.status.toUpperCase() !== "ACTIVE") {
+        await client.deleteAccount(made.id).catch(() => undefined);
+        throw new ConnectProblem(this.info.id, `${this.info.name} didn't accept that key. Check it and paste it again.`, 422);
+      }
+      await ctx.vault.put(ctx.tenant, this.info.id, { accountId: made.id, userId, at: ctx.now(), ...(this.dynamic ? { name: this.info.name } : {}) } satisfies Stored);
+    } catch (e) {
+      throw this.problem(e, pasted);
+    }
+    await this.markSystem(ctx, "connected");
+    if (this.pull) await this.pull(ctx).catch(() => undefined); // the harmless read, so the card says it works
+    return { message: (await this.status(ctx)).message };
+  }
+
+  /** "Read now" (and the check right after connecting) for a tool found by search: one harmless read, its line kept with the connection. */
+  private async checkNow(ctx: ConnectorCtx): Promise<{ ok: boolean; message: string }> {
+    try {
+      const headline = await this.run(ctx, async (s) => {
+        const tools = (await s.listTools()).filter((t) => classifyTool(t.slug) === "read" && !t.params?.required.length);
+        const pick = tools.find((t) => CHECK_FIRST.test(t.slug.toUpperCase())) ?? tools.find((t) => CHECK_NEXT.test(t.slug.toUpperCase()));
+        if (!pick) return undefined;
+        return checkHeadline(pick.slug, await s.execute(pick.slug, {})) ?? "";
+      });
+      const r = await this.stored(ctx);
+      if (r && headline !== undefined) await ctx.vault.put(ctx.tenant, this.info.id, { ...r, readAt: ctx.now(), ...(headline ? { headline } : {}) } satisfies Stored);
+      await ctx.audit("check read", headline !== undefined, headline === undefined ? "no harmless read for this tool" : undefined);
+      return headline ? { ok: true, message: `${this.info.name} connected: ${headline}.` } : { ok: true, message: `${this.info.name} is connected.` };
+    } catch (e) {
+      if (e instanceof NotConnectedError || e instanceof NeedsAttentionError) return { ok: false, message: e.words };
+      await ctx.audit("check read", false, e instanceof ComposioToolError ? "the tool said no" : "failed");
+      return { ok: false, message: `${this.info.name} is connected, but it didn't answer just now.` };
     }
   }
 
