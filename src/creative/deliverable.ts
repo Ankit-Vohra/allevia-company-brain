@@ -9,6 +9,7 @@
 import { CREDIT_COSTS } from "../../shared/plans.js";
 import type { DeliverableKind, DeliverableOption } from "../../shared/contracts.js";
 import { agentNodeId } from "../agent/memory.js";
+import { cleanText, Removed } from "../ingest/clean.js";
 import { serial } from "../agent/tools/common.js";
 import type { GraphHandle } from "../graph/client.js";
 import { upsertEdge, upsertNode } from "../graph/upsert.js";
@@ -76,11 +77,12 @@ export async function saveArtwork(
   const sha = sha256Hex(a.buffer);
   const storageKey = deps.store.put(deps.tenant, sha, a.buffer, "jpg");
   const id = entityId("Asset", `artwork ${sha.slice(0, 16)}`);
+  const scene = cleanText(a.scene), prompt = cleanText(a.prompt); // the owner's words reach the graph through the privacy filter (ingest/clean.ts)
   await upsertNode(g, {
-    type: "Asset", id, name: `Artwork: ${a.scene.slice(0, 60)}`,
+    type: "Asset", id, name: `Artwork: ${scene.slice(0, 60)}`,
     props: {
       kind: "artwork", mediaType: "image", mime: "image/jpeg", w: a.w, h: a.h, sha256: sha, storageKey, source: a.engine, aiEdited: true,
-      iptcSourceType: "trainedAlgorithmicMedia", status: "proposed", model: a.model, prompt: a.prompt.slice(0, 4000), recorded: a.recorded,
+      iptcSourceType: "trainedAlgorithmicMedia", status: "proposed", model: a.model, prompt: prompt.slice(0, 4000), recorded: a.recorded,
       ...(a.jobId ? { hfJobId: a.jobId } : {}), ...(a.credits !== undefined ? { hfCredits: a.credits } : {}), generatedAt: deps.now,
     },
   }, deps.now);
@@ -88,7 +90,15 @@ export async function saveArtwork(
   return id;
 }
 
-export async function saveDeliverable(g: GraphHandle, deps: SaveDeps, r: SaveRequest): Promise<SavedDeliverable> {
+export async function saveDeliverable(g: GraphHandle, deps: SaveDeps, request: SaveRequest): Promise<SavedDeliverable> {
+  // What the owner asked for and what the team wrote (the title, the caption, the words on the picture) go through the privacy filter
+  // ingest uses (ingest/clean.ts) before they are saved; a piece that had something taken out says so on its card.
+  const removed = new Removed();
+  const r: SaveRequest = {
+    ...request, title: cleanText(request.title, removed), caption: cleanText(request.caption, removed), altText: cleanText(request.altText, removed),
+    request: cleanText(request.request, removed), notes: request.notes.map((n) => cleanText(n, removed)),
+    options: request.options.map((o) => ({ ...o, note: cleanText(o.note, removed), ...(o.words !== undefined ? { words: cleanText(o.words, removed) } : {}) })),
+  };
   const saved: Array<{ o: OptionToSave; id: string; sha: string }> = [];
   for (const o of r.options) {
     const sha = sha256Hex(o.buffer);
@@ -135,6 +145,7 @@ export async function saveDeliverable(g: GraphHandle, deps: SaveDeps, r: SaveReq
     `Made on request: ${JSON.stringify(r.request.slice(0, 200))}.`,
     ...saved.map((s) => `Option ${s.o.label}: ${s.o.badge === "ok" ? "Nisha checked it" : s.o.badge === "held" ? `Nisha held it back (${s.o.note})` : "not double-checked"}.`),
     ...r.notes.slice(0, 3),
+    ...(removed.total ? [removed.note()] : []),
     `Uses ${credits} credit${credits === 1 ? "" : "s"} on approval.`,
   ].join(" ");
   const asOf = isoDate(deps.now);
@@ -143,7 +154,7 @@ export async function saveDeliverable(g: GraphHandle, deps: SaveDeps, r: SaveReq
     const [pending] = await g.roQuery<{ id: string }>(
       "MATCH (rec:Entity:Recommendation {id:$rid}) WITH rec MATCH (rec)-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL AND a.status = 'pending' RETURN a.id AS id ORDER BY a.id LIMIT 1", { rid: recId });
     const id = pending?.id ?? `approval:made-${short}-${deps.now.toString(36)}`;
-    await upsertNode(g, { type: "Recommendation", id: recId, name: r.title, summary: why.slice(0, 1000), props: { status: "open", kind: "content_draft", by: deps.agentId, area: "content", confidence: saved.some((s) => s.o.badge === "ok") ? 0.8 : 0.4, score: 0.8 }, src, asOf }, deps.now);
+    await upsertNode(g, { type: "Recommendation", id: recId, name: r.title, summary: why.slice(0, 1000), props: { status: "open", kind: "content_draft", by: deps.agentId, area: "content", confidence: saved.some((s) => s.o.badge === "ok") ? 0.8 : 0.4, score: 0.8, ...(removed.total ? { redactions: removed.total } : {}) }, src, asOf }, deps.now);
     await upsertNode(g, { type: "Approval", id, name: `content_draft: ${r.title}`, props: { status: "pending", kind: "content_draft", title: r.title, payload: JSON.stringify(payload), recommendation: recId, studio: true, creative: true }, src, asOf }, deps.now);
     await upsertEdge(g, { from: recId, type: "PROPOSES", to: id, src, asOf }, deps.now);
     for (const s of saved) await upsertEdge(g, { from: recId, type: "EVIDENCED_BY", to: s.id, src, asOf }, deps.now);

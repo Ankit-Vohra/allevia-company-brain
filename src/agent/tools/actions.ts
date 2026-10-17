@@ -6,6 +6,7 @@ import type { ToolContext } from "../tool.js";
 import type { ActionKind } from "../../../shared/contracts.js";
 import { agentById } from "../../../shared/roster.js";
 import { upsertEdge, upsertNode } from "../../graph/upsert.js";
+import { cleanPayload, cleanText, Removed } from "../../ingest/clean.js";
 import { entityId } from "../../util/ids.js";
 import { isArea, loadGoals, relatedGoals } from "../../insights/goals.js";
 import { isoDate } from "../../util/time.js";
@@ -23,8 +24,16 @@ export interface ProposeArgs {
   title: string; why: string; kind: ActionKind; payload: Record<string, unknown>; evidence: string[]; area?: string; confidence?: number;
 }
 
-export async function runPropose(args: ProposeArgs, ctx: ToolContext) {
+export async function runPropose(raw: ProposeArgs, ctx: ToolContext) {
   refuseIfReadOnly(ctx, "propose_action");
+  // The privacy filter ingest uses (ingest/clean.ts): a card's title, its reasoning and its payload (the text to post, the issue's
+  // body) are cleaned before they are saved, so a key or a phone number a model copied in never reaches the graph, a Discord post
+  // or a GitHub issue. The card says so when something was taken out.
+  const removed = new Removed();
+  const args: ProposeArgs = {
+    ...raw, title: cleanText(raw.title, removed), why: cleanText(raw.why, removed), payload: cleanPayload(raw.payload ?? {}, removed),
+    ...(raw.area !== undefined ? { area: cleanText(raw.area, removed) } : {}),
+  };
   const title = args.title.trim();
   if (title.length < 3) throw new InputError("title is too short.");
   if (args.kind === "content_draft") {
@@ -69,14 +78,14 @@ export async function runPropose(args: ProposeArgs, ctx: ToolContext) {
     await upsertNode(ctx.graph, {
       type: "Recommendation", id: recId, name: title, summary: clip(args.why.trim(), 1000),
       props: {
-        status: "open", kind: args.kind, by: ctx.agentId,
+        status: "open", kind: args.kind, by: ctx.agentId, ...(removed.total ? { redactions: removed.total } : {}),
         ...(args.area?.trim() ? { area: args.area.trim() } : {}), ...(confidence !== undefined ? { confidence, score: confidence } : {}),
       },
       src, asOf,
     }, ctx.now);
     await upsertNode(ctx.graph, {
       type: "Approval", id: approvalId, name: `${args.kind}: ${title}`,
-      props: { status: "pending", kind: args.kind, payload, title, recommendation: recId }, src, asOf,
+      props: { status: "pending", kind: args.kind, payload, title, recommendation: recId, ...(removed.total ? { redactions: removed.total } : {}) }, src, asOf,
     }, ctx.now);
     await upsertEdge(ctx.graph, { from: recId, type: "PROPOSES", to: approvalId, src, asOf }, ctx.now);
     for (const to of evidence) await upsertEdge(ctx.graph, { from: recId, type: "EVIDENCED_BY", to, src, asOf }, ctx.now);
@@ -111,8 +120,8 @@ export async function runPropose(args: ProposeArgs, ctx: ToolContext) {
   const said = reused ? `Already proposed and waiting for the owner (${approvalId}); added the evidence.` : `Proposed for the owner's approval (${approvalId}); nothing has been executed.`;
   return col.result(ctx, {
     recommendationId: recId, approvalId, kind: args.kind, status: "pending", title, evidence, ...(advances.length ? { advances } : {}), ...(reused ? { alreadyPending: true } : {}),
-    ...(skipped.length ? { skipped } : {}),
-  }, `${said}${skipped.length ? ` Unknown evidence skipped: ${skipped.join(", ")}.` : ""}`);
+    ...(skipped.length ? { skipped } : {}), ...(removed.total ? { privateDetailsRemoved: removed.words() } : {}),
+  }, `${said}${skipped.length ? ` Unknown evidence skipped: ${skipped.join(", ")}.` : ""}${removed.total ? ` ${removed.note()} If the owner needs them in the text, tell them to add them by hand when they edit the card.` : ""}`);
 }
 
 export const proposeAction = defineTool({

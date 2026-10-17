@@ -20,6 +20,7 @@ import type { AgentMode, AgentSettings, DirectiveDiffLine, DirectivePatch, Direc
 import type { GraphHandle } from "../graph/client.js";
 import { upsertNode, writeBatch, type EdgeInput, type NodeInput, type Prim } from "../graph/upsert.js";
 import type { LlmRunner } from "../ingest/llm.js";
+import { cleanText, Removed } from "../ingest/clean.js";
 import { findBusiness } from "../capabilities/ladder.js";
 import { agentNodeId, ensureRoster } from "../agent/memory.js";
 import { codeCatalog } from "../agent/skills/catalog.js";
@@ -526,13 +527,17 @@ export interface PreviewDeps {
 }
 
 export async function previewDirective(g: GraphHandle, input: { text: string; actor?: string }, deps: PreviewDeps = {}): Promise<DirectivePreview> {
-  const text = input.text.trim();
+  // The owner's words go through the privacy filter ingest uses (ingest/clean.ts) before anything reads or saves them, the model that
+  // reads the instruction included: a key or a phone number in it never reaches the graph, and the preview says so.
+  const removed = new Removed();
+  const text = cleanText(input.text.trim(), removed);
   if (!text) throw new Error("Tell your team something first.");
   if (text.length > MAX_TEXT) throw new Error(`That is too long for one instruction (${text.length} characters; at most ${MAX_TEXT}).`);
   const actor = input.actor ?? "person:founder";
   const now = deps.now ?? Date.now();
 
   const parsed = parseDirective(text);
+  if (removed.total) parsed.notes.push(`${removed.note()} Your team will not see them.`);
   let parser: DirectivePreview["parser"] = "rules";
   if (parsed.unparsed.length && deps.llm !== null) {
     try {

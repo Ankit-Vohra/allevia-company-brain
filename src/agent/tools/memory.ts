@@ -8,6 +8,7 @@ import { VECTOR_DIM } from "../../graph/indexes.js";
 import { upsertEdge, upsertNode } from "../../graph/upsert.js";
 import { DisallowedRelationship } from "../../graph/errors.js";
 import { isoDate } from "../../util/time.js";
+import { cleanText, Removed } from "../../ingest/clean.js";
 import {
   Collector, EDGE, InputError, NODE, SEARCH_TYPES, brief, clip, defineTool, ftEntities, ftTerms, getNodes, isoOrNull, nextId,
   refuseIfReadOnly, refuseIfStopped, ro, serial, type EdgeRow, type NodeRow,
@@ -183,7 +184,9 @@ async function sameSubjectNotes(ctx: ToolContext, n: { kind: string; text: strin
 
 async function runRemember(args: { text: string; kind: "preference" | "fact" | "instruction"; about: string[] }, ctx: ToolContext) {
   refuseIfReadOnly(ctx, "remember");
-  const text = args.text.trim();
+  // The privacy filter ingest uses: a key, a phone number or an address the owner said never reaches the graph (or its vector).
+  const removed = new Removed();
+  const text = cleanText(args.text.trim(), removed);
   if (!text) throw new InputError("text is empty.");
   const about = [...new Set(args.about.map((s) => s.trim()).filter(Boolean))].slice(0, 10);
   const found = await getNodes(ctx, about);
@@ -200,7 +203,8 @@ async function runRemember(args: { text: string; kind: "preference" | "fact" | "
     // What this replaces, found before the new note exists: an active note of the same kind about the same thing.
     const earlier = await sameSubjectNotes(ctx, { kind: args.kind, text, about: linked });
     await upsertNode(ctx.graph, {
-      type: "Memory", id, name: clip(text, 80)!, summary: clip(text, 400), props: { kind: args.kind, text: text.slice(0, 2000), at: ctx.now },
+      type: "Memory", id, name: clip(text, 80)!, summary: clip(text, 400),
+      props: { kind: args.kind, text: text.slice(0, 2000), at: ctx.now, ...(removed.total ? { redactions: removed.total } : {}) },
       src, asOf, ...(embedding?.length === VECTOR_DIM ? { embedding } : {}),
     }, ctx.now);
     for (const to of linked) await upsertEdge(ctx.graph, { from: id, type: "ABOUT", to, src, asOf }, ctx.now);
@@ -232,8 +236,8 @@ async function runRemember(args: { text: string; kind: "preference" | "fact" | "
   if (stated) col.edge({ from: ctx.asker, type: "STATED", to: id, since: ctx.now, until: null });
   return col.result(ctx, {
     id, kind: args.kind, text: clip(text, 300), about: linked, ...(skipped.length ? { skipped } : {}), statedBy: stated ? ctx.asker : null,
-    ...(replaced.length ? { replaces: replaced } : {}),
-  }, `Saved ${id}.${replaced.length ? ` It replaces the earlier note${replaced.length === 1 ? "" : "s"} ${replaced.join(", ")}.` : ""}${skipped.length ? ` Unknown ids skipped: ${skipped.join(", ")}.` : ""}`);
+    ...(replaced.length ? { replaces: replaced } : {}), ...(removed.total ? { privateDetailsRemoved: removed.words() } : {}),
+  }, `Saved ${id}.${replaced.length ? ` It replaces the earlier note${replaced.length === 1 ? "" : "s"} ${replaced.join(", ")}.` : ""}${skipped.length ? ` Unknown ids skipped: ${skipped.join(", ")}.` : ""}${removed.total ? ` ${removed.note()} Tell the owner the note was saved without them.` : ""}`);
 }
 
 export const remember = defineTool({

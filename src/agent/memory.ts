@@ -18,6 +18,7 @@ import type { GraphHandle } from "../graph/client.js";
 import { noteGraphWrite } from "../graph/projection.js";
 import { VECTOR_DIM } from "../graph/indexes.js";
 import { writeBatch, type EdgeInput, type NodeInput, type Prim } from "../graph/upsert.js";
+import { cleanEdge, cleanNode, cleanText, Removed } from "../ingest/clean.js";
 import { typeFromId } from "../util/ids.js";
 import { isoDate, istDate } from "../util/time.js";
 import { TouchedSet } from "./tool.js";
@@ -129,7 +130,7 @@ export async function startSession(
   g: GraphHandle, o: { channel: string; asker: string; title?: string; id?: string; agent?: string }, now: number = Date.now(),
 ): Promise<SessionInfo> {
   const id = o.id ?? newSessionId(now);
-  const title = clip(oneLine(o.title ?? "") || "New thread", 120);
+  const title = clip(oneLine(cleanText(o.title ?? "")) || "New thread", 120); // a thread named after a question that carried a secret is named without it
   await ensurePerson(g, o.asker, now);
   const s = await writeBatch(g, {
     nodes: [{ type: "Session", id, name: title, props: { channel: o.channel, asker: o.asker, startedAt: now, ...(o.agent ? { agent: o.agent } : {}) } }],
@@ -248,9 +249,15 @@ const MADE_BY_TURN = new Set(["Recommendation", "Approval", "Memory", "Rule"]);
 
 export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTurnResult> {
   const now = t.at;
+  // The privacy filter ingest uses (ingest/clean.ts): the question, the answer and every finding are cleaned before anything is cut
+  // short or written, and the node props and the event log are cleaned again at the end. What the owner sees on screen is untouched.
+  const removed = new Removed();
+  const question = cleanText(t.question, removed);
+  const answer = cleanText(t.answer, removed);
+  const findings = t.findings.map((f) => ({ ...f, text: cleanText(f.text, removed), task: cleanText(f.task, removed) }));
   await rosterOnce(g, now);
   const session = await g.roQuery<{ c: number }>("MATCH (s:Entity:Session {id:$id}) RETURN count(s) AS c", { id: t.sessionId });
-  if (!session[0]?.c) await startSession(g, { channel: "unknown", asker: t.asker, title: t.question, id: t.sessionId, ...(t.target ? { agent: t.target } : {}) }, now);
+  if (!session[0]?.c) await startSession(g, { channel: "unknown", asker: t.asker, title: question, id: t.sessionId, ...(t.target ? { agent: t.target } : {}) }, now);
   const askerOk = await ensurePerson(g, t.asker, now);
 
   const touchedIds = t.touched instanceof TouchedSet ? [...t.touched.nodes().map((n) => n.id), ...t.touched.sources().map((s) => s.id)] : t.touched;
@@ -269,13 +276,13 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   const pathIds = unique(t.pathIds ?? []).filter(exists);
   const pathIndex = new Map(pathIds.map((id, i) => [id, i] as const));
   const turnProps: Record<string, Prim> = {
-    question: t.question, answer: t.answer, at: t.at, status: t.status ?? "ok", sessionId: t.sessionId, asker: t.asker,
+    question, answer, at: t.at, status: t.status ?? "ok", sessionId: t.sessionId, asker: t.asker,
     agents: t.agents, citations: t.citations, checks: JSON.stringify(t.checks ?? null), events: JSON.stringify(compactEvents(t.events)),
   };
   if (t.source) turnProps.source = t.source;
   if (t.target) turnProps.target = t.target;
   if (t.ms !== undefined) turnProps.ms = t.ms;
-  if (t.error) turnProps.error = t.error;
+  if (t.error) turnProps.error = cleanText(t.error, removed);
   if (t.skills?.length) turnProps.skills = unique(t.skills.map((s) => `${s.agent}/${s.skillId}`));
   if (pathIds.length) {
     turnProps.pathIds = pathIds;
@@ -291,7 +298,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   // Every node and edge the turn writes carries where it came from (this turn) and the date; edges start when the turn did.
   const asOf = isoDate(now);
   const stamp = { src: t.turnId, asOf, since: now } as const;
-  const nodes: NodeInput[] = [{ type: "Turn", id: t.turnId, name: clip(oneLine(t.question), 120) || t.turnId, summary: clip(t.answer, 600), props: turnProps, src: t.turnId, asOf, ...(t.embedding?.length === VECTOR_DIM && t.embedding.every(Number.isFinite) ? { embedding: t.embedding } : {}) }];
+  const nodes: NodeInput[] = [{ type: "Turn", id: t.turnId, name: clip(oneLine(question), 120) || t.turnId, summary: clip(answer, 600), props: turnProps, src: t.turnId, asOf, ...(t.embedding?.length === VECTOR_DIM && t.embedding.every(Number.isFinite) ? { embedding: t.embedding } : {}) }];
   const edges: EdgeInput[] = [{ from: t.turnId, type: "IN_SESSION", to: t.sessionId }];
   if (askerOk) edges.push({ from: t.asker, type: "ASKED", to: t.turnId });
   for (const a of unique(t.agents)) if (agentById(a)) edges.push({ from: t.turnId, type: "HANDLED_BY", to: agentNodeId(a), ...stamp });
@@ -314,7 +321,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
     for (const r of mine) edges.push({ from: r.id, type: "SOURCED_FROM", to: t.turnId, ...stamp });
   }
 
-  for (const f of t.findings) {
+  for (const f of findings) {
     const who = agentById(f.agent);
     nodes.push({
       type: "Finding", id: f.id, name: clip(oneLine(`${who?.name ?? f.agent}: ${f.task}`), 120), summary: clip(f.text, 600),
@@ -337,7 +344,9 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
     }
   }
 
-  const s = await writeBatch(g, { nodes, edges }, now);
+  const clean = nodes.map((n) => cleanNode(n, removed));
+  if (removed.total) clean[0] = { ...clean[0]!, props: { ...clean[0]!.props, redactions: removed.total } }; // how many details were taken out, never what
+  const s = await writeBatch(g, { nodes: clean, edges: edges.map((e) => cleanEdge(e, removed)) }, now);
   await rawWrite(g, "MATCH (s:Entity:Session {id:$id}) SET s.lastAt = CASE WHEN coalesce(s.lastAt, 0) > $at THEN s.lastAt ELSE $at END", { id: t.sessionId, at: t.at });
   await growKnowsAbout(g, t, cited, now);
   return {
