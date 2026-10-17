@@ -16,7 +16,8 @@
 // - Approvals (POST /api/:t/approvals/:id) go through decide() in approvals.ts, the same function Discord's buttons
 //   use: the real executors, with GitHub issues and Discord posts as a dry run unless ALLEVIA_ACTIONS_LIVE=1. The
 //   answer is the card plus `learned` (the learned-rule AgentEvents, in the JSON) and `action`.
-// Focused route files: routes/program.ts (program, capabilities, learning), routes/team.ts (agents, directives),
+// Focused route files: routes/program.ts (program, capabilities, learning), routes/team.ts (agents, directives), routes/library.ts
+// (the Library: everything made and every photo sent), routes/chat-photo.ts (a photo sent in the chat runs the Studio's pipeline),
 // routes/goals.ts (the owner says OK to the suggested goals), routes/numbers.ts (the owner adds a spreadsheet of their numbers), routes/actions.ts (where an approved fix lands: tasks, or the business's own GitHub repo), routes/connectors.ts (connect Search Console), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/week.ts (Home's "what your team did this week" counts), routes/graph-work.ts (the Brain page's "what breaks if something stops"), routes/checkup.ts ("Check my website": the check-up in the background, and its weekly setting), routes/credits.ts (credits, the plan, and billing in test mode).
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -58,6 +59,8 @@ import { registerTeamRoutes } from "./routes/team.js";
 import { LinkTooSoon, type HubService } from "../discord/hub-service.js";
 import { registerUsageRoutes } from "./routes/usage.js";
 import { registerWeekRoutes } from "./routes/week.js";
+import { registerLibraryRoutes } from "./routes/library.js";
+import { CHAT_PHOTO_PATH, registerChatPhotoRoutes } from "./routes/chat-photo.js";
 import { registerWorkRoutes } from "./routes/work.js";
 import { registerGraphWorkRoutes } from "./routes/graph-work.js";
 import { registerCheckupRoutes } from "./routes/checkup.js";
@@ -395,9 +398,9 @@ export function createApp(deps: ServerDeps): Hono {
     await showcaseView.run(idx, next);
     c.res = await maskResponse(c.res, idx);
   });
-  // 64 KB everywhere except the Studio's photo upload (studio.ts) and the spreadsheet upload (routes/numbers.ts), which set their own limits
+  // 64 KB everywhere except the Studio's photo upload (studio.ts), a photo sent in the chat (routes/chat-photo.ts) and the spreadsheet upload (routes/numbers.ts), which set their own limits
   const smallBodies = bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: "The request body is too large." }, 413) });
-  app.use("/api/*", (c, next) => (c.req.method === "POST" && (STUDIO_UPLOAD_PATH.test(c.req.path) || NUMBERS_UPLOAD_PATH.test(c.req.path)) ? next() : smallBodies(c, next)));
+  app.use("/api/*", (c, next) => (c.req.method === "POST" && (STUDIO_UPLOAD_PATH.test(c.req.path) || NUMBERS_UPLOAD_PATH.test(c.req.path) || CHAT_PHOTO_PATH.test(c.req.path)) ? next() : smallBodies(c, next)));
   app.use("/api/*", async (c, next) => {
     await next();
     if (!c.res.headers.get("cache-control")) c.header("Cache-Control", "no-store");
@@ -819,6 +822,12 @@ export function createApp(deps: ServerDeps): Hono {
     void turn.done.then(release, release);
     // This stream follows the turn; when the client goes away only the following stops.
     return sse<AgentEvent>(c, { heartbeatMs, log }, (send, signal) => turn.follow(0, send, signal));
+  });
+
+  // the Library (read-only) and a photo sent in the chat, which runs the Studio's pipeline as a turn in the conversation
+  registerLibraryRoutes(app, routeCtx);
+  registerChatPhotoRoutes(app, routeCtx, {
+    turns, heartbeatMs, gate: (g, tenant, service) => credits.assertCanSpend(tenant, service, { g }), ...(deps.studio ? { studio: deps.studio } : {}),
   });
 
   mountStudio(app, {

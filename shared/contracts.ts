@@ -280,3 +280,24 @@ export interface LearnedRuleDto {
   fromApprovalIds: string[];
   agents: AgentId[];          // the desks it applies to (none: everyone)
 }
+
+// GET /api/:t/library: everything the team made for this business and every photo the owner sent, newest first
+// (src/server/routes/library.ts). Read from the graph's Asset nodes, the cards that propose them and the posts that use them.
+export type LibraryKind = "poster" | "ad" | "product-shoot" | "picture" | "clip" | "your-photo" | "your-video";
+export type LibraryState = "waiting" | "approved" | "posted" | "declined";
+export interface LibraryItem {
+  id: string;                 // the Asset id (lineage: GET /api/:t/assets/:id/lineage)
+  title: string;
+  kind: LibraryKind;
+  media: "image" | "video";
+  mine: boolean;              // the owner sent it (a photo or a video), not made by the team
+  state: LibraryState | null; // null: an owner's photo, or something no card ever proposed
+  approvalId: string | null;  // the card that proposes it (the pending one, when it waits)
+  at: number;                 // epoch ms it was made or received
+  credits: number | null;     // Higgsfield credits the job used (null: free, or replayed from a recording)
+  label: string | null;       // "A", "B" on a card's options
+  check: "ok" | "held" | "unchecked" | null; // Fact Checker's check
+  url: string;                // the file
+  thumb: string;              // a small copy (the file itself for a video)
+}
+export interface LibraryDto { items: LibraryItem[] }
