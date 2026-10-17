@@ -14,6 +14,7 @@ import { AgentAvatar, agentDef } from "../components/bits";
 import { AssetLineage } from "../components/AssetLineage";
 import { BrandLibrary } from "../components/BrandLibrary";
 import { Icon } from "../components/Icon";
+import { Reveal } from "../components/Reveal";
 import { useApp } from "../state/app";
 import { runStore, useRun } from "../state/runs";
 import type { NodeDetail } from "../types-ext";
@@ -226,14 +227,13 @@ export default function StudioPage() {
       <header className="studio-head">
         <p className="studio-eyebrow"><Icon name="sparkle" size={14} /> Content Studio</p>
         <h1 className="page-title">A phone photo, made into a post</h1>
-        <p className="studio-lede">
-          Tara reads the photo and marks what must not change. You get two options: a free clean-up, and an AI edit styled for your
-          business (the price is said first). Nisha checks both against the original before you see them.
-        </p>
+        <p className="studio-lede">A free clean-up and an AI edit · nothing is posted without your OK</p>
+        <Reveal label="How it works">
+          <p className="studio-lede">Tara reads the photo and marks what must not change. The AI edit says its price first. Nisha checks both against the original before you see them.</p>
+        </Reveal>
         <label className="studio-setting">
           <input type="checkbox" checked={!!settings?.blurFaces} disabled={!settings || !live || getPublicMode()} onChange={(e) => void toggleBlur(e.target.checked)} />
-          <span>Blur people's faces in my content</span>
-          <small>Off: people in your photos are kept as they are.</small>
+          <span>Blur people's faces</span>
         </label>
         {hasRun && !running && (
           <button type="button" className="btn btn-ghost btn-sm studio-new" onClick={() => {
@@ -261,7 +261,7 @@ export default function StudioPage() {
                 <button type="button" className="drop-cta" onClick={() => inputRef.current?.click()} disabled={!live}>
                   <Icon name="plus" size={22} />
                   <span>Drop a photo here, or choose one</span>
-                  <small>JPEG, PNG or WebP. Location data is removed on arrival.</small>
+                  <small>JPEG, PNG or WebP · location removed</small>
                 </button>
               )}
               <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pick(e.target.files?.[0])} />
@@ -276,7 +276,7 @@ export default function StudioPage() {
                 {preview && <button type="button" className="btn btn-ghost" onClick={() => { setFile(null); setPreview(null); }}>Choose another</button>}
                 {!preview && sample && <button type="button" className="btn btn-ghost" onClick={useSample}>Use the demo photo</button>}
               </div>
-              {!live && <p className="studio-note">The Studio runs on the live server; this is the offline demo.</p>}
+              {!live && <p className="studio-note">Works in the live app.</p>}
             </div>
           )}
 
@@ -313,12 +313,13 @@ export default function StudioPage() {
             <article className="card tara">
               <header className="card-head">
                 <AgentAvatar id="content-strategist" size={30} />
-                <div><b>Tara</b><span>Content Strategist · her read of the photo</span></div>
+                <div><b>Tara</b><span>her read of the photo</span></div>
                 <span className={`verdict verdict-${f.assessment.verdict}`}>{VERDICT_LINE[f.assessment.verdict] ?? f.assessment.verdict}</span>
               </header>
               {assessment ? (
                 <>
                   <p className="tara-subject">{assessment.subject}</p>
+                  <Reveal label="Tara's notes">
                   <dl className="facts">
                     <dt>Angle</dt><dd>{assessment.angle}</dd>
                     <dt>Light</dt><dd>{assessment.lighting}</dd>
@@ -336,6 +337,7 @@ export default function StudioPage() {
                     <div><h3>Must not change</h3><ul>{assessment.locks.map((s) => <li key={s}>{s}</li>)}</ul></div>
                   </div>
                   {assessment.coaching && <p className="coaching"><Icon name="pen" size={14} /> Next time: {assessment.coaching}</p>}
+                  </Reveal>
                 </>
               ) : <p className="muted small">Loading Tara's notes…</p>}
             </article>
@@ -399,7 +401,7 @@ export default function StudioPage() {
 
           {f.done && payload && !decided && (
             <section className="card change" aria-label="Ask for a change">
-              <header className="card-head"><div><b>Want it different?</b><span>Say it in your own words. Light and colour are free; bigger changes use the AI editor and the price is shown.</span></div></header>
+              <header className="card-head"><div><b>Want it different?</b><span>Light and colour are free; the AI editor shows its price</span></div></header>
               <div className="change-ideas">
                 {CHANGE_IDEAS.map((idea) => (
                   <button key={idea} type="button" className="btn btn-quiet btn-sm" disabled={changing} onClick={() => setChangeText(idea === "Make it an ad" ? "Make this into an ad saying " : idea)}>{idea}</button>
@@ -430,7 +432,7 @@ export default function StudioPage() {
             <article className="card approve">
               <header className="card-head">
                 <AgentAvatar id="copy-editor" size={30} />
-                <div><b>Dev</b><span>Brand &amp; Copy Editor · the caption, held to the voice rules</span></div>
+                <div><b>Dev</b><span>the caption</span></div>
               </header>
               <label className="caption-field">
                 <span className="visually-hidden">Caption</span>
@@ -465,7 +467,7 @@ export default function StudioPage() {
               <span className="studio-avatars" aria-hidden="true">
                 {["content-strategist", "fact-checker", "copy-editor"].map((a) => <AgentAvatar key={a} id={a} size={34} />)}
               </span>
-              <p>Tara, Nisha and Dev are ready. Your photo stays yours: nothing is posted until you approve it, and a rejected draft costs nothing.</p>
+              <p>Tara, Nisha and Dev are ready.</p>
             </div>
           )}
         </section>
