@@ -21,6 +21,9 @@ export { classifyHook, voiceLint, type VoiceFinding } from "./playbook-lint.js";
 export interface PlaybooksOptions {
   tenantSlug: string;   // playbooks are the same for every tenant; kept so all sources share one call shape
   industry?: string;    // picks the industry benchmark templates ("jobs", "architecture", "real estate"…)
+  // Every industry's benchmark template in its neutral wording (no "closest template for" note, no jobs-only negative
+  // keywords): what the shared reference graph holds (src/ingest/sources/reference.ts). `industry` is ignored with it.
+  allIndustries?: boolean;
 }
 
 const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1).trimEnd()}…`);
@@ -156,10 +159,13 @@ function templateText(label: string, t: IndustryTemplate, jobs: boolean, approxi
   ].filter(Boolean).join(" ");
 }
 
-function ads(b: PackBuilder, industry: string | undefined): void {
+function ads(b: PackBuilder, industry: string | undefined, all = false): void {
   const templates = loadIndustryTemplates();
   const tdoc = b.doc("industry-templates.json", templates.hash);
-  const m = matchIndustry(industry, templates.data.templates);
+  const keys = Object.keys(templates.data.templates);
+  const m = all
+    ? { keys: [...keys.filter((k) => k !== "generic").sort(), ...keys.filter((k) => k === "generic")], via: undefined, jobs: false }
+    : matchIndustry(industry, templates.data.templates);
   for (const key of m.keys) {
     const t = templates.data.templates[key]!;
     const specific = key !== "generic";
@@ -224,7 +230,7 @@ export function loadPlaybooks(opts: PlaybooksOptions): SourceResult {
 
   const packs: Array<[Pack, (b: PackBuilder) => void]> = [
     [PACKS.instagram, instagram], [PACKS.seo, seo], [PACKS.googleUpdates, googleUpdates],
-    [PACKS.ads, (b) => ads(b, opts.industry)], [PACKS.voice, voice],
+    [PACKS.ads, (b) => ads(b, opts.industry, opts.allIndustries === true)], [PACKS.voice, voice],
   ];
   for (const [pack, build] of packs) {
     const b = new PackBuilder(pack);

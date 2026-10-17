@@ -13,6 +13,8 @@ import type { EdgeRef, NodeRef, SourceRef, ToolResult } from "../../../shared/co
 import type { AlgoOpts } from "../../graph/algorithms.js";
 import { currentEdge } from "../../graph/read.js";
 import { MissingEndpoint } from "../../graph/errors.js";
+import { openReference } from "../../graph/reference.js";
+import { isReferenceId } from "../../ingest/sources/reference.js";
 import { REL_TYPES, SEARCHABLE, typeOfLabels, type EntityType, type RelType } from "../../graph/schema.js";
 import { toIso } from "../../util/time.js";
 import { displayName } from "../../../shared/legacy-names.js";
@@ -130,6 +132,27 @@ export async function packed<T>(ctx: ToolContext, body: string, row: string, par
      UNWIND range(0, size(xs) - 1, $pack) AS i RETURN total, xs[i..i + $pack] AS part`,
     { ...params, cap, pack: PACK });
   return { rows: parts.flatMap((p) => p.part), total: parts[0]?.total ?? 0 };
+}
+
+// ---------- the shared reference graph ----------
+
+// The same context on the shared reference graph (general know-how; src/graph/reference.ts), so the read helpers here work
+// on it unchanged. Null when the run reads no reference graph (ctx.reference === null).
+export async function referenceCtx(ctx: ToolContext): Promise<ToolContext | null> {
+  if (ctx.reference === null) return null;
+  return { ...ctx, graph: ctx.reference ?? await openReference() };
+}
+
+// A read of the reference graph: `empty` while it is not loaded yet (no graph) or switched off.
+export async function fromReference<T>(ctx: ToolContext, fn: (ref: ToolContext) => Promise<T>, empty: T): Promise<T> {
+  const ref = await referenceCtx(ctx);
+  if (!ref) return empty;
+  try {
+    return await fn(ref);
+  } catch (e) {
+    if (/empty key/i.test(String((e as Error)?.message))) return empty;
+    throw e;
+  }
 }
 
 // ---------- rows -> refs ----------
@@ -392,6 +415,11 @@ export async function requireNode(ctx: ToolContext, id: string): Promise<NodeRow
     `MATCH (n:Entity {id:$id}) OPTIONAL MATCH (c:Entity {id: n.mergedInto})
      RETURN ${NODE("n")} AS n, CASE WHEN c IS NULL THEN null ELSE ${NODE("c")} END AS c LIMIT 1`, { id });
   if (found) return found.c ?? found.n;
+  // a shared rule, playbook or reference document (src/graph/reference.ts) is not in the business's records but still resolves
+  if (isReferenceId(id)) {
+    const shared = await fromReference(ctx, (ref) => getNode(ref, id), null);
+    if (shared) return shared;
+  }
   const named = await byExactName(ctx, id);
   if (named) return named;
   const suggestions = await suggest(ctx, id);

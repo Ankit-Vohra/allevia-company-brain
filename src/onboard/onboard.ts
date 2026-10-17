@@ -24,12 +24,13 @@ import { legacyCacheDir, tenantCacheDir } from "../util/cache.js";
 import { entityId } from "../util/ids.js";
 import { EXTRACTABLE_TYPES, type KnownEntity, type LlmRunner } from "../ingest/extract.js";
 import { embedPassages, entityText } from "../ingest/embed.js";
-import { loadPlaybooks } from "../ingest/sources/playbooks.js";
+import { seoRuleStubsWrite } from "../ingest/sources/reference.js";
+import { ensureReference } from "../graph/reference.js";
 import type { GraphWrite } from "../ingest/types.js";
 import {
   BlockedUrlError, brandWrite, buildBrandKit, channelsWrite, checkUrl, crawlSite, describeBrand, evaluateSeo,
   extractPages, findSocials, linksWrite, makeAsk, normalizeUrl, pageDocId, pageId, pageWrite, profileBusiness, profileWrite, redactPage, selectKeyPages,
-  seoRulesWrite, seoWrite, understandingLinks, websiteChannelWrite, type BrandVoice, type Profile, type CrawlOptions, type CrawlResult, type PageData,
+  seoWrite, understandingLinks, websiteChannelWrite, type BrandVoice, type Profile, type CrawlOptions, type CrawlResult, type PageData,
 } from "../ingest/sources/website/index.js";
 import type { BaselineResult } from "../program/program.js";
 import { baselineStage, capabilitiesStage, goalsStage, northStarStage, profileStage, type GoalsResult, type ProfileResult, type ProgramStageCtx } from "./enroll.js";
@@ -390,7 +391,8 @@ export async function onboard(typed: OnboardInput, emit: (e: OnboardEvent) => vo
     try {
       const report = evaluateSeo(pages, crawl.linkStatus);
       result.seoScore = report.score;
-      await write("seo", seoRulesWrite());
+      // the rules themselves live in the shared reference graph; this business keeps stubs of the ones its audit used
+      await write("seo", seoRuleStubsWrite(report));
       // a check whose outcome flipped since the last run: close the old edge first
       const prior = await retrying(() => g.query<{ p: string; t: string; r: string }>(
         "MATCH (p:Page)-[x:FAILS|PASSES]->(r:Rule) WHERE x.until IS NULL RETURN p.id AS p, type(x) AS t, r.id AS r"));
@@ -514,12 +516,12 @@ export async function onboard(typed: OnboardInput, emit: (e: OnboardEvent) => vo
   }
 
   if (website && !stopped()) {
-    stage("playbooks", "Loading SEO, Instagram, ads and writing playbooks for your industry");
+    stage("playbooks", "Opening the shared SEO, Instagram, ads and writing playbooks to your team");
     try {
-      const industry = input.industry ?? siteProfile?.industry; // the owner's word, else what the website says
-      const pb = loadPlaybooks({ tenantSlug: input.slug, ...(industry ? { industry } : {}) });
-      await write("playbooks", pb.write);
-      for (const s of pb.skipped.slice(0, 5)) log(`[onboard] playbooks skipped ${s.ref}: ${s.reason}`);
+      // General know-how is kept once for every business (src/graph/reference.ts), never copied into this business's graph.
+      const r = await ensureReference();
+      log(`[onboard] playbooks: shared reference ${r.loaded ? `loaded (${r.nodes} nodes)` : "already loaded"}`);
+      for (const e of r.errors.slice(0, 5)) log(`[onboard] playbooks: ${e}`);
     } catch (e) {
       fail("playbooks", e);
     }

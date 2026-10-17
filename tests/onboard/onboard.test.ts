@@ -89,7 +89,11 @@ describe("onboard (fixture site, fake LLM, test graph)", () => {
     expect(c.Page).toBe(first.pages);
     expect(c.BrandAsset).toBeGreaterThanOrEqual(5);
     expect(c.Product).toBe(3);
-    expect(c.Rule).toBeGreaterThan(20);
+    // the playbooks are not copied in: only stubs of the SEO checks this site's audit used (the rules live in the shared reference graph)
+    expect(c.Rule).toBeGreaterThan(5);
+    const copied = await q<{ c: number }>(
+      "MATCH (n:Entity) WHERE (n:Rule AND n.refStub IS NULL) OR n:Playbook OR (n:Event AND n.kind = 'google-update') OR (n:Document AND n.kind = 'playbook') RETURN count(n) AS c");
+    expect(copied[0]!.c).toBe(0);
     expect(c.seoScore).toBeGreaterThan(0);
     const [biz] = await q<{ s: string; city: string; country: string; style: string }>(
       "MATCH (b:Business) RETURN b.summary AS s, b.city AS city, b.country AS country, b.designStyle AS style");

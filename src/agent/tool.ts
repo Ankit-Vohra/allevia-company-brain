@@ -25,6 +25,9 @@ export interface ToolContext {
   creative?: CreativeDeps;  // what the creating tools may use (files, vision, the capped image engine); absent: creating is not set up
   publicData?: PublicDataPort; // public-data lookups (Apify, budgeted); absent or off: those tools say they aren't switched on
   connections?: ConnectionsPort; // this business's connections (Google, Composio): the tools that use them say plainly when one is missing; absent: none are
+  // The shared reference graph (general know-how: the playbooks, their rules, the Google update timeline; src/graph/reference.ts).
+  // Absent: the one ALLEVIA_REFERENCE_GRAPH names; null: none (the tools read the business graph only).
+  reference?: GraphHandle | null;
   signal?: AbortSignal;     // aborted when the agent's run is stopped (timeout, turn stopped): a write tool checks it
                             // right before it commits, so a run that was stopped mid-call changes nothing
 }

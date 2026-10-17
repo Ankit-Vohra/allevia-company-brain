@@ -23,7 +23,7 @@ export default defineConfig({
     execArgv: ["--no-incremental-marking", "--no-concurrent-marking"],
     // The query-shape check: setupFiles record what src/ sends, globalSetup plans it all with EXPLAIN when the run ends.
     globalSetup: ["tests/setup/query-shapes.global.ts", "tests/setup/templates.global.ts"],
-    setupFiles: ["tests/setup/query-shapes.ts", "tests/setup/native.ts"],
+    setupFiles: ["tests/setup/query-shapes.ts", "tests/setup/native.ts", "tests/setup/reference.ts"],
     testTimeout: 20_000,
     hookTimeout: 30_000,
     env: {

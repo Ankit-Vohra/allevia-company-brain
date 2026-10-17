@@ -11,6 +11,7 @@
 // Each one names its shipped base skill (reel-script, photo-to-ad-brief, brand-voice-check): the owner's rules and the
 // rules learned from edits on the base reach it too, which is how the team keeps refining it.
 import type { GraphHandle } from "../../graph/client.js";
+import { readReference } from "../../graph/reference.js";
 import { upsertNode, writeBatch } from "../../graph/upsert.js";
 import { findBusiness } from "../../capabilities/ladder.js";
 import { contentPerformance } from "../tools/content.js";
@@ -72,9 +73,13 @@ export async function companyFacts(g: GraphHandle, tenant: string, now: number =
     `MATCH (x:${label}) RETURN x.name AS name, x.summary AS summary ORDER BY coalesce(x.createdAt, 0), x.id LIMIT ${n}`))
     .map((r) => one([r.name, r.summary].filter(Boolean).join(": "))).filter(Boolean);
   const [audiences, needs, products, features, channels] = await Promise.all([list("Audience", 8), list("Need", 8), list("Product", 8), list("Feature", 10), list("Channel", 8)]);
-  const hooks = (await g.roQuery<{ tpl: string | null; text: string | null }>(
-    "MATCH (r:Rule) WHERE r.kind = 'hook' RETURN r.template AS tpl, r.text AS text ORDER BY coalesce(r.rank, 0) DESC, r.id LIMIT 8"))
-    .map((r) => one(r.tpl ?? r.text)).filter(Boolean);
+  // the business's own hook rules first, then the shared playbook's (src/graph/reference.ts); a stub has no text of its own
+  const HOOKS = "MATCH (r:Rule) WHERE r.kind = 'hook' AND r.refStub IS NULL RETURN r.template AS tpl, r.text AS text ORDER BY coalesce(r.rank, 0) DESC, r.id LIMIT 8";
+  const hookRows = [
+    ...await g.roQuery<{ tpl: string | null; text: string | null }>(HOOKS),
+    ...await readReference<{ tpl: string | null; text: string | null }>(HOOKS),
+  ];
+  const hooks = [...new Set(hookRows.map((r) => one(r.tpl ?? r.text)).filter(Boolean))].slice(0, 8);
   const learned = (await g.roQuery<{ text: string | null }>(
     "MATCH (r:Rule) WHERE r.kind = 'learned' AND coalesce(r.status, 'active') = 'active' RETURN coalesce(r.text, r.name) AS text ORDER BY coalesce(r.confidence, 0) DESC, r.id LIMIT 12"))
     .map((r) => one(r.text)).filter(Boolean);

@@ -16,6 +16,7 @@ import { AGENTS, DEPARTMENTS, agentById } from "../../shared/roster.js";
 import type { AgentEvent, NodeRef, TurnChecks } from "../../shared/contracts.js";
 import type { GraphHandle } from "../graph/client.js";
 import { noteGraphWrite } from "../graph/projection.js";
+import { ensureReferenceStubs } from "../graph/reference.js";
 import { VECTOR_DIM } from "../graph/indexes.js";
 import { writeBatch, type EdgeInput, type NodeInput, type Prim } from "../graph/upsert.js";
 import { cleanEdge, cleanNode, cleanText, Removed } from "../ingest/clean.js";
@@ -266,6 +267,15 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
   // The skills opened this turn that are in the graph as Playbook nodes (use_skill writes them): the Turn TOUCHED them, the agent
   // that opened one USES it, and the Finding of a desk that used it is GUIDED_BY it.
   const skillIds = unique([...(t.skills ?? []).map((s) => s.skillId), ...t.findings.flatMap((f) => f.skills ?? [])]).map(skillNodeId);
+  // A shared rule (src/graph/reference.ts) the answer cited, drew on its path or worked under, and that a tool returned this turn,
+  // gets a stub in this business's graph, so the CITED / GUIDED_BY edge has an endpoint and the citation resolves later.
+  const used = new Set(touchedIds);
+  const applied = [...t.citations, ...(t.pathIds ?? []), ...t.findings.flatMap((f) => [...f.citations, ...f.basedOn]), ...guideIds].filter((id) => used.has(id));
+  try {
+    await ensureReferenceStubs(g, applied, now);
+  } catch {
+    // the turn is still saved; a citation of a shared rule just has no edge
+  }
   const known = await existing(g, [...touchedIds, ...(t.pathIds ?? []), ...skillIds, ...t.citations, ...t.findings.flatMap((f) => [...f.citations, ...f.basedOn]), ...guideIds]);
   const guide = (id: string): boolean => known.has(id) && GUIDES.has(typeFromId(id) ?? ""); // an instruction still in the graph
   const exists = (id: string): boolean => known.has(id) && id !== t.turnId;

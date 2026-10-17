@@ -17,6 +17,7 @@
 // state as a Version (both are TRACKED).
 import type { AccessMode, CapabilityKey, CapabilityState, CapabilityStatus } from "../../shared/contracts.js";
 import type { GraphHandle } from "../graph/client.js";
+import { readReference } from "../graph/reference.js";
 import { businessId as tenantBusinessId } from "../graph/tenants.js";
 import { writeBatch, type EdgeInput, type NodeInput } from "../graph/upsert.js";
 import { isoDate } from "../util/time.js";
@@ -72,6 +73,10 @@ export async function findBusiness(g: GraphHandle, given?: string): Promise<stri
   return rows[0]?.id ?? null;
 }
 
+// The channels an ad benchmark rule APPLIES_TO.
+const BENCHMARK_CHANNELS = `MATCH (r:Rule)-[e:APPLIES_TO]->(c:Channel) WHERE e.until IS NULL AND (r.kind = 'benchmark' OR r.id STARTS WITH 'rule:benchmark-')
+       RETURN DISTINCT c.id AS id`;
+
 async function readFacts(g: GraphHandle, businessId?: string): Promise<LadderFacts> {
   const ids = [...new Set(CAPABILITIES.flatMap((c) => [...c.systems, ...c.channels]))];
   const n = async (cypher: string): Promise<number> => (await g.roQuery<{ c: number }>(cypher))[0]?.c ?? 0;
@@ -91,9 +96,7 @@ async function readFacts(g: GraphHandle, businessId?: string): Promise<LadderFac
     n("MATCH (:Page)-[r:PART_OF]->(:Entity:Channel {id:'channel:website'}) WHERE r.until IS NULL RETURN count(r) AS c"),
     n("MATCH (b:BrandAsset) RETURN count(b) AS c"),
     n("MATCH (a:Asset) WHERE a.kind = 'original' RETURN count(a) AS c"),
-    g.roQuery<{ id: string }>(
-      `MATCH (r:Rule)-[e:APPLIES_TO]->(c:Channel) WHERE e.until IS NULL AND (r.kind = 'benchmark' OR r.id STARTS WITH 'rule:benchmark-')
-       RETURN DISTINCT c.id AS id`),
+    g.roQuery<{ id: string }>(BENCHMARK_CHANNELS),
     // The playbooks put bare Channel anchors (Instagram, Google Search, Meta Ads) in every tenant graph. Only a channel
     // that is PART_OF a Business is a profile the business has: the crawl found its link, or the owner gave the handle.
     g.roQuery<{ id: string }>(
@@ -111,7 +114,8 @@ async function readFacts(g: GraphHandle, businessId?: string): Promise<LadderFac
     uploadDocs: new Set(docs.filter((d) => UPLOAD_KINDS.has(lc(d.kind))).map((d) => d.id)),
     publicDocs: new Set(docs.filter((d) => PUBLIC_KINDS.has(lc(d.kind))).map((d) => d.id)),
     seoChecks, crawledPages, brandAssets, originals,
-    benchmarkChannels: new Set(bench.map((b) => b.id)),
+    // the business's own benchmark rules and the shared playbooks' (src/graph/reference.ts), which every business reads
+    benchmarkChannels: new Set([...bench, ...await readReference<{ id: string }>(BENCHMARK_CHANNELS)].map((b) => b.id)),
     ownedChannels: new Set(owned.map((o) => o.id)),
   };
 }

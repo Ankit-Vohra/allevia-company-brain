@@ -40,7 +40,7 @@ import { runLibrarian, type LibrarianReport } from "./librarian.js";
 import { graphSize, runRecordWrite } from "./run-record.js";
 import { loadBrain } from "./sources/brain.js";
 import { mapSnapshot } from "./sources/ops.js";
-import { loadPlaybooks } from "./sources/playbooks.js";
+import { ensureReference } from "../graph/reference.js";
 import { simulateAds } from "./sources/simads.js";
 import { fetchIssues, mapIssues, type GhIssue, type GhRunner } from "./sources/github.js";
 import type { IngestReport, RawDoc, SourceResult } from "./types.js";
@@ -385,8 +385,14 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
     }
   }
   if (want.has("playbooks")) {
+    // General know-how lives once in the shared reference graph (src/graph/reference.ts), not in each business's graph.
     const t = Date.now();
-    took(loadPlaybooks({ tenantSlug: tc.slug, industry: tc.industry }), Date.now() - t);
+    const ref = await ensureReference();
+    took({
+      source: "playbooks", docs: [], write: { nodes: [], edges: [], observations: [] }, redactions: {},
+      skipped: ref.errors.map((e) => ({ ref: ref.graph, reason: e })),
+    }, Date.now() - t);
+    log(`[playbooks] kept in the shared reference graph ${ref.graph}${ref.loaded ? ` (loaded ${ref.nodes} nodes)` : ""}`);
   }
   if (want.has("simads")) {
     if (!tc.ads) skipped.push({ source: "simads", ref: tc.slug, reason: "no ads profile in the tenant config" });

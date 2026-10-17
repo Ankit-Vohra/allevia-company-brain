@@ -160,6 +160,8 @@ export function evaluateSeo(pages: PageData[], linkStatus: Record<string, number
 
 // The Rules FAILS/PASSES point at: the vendored seo-check pack (exactly as the playbooks source writes it, so the two
 // never disagree) and Allevia's local checks, both INCLUDED by their Playbook and APPLIES_TO the website channel.
+// The full rules, for the shared reference graph (src/ingest/sources/reference.ts). A business graph gets only stubs of the
+// rules its own audit points at (seoRuleStubsWrite).
 export function seoRulesWrite(): GraphWrite {
   const pb = loadPlaybooks({ tenantSlug: "onboard" }).write;
   const seoPlaybook = playbookId(PACKS.seo);
@@ -167,7 +169,14 @@ export function seoRulesWrite(): GraphWrite {
   for (const e of pb.edges) if (e.from === seoPlaybook && (e.type === "INCLUDES" || e.type === "SOURCED_FROM")) keep.add(e.to);
   const nodes: NodeInput[] = pb.nodes.filter((n) => keep.has(n.id));
   const edges: EdgeInput[] = pb.edges.filter((e) => keep.has(e.from) && keep.has(e.to));
+  const own = alleviaSeoWrite();
+  return { nodes: [...nodes, ...own.nodes.filter((n) => !keep.has(n.id))], edges: [...edges, ...own.edges], observations: [] };
+}
 
+// Allevia's own SEO checks (what the vendored audit lacks): their Playbook, the Rules and the website channel anchor.
+export function alleviaSeoWrite(): GraphWrite {
+  const nodes: NodeInput[] = [];
+  const edges: EdgeInput[] = [];
   nodes.push({ type: "Playbook", id: ALLEVIA_SEO_PLAYBOOK, name: "Allevia SEO checks",
     summary: "Allevia's own website checks for what the vendored open-seo audit does not cover: canonical links, structured data, viewport, mixed content and Open Graph.",
     props: { source: "allevia" } });
