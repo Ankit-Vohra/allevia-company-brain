@@ -619,6 +619,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 | `showcase <tenant> [<turnId>]` | Mark a stored turn for public replay, or list the showcase turns |
 | `db:check` / `db:migrate [tenant…]` | Ping FalkorDB and compare its settings with `docker-compose.yml`; bring tenant graphs up to the current schema |
 | `db:telemetry [--dry-run]` | Remove FalkorDB's own `telemetry{<graph>}` streams, which once broke a restart ([#29](docs/notes/falkordb-reply-compact-panic.md)); the server also does it every 10 minutes (`ALLEVIA_TELEMETRY_SWEEP=off` stops that) |
+| `db:usage [--on <url|env:NAME>] [--limit-mb N] [--all]` | How full the database is: memory used against its limit (`INFO memory`), each graph's share (`GRAPH.MEMORY USAGE`); warns from 80% (exit 3). Read-only; works on FalkorDB Cloud |
 | `db:export` / `db:import` / `db:busy` | Copy a graph between FalkorDB servers as a verified JSON-lines file, and see what a server is running ([moving to FalkorDB Cloud](docs/falkordb-cloud.md)) |
 | `privacy-scan <tenant>` | Scan every string in a tenant's graph for secrets and personal data (must report 0) |
 | `graph:story <tenant> [--by recorded\|happened] [--bucket day\|week]` | How the business's brain grew: nodes and edges per day or week by kind, from the graph itself (two clocks: when the team learned it, and the date of its source); read-only |

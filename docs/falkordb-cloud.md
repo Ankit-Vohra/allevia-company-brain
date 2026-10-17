@@ -63,6 +63,12 @@ So the four businesses take about **37 MB of the 100 MB** (demo about 6, meta + 
 `GRAPH.MEMORY USAGE` says Aamdani 11 MB, AVS 2 MB; the rest is Redis and index overhead. Headroom: roughly 2.5x
 today's data before the 80 MB line.
 
+**Watching it:** `npm run cli -- db:usage` prints the memory used against the plan's limit (from `INFO memory`; set
+`ALLEVIA_DB_LIMIT_MB=100` if a server does not report its own), each graph's own share (`GRAPH.MEMORY USAGE`), and warns from
+80% (exit 3, to the error stream; critical from 95%, and it names leftover `allevia_test_…` graphs to drop first). It is
+read-only. On 17 October 2026 it read 64 MB used of 100 MB (peak 99 MB earlier), six graphs of their own 19 MB. A full plan
+refuses every write (`noeviction`), so look before a big import, an onboarding or a long test run.
+
 The local export files were taken 2026-10-16; the live app has kept writing to 6390 since. Re-copy just before the
 switch (section 5).
 
