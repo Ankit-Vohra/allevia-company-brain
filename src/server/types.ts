@@ -21,6 +21,8 @@ export interface TenantDto {
   showcase?: boolean;
   /** With sign-in on: the caller's role in this business (an owner link or the operator's makes them the owner). Absent for a demo they only read, and with sign-in off. */
   role?: "owner" | "member";
+  /** With role: the caller is an operator account (the person who runs Allevia) and opens this business as its owner without being in it. */
+  operator?: true;
 }
 
 export interface FreshnessDto { source: string; asOf: string; status: "ok" | "stale" | "error"; note?: string }

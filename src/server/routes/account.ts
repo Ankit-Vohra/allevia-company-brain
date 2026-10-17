@@ -46,11 +46,14 @@ export interface AccountRouteCtx {
 export interface AccountDto {
   user: { id: string; email: string; name: string };
   businesses: Array<{ id: string; name: string; role: Membership["role"] }>;
+  /** The person who runs Allevia (User.operator, set only by `auth:operator` on the server): every business opens to them. */
+  operator?: true;
 }
 
-export const accountDto = (user: Account, memberships: Membership[]): AccountDto => ({
+export const accountDto = (user: Account, memberships: Membership[], operator = false): AccountDto => ({
   user: { id: user.id, email: user.email, name: user.name },
   businesses: memberships.map((m) => ({ id: m.slug, name: m.name, role: m.role })),
+  ...(operator ? { operator: true as const } : {}),
 });
 
 const Signup = z.object({ name: z.string().max(400), email: z.string().max(400), password: z.string().max(1000) });
@@ -136,7 +139,7 @@ export function registerAccountRoutes(app: Hono, ctx: AccountRouteCtx): void {
   app.get("/api/auth/me", async (c) => {
     on();
     const s = await signedIn(c);
-    return c.json(accountDto(s.user, s.memberships));
+    return c.json(accountDto(s.user, s.memberships, s.operator));
   });
 
   app.post("/api/auth/password", async (c) => {
