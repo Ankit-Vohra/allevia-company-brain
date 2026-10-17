@@ -222,6 +222,9 @@ export default function StudioPage() {
   };
 
   const hasRun = !!f.originalId;
+  // once the team has the photo, the picker goes: left up, it showed the same photo twice and a second "Send to Tara"
+  // beside the finished options (a run that fails before that keeps the photo, to send again)
+  useEffect(() => { if (hasRun) { setFile(null); setPreview((p) => { if (p) URL.revokeObjectURL(p); return null; }); } }, [hasRun]);
   return (
     <div className="studio-page">
       <header className="studio-head">
