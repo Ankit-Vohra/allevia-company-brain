@@ -60,10 +60,12 @@ describe("splitMessage", () => {
 describe("answer rendering", () => {
   const names = new Map([["decision:007-pause-daily-stories", "Pause daily stories"], ["document:adr-007", "ADR 007: Pause daily stories and put the time into reels"]]);
 
-  it("turns [[id]] citations into short labels, falling back to the id's slug", () => {
-    const out = renderCitations("We paused [[decision:007-pause-daily-stories]] per [[document:adr-007]] and [[metric:weekly-signups]].", names);
-    expect(out).toBe("We paused `Pause daily stories` per `ADR 007: Pause daily stories and put th…` and `weekly signups`.");
-    expect(renderCitations("x [[a:b]][[a:b]]", new Map())).toBe("x `b`");
+  it("turns [[id]] citations into superscript numbers at the clause end, with one small sources line (names, else the id's slug)", () => {
+    const out = renderCitations("We paused daily stories [[decision:007-pause-daily-stories]] [[document:adr-007]], and sign-ups held [[metric:weekly-signups]].", names);
+    expect(out).toBe("We paused daily stories,¹ ² and sign-ups held.³\n-# Sources: ¹ Pause daily stories · ² ADR 007: Pause daily stories and put th… · ³ weekly signups");
+    expect(renderCitations("x [[a:b]][[a:b]]", new Map())).toBe("x¹\n-# Sources: ¹ b");
+    expect(renderCitations("Again [[a:b]]. And again [[a:b]].", new Map())).toBe("Again.¹ And again.¹\n-# Sources: ¹ b");
+    expect(renderCitations("No sources.", new Map())).toBe("No sources.");
   });
 
   it("badges: sources verified when citations and numbers check out; a warning per failed check", () => {
@@ -84,7 +86,7 @@ describe("answer rendering", () => {
       answer: "We paused daily stories [[decision:007-pause-daily-stories]].", checks: OK, names,
       url: "http://127.0.0.1:8787/ask/session:s?tenant=mini",
     });
-    expect(parts).toEqual(["We paused daily stories `Pause daily stories`.\n\n✅ sources verified · Path view: <http://127.0.0.1:8787/ask/session:s?tenant=mini>"]);
+    expect(parts).toEqual(["We paused daily stories.¹\n-# Sources: ¹ Pause daily stories\n\n✅ sources verified · Path view: <http://127.0.0.1:8787/ask/session:s?tenant=mini>"]);
     const long = renderAnswer({ answer: "Long answer. ".repeat(400), checks: OK, names, url: "http://x.example/ask/s" });
     expect(long.length).toBe(3);
     expect(long.at(-1)).toContain("Path view");

@@ -1,10 +1,13 @@
 // How Allevia's answers look in Discord (pure functions, unit-tested): messages split under Discord's 2,000-character
-// limit, [[id]] citations as short labels, the turn's checks as badges, and the link to the web path view.
+// limit, [[id]] citations as small superscript numbers with one quiet sources line, the turn's checks as badges, and the
+// link to the web path view.
+import { markerText, numberCitations } from "../../shared/citations.js";
 import type { TurnChecks } from "../../shared/contracts.js";
 
 export const DISCORD_MAX = 2000;
 export const THREAD_NAME_MAX = 100;
 const LABEL_MAX = 40;
+const SOURCES_MAX = 8;
 
 const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
 const isHigh = (c: number): boolean => c >= 0xd800 && c <= 0xdbff;
@@ -50,11 +53,18 @@ export function splitMessage(text: string, max: number = DISCORD_MAX): string[] 
 // "metric:weekly-signups" -> "weekly signups"
 const slugLabel = (id: string): string => id.slice(id.indexOf(":") + 1).replace(/[-_]+/g, " ").trim() || id;
 
-// [[id]] -> `Name` (the node's name when a tool returned it, else the id's slug), a repeated citation shown once.
+const SUP = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+const sup = (s: string): string => s.replace(/\d/g, (d) => SUP[Number(d)]!).replace(/–/g, "⁻").replace(/, /g, " ");
+
+// [[id]] -> a superscript number at the end of its clause ("unchanged.¹", "¹ ²" together), the same number each time an id
+// is cited, and one small line under the text naming each: "-# Sources: ¹ Pause daily stories · ² weekly signups" (the
+// node's name when a tool returned it, else the id's slug). Discord has no popover, so the names are a line, not chips.
 export function renderCitations(text: string, names: ReadonlyMap<string, string>): string {
-  return text
-    .replace(/\[\[([^\]]+)\]\](?:\s*\[\[\1\]\])+/g, "[[$1]]")
-    .replace(/\[\[([^\]]+)\]\]/g, (_, id: string) => `\`${clip((names.get(id) ?? slugLabel(id)).replace(/`/g, "'").trim(), LABEL_MAX)}\``);
+  const { md, ids } = numberCitations(text, (ns) => sup(markerText(ns)));
+  if (!ids.length) return md;
+  const shown = ids.slice(0, SOURCES_MAX).map((id, i) => `${sup(String(i + 1))} ${clip((names.get(id) ?? slugLabel(id)).replace(/[`*_~|]/g, "").trim(), LABEL_MAX)}`);
+  const more = ids.length > SOURCES_MAX ? ` · +${ids.length - SOURCES_MAX} more in the path view` : "";
+  return `${md.trimEnd()}\n-# Sources: ${shown.join(" · ")}${more}`;
 }
 
 const list = (xs: string[], n = 5): string => xs.slice(0, n).join(", ") + (xs.length > n ? ` +${xs.length - n}` : "");

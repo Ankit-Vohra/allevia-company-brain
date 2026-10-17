@@ -122,7 +122,7 @@ afterAll(async () => { await cleanup?.(); });
 beforeEach(() => { calls = []; decided = []; });
 
 describe("threads and sessions", () => {
-  it("a message in the channel opens a thread named after it, works there, and answers with labels, badges and the path link", async () => {
+  it("a message in the channel opens a thread named after it, works there, and answers with numbered sources, badges and the path link", async () => {
     const bot = await makeBot();
     const m = message({ content: QUESTION });
     await bot.onMessage(m);
@@ -140,7 +140,8 @@ describe("threads and sessions", () => {
     expect(log!.edits.length).toBeGreaterThan(0);
     expect(text(log!.current)).toContain("Memory Keeper · done");
     const body = answer.map((p) => text(p.current)).join("\n");
-    expect(body).toContain("We paused daily stories on 20 Sep 2026 `Pause daily stories`");
+    expect(body).toContain("We paused daily stories on 20 Sep 2026,¹ as of 20 Sep 2026.");
+    expect(body).toContain("-# Sources: ¹ Pause daily stories");
     expect(body).not.toContain("[[");
     expect(body).toMatch(/✅ sources verified|⚠️/);
     expect(body).toContain(`Path view: <http://127.0.0.1:8787/ask/${sessionId}?tenant=mini>`);
