@@ -90,3 +90,10 @@
 .dr-option-label b { font-weight: 600; }
 .dr-pick { color: var(--color-accent-ink); font-weight: 600; }
 .dr-held { color: var(--color-warn); font-weight: 600; }
+
+/* the same idea drafted more than once: one row, "×3" */
+.ap-repeat { flex: none; padding: 0 6px; border-radius: 9px; background: var(--color-paper-2); color: var(--color-ink-2); font-size: var(--text-2xs); font-weight: 600; }
+.ap-repeat-btn.btn { min-width: 0; padding: 0 0.5em; font-size: var(--text-xs); font-weight: 600; color: var(--color-ink-2); }
+.ap-repeat-btn[aria-expanded="true"] { background: var(--color-paper-2); }
+.ap-earlier { margin: 0 0 4px 34px; padding-left: 10px; border-left: 2px solid var(--color-rule-2); }
+.ap-older { margin-top: var(--space-sm); }

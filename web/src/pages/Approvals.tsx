@@ -1,8 +1,9 @@
-// Waiting for your OK: nothing leaves Allevia without the owner's yes. Every draft is one compact row (what it is, who made
-// it, how big) with OK and Look; Look opens the whole draft in a sheet with Approve, Change and No thanks, the same call as
+// Needs your OK: nothing leaves Allevia without the owner's yes. Every draft is one compact row (what it is, who made
+// it, how big) with OK and Look; the same idea drafted on several mornings is one row with "×3" (the newest is the one acted
+// on, the earlier ones open under it), and anything over a week old sits under one folded "Older" row; Look opens the whole draft in a sheet with Approve, Change and No thanks, the same call as
 // Home and the Discord buttons. An edit becomes a habit the team keeps (said right after). Your posts, what you decided and
 // what your edits taught sit folded below. /approvals#appr:… (from Insights and the chat) opens that draft at once.
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import type { LearnedRuleDto } from "@shared/contracts";
 import { api, getPublicMode } from "../api";
@@ -18,6 +19,7 @@ import { Reveal } from "../components/Reveal";
 import { Sheet } from "../components/Sheet";
 import { wordDiff } from "../lib/diff";
 import { fmtMoney } from "../lib/format";
+import { groupDrafts, splitOlder } from "../lib/group";
 import { plainTitle } from "../lib/home";
 import { TEAM_CHANGED } from "../lib/office-shared";
 import { useApp, useAsync } from "../state/app";
@@ -63,8 +65,33 @@ export default function ApprovalsPage() {
   // not memoised: the mock API edits its cards in place, so the list's identity does not change when a card is decided
   const all = list.data ?? [];
   const pending = all.filter((a) => a.status === "pending");
+  // newest first, then folded: one row per idea, this week's on top and the rest under Older
+  const groups = groupDrafts([...pending].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+  const { recent, older } = splitOlder(groups, (a) => a.createdAt);
+  const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(new Set());
+  const toggleGroup = (id: string) => setOpenGroups((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const rows = (gs: typeof groups) => (
+    <ul className="ap-list">
+      {gs.map((g) => (
+        <Fragment key={g.lead.id}>
+          <ApprovalRow
+            a={g.lead} stake={stakes.get(g.lead.id)} readOnly={readOnly} onOk={(x) => decide(x, "approve")} onLook={(x) => setLook(x.id)}
+            repeats={g.items.length} repeatsOpen={openGroups.has(g.lead.id)} onRepeats={() => toggleGroup(g.lead.id)}
+          />
+          {openGroups.has(g.lead.id) && (
+            <li className="ap-earlier">
+              <ul className="ap-list" aria-label="Earlier drafts of the same idea">
+                {g.items.slice(1).map((a) => (
+                  <ApprovalRow key={a.id} a={a} stake={stakes.get(a.id)} readOnly={readOnly} onOk={(x) => decide(x, "approve")} onLook={(x) => setLook(x.id)} />
+                ))}
+              </ul>
+            </li>
+          )}
+        </Fragment>
+      ))}
+    </ul>
+  );
   const decided = all.filter((a) => a.status !== "pending").sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""));
-  const approvedCount = decided.filter((a) => a.status === "executed" || a.status === "approved" || a.status === "edited").length;
   const open = pending.find((a) => a.id === look);
   const rules = feed.data?.rules ?? [];
   const rulesFrom = useMemo(() => {
@@ -94,12 +121,7 @@ export default function ApprovalsPage() {
   return (
     <div className="approvals-page">
       <header className="appr-head">
-        <h1 className="page-title">Waiting for your OK</h1>
-        {!list.loading && (
-          <p className="appr-tally" aria-label="Where things stand">
-            <b className="num">{pending.length}</b> waiting{approvedCount > 0 && <> · <b className="num">{approvedCount}</b> approved</>} · nothing goes out without you
-          </p>
-        )}
+        <h1 className="page-title">Needs your OK</h1>
       </header>
 
       {list.error && <p className="notice notice-bad" role="alert">Your drafts did not load: {list.error}</p>}
@@ -110,16 +132,19 @@ export default function ApprovalsPage() {
         {list.loading && !list.data ? (
           <span className="skeleton" style={{ display: "block", height: 160 }} />
         ) : pending.length > 0 ? (
-          <ul className="ap-list">
-            {pending.map((a) => (
-              <ApprovalRow key={a.id} a={a} stake={stakes.get(a.id)} readOnly={readOnly} onOk={(x) => decide(x, "approve")} onLook={(x) => setLook(x.id)} />
-            ))}
-          </ul>
+          <>
+            {rows(recent)}
+            {older.length > 0 && (
+              <Reveal className="ap-older" tone="row" label={`Older (${older.length})`} defaultOpen={recent.length === 0}>
+                {rows(older)}
+              </Reveal>
+            )}
+          </>
         ) : list.data ? (
           <div className="appr-empty">
             <span className="appr-empty-icon" aria-hidden="true"><Icon name="check" size={20} /></span>
             <h2 className="appr-empty-title">Nothing needs you right now</h2>
-            <Link className="btn btn-ghost" to="/insights">See what we noticed</Link>
+            <Link className="btn btn-ghost" to="/insights">See the ideas</Link>
           </div>
         ) : null}
       </section>

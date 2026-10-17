@@ -13,8 +13,13 @@ import { kindWords } from "../../lib/approval-words";
 import type { Done } from "./decide";
 import "./approval.css";
 
-export function ApprovalRow({ a, big, stake, readOnly, onOk, onLook }: {
+export function ApprovalRow({ a, big, stake, readOnly, onOk, onLook, repeats, onRepeats, repeatsOpen }: {
   a: Approval;
+  /** How many drafts of the same idea this row stands for (the newest is this one); shown as "×3". */
+  repeats?: number;
+  /** Shows or hides the earlier drafts of the same idea (the Needs your OK page). */
+  onRepeats?: () => void;
+  repeatsOpen?: boolean;
   big?: boolean;
   /** How big: the idea's figure ("≈3× reach per reel"), else what it costs in credits. */
   stake?: string;
@@ -48,9 +53,16 @@ export function ApprovalRow({ a, big, stake, readOnly, onOk, onLook }: {
           {big && <span className="ap-badge">Big one</span>}
           {size && <span className="ap-row-size">{size}</span>}
           {a.simulated && <span className="ap-sample">sample</span>}
+          {(repeats ?? 0) > 1 && !onRepeats && <span className="ap-repeat" aria-label={`${repeats} drafts of this`}>×{repeats}</span>}
         </span>
       </button>
       <span className="ap-row-acts">
+        {(repeats ?? 0) > 1 && onRepeats && (
+          <button type="button" className="btn btn-quiet btn-sm ap-repeat-btn" onClick={onRepeats} aria-expanded={!!repeatsOpen}
+            aria-label={`${repeats} drafts of this idea: ${repeatsOpen ? "hide" : "show"} the earlier ${repeats! - 1}`} title="The same idea, drafted more than once">
+            ×{repeats}
+          </button>
+        )}
         <button type="button" className="btn btn-gold btn-sm ap-ok" onClick={() => void ok()} disabled={busy || readOnly} aria-label={`OK: ${title}`} title={readOnly ? "Turned off in the public demo" : undefined}>
           {busy ? "…" : <><Icon name="check" size={14} /> OK</>}
         </button>

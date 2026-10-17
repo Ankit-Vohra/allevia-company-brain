@@ -9,12 +9,13 @@ import BrainLive from "../components/BrainLive";
 import { AskBox } from "../components/home/AskBox";
 import { NeedsOk } from "../components/home/NeedsOk";
 import { SetupChips } from "../components/home/SetupChips";
-import { stakeOf } from "../components/insights-words";
+import { stakeOf, withoutSim } from "../components/insights-words";
 import { APPROVALS_CHANGED } from "../components/TopBar";
 import { usedShare } from "../lib/credits";
 import { useOfficeClock } from "../lib/daylight";
 import { fmtLongDate, fmtMoney, fmtNum, fmtPct } from "../lib/format";
-import { homeStatus, planSummary, pulseWords, waitingList } from "../lib/home";
+import { groupIdeas } from "../lib/group";
+import { homeStatus, planSummary, pulseWords, waitingGroups } from "../lib/home";
 import { CREDITS_CHANGED } from "../lib/sse";
 import { FIRST_DAY_QUESTIONS, SUGGESTIONS, TEAM_CHANGED } from "../lib/office-shared";
 import { useMedia } from "../lib/useMedia";
@@ -52,7 +53,8 @@ function HomeBody() {
   const credits = useAsync(() => api.credits(tenant.id).catch(() => null), [tenant.id, tick]);
 
   // not memoised: the mock API edits its cards in place, so the list's identity does not change when a card is decided
-  const waiting = waitingList(approvals.data, standup.data);
+  // the same idea drafted on several mornings is one row; the count everywhere is the number of rows
+  const groups = waitingGroups(approvals.data, standup.data);
   const stakes = useMemo(() => {
     const m = new Map<string, string>();
     for (const r of recs.data ?? []) {
@@ -66,15 +68,20 @@ function HomeBody() {
   const goalsToOk = (goalSetup.data ?? []).filter((g) => !g.confirmed).length;
   const pulse = pulseWords(program.data?.goals, (n) => fmtPct(n));
 
+  // the best idea that is not already waiting above as a draft
+  const waitingIds = new Set(groups.flatMap((g) => g.items.map((w) => w.approval.id)));
+  const topIdea = recs.data === undefined ? undefined
+    : groupIdeas([...recs.data].filter((r) => r.status !== "dismissed" && !(r.approvalId && waitingIds.has(r.approvalId))).sort((a, b) => b.score - a.score))[0]?.lead.title ?? null;
   const ctx: HomeCtx = {
     tenant,
     standup: standup.data,
+    topIdea: topIdea ? withoutSim(topIdea) : topIdea,
     plan: { data: plan, loading: program.loading },
     goalsToOk,
     credits: { left: credits.data === undefined ? undefined : credits.data?.balance.left ?? null, used: credits.data ? usedShare(credits.data.balance) : 0 },
   };
   const suggestions = (SUGGESTIONS[tenant.id] ?? FIRST_DAY_QUESTIONS).slice(0, 2);
-  const status = approvals.data === undefined && approvals.loading ? " " : homeStatus(waiting.length, pulse);
+  const status = approvals.data === undefined && approvals.loading ? " " : homeStatus(groups.length, pulse);
 
   return (
     <div className="hm">
@@ -90,10 +97,10 @@ function HomeBody() {
         <BrainLive tenant={tenant.id} height={wide ? 260 : 190} />
       </section>
 
-      <NeedsOk tenant={tenant} items={waiting} stakes={stakes} loading={approvals.loading} error={approvals.error} />
+      <NeedsOk tenant={tenant} groups={groups} stakes={stakes} loading={approvals.loading} error={approvals.error} />
 
       <div className="hm-tiles">
-        {tilesInOrder().map((t) => <div key={t.id} className={`hm-tile-slot${t.wide ? " is-wide" : ""}`}>{t.render(ctx)}</div>)}
+        {tilesInOrder(undefined, ctx).map((t) => <div key={t.id} className={`hm-tile-slot${t.wide ? " is-wide" : ""}`}>{t.render(ctx)}</div>)}
       </div>
 
       <SetupChips tenantId={tenant.id} page={connections.data} goals={program.data?.goals ?? []} toOk={goalsToOk} />

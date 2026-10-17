@@ -9,6 +9,7 @@ import type { AgentId, AgentMode, ProgramGoal } from "../../../shared/contracts.
 import { AGENTS } from "../../../shared/roster.js";
 import { CHIEF, TEAM, dotOf, workingNow, type Dot } from "./chat.js";
 import { goalState, goalView, monthWeek, notStartedYet, type GoalView } from "./plainwords.js";
+import { groupSimilar, subjectOf, type Group } from "./group.js";
 import { humanDates } from "./words.js";
 
 // ---------------------------------------------------------------- waiting for your OK
@@ -54,6 +55,12 @@ export function waitingList<A extends DraftLike>(approvals: readonly A[] | undef
     });
 }
 
+/** The waiting list with repeats folded: the same idea drafted on several mornings is one group, led by its newest draft.
+ *  Its length is the count the owner sees (the top bar, Home, the office and Needs your OK say the same number). */
+export function waitingGroups<A extends DraftLike & { title: string; recommendationId?: string }>(approvals: readonly A[] | undefined, standup: StandupLike | null | undefined): Group<WaitingItem<A>>[] {
+  return groupSimilar(waitingList(approvals, standup), { subject: (w) => subjectOf(w.approval.recommendationId), title: (w) => w.approval.title, at: (w) => w.approval.createdAt });
+}
+
 /** The first few to decide here, and how many more wait on the Approvals page. */
 export function firstFew<T>(list: readonly T[], n = 3): { shown: T[]; more: number } {
   return { shown: list.slice(0, n), more: Math.max(0, list.length - n) };
@@ -81,8 +88,11 @@ export function briefFirstLine(md: string): string {
   const paras = md.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   const p = paras.find((x) => !/^#*\s*today['’]s note\b/i.test(x)) ?? paras[0] ?? "";
   const [head = "", next] = p.split("\n").map((l) => l.trim());
-  // a heading with its first point under it reads as one sentence
-  if (next && /^[-•*]\s+/.test(next) && !/^[-•*]\s+/.test(head)) return clean(`${head.replace(/[:.]$/, "")}: ${next.replace(/^[-•*]\s+/, "")}`);
+  const point = /^(?:[-•*]|\d+[.)])\s+/;
+  // a numbered list under a heading: the heading says it ("Two big things are waiting for your OK"); the points are one tap away
+  if (next && /^\d+[.)]\s+/.test(next) && !point.test(head)) return clean(head.replace(/[:.]$/, ""));
+  // a heading with its one point under it reads as one sentence
+  if (next && point.test(next) && !point.test(head)) return clean(`${head.replace(/[:.]$/, "")}: ${next.replace(point, "")}`);
   return clean(p);
 }
 
