@@ -21,7 +21,10 @@ export const Dot = ({ label }: { label: string }) => <span className="bn-dot" st
 
 export function SearchBox({ tenantId, onPick, placeholder = "Search what your team knows" }: { tenantId: string; onPick: (id: string) => void; placeholder?: string }) {
   const [q, setQ] = useState("");
-  const [hits, setHits] = useState<SearchHit[]>([]);
+  // The hits and the term they answer: until the search for the typed term comes back, the list says "Searching"
+  // rather than "Nothing matches" (it flashed for a second before every result, 18 Oct).
+  const [found, setFound] = useState<{ term: string; hits: SearchHit[]; failed?: boolean }>({ term: "", hits: [] });
+  const hits = found.hits;
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const listId = useId();
@@ -29,9 +32,14 @@ export function SearchBox({ tenantId, onPick, placeholder = "Search what your te
 
   useEffect(() => {
     const term = q.trim();
-    if (!term) { setHits([]); return; }
+    if (!term) { setFound({ term: "", hits: [] }); return; }
     let live = true;
-    const t = setTimeout(() => { api.search(tenantId, term).then((h) => { if (live) { setHits(h); setActive(0); } }, () => {}); }, 140);
+    const t = setTimeout(() => {
+      api.search(tenantId, term).then(
+        (h) => { if (live) { setFound({ term, hits: h }); setActive(0); } },
+        () => { if (live) setFound({ term, hits: [], failed: true }); },
+      );
+    }, 140);
     return () => { live = false; clearTimeout(t); };
   }, [q, tenantId]);
 
@@ -55,6 +63,7 @@ export function SearchBox({ tenantId, onPick, placeholder = "Search what your te
     else if (e.key === "Escape") setOpen(false);
   };
   const showList = open && q.trim().length > 0;
+  const searching = found.term !== q.trim();
 
   return (
     <div className="bn-search" ref={wrap}>
@@ -77,7 +86,11 @@ export function SearchBox({ tenantId, onPick, placeholder = "Search what your te
       {showList && (
         <ul id={listId} className="search-list" role="listbox" aria-label="Matches">
           {hits.length === 0 ? (
-            <li className="search-empty" role="presentation">Nothing matches “{q.trim()}”. Try a name, a page or a month.</li>
+            <li className="search-empty" role="presentation">
+              {searching ? "Searching…"
+                : found.failed ? "We couldn't search just now. Try again in a moment."
+                : <>Nothing matches “{q.trim()}”. Try a name, a page or a month.</>}
+            </li>
           ) : hits.map((h, i) => (
             <li
               key={h.node.id}
