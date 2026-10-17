@@ -9,7 +9,7 @@
 //              toolkit and be active before its id is sealed
 //   run        a session for one call: `execute(tool, args)` runs a Composio tool as this business, and only this business;
 //              `listTools()` says what the toolkit can do. Google toolkits also carry `apis`, the same Calendar/Gmail/Analytics
-//              calls our own Google app offers, so the agents' tools work on either path.
+//              calls our own Google app offers, so the agents' tools work on either path (Analytics through the read-only proxy).
 // Off, and plainly explained, without COMPOSIO_API_KEY. The REST shapes and the tool slugs below follow Composio's v3 API and
 // catalogue as known when this was written and have NEVER run against the real service: `connect toolkits` checks the slugs, and
 // docs/connections-setup.md lists what to verify first.
@@ -17,7 +17,7 @@ import { createHmac } from "node:crypto";
 import { entryById, entryByToolkit, TOOLKIT_CATALOG, type ToolkitEntry } from "../../shared/connection-map.js";
 import { asRecord, realFetch, type FetchFn } from "../connectors/google/client.js";
 import { once } from "./once.js";
-import { readerFor, type Reader } from "./firstread.js";
+import { pickGa4Property, readerFor, type Reader } from "./firstread.js";
 import { noteConnection, type ConnectionEvent } from "./graph.js";
 import type { GoogleApis } from "./google/apis.js";
 import type { GoogleSession } from "./google/product.js";
@@ -190,7 +190,40 @@ const firstStr = (v: unknown, keys: string[], depth = 0): string => {
   return "";
 };
 
-export function composioGoogleApis(execute: (tool: string, args: Record<string, unknown>) => Promise<unknown>): GoogleApis {
+// Google Analytics has no report action in Composio's toolkit, so its two calls go to Google's own Admin and Data APIs through the
+// proxy (read-only by proxyIsRead, audited per call), and answer what our own Google app answers.
+const GA4_ADMIN = "https://analyticsadmin.googleapis.com/v1beta";
+const GA4_DATA = "https://analyticsdata.googleapis.com/v1beta";
+type ProxyFn = (req: ProxyRequest) => Promise<unknown>;
+
+export function composioGa4(proxy: ProxyFn): Pick<GoogleApis, "ga4Properties" | "ga4Report"> {
+  const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+  const str = (v: unknown): string => (typeof v === "string" ? v : "");
+  const num = (v: unknown): number => { const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN; return Number.isFinite(n) ? n : 0; };
+  return {
+    async ga4Properties() {
+      const r = asRecord(await proxy({ endpoint: `${GA4_ADMIN}/accountSummaries`, method: "GET", query: { pageSize: "200" } }));
+      return arr(r.accountSummaries).flatMap((a) => arr(asRecord(a).propertySummaries).flatMap((p) => {
+        const x = asRecord(p);
+        return /^properties\/\d+$/.test(str(x.property)) ? [{ property: str(x.property), displayName: str(x.displayName) || str(x.property) }] : [];
+      }));
+    },
+    async ga4Report(_t, property, q) {
+      if (!/^properties\/\d+$/.test(property)) throw new ComposioError("That is not an analytics property.", 400);
+      const r = asRecord(await proxy({
+        endpoint: `${GA4_DATA}/${property}:runReport`, method: "POST",
+        body: { dateRanges: [{ startDate: q.startDate, endDate: q.endDate }], dimensions: q.dimensions.map((name) => ({ name })), metrics: q.metrics.map((name) => ({ name })), limit: String(q.limit) },
+      }));
+      return arr(r.rows).map((row) => {
+        const x = asRecord(row);
+        return { dimensions: arr(x.dimensionValues).map((d) => str(asRecord(d).value)), metrics: arr(x.metricValues).map((m) => num(asRecord(m).value)) };
+      });
+    },
+  };
+}
+
+/** `proxy` is given for Google Analytics: its calls then go through the proxy (composioGa4). */
+export function composioGoogleApis(execute: (tool: string, args: Record<string, unknown>) => Promise<unknown>, proxy?: ProxyFn): GoogleApis {
   const unsupported = (what: string) => async (): Promise<never> => { throw new ComposioError(`${what} is not wrapped on this path: list the toolkit's actions with connection_tools and call one by name.`, 501); };
   return {
     accountEmail: async () => null,
@@ -224,7 +257,7 @@ export function composioGoogleApis(execute: (tool: string, args: Record<string, 
         return { id: firstStr(r, ["messageId", "id"]), from: firstStr(r, ["sender", "from"]), subject: firstStr(r, ["subject"]), date: firstStr(r, ["messageTimestamp", "date"]), snippet: firstStr(r, ["preview", "snippet", "messageText"]).slice(0, 300) };
       });
     },
-    ga4Properties: unsupported("Listing analytics properties"), ga4Report: unsupported("An analytics report"),
+    ...(proxy ? composioGa4(proxy) : { ga4Properties: unsupported("Listing analytics properties"), ga4Report: unsupported("An analytics report") }),
     adsCustomers: unsupported("Listing ads accounts"), adsCampaigns: unsupported("An ads report"),
   };
 }
@@ -249,7 +282,7 @@ export function composioUserId(connectorKey: string, tenant: string): string {
   return `al_${createHmac("sha256", connectorKey).update(`composio-user\u0000${tenant}`).digest("hex").slice(0, 24)}`;
 }
 
-interface Stored { accountId: string; userId: string; at: number; headline?: string; readAt?: number }
+interface Stored { accountId: string; userId: string; at: number; headline?: string; readAt?: number; property?: string }
 
 export const COMPOSIO_OFF_WORDS = (what: string) => `Connecting ${what} isn't switched on yet. Your team is setting up the connection service and will let you know when it's ready.`;
 
@@ -259,6 +292,8 @@ export interface ComposioSession {
   proxy(req: ProxyRequest): Promise<unknown>;
   listTools(search?: string): Promise<ComposioToolInfo[]>;
   toolkit: string;
+  /** Google Analytics only: the property to read (the one the daily read found for this business, else picked now). */
+  ga4Property?: () => Promise<string | null>;
   // present for the Google toolkits: the same session shape the own-Google path gives
   apis?: GoogleApis;
   accessToken?: string;
@@ -284,7 +319,7 @@ export class ComposioConnector implements Connector {
     try {
       const first = await this.run(ctx, (s) => reader(s.execute, ctx, s.proxy));
       const r = await this.stored(ctx);
-      if (r) await ctx.vault.put(ctx.tenant, this.info.id, { ...r, readAt: ctx.now(), ...(first.headline ? { headline: first.headline } : {}) } satisfies Stored);
+      if (r) await ctx.vault.put(ctx.tenant, this.info.id, { ...r, readAt: ctx.now(), ...(first.headline ? { headline: first.headline } : {}), ...(first.property ? { property: first.property } : {}) } satisfies Stored);
       return first.headline ? { ok: true, message: first.headline } : { ok: false, message: `${this.info.name} is connected, but there was nothing to read yet.` };
     } catch (e) {
       if (e instanceof NotConnectedError || e instanceof NeedsAttentionError) return { ok: false, message: e.words };
@@ -364,6 +399,12 @@ export class ComposioConnector implements Connector {
     return { ok: false, message: `${this.info.name} stopped letting us in. Connect it again.` };
   }
 
+  // The Analytics property picked for a live report is kept with the connection, so the next report reads the same one at once.
+  private async keepProperty(ctx: ConnectorCtx, r: Stored, property: string | null): Promise<string | null> {
+    if (property) await ctx.vault.put(ctx.tenant, this.info.id, { ...r, property } satisfies Stored).catch(() => undefined);
+    return property;
+  }
+
   /** A session for one call: runs Composio tools as this business, and only this business. */
   async run<T>(ctx: ConnectorCtx, fn: (s: ComposioSession & GoogleSession) => Promise<T>): Promise<T> {
     const r = await this.stored(ctx).catch(() => { throw new NeedsAttentionError(this.info.id, this.info.name, `We can't open the saved ${this.info.name} connection. Ask the owner to connect it again.`); });
@@ -394,9 +435,12 @@ export class ComposioConnector implements Connector {
       if (!ok) throw new ComposioToolError(`${this.info.name} answered ${out.status}.`, out.status);
       return out.data;
     };
+    const ga4 = this.entry.toolkit === "google_analytics";
     return fn({
       toolkit: this.entry.toolkit, execute, proxy, listTools: (q) => client.tools(this.entry.toolkit, q),
-      apis: composioGoogleApis(execute), accessToken: "composio", meta: {}, allowed: () => true,
+      apis: composioGoogleApis(execute, ga4 ? proxy : undefined), accessToken: "composio", allowed: () => true,
+      meta: ga4 && r.property ? { selected: r.property } : {},
+      ...(ga4 ? { ga4Property: async () => r.property ?? this.keepProperty(ctx, r, (await pickGa4Property(proxy, ctx))?.property ?? null) } : {}),
       ...(this.entry.toolkit === "google_search_console" ? { query: (q: SearchQuery) => searchConsoleQuery(execute, q) } : {}),
     } as ComposioSession & GoogleSession);
   }

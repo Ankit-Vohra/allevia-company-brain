@@ -31,7 +31,8 @@ const plural = (n: number, one: string, many: string): string => `${fmt(n)} ${n 
 /** A read-only call to the provider's own API through the connection (Composio's proxy): for toolkits with no action for the read. */
 export type Proxy = (req: { endpoint: string; method: "GET" | "POST"; body?: Record<string, unknown>; query?: Record<string, string> }) => Promise<unknown>;
 
-export interface FirstRead { headline?: string }
+/** `property`: the Analytics property the read used, kept with the connection so the agents' live reports read the same one. */
+export interface FirstRead { headline?: string; property?: string }
 export type Reader = (execute: Execute, ctx: ConnectorCtx, proxy?: Proxy) => Promise<FirstRead>;
 
 const SRC_PREFIX = "document:first-read-";
@@ -90,7 +91,7 @@ async function businessDomain(ctx: ConnectorCtx): Promise<string> {
   }
 }
 
-async function pickProperty(proxy: Proxy, ctx: ConnectorCtx): Promise<{ property: string; name: string } | null> {
+export async function pickGa4Property(proxy: Proxy, ctx: ConnectorCtx): Promise<{ property: string; name: string } | null> {
   const props = list(await proxy({ endpoint: `${GA4_ADMIN}/accountSummaries`, method: "GET", query: { pageSize: "200" } }), ["accountSummaries"])
     .flatMap((a) => list(a, ["propertySummaries"]))
     .map(rec).filter((p) => typeof p.property === "string" && /^properties\/\d+$/.test(p.property))
@@ -110,7 +111,7 @@ async function pickProperty(proxy: Proxy, ctx: ConnectorCtx): Promise<{ property
 
 const analytics = (ref: ConnRef): Reader => async (_execute, ctx, proxy) => {
   if (!proxy) return {};
-  const picked = await pickProperty(proxy, ctx);
+  const picked = await pickGa4Property(proxy, ctx);
   if (!picked) return {};
   const today = isoDate(ctx.now());
   const end = addDays(today, -1), start = addDays(end, -27);
@@ -139,7 +140,7 @@ const analytics = (ref: ConnRef): Reader => async (_execute, ctx, proxy) => {
     ...groups.map((g) => ({ subject: WEBSITE, metric: `ga4_sessions_from_${g.slug}`, value: g.sessions, unit: "count", windowStart: start, windowEnd: end, asOf: today, src: doc.id, evidence: `${g.name}: ${fmt(g.sessions)} sessions` })),
   ];
   const done = await recordRead(ctx, ref, { doc, nodes: await channelNode(ctx, WEBSITE, "Website"), observations, dataThrough: end, props: { property: picked.property } });
-  return done.ok ? { headline } : {};
+  return done.ok ? { headline, property: picked.property } : { property: picked.property };
 };
 
 const instagram = (ref: ConnRef): Reader => async (execute, ctx) => {
