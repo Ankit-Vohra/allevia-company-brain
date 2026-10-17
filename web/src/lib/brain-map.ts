@@ -5,8 +5,9 @@
 import type { AgentEvent, AgentId, EdgeRef, NodeRef } from "../../../shared/contracts.js";
 import { MAP_KINDS, kindOf, labelOfId } from "./labels.js";
 
-/** One thing on the map: importance 0–1 (PageRank over its top value), a topic, and when the team learned it (ms). */
-export interface MapNode extends NodeRef { rank: number; community?: number; learnedAt?: number }
+/** One thing on the map: importance 0–1 (PageRank over its top value), a topic, and when the team learned it (ms).
+ *  `general`: general know-how every business shares (a playbook rule), drawn only when the owner asks for it. */
+export interface MapNode extends NodeRef { rank: number; community?: number; learnedAt?: number; general?: boolean }
 
 /** What GET /api/:t/graph/map returns (src/server/types.ts BrainMapDto). */
 export interface BrainMapDto {
@@ -14,11 +15,11 @@ export interface BrainMapDto {
   types: string[];
   links: Array<[number, number, number]>;
   counts: Record<string, number>;
-  totals: { things: number; links: number };
+  totals: { things: number; links: number; general?: number };
   capped: boolean;
 }
 
-export interface BrainMap { nodes: MapNode[]; edges: EdgeRef[]; counts: Record<string, number>; totals: { things: number; links: number }; capped: boolean }
+export interface BrainMap { nodes: MapNode[]; edges: EdgeRef[]; counts: Record<string, number>; totals: { things: number; links: number; general?: number }; capped: boolean }
 
 /** The index triples back into links; a triple that points outside the lists is dropped. */
 export function decodeMap(dto: BrainMapDto): BrainMap {

@@ -21,6 +21,14 @@ export const INTENTIONAL_SCANS: IntentionalScan[] = [
     why: "the rules survey (no names given, or filtered to one channel's): tens of Rule and BrandRule nodes, scanned by design",
   },
   {
+    shape: /\(\w+\.id IN \$refIds OR coalesce\(\w+\.refStub, false\) = true OR /,
+    why: "the reference filter (src/graph/reference.ts) tells general know-how apart inside a whole-graph read (the map, the counts, the growth story, the split): the scan is the read's own, the id list only filters it",
+  },
+  {
+    shape: /^MATCH \(n:Entity\) WHERE \(n:Playbook OR n:Rule OR n:Event OR n:Document\) AND NOT n\.id IN \$have /,
+    why: "the Brain map's \"Show general know-how\": the most connected things of the shared reference graph (a few hundred), less those already drawn",
+  },
+  {
     shape: /^MATCH \(a:Entity:Approval\) WITH a ORDER BY /,
     why: "the approvals list: every Approval, newest first, capped by $limit; the id lookup after it is per row",
   },

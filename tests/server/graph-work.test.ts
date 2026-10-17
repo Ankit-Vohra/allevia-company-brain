@@ -4,6 +4,10 @@ import { plainNames, type GraphAtWorkDto } from "../../src/server/routes/graph-w
 import type { BrainMapDto } from "../../src/server/types.js";
 import { seedDepthChain } from "../fixtures/seed-depth.js";
 import { harness, TENANT, type Harness } from "./harness.js";
+import { writeBatch } from "../../src/graph/upsert.js";
+import { ensureReference } from "../../src/graph/reference.js";
+import { splitReference } from "../../src/graph/reference-split.js";
+import { isReferenceId, referenceWrite } from "../../src/ingest/sources/reference.js";
 
 describe("GET /api/:t/graph/at-work (integration)", () => {
   let h: Harness;
@@ -101,6 +105,61 @@ describe("GET /api/:t/graph/map (integration)", () => {
     expect(five.capped).toBe(true);
     expect(five.nodes.map((n) => n.id)).toEqual(m.nodes.slice(0, 5).map((n) => n.id));
     expect((await h.app.request(`/api/${TENANT.slug}/graph/map?limit=lots`)).status).toBe(400);
+  });
+});
+
+// General know-how (the shared playbooks, src/graph/reference.ts) is not the business's knowledge: the map, its counts and the
+// overview leave it out, before the split (a graph still holding the old copy) and after; ?general=1 draws it, marked.
+describe("GET /api/:t/graph/map leaves general know-how out (integration)", () => {
+  let h: Harness;
+  const copy = referenceWrite();
+  const seoPack = new Set(copy.nodes.filter((n) => n.id.includes("open-seo") || n.id.startsWith("rule:seo-check-") || n.id.startsWith("event:google-update")).map((n) => n.id));
+  beforeAll(async () => {
+    h = await harness();
+    await seedDepthChain(h.g);
+    // the old copy, as onboarding wrote it before the shared reference graph: one pack's rules, its file, and the Google updates
+    await writeBatch(h.g, { nodes: copy.nodes.filter((n) => seoPack.has(n.id) || n.type === "Channel"), edges: copy.edges.filter((e) => seoPack.has(e.from)) });
+  }, 120_000);
+  afterAll(async () => h.cleanup());
+
+  const get = async (q = ""): Promise<BrainMapDto> => {
+    const res = await h.app.request(`/api/${TENANT.slug}/graph/map${q}`);
+    expect(res.status).toBe(200);
+    return (await res.json()) as BrainMapDto;
+  };
+
+  it("the map, its counts and the overview count business knowledge only; ?general=1 draws the copy, marked", async () => {
+    const m = await get();
+    expect(m.nodes.filter((n) => isReferenceId(n.id) || n.id.startsWith("event:google-update"))).toEqual([]);
+    const [own] = await h.g.roQuery<{ c: number }>("MATCH (e:Event) WHERE NOT e.id STARTS WITH 'event:google-update' RETURN count(e) AS c");
+    expect(m.counts.Event ?? 0).toBe(own!.c); // the business's own events; the 50-odd copied Google updates are not counted
+    const [rules] = await h.g.roQuery<{ c: number }>("MATCH (r:Rule) WHERE NOT r.id STARTS WITH 'rule:seo-check-' RETURN count(r) AS c");
+    expect(m.counts.Rule).toBe(rules!.c); // the seed's own rules, not the copied pack's
+    expect(m.nodes.some((n) => n.general)).toBe(false);
+    expect(m.totals.general).toBeUndefined();
+    const o = await (await h.app.request(`/api/${TENANT.slug}/overview`)).json() as { counts: Record<string, number>; freshness: Array<{ source: string; asOf: string }> };
+    expect(o.counts).toEqual(m.counts);
+    // the seed's own playbook notes (15 Aug) are its sources; the vendored files (October commits) are not
+    expect(o.freshness.find((f) => f.source === "Playbooks")?.asOf).toBe("2026-08-15");
+    const all = await get("?general=1");
+    expect(all.nodes.some((n) => n.general && isReferenceId(n.id))).toBe(true);
+    expect(all.nodes.filter((n) => n.general).every((n) => isReferenceId(n.id) || n.id.startsWith("event:google-update"))).toBe(true);
+    expect(all.counts).toEqual(m.counts);
+    expect(all.totals.things).toBe(m.totals.things);
+    expect(all.totals.general).toBeGreaterThan(10);
+    expect((await h.app.request(`/api/${TENANT.slug}/graph/map?general=yes`)).status).toBe(400);
+  });
+
+  it("after the split, ?general=1 draws the shared reference graph's things", async () => {
+    await ensureReference();
+    await splitReference(h.g, { apply: true });
+    const m = await get();
+    expect(m.nodes.some((n) => n.general)).toBe(false);
+    const all = await get("?general=1");
+    const general = all.nodes.filter((n) => n.general);
+    expect(general.length).toBeGreaterThan(10);
+    expect(general.some((n) => n.label === "Playbook")).toBe(true);
+    expect(all.totals.general).toBeGreaterThan(100);
   });
 });
 

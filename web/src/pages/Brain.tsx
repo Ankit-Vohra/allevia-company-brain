@@ -42,7 +42,9 @@ export default function BrainPage() {
   const cap = phone ? 220 : 400;
   const live = getMode() === "live";
 
-  const map = useAsync(() => api.brainMap(tenant.id, cap).then(decodeMap), [tenant.id, cap]);
+  // "Show general know-how": the playbooks every business shares, off by default (the map is this business's own knowledge)
+  const [general, setGeneral] = useState(false);
+  const map = useAsync(() => api.brainMap(tenant.id, cap, general).then(decodeMap), [tenant.id, cap, general]);
   const overview = useAsync(() => api.overview(tenant.id), [tenant.id]);
   const detail = useAsync(() => (selected ? api.node(tenant.id, selected) : Promise.resolve(null)), [tenant.id, selected]);
   const reading = useReadingNow(tenant.id);
@@ -62,7 +64,7 @@ export default function BrainPage() {
     return () => window.clearTimeout(t);
   }, [reducedMotion]);
 
-  useEffect(() => { setHidden(new Set(HIDDEN_AT_FIRST)); setImpact(null); setGrow(null); }, [tenant.id]);
+  useEffect(() => { setHidden(new Set(HIDDEN_AT_FIRST)); setImpact(null); setGrow(null); setGeneral(false); }, [tenant.id]);
   useEffect(() => { setImpact((x) => (x && x.id !== selected ? null : x)); }, [selected]);
 
   const select = useCallback((id: string | undefined, opts: { scroll?: boolean } = {}) => {
@@ -238,6 +240,18 @@ export default function BrainPage() {
                 {grow ? <span className="bm-play-at">{growLabel}</span> : "Watch it grow"}
               </button>
               {!grow && <ReadingLine who={reading.who} count={reading.ids.length} />}
+              {!grow && live && (
+                <button
+                  type="button"
+                  className={`bm-general${general ? " is-on" : ""}`}
+                  aria-pressed={general}
+                  onClick={() => setGeneral((v) => !v)}
+                  title="Playbooks every business shares: SEO checks, hook formulas, ad benchmarks, Google updates"
+                >
+                  <span className="bm-general-box" aria-hidden="true" />
+                  Show general know-how{general && map.data?.totals.general ? ` (${fmtNum(map.data.totals.general)})` : ""}
+                </button>
+              )}
             </div>
           )}
           <p className="bm-powered">Powered by <b>FalkorDB</b></p>

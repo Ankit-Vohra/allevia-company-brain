@@ -1,5 +1,5 @@
 // "The graph at work" on the Brain page, read-only:
-//   GET /api/:t/graph/map[?limit=N]: the map (the most important things, light for a phone; see reads.mapGraph)
+//   GET /api/:t/graph/map[?limit=N][&general=1]: the map (the most important things, light for a phone; business knowledge only unless general=1; see reads.mapGraph)
 //   GET /api/:t/graph/story: how the brain grew
 //   GET /api/:t/graph/at-work[?focus=<id or exact name>]
 // What only a graph gives, from the same tools the agents call (src/agent/tools), on the selected business's graph:
@@ -102,7 +102,10 @@ export function registerGraphWorkRoutes(app: Hono, rc: RouteCtx): void {
     const raw = c.req.query("limit");
     const limit = raw === undefined ? LIMITS.mapNodes : Number(raw);
     if (!Number.isFinite(limit) || limit < 1) throw new HttpError(400, `limit is a number from 1 to ${LIMITS.mapNodes}.`);
-    return c.json(await mapGraph(g, limit));
+    // ?general=1: the Brain page's "Show general know-how" (the shared playbooks drawn too, marked general)
+    const general = c.req.query("general");
+    if (general !== undefined && general !== "0" && general !== "1") throw new HttpError(400, "general is 1 (show general know-how) or 0.");
+    return c.json(await mapGraph(g, limit, { general: general === "1" }));
   });
 
   app.get("/api/:t/graph/at-work", async (c) => {

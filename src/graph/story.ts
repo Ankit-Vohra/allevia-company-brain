@@ -9,6 +9,7 @@
 // or edges without the stamp are reported as `undated`). Everything here is GRAPH.RO_QUERY and grouped on the grouping
 // keys, so no sort can tie (src/graph/safety.ts).
 import type { GraphHandle } from "./client.js";
+import { referenceFilter, referenceParams } from "./reference.js";
 
 export type StoryAxis = "recorded" | "source";
 export type StoryBucket = "day" | "week";
@@ -86,10 +87,10 @@ async function nodeRows(g: GraphHandle, axis: StoryAxis): Promise<{ rows: Row[];
     : "substring(n.asOf, 0, 10)";
   const has = axis === "recorded" ? "n.createdAt IS NOT NULL" : "n.asOf IS NOT NULL AND size(n.asOf) >= 10";
   const rows = await g.roQuery<{ d: number | string; k: string | null; c: number }>(
-    `MATCH (n:Entity) WHERE ${has}
+    `MATCH (n:Entity) WHERE ${has} AND NOT ${referenceFilter("n")}
      WITH ${day} AS d, [x IN labels(n) WHERE x <> 'Entity' AND x <> 'Searchable'][0] AS k
-     RETURN d, k, count(*) AS c ORDER BY d, k`, {}, { timeoutMs: 30_000 });
-  const [un] = await g.roQuery<{ c: number }>(`MATCH (n:Entity) WHERE NOT (${has}) RETURN count(n) AS c`, {}, { timeoutMs: 30_000 });
+     RETURN d, k, count(*) AS c ORDER BY d, k`, referenceParams(), { timeoutMs: 30_000 });
+  const [un] = await g.roQuery<{ c: number }>(`MATCH (n:Entity) WHERE NOT (${has}) AND NOT ${referenceFilter("n")} RETURN count(n) AS c`, referenceParams(), { timeoutMs: 30_000 });
   return { rows: rows.map((r) => ({ d: typeof r.d === "number" ? isoDay(r.d) : String(r.d), k: r.k ?? "", c: r.c })), undated: un?.c ?? 0 };
 }
 
@@ -99,10 +100,10 @@ async function edgeRows(g: GraphHandle, axis: StoryAxis): Promise<{ rows: Row[];
     : "substring(r.asOf, 0, 10)";
   const has = axis === "recorded" ? "r.recordedAt IS NOT NULL" : "r.asOf IS NOT NULL AND size(r.asOf) >= 10";
   const rows = await g.roQuery<{ d: number | string; k: string; c: number }>(
-    `MATCH ()-[r]->() WHERE ID(r) >= 0 AND ${has}
+    `MATCH (a)-[r]->(b) WHERE ID(r) >= 0 AND ${has} AND NOT ${referenceFilter("a")} AND NOT ${referenceFilter("b")}
      WITH ${day} AS d, type(r) AS k
-     RETURN d, k, count(*) AS c ORDER BY d, k`, {}, { timeoutMs: 30_000 });
-  const [un] = await g.roQuery<{ c: number }>(`MATCH ()-[r]->() WHERE ID(r) >= 0 AND NOT (${has}) RETURN count(r) AS c`, {}, { timeoutMs: 30_000 });
+     RETURN d, k, count(*) AS c ORDER BY d, k`, referenceParams(), { timeoutMs: 30_000 });
+  const [un] = await g.roQuery<{ c: number }>(`MATCH (a)-[r]->(b) WHERE ID(r) >= 0 AND NOT (${has}) AND NOT ${referenceFilter("a")} AND NOT ${referenceFilter("b")} RETURN count(r) AS c`, referenceParams(), { timeoutMs: 30_000 });
   return { rows: rows.map((r) => ({ d: typeof r.d === "number" ? isoDay(r.d) : String(r.d), k: r.k, c: r.c })), undated: un?.c ?? 0 };
 }
 

@@ -6,6 +6,7 @@ import type { AgentEvent, EdgeRef, NodeRef, SourceRef, TurnChecks } from "../../
 import { AGENTS, agentById } from "../../shared/roster.js";
 import type { GraphHandle } from "../graph/client.js";
 import { SEARCHABLE } from "../graph/schema.js";
+import { readReference, referenceFilter, referenceParams } from "../graph/reference.js";
 import { STOPPED_MESSAGE } from "../agent/ask.js";
 import { agentNodeId, answersThrough } from "../agent/memory.js";
 import { TouchedSet, type ToolContext } from "../agent/tool.js";
@@ -25,7 +26,7 @@ import {
 export const READ_MS = 10_000;
 export const LIMITS = {
   sessions: 50, turns: 100, search: 25, neighbors: 40, versions: 20, sources: 10, focusNodes: 150, overviewNodes: 400,
-  overviewEdges: 3000, mapNodes: 400, mapEdges: 3000, recommendations: 50, approvals: 100, findings: 6, knows: 25, knowledgeEdges: 200, playbooks: 6, answers: 10,
+  overviewEdges: 3000, mapNodes: 400, mapEdges: 3000, generalNodes: 150, recommendations: 50, approvals: 100, findings: 6, knows: 25, knowledgeEdges: 200, playbooks: 6, answers: 10,
 } as const;
 
 // Props never returned: vectors, write bookkeeping, and a Turn's raw event log (served by the replay endpoint).
@@ -69,10 +70,23 @@ export async function businessProps(g: GraphHandle, businessId: string): Promise
 
 // ---------- overview ----------
 
+// What the business knows, by kind. General know-how (the shared playbooks, their rules, the Google update timeline:
+// src/graph/reference.ts) is not counted, whether the graph still holds a copy of it or only stubs.
 export async function labelCounts(g: GraphHandle): Promise<Record<string, number>> {
   const rows = await ro<{ label: string | null; c: number }>(g,
-    "MATCH (n:Entity) WITH [l IN labels(n) WHERE NOT l IN ['Entity', 'Searchable']][0] AS label RETURN label, count(*) AS c ORDER BY c DESC, label LIMIT 100");
+    `MATCH (n:Entity) WHERE NOT ${referenceFilter("n")}
+     WITH [l IN labels(n) WHERE NOT l IN ['Entity', 'Searchable']][0] AS label RETURN label, count(*) AS c ORDER BY c DESC, label LIMIT 100`,
+    referenceParams());
   return Object.fromEntries(rows.filter((r) => r.label).map((r) => [r.label!, r.c]));
+}
+
+// How much general know-how the team can read: the shared reference graph's things, or the copy a business graph that has
+// not been split yet still holds.
+export async function generalCount(g: GraphHandle): Promise<number> {
+  const [own] = await ro<{ c: number }>(g, `MATCH (n:Entity) WHERE ${referenceFilter("n")} AND n.refStub IS NULL RETURN count(n) AS c`, referenceParams());
+  if (own?.c) return own.c;
+  const [shared] = await readReference<{ c: number }>("MATCH (n:Entity) WHERE NOT n:Channel AND NOT n:Version RETURN count(n) AS c", undefined, { timeoutMs: READ_MS });
+  return shared?.c ?? 0;
 }
 
 const SOURCE_NAMES: Record<string, string> = {
@@ -85,7 +99,8 @@ const STALE_DAYS = 7;
 
 export async function freshness(g: GraphHandle, now: number): Promise<FreshnessDto[]> {
   const rows = await ro<{ kind: string; asOf: string | null }>(g,
-    "MATCH (d:Document) WHERE d.asOf IS NOT NULL RETURN coalesce(d.kind, 'other') AS kind, max(d.asOf) AS asOf ORDER BY asOf DESC, kind LIMIT 30");
+    `MATCH (d:Document) WHERE d.asOf IS NOT NULL AND NOT ${referenceFilter("d")} RETURN coalesce(d.kind, 'other') AS kind, max(d.asOf) AS asOf ORDER BY asOf DESC, kind LIMIT 30`,
+    referenceParams());
   const merged = new Map<string, FreshnessDto>();
   for (const r of rows) {
     if (!r.asOf) continue;
@@ -325,12 +340,12 @@ export async function focusGraph(g: GraphHandle, focus: string, depth: number): 
 export async function overviewGraph(g: GraphHandle, limit: number = LIMITS.overviewNodes): Promise<GraphDataDto> {
   const cap = Math.max(1, Math.min(limit, LIMITS.overviewNodes));
   const rows = await ro<{ n: NodeRow; summary: string | null; rank: number | null; community: number | null; deg: number }>(g,
-    `MATCH (n:Entity) WHERE any(l IN labels(n) WHERE l IN $types)
+    `MATCH (n:Entity) WHERE any(l IN labels(n) WHERE l IN $types) AND NOT ${referenceFilter("n")}
      OPTIONAL MATCH (n)-[r]-() WHERE r.until IS NULL AND NOT type(r) IN $skip
      WITH n, count(r) AS deg
      RETURN ${NODE("n")} AS n, n.summary AS summary, n.rank AS rank, n.community AS community, deg
      ORDER BY coalesce(n.rank, 0) DESC, deg DESC, n.id LIMIT $limit`,
-    { types: SEARCHABLE, skip: MAP_SKIP_RELS, limit: cap });
+    { types: SEARCHABLE, skip: MAP_SKIP_RELS, limit: cap, ...referenceParams() });
   const edges = await edgesAmong(g, rows.map((r) => r.n.id), LIMITS.overviewEdges);
   const rankOf = ranker(rows, edges);
   const nodes: GraphNodeDto[] = rows.map((r) => {
@@ -359,22 +374,49 @@ function ranker(rows: RankRow[], edges: EdgeRef[]): (r: RankRow) => { rank: numb
 // The Brain map and Home's living brain: the same top things as the overview, made light for a phone (no summaries, the
 // links as index triples), with when each was learned and the size of the whole brain. Three reads, all GRAPH.RO_QUERY:
 // the ranked things (the last sort key is the id, so no two rows tie), the links among them, and two counts.
-export async function mapGraph(g: GraphHandle, limit: number = LIMITS.mapNodes): Promise<BrainMapDto> {
+//
+// Business knowledge only: general know-how (the shared playbooks and their rules, the Google update timeline;
+// src/graph/reference.ts) is left out of the things, the links and the counts, also in a graph that still holds a copy of
+// it. `general` (the Brain page's "Show general know-how") draws it as well, marked `general`: the copy this graph still
+// holds, else the most connected things of the shared reference graph; the counts stay the business's own, and
+// totals.general says how much general know-how there is.
+export async function mapGraph(g: GraphHandle, limit: number = LIMITS.mapNodes, opts: { general?: boolean } = {}): Promise<BrainMapDto> {
   const cap = Math.max(1, Math.min(Math.floor(limit), LIMITS.mapNodes));
-  const [rows, counts, linkCount] = await Promise.all([
-    ro<RankRow & { learnedAt: number | null; deg: number }>(g,
-      `MATCH (n:Entity) WHERE any(l IN labels(n) WHERE l IN $types)
+  const general = opts.general === true;
+  type MapRow = RankRow & { learnedAt: number | null; deg: number; general: boolean };
+  const [own, counts, linkCount, generalTotal] = await Promise.all([
+    ro<MapRow>(g,
+      `MATCH (n:Entity) WHERE any(l IN labels(n) WHERE l IN $types)${general ? "" : ` AND NOT ${referenceFilter("n")}`}
        OPTIONAL MATCH (n)-[r]-() WHERE r.until IS NULL AND NOT type(r) IN $skip
        WITH n, count(r) AS deg
-       RETURN ${NODE("n")} AS n, n.rank AS rank, n.community AS community, n.createdAt AS learnedAt, deg
+       RETURN ${NODE("n")} AS n, n.rank AS rank, n.community AS community, n.createdAt AS learnedAt, deg, ${referenceFilter("n")} AS general
        ORDER BY coalesce(n.rank, 0) DESC, deg DESC, n.id LIMIT $limit`,
-      { types: SEARCHABLE, skip: MAP_SKIP_RELS, limit: cap }),
+      { types: SEARCHABLE, skip: MAP_SKIP_RELS, limit: cap, ...referenceParams() }),
     labelCounts(g),
     ro<{ c: number }>(g,
-      `MATCH (:Entity)-[r]->(:Entity) WHERE ID(r) >= 0 AND r.until IS NULL AND NOT type(r) IN $skip RETURN count(r) AS c`,
-      { skip: MAP_SKIP_RELS }),
+      `MATCH (a:Entity)-[r]->(b:Entity) WHERE ID(r) >= 0 AND r.until IS NULL AND NOT type(r) IN $skip AND NOT ${referenceFilter("a")} AND NOT ${referenceFilter("b")}
+       RETURN count(r) AS c`,
+      { skip: MAP_SKIP_RELS, ...referenceParams() }),
+    general ? generalCount(g) : Promise.resolve(0),
   ]);
-  const edges = await edgesAmong(g, rows.map((r) => r.n.id), LIMITS.mapEdges);
+  const rows: MapRow[] = [...own];
+  let edges = await edgesAmong(g, rows.map((r) => r.n.id), LIMITS.mapEdges);
+  // a split business holds no copy (stubs at most): the general know-how comes from the shared reference graph
+  if (general && !rows.some((r) => r.general && r.n.labels.includes("Playbook")) && rows.length < cap) {
+    const shared = await readReference<MapRow>(
+      `MATCH (n:Entity) WHERE (n:Playbook OR n:Rule OR n:Event OR n:Document) AND NOT n.id IN $have
+       OPTIONAL MATCH (n)-[r]-() WITH n, count(r) AS deg
+       RETURN ${NODE("n")} AS n, null AS rank, null AS community, null AS learnedAt, deg, true AS general ORDER BY deg DESC, n.id LIMIT $limit`,
+      { have: rows.map((r) => r.n.id), limit: Math.min(LIMITS.generalNodes, cap - rows.length) }, { timeoutMs: READ_MS });
+    if (shared.length) {
+      rows.push(...shared);
+      const ids = [...shared.map((r) => r.n.id), ...own.filter((r) => r.n.labels.includes("Channel")).map((r) => r.n.id)];
+      const sharedEdges = await readReference<EdgeRow>(
+        `MATCH (a:Entity)-[r]->(b:Entity) WHERE a.id IN $ids AND b.id IN $ids AND r.until IS NULL
+         RETURN a.id AS from, type(r) AS type, b.id AS to, r.since AS since LIMIT $limit`, { ids, limit: LIMITS.mapEdges }, { timeoutMs: READ_MS });
+      edges = [...edges, ...sharedEdges.map((r) => edgeRef(r.from, r.type, r.to, r.since))];
+    }
+  }
   const rankOf = ranker(rows, edges);
   const index = new Map(rows.map((r, i) => [r.n.id, i]));
   const types: string[] = [];
@@ -396,10 +438,14 @@ export async function mapGraph(g: GraphHandle, limit: number = LIMITS.mapNodes):
     return {
       ...ref, ...(ref.name.includes("[redacted:") ? { name: plainName(ref.name) } : {}), rank,
       ...(community !== undefined ? { community } : {}), ...(typeof r.learnedAt === "number" ? { learnedAt: r.learnedAt } : {}),
+      ...(r.general ? { general: true } : {}),
     };
   });
   const things = Object.entries(counts).reduce((s, [label, c]) => (PLUMBING.includes(label) ? s : s + c), 0);
-  return { nodes, types, links, counts, totals: { things, links: linkCount[0]?.c ?? 0 }, capped: rows.length >= cap };
+  return {
+    nodes, types, links, counts, totals: { things, links: linkCount[0]?.c ?? 0, ...(general ? { general: generalTotal } : {}) },
+    capped: own.length >= cap,
+  };
 }
 
 // ---------- agents ----------
