@@ -24,6 +24,9 @@ export interface AlleviaConfig {
   dbLimitMb?: number;
   trustProxy: boolean; // ALLEVIA_TRUST_PROXY=1: a reverse proxy is in front, so the rate limits read the client's address from its X-Forwarded-For (src/server/ratelimit.ts)
   actionsLive: boolean; // approved github_issue / discord_post cards really create the issue / post (default: dry run)
+  // ALLEVIA_BILLING (src/billing/provider.ts): payments are in test mode. test-request (the default) records a plan change or a pack
+  // for the operator to approve (`billing:approve`); test-instant, for local use only, applies it at once.
+  billing: "test-request" | "test-instant";
   actionTenants: string[]; // businesses besides the founder's own (tenant-config.ts) that may use the env file's GitHub repo and Discord channel
   port: number;
   webBaseUrl: string; // where the web app is reached, for links from Discord (default http://127.0.0.1:<port>)
@@ -114,6 +117,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
     trustProxy: /^(1|true|yes|on)$/i.test(get("ALLEVIA_TRUST_PROXY") ?? ""),
     ...(((n) => (Number.isFinite(n) && n > 0 ? { dbLimitMb: n } : {}))(Number(get("ALLEVIA_DB_LIMIT_MB")))),
     actionsLive: (get("ALLEVIA_ACTIONS_LIVE") ?? "") === "1",
+    billing: get("ALLEVIA_BILLING") === "test-instant" ? "test-instant" : "test-request",
     actionTenants: (get("ALLEVIA_ACTION_TENANTS") ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     port,
     webBaseUrl,

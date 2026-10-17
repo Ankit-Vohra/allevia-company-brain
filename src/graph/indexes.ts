@@ -38,6 +38,9 @@ export const INDEXES: IndexSpec[] = [
   { label: "Chunk", prop: "text", type: "FULLTEXT" },
   { label: SEARCHABLE_LABEL, prop: ENTITY_VECTOR_PROP, type: "VECTOR" },
   { label: "Chunk", prop: CHUNK_VECTOR_PROP, type: "VECTOR" },
+  // the credit ledger (src/credits): one month's entries are one read, and a spend is found by its key (once per service and ref)
+  { label: "CreditEntry", prop: "key", type: "RANGE" },
+  { label: "CreditEntry", prop: "month", type: "RANGE" },
 ];
 
 // The first generation of search indexes, on every Entity. They also hold what search never returns (one node per
