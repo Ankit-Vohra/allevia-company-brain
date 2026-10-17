@@ -45,7 +45,7 @@ describe("the creating tools on the Studio's Higgsfield engine", () => {
 
   it("turns every decline into plain words, and makes nothing", async () => {
     const missing = await rig({ missing: true });
-    expect(await missing.engine.status()).toMatchObject({ ok: false, reason: "no_cli", plain: "the Higgsfield tool isn't installed on this computer" });
+    expect(await missing.engine.status()).toMatchObject({ ok: false, reason: "no_cli", plain: "pictures aren't switched on yet" });
     const out = await rig({ loggedIn: false });
     expect(await out.engine.status()).toMatchObject({ ok: false, reason: "not_signed_in" });
     await expect(out.engine.generate({ prompt: "x y z", aspect: "1:1" })).rejects.toThrow(EngineUnavailable);

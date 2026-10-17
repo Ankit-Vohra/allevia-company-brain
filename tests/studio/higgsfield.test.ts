@@ -243,7 +243,7 @@ describe("degrades gracefully: the local variant still delivers", () => {
     const r = rig({ missing: true });
     const d = await declined(r.engine.edit(input(), PROMPT, OPTS));
     expect(d.code).toBe("missing");
-    expect(d.message).toMatch(/isn't set up on this computer/);
+    expect(d.message).toBe("Picture making isn't switched on yet, so I made the simple clean-up only.");
   });
   it("the balance is low: the founder's own credits are protected by a floor", async () => {
     const r = rig({ balance: 21, cost: 2 });

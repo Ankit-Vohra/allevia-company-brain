@@ -1,5 +1,7 @@
-// The production generative engine: the `higgsfield` CLI (v1.1.x), on the founder's existing login. It replaces the old
-// stub. Everything that can go wrong is handled before a credit is spent:
+// The production generative engine. It talks to Higgsfield through a backend: the business's own Higgsfield connected through
+// Composio (higgsfield-composio.ts, the owner's subscription credits) when it has one, else the `higgsfield` CLI (v1.1.x) on the
+// founder's login where the CLI can run (it has no Linux ARM build, so never on the t4g server). Everything that can go wrong is
+// handled before a credit is spent, the same way on either backend:
 //   login and balance -> quote (`generate cost`) -> the per-run cap -> the daily cap (ledger) -> create -> reserve the job
 //   id in the ledger -> wait -> fetch the picture -> mark the job done.
 // - The CLI is run with an argument ARRAY (execFile, no shell, nothing interpolated), with a timeout, and the owner's
@@ -15,8 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isIP } from "node:net";
 import { CreditLedger, DailyCapReached, creditCaps, creditsWords, type CreditCaps } from "./credits.js";
-import type { EditInput, EditOpts, EditResult, EngineQuote, GenerationEngine, PhotoshootOpts } from "./engine.js";
-import { EngineDecline } from "./engine.js";
+import type { EditInput, EditOpts, EditResult, EngineQuote, GenerationEngine, PhotoshootOpts } from "./engine.js";import { EngineDecline } from "./engine.js";
 
 export interface CliResult { code: number | null; stdout: string; stderr: string; timedOut: boolean; missing: boolean }
 export type CliRun = (args: string[], o?: { timeoutMs?: number }) => Promise<CliResult>;
@@ -159,10 +160,197 @@ export async function fetchResult(url: string, fetchFn: typeof fetch = fetch): P
   return buf;
 }
 
+// ---------- where the work is done: a backend ----------
+
+// The engine below owns the money rules (the quote, the per-run cap, the daily cap and ledger, the balance floor, joining a
+// job instead of paying twice). A backend only talks to Higgsfield: the CLI on the founder's login (this file), or the
+// business's own Higgsfield connected through Composio (higgsfield-composio.ts). Every refusal is an EngineDecline in the
+// owner's words; nothing a backend throws names a tool, a path or an id.
+
+/** One generation as a backend sees it. */
+export interface HfJob {
+  kind: "image" | "video";
+  model: string;
+  prompt: string;
+  params: Record<string, string>;
+  file?: { flag: string; name: string; bytes: Buffer };   // absent: a picture drawn from the prompt alone
+}
+
+export type HfOutcome = { state: "done"; url: string } | { state: "failed" } | { state: "pending" };
+
+export interface HiggsfieldBackend {
+  readonly name: string;
+  /** Connected, with credits; the balance. An EngineDecline in the owner's words otherwise. */
+  balance(): Promise<number>;
+  /** Readies the job's input (a private temp file, an upload) and runs `fn` with a reference to it; always cleans up. */
+  withInput<T>(job: HfJob, fn: (ref: string) => Promise<T>): Promise<T>;
+  /** The price in credits. Spends nothing. */
+  cost(job: HfJob, ref: string): Promise<number>;
+  /** Starts the job; its id. */
+  create(job: HfJob, ref: string): Promise<string>;
+  /** Waits for the job (up to the backend's own limit): done with the result's address, failed, or still running. */
+  wait(jobId: string, kind: HfJob["kind"]): Promise<HfOutcome>;
+  /** The product-photoshoot prompt writer, where the backend has one. */
+  enhance?(intent: string, opts: PhotoshootOpts): Promise<string>;
+}
+
+// The CLI says this (and exits) on a computer it has no build for, e.g. the Linux ARM server.
+const CLI_UNSUPPORTED = /native cli binary|not found for (?:linux|darwin|win)|unsupported (?:platform|architecture)|exec format error/i;
+
+/** The owner's words when no way to make pictures is set up. */
+export const PICTURES_OFF = "Picture making isn't switched on yet, so I made the simple clean-up only.";
+
+/** The `higgsfield` CLI on the founder's login. */
+export class CliBackend implements HiggsfieldBackend {
+  readonly name = "higgsfield-cli";
+  constructor(private o: { cli: CliRun; tmpRoot?: string; timeouts?: { account?: number; cost?: number; create?: number; wait?: number }; log?: (line: string) => void }) {}
+  private log(line: string): void { this.o.log?.(`[higgsfield] ${line}`); }
+  private t(k: "account" | "cost" | "create" | "wait"): number { return this.o.timeouts?.[k] ?? { account: 25_000, cost: 90_000, create: 120_000, wait: 270_000 }[k]; }
+
+  async balance(): Promise<number> {
+    const r = await this.o.cli(["--json", "account", "status"], { timeoutMs: this.t("account") });
+    if (r.missing || CLI_UNSUPPORTED.test(`${r.stderr}\n${r.stdout}`)) throw new EngineDecline("missing", PICTURES_OFF);
+    if (r.timedOut) throw new EngineDecline("unavailable", "The AI editor didn't answer in time, so I made the simple clean-up only.");
+    const balance = r.code === 0 ? parseBalance(r.stdout) : undefined;
+    if (balance === undefined) throw new EngineDecline("not-logged-in", "The AI editor isn't signed in right now, so I made the simple clean-up only.");
+    return balance;
+  }
+
+  private args(job: HfJob, file: string): string[] {
+    const a: string[] = [job.model, "--prompt", job.prompt];
+    for (const [k, v] of Object.entries(job.params)) a.push(`--${k}`, v);
+    if (job.file) a.push(`--${job.file.flag}`, file);
+    return a;
+  }
+
+  // The photo is given to the CLI as a file in a private directory that is removed whatever happens.
+  async withInput<T>(job: HfJob, fn: (ref: string) => Promise<T>): Promise<T> {
+    const root = this.o.tmpRoot ?? tmpdir();
+    mkdirSync(root, { recursive: true });
+    if (!job.file) return fn("");
+    const dir = mkdtempSync(join(root, "allevia-hf-"));
+    try {
+      const file = join(dir, job.file.name);
+      writeFileSync(file, job.file.bytes, { mode: 0o600 });
+      return await fn(file);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  async cost(job: HfJob, file: string): Promise<number> {
+    const r = await this.o.cli(["--json", "generate", "cost", ...this.args(job, file)], { timeoutMs: this.t("cost") });
+    const credits = r.code === 0 ? parseCost(r.stdout) : undefined;
+    if (credits === undefined) {
+      this.log(`cost check failed (exit ${r.code}${r.timedOut ? ", timed out" : ""})`);
+      throw new EngineDecline("unavailable", "I couldn't get a price for the AI edit, so I made the simple clean-up only. Nothing was spent.");
+    }
+    return credits;
+  }
+
+  async create(job: HfJob, file: string): Promise<string> {
+    const r = await this.o.cli(["--json", "generate", "create", ...this.args(job, file)], { timeoutMs: this.t("create") });
+    const jobId = r.code === 0 ? parseJobId(r.stdout) : undefined;
+    if (!jobId) {
+      this.log(`create failed (exit ${r.code}${r.timedOut ? ", timed out" : ""}): ${r.stderr.slice(0, 160).replace(/\s+/g, " ")}`);
+      throw new EngineDecline("failed", "The AI edit didn't start, so I made the simple clean-up only. No Studio credits were counted.");
+    }
+    return jobId;
+  }
+
+  async wait(id: string, kind: HfJob["kind"]): Promise<HfOutcome> {
+    const w = await this.o.cli(["--json", "generate", "wait", id, "--timeout", `${Math.round(this.t("wait") / 1000)}s`, "--quiet"], { timeoutMs: this.t("wait") + 20_000 });
+    const g = await this.o.cli(["--json", "generate", "get", id], { timeoutMs: this.t("account") });
+    const job = g.code === 0 ? parseJob(g.stdout) : undefined;
+    if (job && FAILED.test(job.status)) return { state: "failed" };
+    const url = job && (FINISHED.test(job.status) || (!job.status && !w.timedOut && w.code === 0)) ? pickResultUrl(job, kind) : undefined;
+    return url ? { state: "done", url } : { state: "pending" };
+  }
+
+  // The product-photoshoot backend writes the prompt for a mode (the studio never freehands it). Its `--enhance-only` answer is
+  // free and fast and needs no picture; the picture itself then goes to gpt_image_2 as the reference through the same ledgered,
+  // capped, idempotent path as every other generation (the all-in-one `product-photoshoot create` with a picture was found to
+  // run past the CLI's own 60 second limit on the enhance call, and gives no job id to reserve before waiting).
+  async enhance(intent: string, opts: PhotoshootOpts): Promise<string> {
+    const args = ["--json", "product-photoshoot", "create", "--mode", opts.mode, "--prompt", cleanPrompt(intent).slice(0, 1500), "--count", "1", "--aspect_ratio", opts.aspect, "--enhance-only"];
+    if (opts.brandContext) args.push("--brand_context", opts.brandContext.slice(0, 600));
+    if (opts.productContext) args.push("--product_context", opts.productContext.slice(0, 600));
+    const r = await this.o.cli(args, { timeoutMs: 150_000 });
+    const j = r.code === 0 ? parseCliJson(r.stdout) : undefined;
+    const first = j && typeof j === "object" && Array.isArray((j as { prompts?: unknown }).prompts) ? ((j as { prompts: unknown[] }).prompts[0] as Record<string, unknown> | undefined) : undefined;
+    const prompt = typeof first?.prompt === "string" ? first.prompt.trim() : "";
+    if (!prompt) {
+      this.log(`photoshoot prompt failed (exit ${r.code}${r.timedOut ? ", timed out" : ""}): ${r.stderr.slice(0, 160).replace(/\s+/g, " ")}`);
+      throw new EngineDecline("unavailable", "The ad styling didn't answer, so no ad picture was made. Nothing was spent.");
+    }
+    return prompt;
+  }
+}
+
+/** Says no to everything, in plain words: nothing here can make pictures. */
+export class OffBackend implements HiggsfieldBackend {
+  readonly name = "off";
+  async balance(): Promise<number> { throw new EngineDecline("missing", PICTURES_OFF); }
+  async withInput<T>(_job: HfJob, fn: (ref: string) => Promise<T>): Promise<T> { return fn(""); }
+  async cost(): Promise<number> { throw new EngineDecline("missing", PICTURES_OFF); }
+  async create(): Promise<string> { throw new EngineDecline("missing", PICTURES_OFF); }
+  async wait(): Promise<HfOutcome> { return { state: "pending" }; }
+}
+
+/** Whether the CLI can run on this computer: present, with a build for it, and answering. Asked once, then remembered. */
+export function cliProbe(cli: CliRun, o: { platform?: string; arch?: string } = {}): () => Promise<boolean> {
+  let known: Promise<boolean> | undefined;
+  return () => (known ??= (async () => {
+    // The CLI ships no Linux ARM build (the t4g server): it is not even tried there.
+    if ((o.platform ?? process.platform) === "linux" && /^arm/.test(o.arch ?? process.arch)) return false;
+    try {
+      const r = await cli(["--version"], { timeoutMs: 15_000 });
+      return !r.missing && !r.timedOut && r.code === 0 && !CLI_UNSUPPORTED.test(`${r.stderr}\n${r.stdout}`);
+    } catch {
+      return false;
+    }
+  })());
+}
+
+/** Chooses the backend for one business: its connected Higgsfield first, then the CLI where it runs, else "not switched on". */
+export function pickBackend(o: { connected?: (tenant: string) => Promise<HiggsfieldBackend | null>; cli?: HiggsfieldBackend; cliUsable?: () => Promise<boolean>; log?: (line: string) => void }): (tenant: string) => Promise<HiggsfieldBackend> {
+  const off = new OffBackend();
+  return async (tenant) => {
+    const mine = o.connected ? await o.connected(tenant).catch((e: unknown) => { o.log?.(`[higgsfield] connection check failed: ${e instanceof Error ? e.message.slice(0, 120) : "unknown"}`); return null; }) : null;
+    if (mine) return mine;
+    if (o.cli && (!o.cliUsable || await o.cliUsable().catch(() => false))) return o.cli;
+    return off;
+  };
+}
+
+function cleanPrompt(p: string): string {
+  // never starts with a dash (the CLI reads --name value pairs), no control characters, bounded
+  const t = p.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, " ").trim().slice(0, 6000);
+  return /^-/.test(t) ? `Edit: ${t}` : t;
+}
+
+// Where no prompt writer is at hand (the connected Higgsfield has none), the premium ad prompt is written here from the mode.
+const MODE_SCENES: Record<PhotoshootOpts["mode"], string> = {
+  lifestyle_scene: "A natural lifestyle photograph of this product in real use, in a real-world setting with hands and atmosphere, soft daylight, the look of a genuine customer photo",
+  closeup_product_with_person: "A tight close-up photograph of this product held in a person's hands, shallow depth of field, soft natural light",
+  product_shot: "A clean studio product photograph of this product on a simple seamless background, soft even light and a gentle shadow",
+  ad_creative_pack: "A polished paid-social advertising photograph of this product, bold simple composition with space for words, premium lighting",
+};
+export function localPhotoshootPrompt(intent: string, opts: PhotoshootOpts): string {
+  return [
+    `${MODE_SCENES[opts.mode]}.`, `What it is for: ${intent.trim().slice(0, 600)}.`,
+    opts.productContext ? `The product: ${opts.productContext.slice(0, 300)}.` : "", opts.brandContext ? `The brand: ${opts.brandContext.slice(0, 300)}.` : "",
+    "Photographic and believable; no text or logos added.",
+  ].filter(Boolean).join(" ");
+}
+
 // ---------- the engine ----------
 
 export interface HiggsfieldOpts {
-  cli: CliRun;
+  /** The founder's CLI (tests pass a fake). Used when no `backend` is given. */
+  cli?: CliRun;
+  /** Who talks to Higgsfield: one backend, or one chosen per business (pickBackend). */
+  backend?: HiggsfieldBackend | ((tenant: string) => Promise<HiggsfieldBackend>);
   ledger: CreditLedger;
   caps?: CreditCaps;
   model?: string;
@@ -176,12 +364,7 @@ export interface HiggsfieldOpts {
   log?: (line: string) => void;
 }
 
-interface JobSpec {
-  kind: "image" | "video";
-  model: string;
-  prompt: string;
-  params: Record<string, string>;
-  file?: { flag: string; name: string; bytes: Buffer };   // absent: a picture drawn from the prompt alone
+interface JobSpec extends HfJob {
   tenant: string;
   keyParts: string[];
   maxCredits: number;
@@ -193,49 +376,40 @@ interface JobSpec {
 export class HiggsfieldEngine implements GenerationEngine {
   readonly name = "higgsfield";
   readonly caps: CreditCaps;
+  private pick: (tenant: string) => Promise<HiggsfieldBackend>;
   constructor(private o: HiggsfieldOpts) {
     this.caps = o.caps ?? creditCaps();
+    const b = o.backend;
+    if (typeof b === "function") this.pick = b;
+    else {
+      const fixed = b ?? (o.cli ? new CliBackend({ cli: o.cli, ...(o.tmpRoot ? { tmpRoot: o.tmpRoot } : {}), ...(o.timeouts ? { timeouts: o.timeouts } : {}), ...(o.log ? { log: o.log } : {}) }) : new OffBackend());
+      this.pick = async () => fixed;
+    }
   }
 
   private log(line: string): void { this.o.log?.(`[higgsfield] ${line}`); }
-  private t(k: "account" | "cost" | "create" | "wait"): number { return this.o.timeouts?.[k] ?? { account: 25_000, cost: 90_000, create: 120_000, wait: 270_000 }[k]; }
+
+  // A backend that fails in a way nobody foresaw never reaches the owner as a raw error: it is logged and said plainly.
+  private async backend(tenant: string): Promise<HiggsfieldBackend> {
+    try { return await this.pick(tenant); } catch (e) { this.log(`no backend: ${e instanceof Error ? e.message.slice(0, 160) : "unknown"}`); return new OffBackend(); }
+  }
+  private async safely<T>(what: string, fn: () => Promise<T>): Promise<T> {
+    try { return await fn(); } catch (e) {
+      if (e instanceof EngineDecline || e instanceof DailyCapReached) throw e;
+      this.log(`${what} failed: ${e instanceof Error ? e.message.slice(0, 200) : "unknown"}`);
+      throw new EngineDecline("unavailable", "Picture making failed just now, so I made the simple clean-up only. Nothing was spent.");
+    }
+  }
 
   // ----- login and balance -----
 
-  /** Signed in with credits to spare, or an EngineDecline in the owner's words. Returns the balance. */
-  async preflight(): Promise<number> {
-    const r = await this.o.cli(["--json", "account", "status"], { timeoutMs: this.t("account") });
-    if (r.missing) throw new EngineDecline("missing", "The AI editor isn't set up on this computer, so I made the simple clean-up only.");
-    if (r.timedOut) throw new EngineDecline("unavailable", "The AI editor didn't answer in time, so I made the simple clean-up only.");
-    const balance = r.code === 0 ? parseBalance(r.stdout) : undefined;
-    if (balance === undefined) throw new EngineDecline("not-logged-in", "The AI editor isn't signed in right now, so I made the simple clean-up only.");
-    return balance;
+  /** Connected with credits to spare, or an EngineDecline in the owner's words. Returns the balance. */
+  async preflight(tenant = "unknown"): Promise<number> {
+    const b = await this.backend(tenant);
+    return this.safely("balance", () => b.balance());
   }
 
-  // ----- pricing -----
-
-  private args(spec: JobSpec, file: string): string[] {
-    const a: string[] = [spec.model, "--prompt", spec.prompt];
-    for (const [k, v] of Object.entries(spec.params)) a.push(`--${k}`, v);
-    if (spec.file) a.push(`--${spec.file.flag}`, file);
-    return a;
-  }
-
-  private async price(spec: JobSpec, file: string): Promise<number> {
-    const r = await this.o.cli(["--json", "generate", "cost", ...this.args(spec, file)], { timeoutMs: this.t("cost") });
-    const credits = r.code === 0 ? parseCost(r.stdout) : undefined;
-    if (credits === undefined) {
-      this.log(`cost check failed (exit ${r.code}${r.timedOut ? ", timed out" : ""})`);
-      throw new EngineDecline("unavailable", "I couldn't get a price for the AI edit, so I made the simple clean-up only. Nothing was spent.");
-    }
-    return credits;
-  }
-
-  private prompt(p: string): string {
-    // never starts with a dash (the CLI reads --name value pairs), no control characters, bounded
-    const t = p.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, " ").trim().slice(0, 6000);
-    return /^-/.test(t) ? `Edit: ${t}` : t;
-  }
+  private prompt(p: string): string { return cleanPrompt(p); }
 
   private spec(input: EditInput, prompt: string, opts: EditOpts): JobSpec {
     const ext = input.mime === "image/png" ? "png" : "jpg";
@@ -250,8 +424,7 @@ export class HiggsfieldEngine implements GenerationEngine {
 
   /** What an edit would cost, checked against the caps and the balance. Spends nothing. */
   async quote(input: EditInput, prompt: string, opts: EditOpts): Promise<EngineQuote> {
-    const spec = this.spec(input, prompt, opts);
-    return this.withFile(spec, async (file) => (await this.vet(spec, file)).quote);
+    return this.quoteSpec(this.spec(input, prompt, opts));
   }
 
   async edit(input: EditInput, prompt: string, opts: EditOpts): Promise<EditResult> {
@@ -262,23 +435,10 @@ export class HiggsfieldEngine implements GenerationEngine {
 
   // ----- the premium ad picture (Higgsfield product-photoshoot) -----
 
-  // The product-photoshoot backend writes the prompt for a mode (the studio never freehands it). Its `--enhance-only` answer is
-  // free and fast and needs no picture; the picture itself then goes to gpt_image_2 as the reference through the same ledgered,
-  // capped, idempotent path as every other generation (the all-in-one `product-photoshoot create` with a picture was found to
-  // run past the CLI's own 60 second limit on the enhance call, and gives no job id to reserve before waiting).
-  private async enhance(intent: string, opts: PhotoshootOpts): Promise<{ prompt: string; model: string; aspect: string }> {
-    const args = ["--json", "product-photoshoot", "create", "--mode", opts.mode, "--prompt", this.prompt(intent).slice(0, 1500), "--count", "1", "--aspect_ratio", opts.aspect, "--enhance-only"];
-    if (opts.brandContext) args.push("--brand_context", opts.brandContext.slice(0, 600));
-    if (opts.productContext) args.push("--product_context", opts.productContext.slice(0, 600));
-    const r = await this.o.cli(args, { timeoutMs: 150_000 });
-    const j = r.code === 0 ? parseCliJson(r.stdout) : undefined;
-    const first = j && typeof j === "object" && Array.isArray((j as { prompts?: unknown }).prompts) ? ((j as { prompts: unknown[] }).prompts[0] as Record<string, unknown> | undefined) : undefined;
-    const prompt = typeof first?.prompt === "string" ? first.prompt.trim() : "";
-    if (!prompt) {
-      this.log(`photoshoot prompt failed (exit ${r.code}${r.timedOut ? ", timed out" : ""}): ${r.stderr.slice(0, 160).replace(/\s+/g, " ")}`);
-      throw new EngineDecline("unavailable", "The ad styling didn't answer, so no ad picture was made. Nothing was spent.");
-    }
-    // the backend names gpt_image_2; the price was checked for exactly that model, so it is the one used
+  // The backend's own prompt writer where it has one (the CLI's product-photoshoot), else the prompt written here from the mode.
+  // The model is gpt_image_2: the price is checked for exactly that model, so it is the one used.
+  private async enhance(b: HiggsfieldBackend, intent: string, opts: PhotoshootOpts): Promise<{ prompt: string; model: string; aspect: string }> {
+    const prompt = b.enhance ? await this.safely("photoshoot prompt", () => b.enhance!(intent, opts)) : localPhotoshootPrompt(intent, opts);
     return { prompt, model: PHOTOSHOOT_MODEL, aspect: opts.aspect };
   }
 
@@ -294,8 +454,7 @@ export class HiggsfieldEngine implements GenerationEngine {
 
   /** What the premium ad picture would cost, checked against the caps and the balance. Spends nothing. */
   async quotePhotoshoot(input: EditInput, intent: string, opts: PhotoshootOpts): Promise<EngineQuote> {
-    const spec = this.photoshootSpec(input, intent, opts);
-    return this.withFile(spec, async (file) => (await this.vet(spec, file)).quote);
+    return this.quoteSpec(this.photoshootSpec(input, intent, opts));
   }
 
   async photoshoot(input: EditInput, intent: string, opts: PhotoshootOpts): Promise<EditResult> {
@@ -303,7 +462,7 @@ export class HiggsfieldEngine implements GenerationEngine {
     // the same request again joins its job (the ledger), so the backend is not asked for a prompt a second time
     const key = createHash("sha256").update([probe.model, probe.keyPrompt, JSON.stringify(probe.params), ...probe.keyParts].join("\u0001")).digest("hex");
     const prior = this.o.ledger.existing(key);
-    const e = prior ? { prompt: probe.prompt, model: probe.model, aspect: opts.aspect } : await this.enhance(intent, opts);
+    const e = prior ? { prompt: probe.prompt, model: probe.model, aspect: opts.aspect } : await this.enhance(await this.backend(probe.tenant), intent, opts);
     // The reference picture is attached, and one sentence is added so the model keeps the product itself: the backend's prompt is
     // written for a product in words, the picture is what it must match.
     const guard = "Use the attached photo as the exact reference for the product: keep its shape, colour, material, label and logo exactly as in the photo, and do not invent any new text.";
@@ -337,8 +496,7 @@ export class HiggsfieldEngine implements GenerationEngine {
   }
 
   async drawQuote(o: { prompt: string; aspect: string; tenant: string; maxCredits?: number }): Promise<EngineQuote> {
-    const spec = this.drawSpec(o);
-    return this.withFile(spec, async (file) => (await this.vet(spec, file)).quote);
+    return this.quoteSpec(this.drawSpec(o));
   }
 
   async draw(o: { prompt: string; aspect: string; tenant: string; maxCredits?: number }): Promise<EditResult> {
@@ -350,35 +508,24 @@ export class HiggsfieldEngine implements GenerationEngine {
   /** What a clip would cost, without making it. */
   async clipQuote(o: { image: Buffer; tenant: string; sourceSha256: string; prompt: string; seconds?: number; aspect?: "9:16" | "4:5" | "1:1"; maxCredits?: number }): Promise<EngineQuote> {
     const seconds = o.seconds ?? 5;
-    const spec: JobSpec = {
+    return this.quoteSpec({
       kind: "video", model: this.o.clipModel ?? DEFAULT_CLIP_MODEL, prompt: this.prompt(o.prompt),
       params: clipParams(this.o.clipModel ?? DEFAULT_CLIP_MODEL, seconds, o.aspect ?? "9:16"),
       file: { flag: "start-image", name: "start.jpg", bytes: o.image }, tenant: o.tenant, keyParts: [], maxCredits: o.maxCredits ?? this.caps.run,
-    };
-    return this.withFile(spec, async (file) => (await this.vet(spec, file)).quote);
+    });
   }
 
   // ----- the work -----
 
-  // The photo is given to the CLI as a file in a private directory that is removed whatever happens.
-  private async withFile<T>(spec: JobSpec, fn: (file: string) => Promise<T>): Promise<T> {
-    const root = this.o.tmpRoot ?? tmpdir();
-    mkdirSync(root, { recursive: true });
-    if (!spec.file) return fn("");
-    const dir = mkdtempSync(join(root, "allevia-hf-"));
-    try {
-      const file = join(dir, spec.file.name);
-      writeFileSync(file, spec.file.bytes, { mode: 0o600 });
-      return await fn(file);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+  private async quoteSpec(spec: JobSpec): Promise<EngineQuote> {
+    const b = await this.backend(spec.tenant);
+    return this.safely("quote", () => b.withInput(spec, async (ref) => (await this.vet(b, spec, ref)).quote));
   }
 
-  // Signed in, priced, within the run cap, the daily cap and the balance floor.
-  private async vet(spec: JobSpec, file: string): Promise<{ quote: EngineQuote; balance: number }> {
-    const balance = await this.preflight();
-    const credits = await this.price(spec, file);
+  // Connected, priced, within the run cap, the daily cap and the balance floor.
+  private async vet(b: HiggsfieldBackend, spec: JobSpec, ref: string): Promise<{ quote: EngineQuote; balance: number }> {
+    const balance = await b.balance();
+    const credits = await b.cost(spec, ref);
     const quote: EngineQuote = { credits, words: creditsWords(credits, { about: true }) };
     if (credits > spec.maxCredits) {
       throw new EngineDecline("run-cap", `That would use ${creditsWords(credits, { about: true })}, more than the ${creditsWords(spec.maxCredits)} allowed for one edit, so I kept to the simple clean-up.`);
@@ -395,52 +542,50 @@ export class HiggsfieldEngine implements GenerationEngine {
   }
 
   private async runJob(spec: JobSpec): Promise<{ bytes: Buffer; jobId: string; credits: number; at: number }> {
-    return this.withFile(spec, async (file) => {
-      const key = createHash("sha256").update([spec.model, spec.keyPrompt ?? spec.prompt, JSON.stringify(spec.params), ...spec.keyParts].join("\u0001")).digest("hex");
-      // The same request again joins its job: nothing is created or charged twice.
-      const prior = this.o.ledger.existing(key);
-      let jobId = prior?.jobId;
-      let credits = prior?.credits ?? 0;
-      if (!prior) {
-        const { quote } = await this.vet(spec, file);
+    const key = createHash("sha256").update([spec.model, spec.keyPrompt ?? spec.prompt, JSON.stringify(spec.params), ...spec.keyParts].join("\u0001")).digest("hex");
+    // The same request again joins its job: nothing is created or charged twice (and the photo is not handed over again).
+    const prior = this.o.ledger.existing(key);
+    const b = await this.backend(spec.tenant);
+    let jobId = prior?.jobId;
+    let credits = prior?.credits ?? 0;
+    if (!prior) {
+      await this.safely("create", () => b.withInput(spec, async (ref) => {
+        const { quote } = await this.vet(b, spec, ref);
         spec.onQuote?.(quote);
-        const r = await this.o.cli(["--json", "generate", "create", ...this.args(spec, file)], { timeoutMs: this.t("create") });
-        jobId = r.code === 0 ? parseJobId(r.stdout) : undefined;
-        if (!jobId) {
-          this.log(`create failed (exit ${r.code}${r.timedOut ? ", timed out" : ""}): ${r.stderr.slice(0, 160).replace(/\s+/g, " ")}`);
-          throw new EngineDecline("failed", "The AI edit didn't start, so I made the simple clean-up only. No Studio credits were counted.");
-        }
+        jobId = await b.create(spec, ref);
         credits = quote.credits;
-        try {
-          await this.o.ledger.reserve({ jobId, key, tenant: spec.tenant, model: spec.model, credits }, this.caps.daily);
-        } catch (e) {
-          if (e instanceof DailyCapReached) throw new EngineDecline("daily-cap", "Today's Studio budget for AI edits is used up, so I kept to the simple clean-up. It starts again tomorrow.");
-          throw e;
-        }
-      }
-      const id = jobId!;
-      const w = await this.o.cli(["--json", "generate", "wait", id, "--timeout", `${Math.round(this.t("wait") / 1000)}s`, "--quiet"], { timeoutMs: this.t("wait") + 20_000 });
-      const g = await this.o.cli(["--json", "generate", "get", id], { timeoutMs: this.t("account") });
-      const job = g.code === 0 ? parseJob(g.stdout) : undefined;
-      if (job && FAILED.test(job.status)) {
-        await this.o.ledger.mark(id, "failed");
-        throw new EngineDecline("failed", "The AI edit didn't work this time, so I made the simple clean-up only. No Studio credits were counted.");
-      }
-      const url = job && (FINISHED.test(job.status) || (!job.status && !w.timedOut && w.code === 0)) ? pickResultUrl(job, spec.kind) : undefined;
-      if (!url) {
-        // still running (or the wait ran out): the job stays counted and the same request joins it later
-        throw new EngineDecline("timeout", "The AI edit is taking longer than expected, so I made the simple clean-up for now. Ask again in a few minutes: it picks up the same job and is not charged twice.");
-      }
-      let bytes: Buffer;
+      }));
       try {
-        bytes = await (this.o.fetchImage ?? ((u: string) => fetchResult(u)))(url);
+        await this.o.ledger.reserve({ jobId: jobId!, key, tenant: spec.tenant, model: spec.model, credits }, this.caps.daily);
       } catch (e) {
-        this.log(`result download failed: ${(e as Error).message}`);
-        throw new EngineDecline("failed", "The AI edit finished but I couldn't fetch the picture, so I made the simple clean-up only. Ask again in a moment: it picks up the same job and is not charged twice.");
+        if (e instanceof DailyCapReached) throw new EngineDecline("daily-cap", "Today's Studio budget for AI edits is used up, so I kept to the simple clean-up. It starts again tomorrow.");
+        throw e;
       }
-      await this.o.ledger.mark(id, "done");
-      return { bytes, jobId: id, credits, at: Date.now() };
+    }
+    const id = jobId!;
+    // a hiccup while waiting is not a failed job: it stays counted and the same request joins it later
+    const out: HfOutcome = await b.wait(id, spec.kind).catch((e: unknown) => {
+      if (e instanceof EngineDecline && e.code !== "unavailable") throw e;
+      this.log(`wait failed: ${e instanceof Error ? e.message.slice(0, 200) : "unknown"}`);
+      return { state: "pending" as const };
     });
+    if (out.state === "failed") {
+      await this.o.ledger.mark(id, "failed");
+      throw new EngineDecline("failed", "The AI edit didn't work this time, so I made the simple clean-up only. No Studio credits were counted.");
+    }
+    if (out.state === "pending") {
+      // still running (or the wait ran out): the job stays counted and the same request joins it later
+      throw new EngineDecline("timeout", "The AI edit is taking longer than expected, so I made the simple clean-up for now. Ask again in a few minutes: it picks up the same job and is not charged twice.");
+    }
+    let bytes: Buffer;
+    try {
+      bytes = await (this.o.fetchImage ?? ((u: string) => fetchResult(u)))(out.url);
+    } catch (e) {
+      this.log(`result download failed: ${(e as Error).message}`);
+      throw new EngineDecline("failed", "The AI edit finished but I couldn't fetch the picture, so I made the simple clean-up only. Ask again in a moment: it picks up the same job and is not charged twice.");
+    }
+    await this.o.ledger.mark(id, "done");
+    return { bytes, jobId: id, credits, at: Date.now() };
   }
 }
 
