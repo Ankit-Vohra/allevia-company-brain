@@ -85,10 +85,13 @@ function Started({ p, caps, suggested, onSet }: { p: ProgramScorecard; caps?: Ca
       </section>
 
       <section className="owner-facts" aria-label="What your team learned, and what comes next">
-        <Link to="/team" className="owner-fact" title={lastRule ? `Latest: “${lastRule.text}”` : undefined}>
-          <span className="owner-fact-label">Learned from your edits</span>
-          <span className="owner-fact-value num">{p.learnedRules.active}</span>
-        </Link>
+        {/* an empty "0" tile says nothing: it shows once the team has learned something */}
+        {p.learnedRules.active > 0 && (
+          <Link to="/team" className="owner-fact" title={lastRule ? `Latest: “${lastRule.text}”` : undefined}>
+            <span className="owner-fact-label">Learned from your edits</span>
+            <span className="owner-fact-value num">{p.learnedRules.active}</span>
+          </Link>
+        )}
         <div className="owner-fact">
           <span className="owner-fact-label">Next check-in</span>
           <span className="owner-fact-value is-text">{next ? fmtDate(next.dueDate) : "All done"}</span>

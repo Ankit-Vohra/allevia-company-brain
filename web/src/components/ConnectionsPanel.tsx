@@ -200,7 +200,8 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
   return (
     <div className={`cx cx-${variant}`}>
       {note?.text && <p className={`notice ${note.text.startsWith("Connected") ? "notice-ok" : ""}`} role="status">{note.text}</p>}
-      <p className="cx-never"><Icon name="check" size={15} /><span>{never} <span className="cx-never-tail">Disconnect any time.</span></span></p>
+      {/* on the Your tools page the promise sits at the foot, not as a sentence under the heading */}
+      {variant === "onboard" && <p className="cx-never"><Icon name="check" size={15} /><span>{never} <span className="cx-never-tail">Disconnect any time.</span></span></p>}
       {!live && <p className="cx-quiet">Connecting works in the live app.</p>}
       {error && <p className="notice notice-bad" role="alert">{error}</p>}
       {waiting.size > 0 && <p className="cx-quiet" role="status">Waiting for you to finish in the other tab. This updates by itself.</p>}
@@ -250,12 +251,13 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
         <section className="cx-group" aria-labelledby="cx-starters">
           <h2 id="cx-starters" className="cx-group-h">Try these now</h2>
           <ul className="cx-chips">
-            {data.starters.map((s) => (
+            {data.starters.slice(0, 3).map((s) => (
               <li key={s.id}><Link className="chat-chip" to={`/chat?q=${encodeURIComponent(s.ask)}`} title={s.ask}>{s.label}{s.needsOk ? <span className="cx-ok"> · after your OK</span> : null}</Link></li>
             ))}
           </ul>
         </section>
       )}
+      {variant === "page" && <p className="cx-never is-foot"><Icon name="check" size={14} /><span>{never} <span className="cx-never-tail">Disconnect any time.</span></span></p>}
     </div>
   );
 }

@@ -230,9 +230,8 @@ export default function StudioPage() {
       <header className="studio-head">
         <p className="studio-eyebrow"><Icon name="sparkle" size={14} /> Content Studio</p>
         <h1 className="page-title">A phone photo, made into a post</h1>
-        <p className="studio-lede">A free clean-up and an AI edit · nothing is posted without your OK</p>
         <Reveal label="How it works">
-          <p className="studio-lede">Tara reads the photo and marks what must not change. The AI edit says its price first. Nisha checks both against the original before you see them.</p>
+          <p className="studio-lede">A free clean-up and an AI edit; nothing is posted without your OK. Tara reads the photo and marks what must not change. The AI edit says its price first. Nisha checks both against the original before you see them.</p>
         </Reveal>
         <label className="studio-setting">
           <input type="checkbox" checked={!!settings?.blurFaces} disabled={!settings || !live || getPublicMode()} onChange={(e) => void toggleBlur(e.target.checked)} />
