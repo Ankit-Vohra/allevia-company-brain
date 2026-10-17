@@ -13,6 +13,7 @@ import { useThread } from "../components/chat/useThread";
 import { Icon } from "../components/Icon";
 import { APPROVALS_CHANGED } from "../components/TopBar";
 import { CHIEF, TEAM, type Who, chatPath, dotOf, dotWords, startersFor, threadsFor, whoFrom, whoOfThread, workingNow } from "../lib/chat";
+import { groupThreads } from "../lib/group";
 import { useMedia } from "../lib/useMedia";
 import { useApp, useAsync } from "../state/app";
 import { runStore, useRunStore } from "../state/runs";
@@ -170,7 +171,8 @@ export default function ChatPage() {
     .filter((s) => who === TEAM || who === CHIEF || s.agents.includes(who))
     .slice(0, who === TEAM ? 3 : 4).map((s) => ({ id: `job:${s.id}`, label: s.label, prompt: s.ask }));
   const baseChips = who === TEAM ? (SUGGESTIONS[tenant.id] ?? FIRST_DAY_QUESTIONS).slice(0, 4).map((s) => ({ id: s, label: s, prompt: s })) : startersFor(who, person?.skills);
-  const chips = [...jobChips, ...baseChips].slice(0, who === TEAM ? 6 : 8);
+  // three to start with; anything else can be typed
+  const chips = [...jobChips, ...baseChips].slice(0, 3);
 
   const rail = (
     <Rail who={who} sessionId={sessionId} team={team.data} threads={threads.data} mine={mine} loading={threads.loading && !threads.data} working={working} onPick={() => setSheet(false)} />
@@ -188,11 +190,11 @@ export default function ChatPage() {
             {who === TEAM ? <AgentAvatar id={CHIEF} size={40} /> : <AgentAvatar id={who} size={40} ring={working.has(who)} />}
             <div className="chat-head-text">
               <h1 id="chat-title" className="chat-title">{nameOf(who)}</h1>
-              <p className="chat-sub">
-                {who === TEAM
-                  ? `Everyone · ${agentDef(CHIEF)?.name} picks who answers`
-                  : <><span className={`ct-dot dot-${dotOf(person, working.has(who))}`} aria-hidden="true" /> {agentDef(who)?.title} · {dotWords(dotOf(person, working.has(who)), person?.mode)}</>}
-              </p>
+              {who !== TEAM && (
+                <p className="chat-sub">
+                  <span className={`ct-dot dot-${dotOf(person, working.has(who))}`} aria-hidden="true" /> {agentDef(who)?.title} · {dotWords(dotOf(person, working.has(who)), person?.mode)}
+                </p>
+              )}
             </div>
           </div>
           <div className="chat-head-actions">
@@ -316,10 +318,18 @@ function Dot({ dot }: { dot: ReturnType<typeof dotOf> }) {
   return <span className={`ct-dot dot-${dot}`} role="img" aria-label={dotWords(dot)} />;
 }
 
+/** At most this many recent conversations in the rail, the same question asked again folded into one row; then "Show all". */
+const RECENT = 8;
+
 function Rail({ who, sessionId, team, threads, mine, loading, working, onPick }: {
   who: Who; sessionId?: string; team?: AgentView[]; threads?: SessionSummary[]; mine: SessionSummary[]; loading: boolean; working: Set<string>; onPick: () => void;
 }) {
   const people = AGENTS.filter((a) => a.id !== CHIEF);
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => { setShowAll(false); }, [who]);
+  const folded = groupThreads(mine);
+  // "Show all" lists every conversation, repeats too, so each one stays one tap away
+  const list = showAll ? mine.map((s) => ({ lead: s, items: [s] })) : folded.slice(0, RECENT);
   const entry = (id: Who, avatar: ReactNode, name: string, role: string, dot: ReturnType<typeof dotOf>) => {
     const active = who === id;
     const convos = active ? mine : [];
@@ -328,7 +338,7 @@ function Rail({ who, sessionId, team, threads, mine, loading, working, onPick }:
         <NavLink to={chatPath(id)} end className={() => `rail-link${active && !sessionId ? " is-current" : ""}`} aria-current={active ? "page" : undefined} onClick={onPick}>
           <span className="rail-avatar">{avatar}<Dot dot={dot} /></span>
           <span className="rail-text"><span className="rail-name">{name}</span><span className="rail-role">{dot === "off" ? "Resting" : role}</span></span>
-          {threadsFor(id, threads).length > 0 && <span className="rail-count" aria-label={`${threadsFor(id, threads).length} conversations`}>{threadsFor(id, threads).length}</span>}
+          {threadsFor(id, threads).length > 0 && <span className="rail-count" aria-label={`${groupThreads(threadsFor(id, threads)).length} conversations`}>{groupThreads(threadsFor(id, threads)).length}</span>}
         </NavLink>
         {active && (
           <div className="rail-convos">
@@ -340,10 +350,10 @@ function Rail({ who, sessionId, team, threads, mine, loading, working, onPick }:
               <p className="rail-empty">None yet.</p>
             ) : (
               <ul>
-                {convos.map((s) => (
+                {(active ? list : []).map(({ lead: s, items }) => (
                   <li key={s.id}>
                     <NavLink to={chatPath(id, s.id)} className={`rail-convo${s.id === sessionId ? " is-active" : ""}`} aria-current={s.id === sessionId ? "page" : undefined} onClick={onPick}>
-                      <span className="rail-convo-title">{s.title}</span>
+                      <span className="rail-convo-title">{s.title}{items.length > 1 && <span className="rail-repeat" aria-label={`asked ${items.length} times`}> ×{items.length}</span>}</span>
                       <span className="rail-convo-meta">
                         {s.channel === "discord" && <><Icon name="chat" size={11} /> Discord · </>}{fmtAgo(s.lastAt)}
                         {s.running && <span className="rail-live"><span className="ct-pulse" aria-hidden="true" /> working</span>}
@@ -351,6 +361,13 @@ function Rail({ who, sessionId, team, threads, mine, loading, working, onPick }:
                     </NavLink>
                   </li>
                 ))}
+                {(showAll || folded.length > RECENT || folded.length < convos.length) && (
+                  <li>
+                    <button type="button" className="btn btn-quiet btn-sm rail-all" onClick={() => setShowAll((v) => !v)} aria-expanded={showAll}>
+                      {showAll ? "Show fewer" : "Show all"}
+                    </button>
+                  </li>
+                )}
               </ul>
             )}
           </div>
