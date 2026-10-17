@@ -2,6 +2,6 @@
 // (shared/flags.ts); its source stays in pricing/index.html.
 import { pricingVisible } from "./shared/flags.ts";
 
-const ALL = ["index", "a", "product", "integrations", "team", "pricing", "security", "faq", "contact"];
+const ALL = ["index", "a", "product", "integrations", "team", "pricing", "security", "faq", "contact", "about", "privacy", "terms", "cookies", "data-deletion"];
 
 export const protoPages = (): string[] => ALL.filter((k) => k !== "pricing" || pricingVisible());

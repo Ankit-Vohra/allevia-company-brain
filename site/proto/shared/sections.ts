@@ -10,6 +10,7 @@ import { COMPANY } from "../../src/company.ts";
 import { heroA, productDiagram } from "./hero-sections.ts";
 import { HOME_SECTIONS } from "./home-sections.ts";
 import { PAGE_SECTIONS } from "./page-sections.ts";
+import { LEGAL_SECTIONS } from "./legal-sections.ts";
 import { pricingVisible } from "./flags.ts";
 export { esc };
 
@@ -38,7 +39,7 @@ export function nav(current: string, home: string): string {
 </header>`;
 }
 
-/** The footer: the logo and one line about Allevia, three columns of links (the legal pages and About live on the main site and stay complete),
+/** The footer: the logo and one line about Allevia, three columns of links (About and the legal pages are built here too, legal-sections.ts),
  *  the contact email and the year. */
 export function footer(): string {
   const col = (title: string, links: [string, string][]) => `<nav class="foot__col" aria-label="${esc(title)}"><h2 class="foot__h">${esc(title)}</h2><ul>${links.map(([l, h]) => `<li><a href="${h}">${esc(l)}</a></li>`).join("")}</ul></nav>`;
@@ -72,6 +73,7 @@ export const SECTIONS: Record<string, (page: string) => string> = {
   ...TEAM_SECTIONS,
   ...HOME_SECTIONS,
   ...PAGE_SECTIONS,
+  ...LEGAL_SECTIONS,
   "hero-a": () => heroA(),
   "product-diagram": () => productDiagram(),
   nav: (page) => nav(navItems().some((n) => n.id === page) ? page : "", "/a/"),
