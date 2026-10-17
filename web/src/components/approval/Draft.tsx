@@ -18,7 +18,7 @@ import "./approval.css";
 const bodyOf = (a: Approval) => a.payload.body.replace(/^Evidence: .*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
 /** A website address or a place ("Instagram post"); never a repo name or a one-word tag, which is plumbing. */
 const aboutOf = (a: Approval): string | undefined => {
-  const t = a.payload.target?.trim();
+  const t = a.payload.target ? plainTitle(a.payload.target) : undefined;
   return t && t.length <= 90 && !/^[\w.-]+\/[\w.-]+$/.test(t) && (/^https?:\/\//.test(t) || /\s/.test(t)) ? t : undefined;
 };
 

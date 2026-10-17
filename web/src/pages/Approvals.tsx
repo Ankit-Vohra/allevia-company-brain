@@ -1,75 +1,71 @@
-// Waiting for your OK: nothing leaves Allevia without the owner's yes. One draft at a time, as a stack: the top card is
-// the one to decide, the next one or two peek out behind it. Each card says who made it, what it is and what happens if
-// you say OK; the draft itself, where it goes and why sit behind "Details". An edit becomes a rule the team follows next
-// time (the decision's answer carries the `learned` events, shown right after). Decided drafts and the rules your edits
-// taught are one quiet tap away below the stack.
-import { usesWords } from "@shared/credits";
-import "../components/credits.css";
+// Waiting for your OK: nothing leaves Allevia without the owner's yes. Every draft is one compact row (what it is, who made
+// it, how big) with OK and Look; Look opens the whole draft in a sheet with Approve, Change and No thanks, the same call as
+// Home and the Discord buttons. An edit becomes a habit the team keeps (said right after). Your posts, what you decided and
+// what your edits taught sit folded below. /approvals#appr:… (from Insights and the chat) opens that draft at once.
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
-import type { ActionKind, LearnedRuleDto } from "@shared/contracts";
-import { api } from "../api";
+import type { LearnedRuleDto } from "@shared/contracts";
+import { api, getPublicMode } from "../api";
+import { ApprovalRow, Decided } from "../components/approval/ApprovalRow";
+import { decideDraft, type Done, type Payload } from "../components/approval/decide";
+import { DraftView } from "../components/approval/Draft";
 import { AgentAvatar, agentDef } from "../components/bits";
 import { Icon } from "../components/Icon";
-import { whenWords, withoutSim } from "../components/insights-words";
-import { LearnedChips, LearnedPathDialog, RuleRow, ruleClause } from "../components/Learning";
-import { PostLine, PostsList } from "../components/PostsList";
+import { stakeOf, whenWords, withoutSim } from "../components/insights-words";
+import { LearnedPathDialog, RuleRow, ruleClause } from "../components/Learning";
+import { PostsList } from "../components/PostsList";
 import { Reveal } from "../components/Reveal";
-import { APPROVALS_CHANGED } from "../components/TopBar";
-import { ACTION } from "../lib/actions";
-import { kindWords } from "../lib/approval-words";
+import { Sheet } from "../components/Sheet";
 import { wordDiff } from "../lib/diff";
+import { fmtMoney } from "../lib/format";
+import { plainTitle } from "../lib/home";
+import { TEAM_CHANGED } from "../lib/office-shared";
 import { useApp, useAsync } from "../state/app";
-import type { Approval, LearnedEvent, PostView } from "../types-ext";
-import { TEAM_CHANGED } from "./Office";
+import type { Approval, PostView } from "../types-ext";
 import "./approvals.css";
 
-type Payload = Approval["payload"];
-
 const OUTCOME: Record<Approval["status"], { text: string; cls: string }> = {
-  pending: { text: "Waiting for your OK", cls: "is-wait" },
+  pending: { text: "Waiting", cls: "is-wait" },
   approved: { text: "Approved", cls: "is-ok" },
-  edited: { text: "Approved with your edits", cls: "is-ok" },
+  edited: { text: "Approved, edited", cls: "is-ok" },
   executed: { text: "Done", cls: "is-ok" },
   rejected: { text: "You said no", cls: "is-no" },
   failed: { text: "Did not go through", cls: "is-bad" },
 };
 
-interface Last { id: string; title: string; kind: ActionKind; outcome: "approved" | "edited" | "rejected"; result?: string }
-
 export default function ApprovalsPage() {
   const { tenant } = useApp();
   const list = useAsync(() => api.approvals(tenant.id), [tenant.id]);
-  const recs = useAsync(() => api.recommendations(tenant.id), [tenant.id]);
+  const recs = useAsync(() => api.recommendations(tenant.id).catch(() => []), [tenant.id]);
   const feed = useAsync(() => api.learning(tenant.id).catch(() => null), [tenant.id]);
-  const [recent, setRecent] = useState<Set<string>>(new Set());
-  // what each decision taught, from POST /approvals/:id's `learned` events (for the drafts decided on this visit)
-  const [taught, setTaught] = useState<Record<string, LearnedEvent[]>>({});
-  const [last, setLast] = useState<Last | null>(null);
-  // a "post it" card decided on this visit: what became of it, with Cancel or Try again at once
-  const [lastPost, setLastPost] = useState<PostView | null>(null);
   const posts = useAsync(() => api.publishPosts(tenant.id).catch(() => [] as PostView[]), [tenant.id]);
+  const [last, setLast] = useState<Done | null>(null);
+  const [look, setLook] = useState<string | null>(() => safeDecode(location.hash.slice(1)) || null);
   const [openRule, setOpenRule] = useState<LearnedRuleDto | null>(null);
-  const [hash, setHash] = useState(() => safeDecode(location.hash.slice(1)));
+  const readOnly = getPublicMode();
 
-  useEffect(() => { setRecent(new Set()); setTaught({}); setLast(null); setLastPost(null); }, [tenant.id]);
+  useEffect(() => { setLast(null); }, [tenant.id]);
   useEffect(() => {
-    const on = () => setHash(safeDecode(location.hash.slice(1)));
+    const on = () => setLook(safeDecode(location.hash.slice(1)) || null);
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
 
-  const recTitle = useMemo(() => new Map((recs.data ?? []).map((r) => [r.id, r.title])), [recs.data]);
+  const stakes = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of recs.data ?? []) {
+      if (!r.approvalId) continue;
+      const s = stakeOf(r, fmtMoney);
+      m.set(r.approvalId, s.small ? `${s.big} ${s.small}` : s.big);
+    }
+    return m;
+  }, [recs.data]);
+  // not memoised: the mock API edits its cards in place, so the list's identity does not change when a card is decided
   const all = list.data ?? [];
-  // /approvals#appr:… (from Insights and Ask) puts that draft on top of the stack
-  // (not memoised: the mock API edits its cards in place, so the list's identity does not change when a card is decided)
   const pending = all.filter((a) => a.status === "pending");
-  const at = pending.findIndex((a) => a.id === hash);
-  const stack = at > 0 ? [pending[at]!, ...pending.slice(0, at), ...pending.slice(at + 1)] : pending;
-  const history = all.filter((a) => a.status !== "pending").sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""));
-  const approvedCount = history.filter((a) => a.status === "executed" || a.status === "approved" || a.status === "edited").length;
-  const top = stack[0];
-  const handled = [...recent].filter((id) => !stack.some((a) => a.id === id)).length;
+  const decided = all.filter((a) => a.status !== "pending").sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""));
+  const approvedCount = decided.filter((a) => a.status === "executed" || a.status === "approved" || a.status === "edited").length;
+  const open = pending.find((a) => a.id === look);
   const rules = feed.data?.rules ?? [];
   const rulesFrom = useMemo(() => {
     const m = new Map<string, LearnedRuleDto[]>();
@@ -77,20 +73,15 @@ export default function ApprovalsPage() {
     return m;
   }, [rules]);
 
-  useEffect(() => {
-    if (!top || !hash || top.id !== hash) return;
-    document.getElementById(top.id)?.focus({ preventScroll: true });
-  }, [top?.id, hash]);
-
-  const decide = async (a: Approval, decision: "approve" | "reject", editedPayload?: Payload) => {
-    const out = await api.decide(tenant.id, a.id, { decision, editedPayload });
-    setTaught((t) => ({ ...t, [a.id]: out.learned ?? [] }));
-    setRecent((s) => new Set(s).add(a.id));
-    setLast({ id: a.id, title: withoutSim(a.title), kind: a.kind, outcome: decision === "reject" ? "rejected" : editedPayload ? "edited" : "approved", ...(out.action?.result && a.kind === "publish_post" ? { result: out.action.result } : {}) });
-    setLastPost(out.post ?? null);
+  const close = () => {
+    setLook(null);
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+  };
+  const decide = async (a: Approval, decision: "approve" | "reject", edited?: Payload) => {
+    const d = await decideDraft(tenant.id, a, decision, edited);
+    setLast(d);
+    close();
     posts.reload();
-    window.dispatchEvent(new Event(APPROVALS_CHANGED));
-    if (out.learned?.length) window.dispatchEvent(new Event(TEAM_CHANGED));
     list.reload();
     feed.reload();
   };
@@ -100,56 +91,37 @@ export default function ApprovalsPage() {
     window.dispatchEvent(new Event(TEAM_CHANGED));
   };
 
-  const peeks = Math.min(2, Math.max(0, stack.length - 1));
-
   return (
     <div className="approvals-page">
       <header className="appr-head">
         <h1 className="page-title">Waiting for your OK</h1>
-        <p className="page-lede">Nothing goes out until you say OK. If you change a draft first, your team remembers it for next time.</p>
         {!list.loading && (
           <p className="appr-tally" aria-label="Where things stand">
-            <b className="num">{stack.length}</b> waiting{approvedCount > 0 && <> · <b className="num">{approvedCount}</b> approved so far</>}
+            <b className="num">{pending.length}</b> waiting{approvedCount > 0 && <> · <b className="num">{approvedCount}</b> approved</>} · nothing goes out without you
           </p>
         )}
       </header>
 
       {list.error && <p className="notice notice-bad" role="alert">Your drafts did not load: {list.error}</p>}
 
-      <section className="appr-stage" aria-label="Drafts waiting for your OK">
+      {last && <Decided d={last} tenantId={tenant.id} onPost={(p) => { setLast({ ...last, post: p }); posts.reload(); }} />}
+
+      <section className="appr-list" aria-label="Drafts waiting for your OK">
         {list.loading && !list.data ? (
-          <span className="skeleton" style={{ display: "block", height: 280 }} />
-        ) : top ? (
-          <>
-            <p className="appr-count num" aria-live="polite">{handled + 1} of {handled + stack.length}</p>
-            <div className={`appr-stack peeks-${peeks}`}>
-              {peeks > 1 && <div className="appr-peek is-far" aria-hidden="true" />}
-              {peeks > 0 && <div className="appr-peek is-near" aria-hidden="true" />}
-              <ApprovalCard key={top.id} a={top} advanced={recent.size > 0} recTitle={top.recommendationId ? recTitle.get(top.recommendationId) : undefined} onDecide={decide} tz={tenant.timeZone} locale={tenant.locale} />
-            </div>
-          </>
-        ) : null}
-
-        {last && (
-          <div className="appr-last" role="status">
-            <p className="appr-last-line">
-              <Icon name={last.outcome === "rejected" ? "x" : "check"} size={15} />
-              <span><b>{last.outcome === "rejected" ? "You said no" : last.outcome === "edited" ? "Approved with your edits" : "Approved"}</b>: {last.title}</span>
-            </p>
-            <p className="small muted">{last.outcome === "rejected" ? "Nothing was changed." : last.result ?? kindWords({ kind: last.kind, title: last.title }).done}</p>
-            {lastPost && lastPost.approvalId === last.id && <PostLine tenantId={tenant.id} post={lastPost} onChanged={(p) => { setLastPost(p); posts.reload(); }} quiet />}
-            <LearnedChips events={taught[last.id]} edited={last.outcome === "edited"} />
-          </div>
-        )}
-
-        {!list.loading && list.data && !top && (
+          <span className="skeleton" style={{ display: "block", height: 160 }} />
+        ) : pending.length > 0 ? (
+          <ul className="ap-list">
+            {pending.map((a) => (
+              <ApprovalRow key={a.id} a={a} stake={stakes.get(a.id)} readOnly={readOnly} onOk={(x) => decide(x, "approve")} onLook={(x) => setLook(x.id)} />
+            ))}
+          </ul>
+        ) : list.data ? (
           <div className="appr-empty">
-            <span className="appr-empty-icon" aria-hidden="true"><Icon name="check" size={22} /></span>
+            <span className="appr-empty-icon" aria-hidden="true"><Icon name="check" size={20} /></span>
             <h2 className="appr-empty-title">Nothing needs you right now</h2>
-            <p>Your team will leave new drafts here as soon as they have one. Until then, see what we noticed this week.</p>
             <Link className="btn btn-ghost" to="/insights">See what we noticed</Link>
           </div>
-        )}
+        ) : null}
       </section>
 
       <div className="appr-more">
@@ -157,12 +129,12 @@ export default function ApprovalsPage() {
           <PostsList tenantId={tenant.id} posts={posts.data ?? []} onChanged={posts.reload} />
         </Reveal>
 
-        <Reveal tone="row" label="Recently decided" summary={history.length ? `${history.length}` : "none yet"}>
-          {history.length === 0 ? (
-            <p className="muted small appr-none">What you decide shows up here, with what happened next.</p>
+        <Reveal tone="row" label="Decided" summary={decided.length ? `${decided.length}` : "none yet"}>
+          {decided.length === 0 ? (
+            <p className="muted small appr-none">What you decide shows up here.</p>
           ) : (
             <ol className="ledger">
-              {history.map((a) => {
+              {decided.map((a) => {
                 const o = OUTCOME[a.status];
                 return (
                   <li key={a.id} className="ledger-row">
@@ -173,17 +145,17 @@ export default function ApprovalsPage() {
                         {a.editedPayload && (() => {
                           const r = rulesFrom.get(a.id)?.[0];
                           return r
-                            ? <button type="button" className="learned-chip" onClick={() => setOpenRule(r)} title="See what was learned and where it came from"><Icon name="sparkle" size={12} /> Learned: {ruleClause(r.text)}</button>
+                            ? <button type="button" className="learned-chip" onClick={() => setOpenRule(r)} title="What was learned and where it came from"><Icon name="sparkle" size={12} /> Learned: {ruleClause(r.text)}</button>
                             : <span className="learned-chip is-quiet"><Icon name="pen" size={12} /> You edited it</span>;
                         })()}
                       </span>
                       {a.editedPayload && (
-                        <Reveal className="ledger-edit" label="See what you changed">
+                        <Reveal className="ledger-edit" label="What you changed">
                           <p className="doc-body"><Marked a={`${a.payload.title}\n${a.payload.body}`} b={`${a.editedPayload.title}\n${a.editedPayload.body}`} /></p>
                         </Reveal>
                       )}
                     </span>
-                    <span className={`ledger-out ${o.cls}`}>{a.status === "executed" && a.editedPayload ? "Done, with your edits" : o.text}</span>
+                    <span className={`ledger-out ${o.cls}`}>{a.status === "executed" && a.editedPayload ? "Done, edited" : o.text}</span>
                   </li>
                 );
               })}
@@ -191,21 +163,30 @@ export default function ApprovalsPage() {
           )}
         </Reveal>
 
-        <Reveal tone="row" label="Things your team learned from your edits" summary={feed.data && feed.data.active > 0 ? `${feed.data.active} in use` : "none yet"}>
+        <Reveal tone="row" label="Learned from your edits" summary={feed.data && feed.data.active > 0 ? `${feed.data.active} in use` : "none yet"}>
           {feed.loading && !feed.data ? (
             <span className="skeleton" style={{ display: "block", height: 100 }} />
           ) : rules.length === 0 ? (
-            <p className="muted small appr-none">When you change a draft before approving it, the change becomes a habit your team keeps. It shows up here, and you can retire any of them.</p>
+            <p className="muted small appr-none">Change a draft before you OK it, and your team keeps the change as a habit.</p>
           ) : (
             <>
               <ul className="learned-feed">
                 {rules.slice(0, 12).map((r) => <RuleRow key={r.id} rule={r} onRetire={retire} onOpen={(id) => setOpenRule(rules.find((x) => x.id === id) ?? null)} />)}
               </ul>
-              <p className="small muted appr-none">Each one is a book on Sara’s shelf in the office. <Link to="/team">See everyone’s habits</Link></p>
+              <p className="small muted appr-none"><Link to="/team">Everyone's habits</Link></p>
             </>
           )}
         </Reveal>
       </div>
+
+      <Sheet open={!!open} onClose={close} label={open ? plainTitle(open.title) : "Draft"}>
+        {open && (
+          <DraftView
+            key={open.id} a={open} why={open.preview?.why} stake={stakes.get(open.id)}
+            tz={tenant.timeZone} locale={tenant.locale} tenantId={tenant.id} readOnly={readOnly} onDecide={decide}
+          />
+        )}
+      </Sheet>
       <LearnedPathDialog rule={openRule} onClose={() => setOpenRule(null)} onRetired={() => { feed.reload(); window.dispatchEvent(new Event(TEAM_CHANGED)); }} />
     </div>
   );
@@ -213,97 +194,6 @@ export default function ApprovalsPage() {
 
 function safeDecode(s: string) {
   try { return decodeURIComponent(s); } catch { return s; }
-}
-
-function ApprovalCard({ a, advanced, recTitle, onDecide, tz, locale }: { a: Approval; advanced: boolean; recTitle?: string; onDecide: (a: Approval, d: "approve" | "reject", p?: Payload) => Promise<void>; tz?: string; locale?: string }) {
-  const k = kindWords(a);
-  const who = agentDef(a.by);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<Payload>(a.payload);
-  const [busy, setBusy] = useState<null | "approve" | "reject">(null);
-  const [error, setError] = useState<string | null>(null);
-  const changed = draft.title !== a.payload.title || draft.body !== a.payload.body;
-
-  const go = async (d: "approve" | "reject") => {
-    setBusy(d);
-    setError(null);
-    try {
-      await onDecide(a, d, d === "approve" && editing && changed ? draft : undefined);
-      setEditing(false);
-    } catch (e) {
-      setError((e as Error).message || "That did not go through. Try again.");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  return (
-    <article id={a.id} tabIndex={-1} className={`appr-card${editing ? " is-editing" : ""}${advanced ? " is-next" : ""}`} aria-labelledby={`${a.id}-t`}>
-      <p className="appr-kind">
-        <Icon name={ACTION[a.kind].icon} size={15} /> {k.label}
-        {a.simulated && <span className="sample-tag">sample numbers</span>}
-      </p>
-      <h2 id={`${a.id}-t`} className="appr-title">{withoutSim(a.title)}</h2>
-      <p className="appr-from">
-        <AgentAvatar id={a.by} size={24} />
-        <span><b>{who?.name}</b>{who ? `, ${who.title.toLowerCase()}` : ""} · {whenWords(a.createdAt, tz, locale)}</span>
-      </p>
-
-      {editing ? (
-        <div className="appr-edit">
-          <label className="visually-hidden" htmlFor={`${a.id}-title`}>Title</label>
-          <input id={`${a.id}-title`} className="field doc-title-field" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
-          <label className="visually-hidden" htmlFor={`${a.id}-body`}>Draft</label>
-          <textarea id={`${a.id}-body`} className="field doc-body-field" rows={Math.min(12, Math.max(5, draft.body.split("\n").length + 2))} value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
-          <p className="appr-hint">Your change becomes a habit {who?.name} keeps on the next draft.</p>
-        </div>
-      ) : (
-        <>
-          <p className="appr-effect">{a.kind === "publish_post" && a.preview?.post
-            ? `If you say OK, this is posted to ${a.preview.post.where}${a.preview.post.when ? `, set for ${a.preview.post.when.words}${a.preview.post.when.timeZone ? ` (${a.preview.post.when.timeZone.replace(/_/g, " ")})` : ""}` : " straight away"}. Nothing is posted before.${a.preview.post.textOnly ? " LinkedIn posts from here are text only, so the picture stays out." : ""}`
-            : k.effect(a.payload.target)}{usesWords(a.credits ?? 0) ? <span className="uses-credits"> {usesWords(a.credits ?? 0)}.</span> : null}</p>
-          <Reveal className="appr-details" label="Details" summary="the full draft and where it goes">
-            <div className="appr-detail">
-              {a.payload.target && (
-                <>
-                  <p className="detail-k">Where it goes</p>
-                  <p className="detail-target"><Icon name={ACTION[a.kind].icon} size={13} /> {a.payload.target}</p>
-                </>
-              )}
-              <p className="detail-k">The draft</p>
-              <p className="doc-title">{a.payload.title}</p>
-              <p className="doc-body">{a.payload.body.replace(/^Evidence: .*$/gm, "").replace(/\n{3,}/g, "\n\n").trim()}</p>
-              {recTitle && <p className="detail-why">Why: <Link to="/insights">{withoutSim(recTitle)}</Link></p>}
-            </div>
-          </Reveal>
-        </>
-      )}
-
-      <div className="appr-actions">
-        {editing ? (
-          <>
-            <button type="button" className="btn btn-gold appr-yes" onClick={() => go("approve")} disabled={busy !== null || !draft.title.trim()}>
-              <Icon name="check" size={16} /> {busy === "approve" ? "Approving…" : changed ? "Approve with edits" : "Approve"}
-            </button>
-            <button type="button" className="btn btn-quiet" onClick={() => { setEditing(false); setDraft(a.payload); }} disabled={busy !== null}>Cancel</button>
-          </>
-        ) : (
-          <>
-            <button type="button" className="btn btn-gold appr-yes" onClick={() => go("approve")} disabled={busy !== null}>
-              <Icon name="check" size={16} /> {busy === "approve" ? "Approving…" : "Approve"}
-            </button>
-            <button type="button" className="btn btn-ghost" onClick={() => setEditing(true)} disabled={busy !== null}>
-              <Icon name="pen" size={15} /> Change
-            </button>
-            <button type="button" className="btn btn-quiet" onClick={() => go("reject")} disabled={busy !== null}>
-              {busy === "reject" ? "Saying no…" : "No thanks"}
-            </button>
-          </>
-        )}
-      </div>
-      {error && <p className="notice notice-bad" role="alert">{error}</p>}
-    </article>
-  );
 }
 
 /** The owner's edit, marked in place: what was cut and what was written instead. */

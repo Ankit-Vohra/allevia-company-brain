@@ -1,4 +1,4 @@
-/* ---------- Waiting for your OK: one draft at a time, the next ones peeking out behind ---------- */
+/* ---------- Waiting for your OK: one compact row per draft; the whole draft opens in a sheet ---------- */
 .approvals-page {
   width: 100%; max-width: 640px; margin: 0 auto;
   padding: var(--space-xl) clamp(16px, 3vw, 32px) var(--space-2xl);
@@ -10,70 +10,16 @@
 .sample-tag { display: inline-flex; align-items: center; gap: 5px; margin-left: 4px; font-size: var(--text-xs); font-weight: 500; color: var(--color-warn); white-space: nowrap; }
 .sample-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--color-warn); }
 
-.appr-stage { display: grid; gap: var(--space-sm); }
-.appr-count { font-size: var(--text-sm); font-weight: 500; color: var(--color-muted); }
-
-/* the stack: two empty sheets behind the live card, each a little narrower and lower */
-.appr-stack { position: relative; padding-bottom: 0; }
-.appr-stack.peeks-1 { padding-bottom: 14px; }
-.appr-stack.peeks-2 { padding-bottom: 28px; }
-.appr-peek {
-  position: absolute; z-index: 0; border: var(--rule); border-radius: var(--radius-md); background: var(--color-card);
-  box-shadow: var(--shadow-whisper);
+.appr-list {
+  padding: 2px var(--space-md); border: 1px solid var(--color-rule-2); border-radius: 14px; background: var(--color-card); box-shadow: var(--shadow-whisper);
 }
-.appr-peek.is-near { inset: 12px 14px 0; }
-.appr-stack.peeks-2 .appr-peek.is-near { inset: 12px 14px 14px; }
-.appr-peek.is-far { inset: 24px 28px 0; background: var(--color-paper-2); }
+.appr-list:has(.appr-empty), .appr-list:has(> .skeleton) { padding: 0; border: 0; background: none; box-shadow: none; }
 
-.appr-card {
-  position: relative; z-index: 1; display: grid; gap: var(--space-sm); padding: var(--space-lg);
-  border: var(--rule); border-radius: var(--radius-md); background: var(--color-card);
-  box-shadow: var(--shadow-lift);
-}
-.appr-card:focus { outline: none; }
-.appr-card:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-.appr-card.is-editing { border-color: var(--color-focus); }
-/* after a decision the next card rises up from the pile */
-.appr-card.is-next { animation: appr-rise var(--dur-long) var(--ease-out); }
-@keyframes appr-rise { from { opacity: 0.4; transform: translateY(14px) scale(0.965); } }
-
-.appr-kind { display: flex; align-items: center; gap: 7px; font-size: var(--text-xs); font-weight: 600; color: var(--color-muted); }
-.appr-title { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 450; line-height: 1.22; letter-spacing: -0.01em; text-wrap: balance; }
-.appr-from { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); color: var(--color-muted); }
-.appr-from b { font-weight: 600; color: var(--color-ink); }
-.appr-effect { font-size: var(--text-base); color: var(--color-ink-2); text-wrap: pretty; margin-top: var(--space-2xs); }
-.appr-hint { font-size: var(--text-xs); color: var(--color-accent-ink); }
-.appr-actions { display: flex; gap: var(--space-xs); margin-top: var(--space-xs); }
-.appr-actions .btn { min-height: 44px; }
-.appr-yes { flex: 1.6; }
-.appr-actions .btn-ghost { flex: 1; }
-.appr-actions .btn-quiet { flex: 0 0 auto; }
-
-/* details: the draft itself, where it goes, why */
-.appr-detail { display: grid; gap: 4px; padding: var(--space-xs) 0 var(--space-xs) var(--space-md); border-left: 2px solid var(--color-rule-2); min-width: 0; }
-.detail-k { font-size: var(--text-xs); font-weight: 600; color: var(--color-muted); margin-top: var(--space-xs); }
-.detail-k:first-child { margin-top: 0; }
-.detail-target { display: flex; align-items: flex-start; gap: 6px; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-2); overflow-wrap: anywhere; }
-.detail-target svg { flex: none; margin-top: 1px; }
-.doc-title { font-weight: 600; line-height: 1.4; font-size: var(--text-sm); }
+/* the owner's edit, marked in place */
 .doc-body { white-space: pre-wrap; font-size: var(--text-sm); line-height: 1.6; color: var(--color-ink-2); overflow-wrap: anywhere; }
-.detail-why { font-size: var(--text-sm); color: var(--color-muted); margin-top: var(--space-xs); }
-.detail-why a { color: var(--color-ink); text-decoration-color: var(--color-rule); }
-.detail-why a:hover { text-decoration-color: var(--color-accent); }
-
-/* editing */
-.appr-edit { display: grid; gap: var(--space-xs); }
-.doc-title-field { font-weight: 600; }
-.doc-body-field { resize: vertical; line-height: 1.6; font-size: var(--text-sm); min-height: 140px; }
 .doc-del { color: var(--color-bad); text-decoration: line-through; text-decoration-thickness: 1.5px; background: var(--color-bad-soft); border-radius: 2px; }
 .doc-del + .doc-ins, .doc-ins + .doc-del { margin-left: 3px; }
 .doc-ins { color: var(--color-ok); text-decoration: none; background: var(--color-ok-soft); border-radius: 2px; font-weight: 500; }
-
-/* what just happened, and what it taught */
-.appr-last { display: grid; gap: 4px; justify-items: start; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); background: var(--color-ok-soft); animation: appr-fade var(--dur-short) var(--ease-out); }
-.appr-last-line { display: flex; align-items: flex-start; gap: 8px; font-size: var(--text-sm); color: var(--color-ink); }
-.appr-last-line svg { flex: none; margin-top: 2px; color: var(--color-ok); }
-@keyframes appr-fade { from { opacity: 0; } }
 
 .learned-chip {
   display: inline-flex; align-items: center; gap: 5px; height: 22px; max-width: 100%; padding: 0 8px; margin-left: 6px;
@@ -85,7 +31,7 @@ button.learned-chip:hover { box-shadow: 0 0 0 1px var(--color-accent); }
 .learned-chip.is-quiet { background: var(--color-paper-2); color: var(--color-ink-2); font-weight: 500; }
 
 /* nothing waiting */
-.appr-empty { display: grid; justify-items: center; gap: var(--space-xs); text-align: center; padding: var(--space-2xl) var(--space-lg); color: var(--color-ink-2); font-size: var(--text-base); }
+.appr-empty { display: grid; justify-items: center; gap: var(--space-xs); text-align: center; padding: var(--space-xl) var(--space-lg); color: var(--color-ink-2); font-size: var(--text-base); }
 .appr-empty p { max-width: 40ch; text-wrap: balance; }
 .appr-empty .btn { margin-top: var(--space-xs); min-height: 44px; }
 .appr-empty-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--color-ok-soft); color: var(--color-ok); }
@@ -112,12 +58,6 @@ button.learned-chip:hover { box-shadow: 0 0 0 1px var(--color-accent); }
 
 @media (max-width: 760px) {
   .approvals-page { padding-top: var(--space-md); padding-bottom: 6rem; gap: var(--space-md); }
-  .appr-card { padding: var(--space-md); }
-  .appr-peek.is-near { inset-inline: 10px; }
-  .appr-peek.is-far { inset-inline: 20px; }
   .ledger-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .ledger-out { justify-self: start; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .appr-card.is-next, .appr-last { animation: none; }
 }

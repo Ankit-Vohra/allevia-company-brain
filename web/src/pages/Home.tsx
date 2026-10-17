@@ -51,7 +51,8 @@ function HomeBody() {
   const connections = useAsync(() => api.connections(tenant.id).catch(() => null), [tenant.id]);
   const credits = useAsync(() => api.credits(tenant.id).catch(() => null), [tenant.id, tick]);
 
-  const waiting = useMemo(() => waitingList(approvals.data, standup.data), [approvals.data, standup.data]);
+  // not memoised: the mock API edits its cards in place, so the list's identity does not change when a card is decided
+  const waiting = waitingList(approvals.data, standup.data);
   const stakes = useMemo(() => {
     const m = new Map<string, string>();
     for (const r of recs.data ?? []) {
