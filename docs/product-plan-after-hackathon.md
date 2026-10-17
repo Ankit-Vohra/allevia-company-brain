@@ -294,3 +294,36 @@ that. Claude API and picture costs are per use, and the credits are priced to co
   pictures.
 - **One person runs everything.** Automatic deploys, alerts, durable jobs and backups exist so a night off is possible.
 - **Google and Meta verifications take weeks.** Start the paperwork on 19 October, even before the code needs it.
+
+## 9. Keeping the brain clean as it grows (17 October)
+
+Measured live: general reference knowledge was copied into every business graph (about 200 playbook rules each, plus a
+58-event Google update timeline in AVS Atelier). Number readings (about 1,500 to 1,700 in active businesses) and search
+chunks grow without limit.
+
+**Already in place:**
+- bi-temporal facts, closed and never deleted (the approach Zep's Graphiti takes);
+- a source on every fact;
+- one graph per business;
+- `graph:tidy`;
+- `db:usage` alerts.
+
+**Phase 1** (building on 17 Oct):
+- a shared read-only reference graph;
+- the map shows business knowledge only;
+- a write gate (source, date and known type required);
+- entity resolution on write;
+- a `graph:hygiene` report.
+
+**Phase 2:**
+- roll up daily numbers to weekly after 90 days and monthly after a year, archiving the raw values to S3;
+- drop the chunks of superseded documents;
+- move closed facts and versions older than 180 days to the S3 archive;
+- a review list of cold, low-degree, low-PageRank nodes, with no auto-delete;
+- per-plan size budgets with an 80% alert.
+
+**Phase 3:** community summary nodes (one per cluster, as Graphiti does) for large brains and a calmer map.
+
+**Research:**
+- the Zep paper (arXiv 2501.13956): episodes, entities and communities; invalidation instead of deletion; bi-temporal facts;
+- 2026 work on selective forgetting: pruning by recency, access, centrality and age loses little accuracy.
