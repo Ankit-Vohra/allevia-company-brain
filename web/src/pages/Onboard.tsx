@@ -196,7 +196,7 @@ export default function OnboardPage() {
       <header className="ob-head">
         <h1 className="page-title">{run?.done ? `${bizName} is ready` : running ? `Setting up ${bizName}` : first ? "Set up your business" : "Add a business"}</h1>
         {!run || run.error ? (
-          <p className="page-lede">Paste your website. We read it, learn your business and set your team up. It takes about two minutes, and nothing is posted or changed anywhere.</p>
+          <p className="page-lede">Paste your website · about 2 minutes · nothing is posted</p>
         ) : null}
       </header>
 
@@ -265,7 +265,7 @@ export default function OnboardPage() {
       {inTools && doneTenant && (
         <section className="ob-tools" aria-labelledby="ob-tools-h">
           <h2 id="ob-tools-h" className="ob-goals-title">Connect your tools</h2>
-          <p className="ob-goals-lede">Optional, and each one is a tap. The ones that fit your business are first. Your team reads what you connect straight away, so day one has real numbers. You can skip this and do it later from Your tools.</p>
+          <p className="ob-goals-lede">Optional · one tap each · best fits first</p>
           <ConnectionsPanel tenantId={doneTenant} variant="onboard" onChanged={setToolsConnected} />
           <div className="ob-cta">
             <button type="button" className="btn btn-gold" onClick={() => setToolsDone(true)}>{toolsConnected > 0 ? "Continue" : "Skip for now"}</button>
@@ -341,7 +341,7 @@ function Ready({ host, counts, discord, pages, goals, tenantId, onGoal, onOpen }
       {goals.length > 0 && tenantId && (
         <div className="ob-goals owner-suggest">
           <h2 className="ob-goals-title">{goals.length === 1 ? "A goal to start with" : `${goals.length} goals to start with`}</h2>
-          <p className="ob-goals-lede">This is where we think we can get you. Tap OK, or change a number if you want it higher or lower. That is the whole set-up.</p>
+          <p className="ob-goals-lede">Tap OK, or change a number. That is the whole set-up.</p>
           <ul className="owner-suggest-list">
             {goals.map((g) => g.confirmed ? (
               <li key={g.id} className="owner-suggest-row is-done">
