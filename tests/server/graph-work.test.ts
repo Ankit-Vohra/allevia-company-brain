@@ -70,7 +70,9 @@ describe("GET /api/:t/graph/map (integration)", () => {
     expect(m.nodes.some((n) => ["Version", "Chunk", "Observation", "Turn", "Session"].includes(n.label))).toBe(false);
     expect(m.nodes.some((n) => "summary" in n)).toBe(false);
     expect(Math.max(...m.nodes.map((n) => n.rank))).toBe(1);
-    for (let i = 1; i < m.nodes.length; i++) expect(m.nodes[i]!.rank).toBeLessThanOrEqual(m.nodes[i - 1]!.rank + 1e-9);
+    // the order is the selection's (stored PageRank, then links), which the ?limit= test below relies on; the rank shown is
+    // worked out within the map and sizes the dots, so it need not fall in that order
+    expect(m.nodes.every((n) => n.rank >= 0 && n.rank <= 1)).toBe(true);
     expect(m.nodes.every((n) => typeof n.learnedAt === "number" && n.learnedAt > 0)).toBe(true);
     expect(m.links.length).toBeGreaterThan(0);
     const keys = new Set<string>();
