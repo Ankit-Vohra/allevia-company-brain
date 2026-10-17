@@ -155,7 +155,7 @@ async function runPlaybook(args: { topic?: string; kind?: string; channel?: stri
 export const playbook = defineTool({
   name: "playbook",
   description:
-    "How to do it, not what worked (content_performance measures that): rules such as hook formulas, SEO checks, brand-voice rules, benchmarks and rules learned from the owner's edits, with template, example, howToFix, severity and their playbook. General know-how shared by every business comes back with general: true. Filter by topic words, kind (hook, seo_check, voice, learned…) and channel. Example: {\"topic\":\"hooks\",\"channel\":\"instagram\"}",
+    "How to do it, not what worked (content_performance measures that): hook formulas, SEO checks, brand-voice rules, benchmarks and rules learned from the owner's edits, with template, example, howToFix, severity and their playbook; general: true is shared know-how. Filter by topic words, kind (hook, seo_check, voice, learned…) and channel. Example: {\"topic\":\"hooks\",\"channel\":\"instagram\"}",
   input: {
     topic: z.string().optional().describe("Words, e.g. 'hooks' or 'meta description'"),
     kind: z.string().optional().describe("Rule kind, e.g. hook, seo_check, voice, learned"),
