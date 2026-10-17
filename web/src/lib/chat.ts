@@ -94,6 +94,15 @@ export const noteText = (s: string): string => humanDates(noCites(s)
   .replace(/^\s*[-•]\s+/, "")
   .replace(/\s+/g, " ").trim());
 
+/** What a thread says when its question was saved and nothing after it (the run died with the server). */
+export const LOST_ANSWER = "This question never got an answer: the team was interrupted before it finished.";
+
+/** A saved turn's answer as the one event the chat needs to show it, for when its work log is missing or still loading. */
+export function savedAnswer(t: { id: string; answer: string; citations?: string[]; checks: TurnChecks; agents?: AgentId[]; ms?: number }): AgentEvent[] {
+  if (!t.answer?.trim()) return [];
+  return [{ type: "final", turnId: t.id, answer: t.answer, citations: t.citations ?? [], checks: t.checks, agents: t.agents ?? [], ms: t.ms ?? 0 }];
+}
+
 /**
  * The messages the team sent each other in one turn, in order, as a readable thread: the Chief's plan, who handed what to
  * whom, what each person found, the reviews, and what is waiting for the owner. Streamed text and tool calls are not
@@ -122,21 +131,22 @@ export function teamTalk(events: readonly AgentEvent[]): TalkLine[] {
         const k = `${e.from}>${e.to}>${e.note}`;
         if (handed.has(k)) break;
         handed.add(k);
-        out.push({ kind: "handoff", from: e.from, to: e.to, text: noCites(e.note), at });
+        // a handoff often carries the sender's own notes ("Zoya's finding: …"): the name is already on the line
+        out.push({ kind: "handoff", from: e.from, to: e.to, text: clip(noteText(e.note).replace(/^[A-Z][\w-]*['’]s (?:notes?|findings?):\s*/i, ""), 260), at });
         break;
       }
       case "skill_used":
-        out.push({ kind: "skill", from: e.agent, text: `Using ${e.name}.`, at });
+        out.push({ kind: "skill", from: e.agent, text: `Using the skill “${e.name.trim().replace(/[.?!]+$/, "")}”.`, at });
         break;
       case "finding":
         author.set(e.findingId, e.agent);
-        out.push({ kind: "finding", from: e.agent, text: clip(noCites(e.text), 260), at });
+        out.push({ kind: "finding", from: e.agent, text: clip(noteText(e.text), 260), at });
         break;
       case "review": {
         const by = author.get(e.findingId);
         const of = by && by !== e.agent ? `${nameOf(by)}'s note` : "that note";
         const lead = e.verdict === "ok" ? `Checked ${of}: fine.` : e.verdict === "fix" ? `Sent ${of} back for a fix.` : `Turned down ${of}.`;
-        out.push({ kind: "review", from: e.agent, ...(by && by !== e.agent ? { to: by } : {}), verdict: e.verdict, text: `${lead}${e.note.trim() ? ` ${noCites(e.note)}` : ""}`, at });
+        out.push({ kind: "review", from: e.agent, ...(by && by !== e.agent ? { to: by } : {}), verdict: e.verdict, text: `${lead}${e.note.trim() ? ` ${noteText(e.note)}` : ""}`, at });
         break;
       }
       case "proposal":

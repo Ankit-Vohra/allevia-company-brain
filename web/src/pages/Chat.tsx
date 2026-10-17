@@ -106,10 +106,12 @@ export default function ChatPage() {
   const send = useCallback((q: string) => {
     const question = q.trim();
     if (!question || thread.running || resting) return;
-    const key = runStore.start(tenant.id, question, { sessionId, ...(who !== TEAM ? { target: who } : {}) });
-    if (!sessionId) setPendingKey(key);
+    // an address for a conversation this business does not have starts a new one rather than failing
+    const sid = sessionId && (thread.detail || thread.loading) ? sessionId : undefined;
+    const key = runStore.start(tenant.id, question, { sessionId: sid, ...(who !== TEAM ? { target: who } : {}) });
+    if (!sid) setPendingKey(key);
     setText("");
-  }, [thread.running, resting, tenant.id, sessionId, who]);
+  }, [thread.running, thread.detail, thread.loading, resting, tenant.id, sessionId, who]);
   // Home's ask box lands here as /chat/team?ask=…: the question is sent at once, and the address is cleaned so a reload does not
   // ask twice (the ref also covers React's double run of effects in development)
   const asked = useRef<string | null>(null);
@@ -143,10 +145,19 @@ export default function ChatPage() {
     if (el && stick.current && thread.running) el.scrollTo({ top: el.scrollHeight, behavior: reducedMotion ? "auto" : "smooth" });
   }, [last?.count, thread.running, reducedMotion]);
   useEffect(() => { stick.current = true; scrollRef.current?.scrollTo({ top: 0 }); }, [who, sessionId]);
+  // switching "Watch the team talk" on opens the talk above the newest answer, out of sight in a long reply: bring it into view
+  const talkTurnedOn = useRef(false);
+  useEffect(() => {
+    if (!talkTurnedOn.current) return;
+    talkTurnedOn.current = false;
+    const box = [...(scrollRef.current?.querySelectorAll<HTMLElement>(".ct-talk") ?? [])].pop();
+    box?.scrollIntoView({ block: "start", behavior: reducedMotion ? "auto" : "smooth" });
+  }, [talk, reducedMotion]);
 
   const mine = threadsFor(who, threads.data);
   const title = thread.detail?.title ?? pending?.question;
   const empty = thread.turns.length === 0 && !thread.loading;
+  const missing = empty && !!sessionId && !thread.detail && !pendingKey;
   // everyday jobs that the tools this business connected make possible (live server only), first in the list
   const conn = useAsync(() => (getMode() === "live" ? api.connections(tenant.id) : Promise.resolve(null)), [tenant.id]);
   const jobChips = (conn.data?.starters ?? [])
@@ -183,7 +194,7 @@ export default function ChatPage() {
             {who === TEAM ? (
               <button
                 type="button" role="switch" aria-checked={talk} className={`ct-toggle${talk ? " is-on" : ""}`}
-                onClick={() => { setTalk(!talk); writeTalk(!talk); }}
+                onClick={() => { talkTurnedOn.current = !talk; setTalk(!talk); writeTalk(!talk); }}
               >
                 <span className="ct-toggle-track" aria-hidden="true"><span /></span>
                 Watch the team talk
@@ -201,7 +212,12 @@ export default function ChatPage() {
         <div className="chat-scroll" ref={scrollRef} onScroll={(e) => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
           {empty ? (
             <div className="chat-empty">
-              {who === TEAM ? (
+              {missing ? (
+                <>
+                  <h2>This conversation isn't in {tenant.name}.</h2>
+                  <p className="chat-empty-persona">It may belong to another business. Pick one of your conversations, or ask something new below.</p>
+                </>
+              ) : who === TEAM ? (
                 <>
                   <h2>Ask {tenant.name}'s team anything.</h2>
                 </>

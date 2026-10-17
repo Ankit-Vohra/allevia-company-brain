@@ -7,6 +7,7 @@ import { type RunView, deriveRun } from "../../state/derive";
 import { type RunRecord, runStore, useRunStore } from "../../state/runs";
 import type { SessionDetail, TurnRecord } from "../../types-ext";
 import { useAsync } from "../../state/app";
+import { LOST_ANSWER, savedAnswer } from "../../lib/chat";
 
 export interface TurnItem {
   key: string;
@@ -48,7 +49,7 @@ export function useThread(tenantId: string, sessionId: string | undefined, pendi
     let live = true;
     for (const t of d?.turns ?? []) {
       if (logs[t.id]) continue;
-      api.replay(tenantId, t.id).then((ev) => { if (live) setLogs((m) => ({ ...m, [t.id]: ev })); }, () => {});
+      api.replay(tenantId, t.id).then((ev) => { if (live) setLogs((m) => ({ ...m, [t.id]: ev })); }, () => { if (live) setLogs((m) => ({ ...m, [t.id]: [] })); });
     }
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -81,19 +82,25 @@ export function useThread(tenantId: string, sessionId: string | undefined, pendi
       const rk = replays[t.id];
       const rp = rk ? snap.runs.get(rk) : undefined;
       const liveTwin = liveRuns.find((r) => r.turnId === t.id);
-      const ended: RunRecord["status"] = t.ended === "stopped" || liveTwin?.status === "stopped" ? "stopped" : t.ended === "failed" ? "error" : "done";
+      // until its work log arrives (or when it has none: a seeded or older thread), the saved answer stands in for it
+      const events = rp ? rp.events : liveTwin?.events ?? (logs[t.id]?.length ? logs[t.id]! : savedAnswer(t));
+      // nothing to show at all, once the log was asked for: an error with Ask again, never an endless grey box
+      const unreadable = !events.length && logs[t.id] !== undefined && !t.ended;
+      const ended: RunRecord["status"] = t.ended === "stopped" || liveTwin?.status === "stopped" ? "stopped" : t.ended === "failed" || unreadable ? "error" : "done";
       return {
         key: t.id, turnId: t.id, question: t.question, at: t.at, record: t, ...(t.target ? { target: t.target } : {}),
-        events: rp ? rp.events : liveTwin?.events ?? logs[t.id] ?? [],
+        events,
         status: rp ? rp.status : ended,
         replaying: rp?.status === "running",
-        ...(ended === "error" && t.error ? { error: t.error } : {}),
+        ...(ended === "error" ? { error: unreadable ? "This answer could not be loaded." : t.error ?? "Something went wrong." } : {}),
       };
     });
     for (const r of liveRuns) {
       if (r.turnId && stored.some((t) => t.id === r.turnId)) continue;
       out.push({ key: r.key, turnId: r.turnId, question: r.question, events: r.events, status: r.status, error: r.error, ...(r.target ? { target: r.target } : {}) });
     }
+    // a thread with a question and nothing after it (the run died with the server, before anything was saved): say so
+    if (d && !out.length && !d.running) out.push({ key: `lost:${d.id}`, question: d.title, events: [], status: "error", error: LOST_ANSWER });
     return out;
   }, [d, logs, replays, liveRuns, snap]);
 
@@ -103,7 +110,7 @@ export function useThread(tenantId: string, sessionId: string | undefined, pendi
 
   const replay = (t: TurnItem, opts: { paced: boolean; speed: () => number }) => {
     if (!t.turnId) return;
-    const events = logs[t.turnId] ?? t.events;
+    const events = logs[t.turnId]?.length ? logs[t.turnId]! : t.events;
     const key = runStore.replay(tenantId, t.turnId, t.question, events, opts);
     setReplays((m) => ({ ...m, [t.turnId!]: key }));
   };

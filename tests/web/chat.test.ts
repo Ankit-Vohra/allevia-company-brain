@@ -8,7 +8,7 @@ import { codeCatalog } from "../../src/agent/skills/catalog.js";
 import { STARTERS } from "../../web/src/lib/starters.js";
 import { humanDates } from "../../web/src/lib/words.js";
 import {
-  TEAM, TONES, checkLines, checksPass, chatPath, contributions, dotOf, dotWords, doorWords, howWeGotThis, starterFor, startersFor, teamTalk,
+  LOST_ANSWER, TEAM, TONES, checkLines, checksPass, chatPath, contributions, savedAnswer, dotOf, dotWords, doorWords, howWeGotThis, starterFor, startersFor, teamTalk,
   threadsFor, toneDirective, whoFrom, whoOfThread, workingNow,
 } from "../../web/src/lib/chat.js";
 
@@ -101,6 +101,27 @@ describe("watch the team talk", () => {
   it("a team that only answers (no plan with other people) has nothing to watch", () => {
     expect(teamTalk([{ type: "plan", by: "chief-of-staff", rationale: "Direct.", steps: [{ agent: "chief-of-staff", task: "Answer" }] }])).toEqual([]);
     expect(teamTalk([])).toEqual([]);
+  });
+  it("reads clean as the founder saw it: no bold marks, no repeated '<name>'s finding:', a skill named once, days in words", () => {
+    const lines = teamTalk([
+      { type: "finding", agent: "oncall-engineer", findingId: "z1", text: "**Most likely still happening today.** The newest crash data is from 2026-10-15.", citations: [] },
+      { type: "handoff", from: "oncall-engineer", to: "data-analyst", note: "Zoya's finding: **Most likely still happening today.**" },
+      { type: "skill_used", agent: "qa-release", skillId: "release-check", name: "Did the last release break anything?", source: "code" },
+    ]);
+    expect(lines.map((l) => l.text)).toEqual([
+      "Most likely still happening today. The newest crash data is from 15 Oct.",
+      "Most likely still happening today.",
+      "Using the skill “Did the last release break anything”.",
+    ]);
+  });
+});
+
+describe("a saved answer without its work log", () => {
+  it("stands in as the final event, so the chat shows the answer and never an empty grey box", () => {
+    const t = { id: "turn:x", answer: "Crash-free sessions fell to 92%.", citations: [], checks: GOOD, agents: ["chief-of-staff" as const], ms: 900 };
+    expect(savedAnswer(t)).toEqual([{ type: "final", turnId: "turn:x", answer: t.answer, citations: [], checks: GOOD, agents: ["chief-of-staff"], ms: 900 }]);
+    expect(savedAnswer({ ...t, answer: "  " })).toEqual([]);
+    expect(LOST_ANSWER).toMatch(/never got an answer/);
   });
 });
 

@@ -109,6 +109,7 @@
 
 /* the team talking it over */
 .ct-talk { padding: 12px 14px; border: 1px dashed var(--color-rule); border-radius: var(--radius-md); background: oklch(from var(--color-card) l c h / 0.6); display: grid; gap: 8px; }
+.ct-talk-none { font-size: var(--text-sm); color: var(--color-muted); }
 .ct-talk-title { font-size: var(--text-xs); font-weight: 600; color: var(--color-muted); }
 .ct-talk ol { list-style: none; display: grid; gap: 8px; }
 .ct-line { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; font-size: var(--text-sm); line-height: 1.45; }

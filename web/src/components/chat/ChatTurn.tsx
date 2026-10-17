@@ -66,8 +66,9 @@ export function ChatTurn(p: TurnProps) {
         </p>
       </div>
 
-      {!turn.events.length && !live ? (
-        <span className="skeleton ct-skel" />
+      {!turn.events.length && turn.status === "done" ? (
+        // a saved turn whose work log is still on its way (a moment; a missing log turns into an error with Try again)
+        <p className="ct-working" role="status"><span className="ct-pulse" aria-hidden="true" /> Opening the answer…</p>
       ) : (
         <div className="ct-reply">
           {live && !answered && (
@@ -95,6 +96,13 @@ export function ChatTurn(p: TurnProps) {
             </div>
           )}
 
+          {!direct && p.talk && !lines.length && !live && turn.events.some((e) => e.type !== "final") && (
+            <p className="ct-talk ct-talk-none">{nameOf(CHIEF)} answered this one herself, so there was no team talk.</p>
+          )}
+          {!direct && p.talk && !lines.length && !live && !turn.events.some((e) => e.type !== "final") && answered && (
+            <p className="ct-talk ct-talk-none">The team's talk for this answer was not saved.</p>
+          )}
+
           {notes.length > 0 && <Notes notes={notes} />}
 
           {answered && (
@@ -107,7 +115,7 @@ export function ChatTurn(p: TurnProps) {
               {view.final && (
                 <p className={`ct-assure${ok ? "" : " is-warn"}`}>
                   <Icon name={ok ? "check" : "warn"} size={14} />
-                  {ok ? "Sources checked" : "A few things could not be matched to a source"} · {view.final.agents.length} {view.final.agents.length === 1 ? "person" : "people"} · {fmtMs(view.final.ms)}
+                  {ok ? "Sources checked" : "A few things could not be matched to a source"} · {view.final.agents.length} {view.final.agents.length === 1 ? "person" : "people"}{view.final.ms > 0 ? ` · ${fmtMs(view.final.ms)}` : ""}
                 </p>
               )}
             </article>
@@ -166,7 +174,7 @@ export function ChatTurn(p: TurnProps) {
             <div className="ct-error" role="alert">
               <Icon name="warn" size={16} />
               <span>{turn.status === "stopped" ? "Stopped before the answer was written." : plain(turn.error ?? view.error ?? "Something went wrong.")}</span>
-              {latest && <button type="button" className="btn btn-ghost btn-sm" onClick={p.onRetry}>Ask again</button>}
+              {latest && <button type="button" className="btn btn-ghost btn-sm" onClick={p.onRetry}>Try again</button>}
             </div>
           )}
         </div>
