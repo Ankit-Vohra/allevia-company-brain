@@ -381,6 +381,7 @@ function shortReason(e: ComposioError, secrets: string[]): string {
   if (!why) return `it answered ${e.status}`;
   return /^[A-Z][a-z]/.test(why) ? why.charAt(0).toLowerCase() + why.slice(1) : why; // "Invalid key" -> "invalid key", "API key ..." stays
 }
+const CREDITS_SEEN = new Map<string, { at: number; credits: number }>();
 
 export const COMPOSIO_OFF_WORDS = (what: string) => `Connecting ${what} isn't switched on yet. Your team is setting up the connection service and will let you know when it's ready.`;
 
@@ -482,7 +483,24 @@ export class ComposioConnector implements Connector {
     if (!r) return { state: "not_connected", message: this.info.blurb };
     this.named(r.name);
     if (r.userId !== this.user(ctx)) return { state: "needs_attention", message: `We can't use the saved ${this.info.name} connection any more. Connect it again.` };
-    return { state: "connected", message: r.headline ? `${this.info.name} connected: ${r.headline}.` : `${this.info.name} is connected.`, lastReadAt: new Date(r.readAt ?? r.at).toISOString() };
+    const left = this.entry.toolkit === "higgsfield_mcp" ? await this.creditsLeft(ctx, r) : undefined;
+    const message = r.headline ? `${this.info.name} connected: ${r.headline}.` : left !== undefined ? `${this.info.name} is connected: ${Math.floor(left).toLocaleString("en-US")} credits left.` : `${this.info.name} is connected.`;
+    return { state: "connected", message, lastReadAt: new Date(r.readAt ?? r.at).toISOString() };
+  }
+
+  // The connected Higgsfield's credits left, for its line on Your tools: read at most every 5 minutes, never waited on long.
+  private async creditsLeft(ctx: ConnectorCtx, r: Stored): Promise<number | undefined> {
+    const key = `${ctx.tenant}\u0000${r.accountId}`;
+    const hit = CREDITS_SEEN.get(key);
+    if (hit && ctx.now() - hit.at < 300_000) return hit.credits;
+    const client = this.deps.client;
+    if (!client) return undefined;
+    const read = client.execute({ tool: "HIGGSFIELD_MCP_BALANCE", accountId: r.accountId, userId: r.userId, args: {} })
+      .then((o) => { const c = o.ok ? (o.data as { credits?: unknown } | null)?.credits : undefined; return typeof c === "number" && Number.isFinite(c) ? c : undefined; })
+      .catch(() => undefined);
+    const credits = await Promise.race([read, new Promise<undefined>((res) => setTimeout(() => res(undefined), 4000).unref?.())]);
+    if (credits !== undefined) CREDITS_SEEN.set(key, { at: ctx.now(), credits });
+    return credits;
   }
 
   // Connecting, three ways, by how the toolkit signs in (Composio's GET /toolkits/{slug}):
