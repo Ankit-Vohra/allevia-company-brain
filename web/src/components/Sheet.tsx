@@ -20,12 +20,12 @@ export function Sheet({ open, onClose, label, children }: {
     if (!open && d.open) d.close();
   }, [open]);
   return (
-    <dialog ref={ref} className="sheet" aria-label={label} onClose={onClose} onClick={(e) => { if (e.target === ref.current) onClose(); }}>
-      <div className="sheet-top">
-        <span className="sheet-grip" aria-hidden="true" />
-        <button type="button" className="btn btn-quiet btn-icon sheet-close" onClick={onClose} aria-label="Close"><Icon name="close" /></button>
+    <dialog ref={ref} className="bsheet" aria-label={label} onClose={onClose} onClick={(e) => { if (e.target === ref.current) onClose(); }}>
+      <div className="bsheet-top">
+        <span className="bsheet-grip" aria-hidden="true" />
+        <button type="button" className="btn btn-quiet btn-icon bsheet-close" onClick={onClose} aria-label="Close"><Icon name="close" /></button>
       </div>
-      {open && <div className="sheet-body">{children}</div>}
+      {open && <div className="bsheet-body">{children}</div>}
     </dialog>
   );
 }
