@@ -5,18 +5,21 @@
 // that proposes each one (Recommendation -EVIDENCED_BY-> Asset, Recommendation -PROPOSES-> Approval) and the post that uses it
 // (Content -USES_ASSET-> Asset). How each one was made is the lineage route (GET /api/:t/assets/:id/lineage, server/studio.ts).
 // Left out: files that are not kept (a refused photo), the artwork behind a poster (the poster's lineage shows it), and the
-// brand files (GET /api/:t/brand).
+// brand files (GET /api/:t/brand), and anything whose file is not in this server's data folder (another machine made it, or the
+// disk was cleaned): an empty grey frame helps nobody.
+import { existsSync } from "node:fs";
 import type { Hono } from "hono";
 import type { LibraryDto, LibraryItem, LibraryKind, LibraryState } from "../../../shared/contracts.js";
 import type { GraphHandle } from "../../graph/client.js";
 import { assetUrl } from "../../studio/intake.js";
+import type { AssetStore } from "../../studio/store.js";
 import type { RouteCtx } from "../http.js";
 
 const LIMIT = 300;
 const READ_MS = 10_000;
 
 interface Row {
-  id: string; name: string | null; kind: string | null; mediaType: string | null; mime: string | null; step: string | null; source: string | null;
+  id: string; key: string | null; name: string | null; kind: string | null; mediaType: string | null; mime: string | null; step: string | null; source: string | null;
   label: string | null; status: string | null; credits: number | null; recorded: boolean | null; badge: string | null; check: string | null;
   headline: string | null; at: number | null; generatedAt: number | null;
 }
@@ -54,14 +57,16 @@ const checkOf = (badge: string | null, check: string | null): LibraryItem["check
   return null;
 };
 
-export async function readLibrary(g: GraphHandle, tenant: string): Promise<LibraryItem[]> {
-  const rows = await g.roQuery<Row>(
+/** `hasFile`: whether the asset's file is kept here (absent: every row is listed). */
+export async function readLibrary(g: GraphHandle, tenant: string, hasFile?: (key: string) => boolean): Promise<LibraryItem[]> {
+  const all = await g.roQuery<Row>(
     `MATCH (a:Entity:Asset)
      WHERE a.storageKey IS NOT NULL AND a.storageKey <> '' AND coalesce(a.status, '') <> 'blocked' AND coalesce(a.kind, '') <> 'artwork'
-     RETURN a.id AS id, a.name AS name, a.kind AS kind, a.mediaType AS mediaType, a.mime AS mime, a.step AS step, a.source AS source,
+     RETURN a.id AS id, a.storageKey AS key, a.name AS name, a.kind AS kind, a.mediaType AS mediaType, a.mime AS mime, a.step AS step, a.source AS source,
             a.label AS label, a.status AS status, a.hfCredits AS credits, a.recorded AS recorded, a.fidelityBadge AS badge, a.check AS check,
             a.adHeadline AS headline, a.createdAt AS at, a.generatedAt AS generatedAt
      ORDER BY at DESC, id LIMIT $limit`, { limit: LIMIT }, { timeoutMs: READ_MS });
+  const rows = hasFile ? all.filter((r) => !!r.key && hasFile(r.key)) : all;
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
   const [cards, posts] = await Promise.all([
@@ -96,10 +101,12 @@ export async function readLibrary(g: GraphHandle, tenant: string): Promise<Libra
   });
 }
 
-export function registerLibraryRoutes(app: Hono, ctx: RouteCtx): void {
+export function registerLibraryRoutes(app: Hono, ctx: RouteCtx, o: { store?: () => Promise<AssetStore | null> } = {}): void {
   app.get("/api/:t/library", async (c) => {
     const { reg, g } = await ctx.tenantOf(c);
-    const dto: LibraryDto = { items: await readLibrary(g, reg.slug) };
+    const store = await o.store?.().catch(() => null);
+    const hasFile = store ? (key: string) => { const p = store.path(reg.slug, key); return !!p && existsSync(p); } : undefined;
+    const dto: LibraryDto = { items: await readLibrary(g, reg.slug, hasFile) };
     return c.json(dto);
   });
 }

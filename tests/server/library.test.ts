@@ -11,6 +11,7 @@ import type { AgentEvent, LibraryDto, LibraryItem } from "../../shared/contracts
 import type { StudioWiring } from "../../src/server/studio.js";
 import { libraryKind, libraryState } from "../../src/server/routes/library.js";
 import { DEFAULT_PHOTO_NOTE } from "../../src/server/routes/chat-photo.js";
+import { upsertNode } from "../../src/graph/upsert.js";
 import { FakeEngine } from "../../src/studio/engine.js";
 import { AssetStore } from "../../src/studio/store.js";
 import { FakeVision } from "../../src/studio/vision.js";
@@ -112,6 +113,9 @@ describe("server: the Library and a photo sent in the chat (integration)", () =>
     expect((await send(h.make({ studio: async () => wiring, publicMode: true }), await facadePhoto(), "x")).status).toBe(403);
     expect((await send(h.make(), await facadePhoto(), "x")).status).toBe(501);
     expect((await h.make({ studio: async () => wiring }).request("/api/other/library")).status).toBe(404);
+    // an asset whose file is not kept here is left out (an empty frame helps nobody)
+    await upsertNode(h.g, { type: "Asset", id: "asset:elsewhere", name: "Made on another machine", props: { kind: "poster", mediaType: "image", storageKey: "ab/abcdef0123456789.jpg", status: "proposed" } });
+    expect((await library(app)).some((i) => i.id === "asset:elsewhere")).toBe(false);
   }, 90_000);
 });
 

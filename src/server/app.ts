@@ -825,7 +825,7 @@ export function createApp(deps: ServerDeps): Hono {
   });
 
   // the Library (read-only) and a photo sent in the chat, which runs the Studio's pipeline as a turn in the conversation
-  registerLibraryRoutes(app, routeCtx);
+  registerLibraryRoutes(app, routeCtx, { store: async () => (await deps.studio?.())?.deps.store ?? null });
   registerChatPhotoRoutes(app, routeCtx, {
     turns, heartbeatMs, gate: (g, tenant, service) => credits.assertCanSpend(tenant, service, { g }), ...(deps.studio ? { studio: deps.studio } : {}),
   });
