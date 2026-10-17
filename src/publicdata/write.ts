@@ -17,7 +17,8 @@ import type { GraphWrite } from "../ingest/types.js";
 import type { EdgeInput, NodeInput, ObservationInput } from "../graph/upsert.js";
 import { entityId, slugify } from "../util/ids.js";
 import { observationId } from "../graph/upsert.js";
-import { adLine, type Ad, type IgProfile, type IgStats, type Listing } from "./normalize.js";
+import { adLine, type Ad, type IgPost, type IgProfile, type IgStats, type Listing } from "./normalize.js";
+import { ownPostsWrite } from "../creative/postresults.js";
 import type { ActorId } from "./actors.js";
 
 export const PUBLIC_CONF = 0.9;
@@ -190,19 +191,23 @@ const igObs = (subject: string, p: IgProfile, s: IgStats, src: string, ctx: Publ
 
 const igResult = (p: IgProfile, s: IgStats) => ({ profile: { ...p, latest: undefined }, stats: s });
 
-/** The business's own public Instagram: its channel (PART_OF the business) and its public numbers. */
-export function ownInstagramWrite(p: IgProfile, s: IgStats, ctx: PublicWriteCtx): GraphWrite {
+/** The business's own public Instagram: its channel (PART_OF the business) and its public numbers; with `own`, each of its posts
+ * as Content with its likes, comments and plays (a post Allevia published gets them on its own node: src/creative/postresults.ts). */
+export function ownInstagramWrite(p: IgProfile, s: IgStats, ctx: PublicWriteCtx, own?: { posts: IgPost[]; published: Map<string, string> }): GraphWrite {
   const doc = lookupDoc("instagram", p.handle, ctx, { name: `Public Instagram profile @${p.handle}`, summary: igSummary(p, s), url: `https://www.instagram.com/${p.handle}/`, result: igResult(p, s) });
+  const posts: GraphWrite = own ? ownPostsWrite(own.posts, { published: own.published, asOf: ctx.asOf, src: doc.id, channel: INSTAGRAM_CHANNEL, evidence: `Public Instagram post, read ${day(ctx.asOf)}`, conf: PUBLIC_CONF })
+    : { nodes: [], edges: [], observations: [] };
   return {
     nodes: [doc, {
       type: "Channel", id: INSTAGRAM_CHANNEL, name: "Instagram", src: doc.id, asOf: ctx.asOf, summary: `Instagram profile @${p.handle}.`,
       props: { platform: "instagram", handle: p.handle, url: `https://www.instagram.com/${p.handle}/` },
-    }],
+    }, ...posts.nodes],
     edges: [
       { from: INSTAGRAM_CHANNEL, type: "PART_OF", to: ctx.businessId, src: doc.id, asOf: ctx.asOf },
       { from: INSTAGRAM_CHANNEL, type: "SOURCED_FROM", to: doc.id, src: doc.id, asOf: ctx.asOf },
+      ...(posts.edges ?? []),
     ],
-    observations: igObs(INSTAGRAM_CHANNEL, p, s, doc.id, ctx),
+    observations: [...igObs(INSTAGRAM_CHANNEL, p, s, doc.id, ctx), ...(posts.observations ?? [])],
   };
 }
 

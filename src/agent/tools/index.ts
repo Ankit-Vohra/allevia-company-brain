@@ -11,6 +11,7 @@ import { impactOf } from "./impact.js";
 import { important, topics } from "./ranking.js";
 import { metricTrend } from "./metrics.js";
 import { contentPerformance } from "./content.js";
+import { whatWorked } from "./whatworked.js";
 import { seoReport } from "./seo.js";
 import { adReport } from "./ads.js";
 import { playbook } from "./playbook.js";
@@ -31,7 +32,7 @@ import { meetingsRead } from "./meetings.js";
 
 export const ALL_TOOLS: AlleviaTool[] = [
   search, getEntity, neighbors, findPaths, traceDecision, whoOwns, whoKnows, impactOf, important, topics, metricTrend,
-  contentPerformance, seoReport, adReport, playbook, history, recall, cypher, remember, proposeAction, showPath,
+  contentPerformance, whatWorked, seoReport, adReport, playbook, history, recall, cypher, remember, proposeAction, showPath,
   useSkill,
   // what the team can make and what it can use to make it (the brand library); see shared/toolkits.ts for who holds them
   getBrandAsset, writeCopyTool, makePosterTool, generateImageTool, makeReelTool, researchTool,

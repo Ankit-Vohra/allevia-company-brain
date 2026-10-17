@@ -13,7 +13,7 @@ const CALLS: Array<[string, Record<string, unknown>]> = [
   ["find_paths", { from: "person:founder", to: "system:ig-connector" }], ["trace_decision", { query: "pause daily stories" }],
   ["who_owns", { id: "system:ig-connector" }], ["who_knows", { id: "channel:instagram" }], ["impact_of", { id: "system:ig-connector" }],
   ["important", {}], ["topics", {}], ["metric_trend", { metric: "followers", subject: "channel:instagram" }], ["metric_trend", { metric: "signups" }],
-  ["content_performance", {}], ["seo_report", {}], ["ad_report", {}], ["playbook", { topic: "hooks" }], ["history", { id: "task:fix-ig-token" }],
+  ["content_performance", {}], ["what_worked", {}], ["seo_report", {}], ["ad_report", {}], ["playbook", { topic: "hooks" }], ["history", { id: "task:fix-ig-token" }],
   ["recall", { ids: ["decision:007-pause-daily-stories"] }], ["cypher", { query: "MATCH (t:Task)<-[r:OWNS]-(o) RETURN t, r, o" }],
   ["get_brand_asset", {}], ["crm_read", { view: "pipeline" }], ["publish_status", {}], ["website_checkup", { all: true }], ["ai_visibility", {}], ["meetings_read", {}],["show_path", { ids: ["decision:007-pause-daily-stories", "channel:instagram", "system:ig-connector"] }],
 ];

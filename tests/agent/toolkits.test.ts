@@ -28,11 +28,11 @@ const PUBLIC_DATA = ["google_listing", "instagram_public", "competitor_watch", "
 const CONN = ["connections_available", "connection_tools", "connection_read", "connection_act"];
 const POSTING = ["publish_post", "publish_status", "publish_cancel"];
 const ADDED: Record<string, string[]> = {
-  "data-analyst": ["research", ...PUBLIC_DATA, "website_checkup", "ai_visibility", "keyword_ideas", "ga4_report", "gsc_report", "ads_report", ...CONN],
-  "growth-marketer": ["research", ...PUBLIC_DATA, "website_checkup", "ai_visibility", "ga4_report", "gsc_report", "ads_report", ...CONN],
+  "data-analyst": ["what_worked", "research", ...PUBLIC_DATA, "website_checkup", "ai_visibility", "keyword_ideas", "ga4_report", "gsc_report", "ads_report", ...CONN],
+  "growth-marketer": ["what_worked", "research", ...PUBLIC_DATA, "website_checkup", "ai_visibility", "ga4_report", "gsc_report", "ads_report", ...CONN],
   "tech-lead": ["website_checkup", "ai_visibility", "keyword_ideas"],
   "chief-of-staff": ["make_poster", "generate_image", "make_reel_script_and_clip", "get_brand_asset", "write_copy", ...POSTING, "research", "calendar_free_slots", "calendar_book", "gmail_draft", "gmail_send", "gmail_inbox", ...CONN, "meetings_read"],
-  "content-strategist": ["write_copy", ...POSTING, "get_brand_asset", "research", ...PUBLIC_DATA, ...CONN],
+  "content-strategist": ["what_worked", "write_copy", ...POSTING, "get_brand_asset", "research", ...PUBLIC_DATA, ...CONN],
   "coe-lead": ["ga4_report", "gsc_report", ...CONN],
   "ops-manager": ["calendar_free_slots", "calendar_book", "gmail_draft", "gmail_send", "gmail_inbox", ...CONN, "meetings_read"],
   // what was decided in a meeting and who does what ("remember this meeting")

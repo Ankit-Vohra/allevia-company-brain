@@ -8,6 +8,7 @@
 //   - returns public, business-level numbers only, and says what public data cannot show (reach, saves, ad spend).
 // They write (the lookup, its numbers), so they are roster-gated, and refused in read-only mode (they would spend).
 import { z } from "zod";
+import { publishedPosts } from "../../creative/postresults.js";
 import type { NodeRef, SourceRef, ToolResult } from "../../../shared/contracts.js";
 import { findBusiness, syncCapabilities } from "../../capabilities/ladder.js";
 import { writeBatch } from "../../graph/upsert.js";
@@ -205,7 +206,7 @@ async function previousReading(ctx: ToolContext, subject: string, metric: string
 
 /** One public profile: from the graph when fresh, else the profile actor (and the post actor when the profile had no posts). */
 async function readInstagram(pd: PublicDataPort, ctx: ToolContext, handle: string, refresh: boolean):
-  Promise<{ ok: true; p: IgProfile; s: IgStats; asOf: string; usd: number; fromCache: boolean; actor: ActorId } | { ok: false; why: string; usd: number }> {
+  Promise<{ ok: true; p: IgProfile; s: IgStats; asOf: string; usd: number; fromCache: boolean; actor: ActorId; posts?: IgPost[] } | { ok: false; why: string; usd: number }> {
   const hit = refresh ? undefined : await cached<IgCache>(ctx, "instagram", handle);
   if (hit?.result.profile) return { ok: true, p: { ...hit.result.profile, latest: [] }, s: hit.result.stats, asOf: hit.asOf, usd: 0, fromCache: true, actor: "apify/instagram-profile-scraper" };
   const r = await runOne(pd, ctx, "apify/instagram-profile-scraper", { usernames: [handle], resultsType: "details", resultsLimit: 12, addParentData: false }, 1);
@@ -219,7 +220,7 @@ async function readInstagram(pd: PublicDataPort, ctx: ToolContext, handle: strin
     const more = await runOne(pd, ctx, "apify/instagram-post-scraper", { username: [handle], resultsLimit: 12, onlyPostsNewerThan: "90 days" }, 12);
     if (more.ok) { usd += more.usd; posts = more.items.map(igPostFrom).filter((x): x is IgPost => !!x); }
   }
-  return { ok: true, p, s: igStats(posts, p.followers), asOf: r.asOf, usd, fromCache: false, actor: r.actor };
+  return { ok: true, p, s: igStats(posts, p.followers), asOf: r.asOf, usd, fromCache: false, actor: r.actor, posts };
 }
 
 async function runInstagram(a: { handle: string; whose?: "ours" | "competitor"; competitorName?: string; refresh?: boolean }, ctx: ToolContext): Promise<ToolResult> {
@@ -238,7 +239,9 @@ async function runInstagram(a: { handle: string; whose?: "ours" | "competitor"; 
   const docId = lookupDocId("instagram", handle);
   if (!ig.fromCache) {
     const wctx = { businessId: biz.id, asOf: ig.asOf, actor: ig.actor };
-    await save(ctx, "instagram_public", whose === "ours" ? ownInstagramWrite(ig.p, ig.s, wctx) : competitorInstagramWrite(ig.p, ig.s, { name: compName, instagram: handle }, wctx), whose === "ours");
+    // our own posts become Content with their numbers (a post we published gets them on its own node), so the next brief learns from them
+    const own = whose === "ours" ? { posts: ig.posts ?? ig.p.latest, published: await publishedPosts(ctx.graph) } : undefined;
+    await save(ctx, "instagram_public", own ? ownInstagramWrite(ig.p, ig.s, wctx, own) : competitorInstagramWrite(ig.p, ig.s, { name: compName, instagram: handle }, wctx), whose === "ours");
   }
   return {
     data: igData(ig.p, ig.s, whose, { asOf: ig.asOf, costUsd: cents(ig.usd), fromCache: ig.fromCache, ...(before ? { previousFollowers: before } : {}) }),

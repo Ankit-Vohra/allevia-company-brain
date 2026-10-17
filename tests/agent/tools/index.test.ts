@@ -5,7 +5,7 @@ import { AGENTS } from "../../../shared/roster.js";
 
 const SPEC_TOOLS = [
   "search", "get_entity", "neighbors", "find_paths", "trace_decision", "who_owns", "who_knows", "impact_of", "important", "topics",
-  "metric_trend", "content_performance", "seo_report", "ad_report", "playbook", "history", "recall", "cypher", "remember",
+  "metric_trend", "content_performance", "what_worked", "seo_report", "ad_report", "playbook", "history", "recall", "cypher", "remember",
   "propose_action", "show_path", "use_skill",
   // the creating tools, the brand library and web research
   "get_brand_asset", "write_copy", "make_poster", "generate_image", "make_reel_script_and_clip", "research",

@@ -12,6 +12,8 @@ import type { NodeInput, ObservationInput } from "../graph/upsert.js";
 import { addDays } from "../insights/text.js";
 import { isoDate } from "../util/time.js";
 import { recordRead, type ConnRef } from "./graph.js";
+import { writeBatch } from "../graph/upsert.js";
+import { ownPostsWrite, publishedPosts, type OwnPost } from "../creative/postresults.js";
 import type { ConnectorCtx } from "./types.js";
 
 type Execute = (tool: string, args: Record<string, unknown>) => Promise<unknown>;
@@ -155,8 +157,37 @@ const instagram = (ref: ConnRef): Reader => async (execute, ctx) => {
     doc, nodes: await channelNode(ctx, channel, "Instagram"),
     observations: [{ subject: channel, metric: "followers", value: followers, unit: "count", windowStart: today, windowEnd: today, asOf: today, src: doc.id }],
   });
+  if (done.ok) await ownMedia(execute, ctx, doc.id, today, channel);
   return done.ok ? { headline } : {};
 };
+
+// The account's own recent posts with their likes, comments and plays, each on its Content node (a post Allevia published gets them
+// on its own node), so the next brief learns from what worked (src/creative/postresults.ts). Best-effort: the followers line stands
+// without it.
+async function ownMedia(execute: Execute, ctx: ConnectorCtx, src: string, today: string, channel: string): Promise<void> {
+  try {
+    const items = list(await execute("INSTAGRAM_GET_USER_MEDIA", { limit: 25, fields: "id,caption,media_type,permalink,timestamp,like_count,comments_count" }), ["data", "media"]);
+    const posts: OwnPost[] = items.flatMap((m) => {
+      const o = (m && typeof m === "object" ? m : {}) as Record<string, unknown>;
+      const id = typeof o.id === "string" || typeof o.id === "number" ? String(o.id) : undefined;
+      if (!id) return [];
+      const type = String(o.media_type ?? "").toUpperCase();
+      const likes = num(o.like_count), comments = num(o.comments_count), views = num(o.plays ?? o.video_views);
+      return [{
+        mediaId: id, kind: type === "VIDEO" || type === "REELS" ? "video" as const : type === "CAROUSEL_ALBUM" ? "carousel" as const : "image" as const,
+        ...(typeof o.permalink === "string" ? { url: o.permalink } : {}), ...(typeof o.timestamp === "string" ? { at: o.timestamp } : {}),
+        ...(typeof o.caption === "string" ? { caption: o.caption } : {}),
+        ...(likes !== null ? { likes } : {}), ...(comments !== null ? { comments } : {}), ...(views !== null ? { views } : {}),
+      }];
+    });
+    if (!posts.length) return;
+    const g = await ctx.graph();
+    const w = ownPostsWrite(posts, { published: await publishedPosts(g), asOf: today, src, channel, evidence: `Instagram post, read from the connected account on ${today}` });
+    await writeBatch(g, w, ctx.now());
+  } catch {
+    // no media read (the action is missing, or the account allows no insights): the followers line stands
+  }
+}
 
 // A reader whose one number is about the connection itself: it writes the snapshot and a single Observation that MEASURES the System.
 async function measured(ctx: ConnectorCtx, ref: ConnRef, provider: string, label: string, headline: string, m: { metric: string; value: number; unit: string; windowStart?: string }): Promise<void> {
