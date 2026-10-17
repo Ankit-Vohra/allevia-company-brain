@@ -61,21 +61,21 @@ export async function makeReelDraft(g: GraphHandle, job: ReelDraftJob, deps: Cre
 
   // 2. the price, before anything is spent
   const engine = deps.engine;
-  const st = engine ? await engine.status().catch(() => ({ ok: false as const, plain: "the image engine did not answer" })) : { ok: false as const, plain: "no image engine is set up on this server" };
+  const st = engine ? await engine.status().catch(() => ({ ok: false as const, plain: "picture making failed just now" })) : { ok: false as const, plain: "pictures aren't switched on yet" };
   let price = 0;
   for (const [i, s] of plan.scenes.entries()) {
     if (s.visual.kind === "generate") {
-      if (!st.ok) { notes.push(`Scene ${i + 1} uses a brand card instead of a new picture: ${st.plain ?? "the image engine is not available"}.`); s.visual = { kind: "card" }; }
+      if (!st.ok) { notes.push(`Scene ${i + 1} uses a brand card instead of a new picture: ${st.plain ?? "pictures aren't switched on yet"}.`); s.visual = { kind: "card" }; }
       else price += (await engine!.quote({ prompt: s.visual.prompt, aspect: "9:16" }).catch(() => null)) ?? QUOTE_UNKNOWN;
     }
     if (s.clip) {
-      if (!st.ok || !engine?.animate) { notes.push(`Scene ${i + 1} gets a slow push instead of a clip: ${!st.ok ? st.plain ?? "the image engine is not available" : "this engine can't make clips"}.`); delete s.clip; }
+      if (!st.ok || !engine?.animate) { notes.push(`Scene ${i + 1} gets a slow push instead of a clip: ${!st.ok ? st.plain ?? "pictures aren't switched on yet" : "this engine can't make clips"}.`); delete s.clip; }
       else price += (await engine.quoteClip?.({ seconds: s.seconds, aspect: "9:16" }).catch(() => null)) ?? QUOTE_UNKNOWN * 2;
     }
   }
   let musicPrice: number | null = null;
   if (plan.music) {
-    if (!st.ok || !engine?.music) { notes.push(`No music bed: ${!st.ok ? st.plain ?? "the engine is not available" : "this engine can't make music"}. Add a sound in Instagram before posting.`); delete plan.music; }
+    if (!st.ok || !engine?.music) { notes.push(`No music bed: ${!st.ok ? st.plain ?? "pictures aren't switched on yet" : "this engine can't make music"}. Add a sound in Instagram before posting.`); delete plan.music; }
     else { musicPrice = (await engine.quoteMusic?.({ prompt: plan.music, seconds: seconds }).catch(() => null)) ?? 1; price += musicPrice; }
   }
   price = Math.round(price * 100) / 100;
@@ -119,7 +119,7 @@ export async function makeReelDraft(g: GraphHandle, job: ReelDraftJob, deps: Cre
         if (img.credits) { spent += img.credits; if (deps.spent) deps.spent.credits += img.credits; }
         raw = img.image; still = await fillVertical(img.image); generated = true;
       } catch (e) {
-        notes.push(`Scene ${i + 1}'s new picture wasn't made (${e instanceof EngineUnavailable ? e.plain : "the engine failed"}), so it uses a brand card.`);
+        notes.push(`Scene ${i + 1}'s new picture wasn't made (${e instanceof EngineUnavailable ? e.plain : "it failed just now"}), so it uses a brand card.`);
       }
     }
     let clip: Buffer | undefined;
@@ -130,7 +130,7 @@ export async function makeReelDraft(g: GraphHandle, job: ReelDraftJob, deps: Cre
         if (c.credits) { spent += c.credits; if (deps.spent) deps.spent.credits += c.credits; }
         clip = c.video;
       } catch (e) {
-        notes.push(`Scene ${i + 1}'s clip wasn't made (${e instanceof EngineUnavailable ? e.plain : "the engine failed"}), so it has a slow push instead.`);
+        notes.push(`Scene ${i + 1}'s clip wasn't made (${e instanceof EngineUnavailable ? e.plain : "it failed just now"}), so it has a slow push instead.`);
       }
     }
     resolved.push({ still, generated, ...(clip ? { clip } : {}), ...(focus ? { focus } : {}) });
@@ -160,7 +160,7 @@ export async function makeReelDraft(g: GraphHandle, job: ReelDraftJob, deps: Cre
       if (m.credits) { spent += m.credits; if (deps.spent) deps.spent.credits += m.credits; }
       music = m.audio;
     } catch (e) {
-      notes.push(`The music bed wasn't made (${e instanceof EngineUnavailable ? e.plain : "the engine failed"}): add a sound in Instagram before posting.`);
+      notes.push(`The music bed wasn't made (${e instanceof EngineUnavailable ? e.plain : "it failed just now"}): add a sound in Instagram before posting.`);
     }
   }
 

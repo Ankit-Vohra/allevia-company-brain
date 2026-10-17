@@ -127,8 +127,8 @@ export async function makeReel(g: GraphHandle, job: ReelJob, deps: CreativeDeps)
     return result;
   }
   if (!engine?.animate) { result.clip.why = "this server can't make video clips yet"; return result; }
-  const st = await engine.status().catch(() => ({ ok: false as const, plain: "the image engine did not answer", reason: "error" as const }));
-  if (!st.ok) { result.clip.why = st.plain ?? "the image engine is not available"; return result; }
+  const st = await engine.status().catch(() => ({ ok: false as const, plain: "picture making failed just now", reason: "error" as const }));
+  if (!st.ok) { result.clip.why = st.plain ?? "pictures aren't switched on yet"; return result; }
   const price = (await engine.quoteClip?.({ seconds, aspect: "9:16" }).catch(() => null)) ?? null;
   result.clip.priceCredits = price;
   if (!job.makeClip) { result.clip.why = `a ${seconds}-second clip from that picture ${price !== null ? `would cost ${price} Higgsfield credits` : "has no price yet"}; say OK and I'll make it`; return result; }
@@ -151,7 +151,7 @@ export async function makeReel(g: GraphHandle, job: ReelJob, deps: CreativeDeps)
     result.clip.made = true;
     notes.push("The clip was not checked frame by frame: watch it before approving.");
   } catch (e) {
-    result.clip.why = e instanceof EngineUnavailable ? e.plain : `the clip failed (${e instanceof Error ? e.message.slice(0, 100) : "unknown error"})`;
+    result.clip.why = e instanceof EngineUnavailable ? e.plain : "clip making failed just now";
   }
   return result;
 }

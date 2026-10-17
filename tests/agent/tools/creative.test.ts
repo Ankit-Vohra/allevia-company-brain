@@ -99,7 +99,7 @@ describe("the creating tools", () => {
     expect(String(r.data.why)).toContain("there are no Higgsfield credits left");
     expect((await g.roQuery("MATCH (a:Asset {kind:'image'}) RETURN a.id")).length).toBe(before);
     const none = await run(generateImageTool, { brief: { goal: "awareness", promoting: "Reading corners", placement: "insta_post" }, scene: "a lamp on a wooden table" }, ctx({ creative: deps({ engine: null }) }));
-    expect(String(none.data.why)).toMatch(/no image engine/);
+    expect(String(none.data.why)).toMatch(/^Pictures aren't switched on yet\. Nothing was made, and nothing was charged\.$/);
   }, 60_000);
 
   it("generate_image holds back a picture that came out with lettering on it", async () => {

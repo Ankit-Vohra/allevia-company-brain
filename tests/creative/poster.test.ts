@@ -114,14 +114,13 @@ describe("makePoster (integration)", () => {
     expect(r.generated).toBe(0);
     expect(r.hfCredits).toBe(0);
     expect(r.saved.options.every((o) => !o.aiEdited)).toBe(true);
-    expect(r.notes.join(" ")).toMatch(/no image engine/i);
-    expect(r.notes.join(" ")).toMatch(/plain background in your brand colours/);
+    expect(r.notes).toContain("Pictures aren't switched on yet, so these use a plain background in your brand colours.");
     // only layouts that need no picture: nothing stands in for a photo that was not made
     expect(r.layouts.every((l) => ["offer-card", "big-type", "date-announcement", "quote-card", "hiring-card"].includes(l))).toBe(true);
   }, 60_000);
 
   it("says why in plain words when the engine, credits or CLI is unavailable, and spends nothing", async () => {
-    for (const [reason, plain] of [["no_cli", "the Higgsfield tool isn't installed on this computer"], ["not_signed_in", "the Higgsfield account isn't signed in"], ["no_credits", "there are no Higgsfield credits left"]] as const) {
+    for (const [reason, plain] of [["no_cli", "Pictures aren't switched on yet"], ["not_signed_in", "the Higgsfield account isn't signed in"], ["no_credits", "there are no Higgsfield credits left"]] as const) {
       engine = new FakeCreativeEngine();
       engine.statusNow = { ok: false, reason, plain };
       const r = await makePoster(g, req({ turnId: `t-${reason}` }), deps());

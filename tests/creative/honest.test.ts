@@ -37,9 +37,9 @@ describe("honest status and failures", () => {
   const down = (reason: "no_cli" | "not_signed_in" | "no_credits", plain: string) => { const e = new FakeCreativeEngine(); e.statusNow = { ok: false, reason, plain }; return e; };
 
   const cases: Array<[string, () => CreativeDeps, RegExp]> = [
-    ["no engine on the server", () => deps(null), /no image engine is set up/],
-    ["the Studio engine cannot draw from a description yet", () => deps(studioEngineAdapter(new RecordedEngine("/nonexistent/manifest.json"))), /image generator isn't connected/],
-    ["the CLI is not installed", () => deps(down("no_cli", "the Higgsfield tool isn't installed here")), /isn't installed here/],
+    ["no engine on the server", () => deps(null), /Pictures aren't switched on yet, so these use a plain background in your brand colours\./],
+    ["the Studio engine cannot draw from a description yet", () => deps(studioEngineAdapter(new RecordedEngine("/nonexistent/manifest.json"))), /Pictures aren't switched on yet, so these use a plain background/],
+    ["the CLI is not installed", () => deps(down("no_cli", "pictures aren't switched on yet")), /Pictures aren't switched on yet, so these use a plain background/],
     ["not signed in", () => deps(down("not_signed_in", "the Higgsfield account isn't signed in")), /isn't signed in/],
     ["no credits", () => deps(down("no_credits", "there are no Higgsfield credits left")), /no Higgsfield credits left/],
     ["over the request's credit limit", () => { const e = new FakeCreativeEngine(); e.cost = 50; return deps(e); }, /more credits than this request is allowed/],
@@ -60,6 +60,6 @@ describe("honest status and failures", () => {
     const a = studioEngineAdapter(new RecordedEngine("/nonexistent/manifest.json"));
     expect(await a.status()).toMatchObject({ ok: false, reason: "off" });
     expect(await a.quote({ prompt: "x", aspect: "1:1" })).toBeNull();
-    await expect(a.generate({ prompt: "x", aspect: "1:1" })).rejects.toThrow(/isn't connected/);
+    await expect(a.generate({ prompt: "x", aspect: "1:1" })).rejects.toThrow(/^pictures aren't switched on yet$/);
   });
 });

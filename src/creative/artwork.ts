@@ -19,13 +19,13 @@ export async function makeArtworks(
   const engine = deps.engine;
   if (!engine) {
     out.engineMissing = true;
-    out.notes.push(`I can't make new pictures on this server yet (no image engine is set up)${o.fallbackSaid}.`);
+    out.notes.push(`Pictures aren't switched on yet${o.fallbackSaid}.`);
     return out;
   }
-  const st = await engine.status().catch((e) => ({ ok: false as const, plain: e instanceof Error ? e.message : String(e), reason: "error" as const }));
+  const st = await engine.status().catch(() => ({ ok: false as const, plain: undefined, reason: "error" as const }));
   if (!st.ok) {
     out.engineMissing = true;
-    out.notes.push(`I couldn't make a picture just now (${st.plain ?? "the image engine is not available"})${o.fallbackSaid}.`);
+    out.notes.push(statusNote(st.reason, st.plain, o.fallbackSaid));
     return out;
   }
   // quote each before any credit is spent; keep only what fits this request's limit
@@ -47,7 +47,7 @@ export async function makeArtworks(
   for (const [i, m] of results.entries()) {
     if (m.status === "rejected") {
       const e = m.reason;
-      out.notes.push(e instanceof EngineUnavailable ? `One picture wasn't made: ${e.plain}.` : `One picture failed (${e instanceof Error ? e.message.slice(0, 100) : "unknown error"}).`);
+      out.notes.push(e instanceof EngineUnavailable ? `One picture wasn't made: ${e.plain}.` : "One picture wasn't made: picture making failed just now.");
       continue;
     }
     const img = m.value;
@@ -56,4 +56,11 @@ export async function makeArtworks(
     out.made.push({ scene: keep[i]!.scene, img, jpeg: await sharp(img.image).jpeg({ quality: 92 }).toBuffer(), w: meta.width ?? 0, h: meta.height ?? 0 });
   }
   return out;
+}
+
+// Why no picture was made, as one plain sentence: "Pictures aren't switched on yet, so ..." or "Picture making failed just now, so ...".
+function statusNote(reason: string | undefined, plain: string | undefined, fallbackSaid: string): string {
+  if (reason === "off" || reason === "no_cli") return `Pictures aren't switched on yet${fallbackSaid}.`;
+  if (!plain || reason === "error") return `Picture making failed just now${fallbackSaid}.`;
+  return `I couldn't make a picture just now (${plain})${fallbackSaid}.`;
 }
