@@ -614,6 +614,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 | `discord-hub status \| list \| provision <tenant> \| reinvite <tenant>` | The customer hub on Discord: read-only check and list, set a business up, a new join link ([setup](docs/discord-hub-setup.md)) |
 | `mcp --tenant <slug> [--http]` | The read-only MCP server for one tenant |
 | `auth:issue <tenant> [--days N]` / `auth:list` / `auth:revoke <id>` / `auth:demo <tenant>` | Owner links for `ALLEVIA_AUTH=1`: issue one (shown once), list them, revoke, mark a business as a public demo |
+| `tenant:export <tenant> <file>` / `tenant:erase <tenant> --confirm <tenant> [--force]` | One business out of Allevia: write all of its data to one checked file; or export it first, then delete its graph, registry rows, files, Discord mapping and sealed connection tokens ([how](docs/tenant-isolation.md)) |
 | `eval <tenant> [--fake]` | Run the tenant's eval questions, score every turn, write `docs/evals/<date>-<tenant>.md` |
 | `showcase <tenant> [<turnId>]` | Mark a stored turn for public replay, or list the showcase turns |
 | `db:check` / `db:migrate [tenant…]` | Ping FalkorDB and compare its settings with `docker-compose.yml`; bring tenant graphs up to the current schema |
