@@ -52,7 +52,13 @@
 .plan-prices li { grid-template-columns: 3.5em minmax(0, 1fr); }
 
 @media (max-width: 640px) {
-  .plan-cards { grid-template-columns: 1fr; }
+  /* two by two on a phone too: a plan is a name, a price, its credits and one button */
+  .plan-cards { gap: var(--space-xs); }
+  .plan-card { padding: 12px; gap: 4px; }
+  .plan-card-name { font-size: var(--text-md); }
+  .plan-card-price b { font-size: var(--text-lg); }
+  .plan-card-credits { font-size: var(--text-xs); }
+  .plan-card > .btn { justify-self: stretch; }
   .plan-more-row { grid-template-columns: 1fr; }
   .plan-more-row > .btn { justify-self: start; }
   .plan-prices li { grid-template-columns: 3.5em minmax(0, 1fr); }

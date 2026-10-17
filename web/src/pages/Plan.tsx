@@ -10,6 +10,7 @@ import { TEST_MODE_NOTE, type BillingCycle, type BillingResultDto } from "@share
 import { ALLEVIA_90, ANNUAL_DISCOUNT, CREDIT_PACKS, CREDIT_RULES, PLANS, PLAN_BY_ID, TRIAL, type PlanId } from "@shared/plans";
 import { api, getPublicMode } from "../api";
 import { creditsChanged, useCurrency } from "../components/Credits";
+import { Reveal } from "../components/Reveal";
 import { ShowDetails } from "../components/ShowDetails";
 import { balanceWords, madeOfWords, packWords, pendingWords, planCards, planIntent, useLines, usedShare } from "../lib/credits";
 import { fmtDate, fmtMoney, fmtNum } from "../lib/format";
@@ -84,7 +85,7 @@ export default function PlanPage() {
       <header className="owner-head">
         <p className="owner-eyebrow">Plan and credits</p>
         <h1 className="owner-title">{head.title}</h1>
-        <p className="owner-lede">{head.lede}</p>
+        <p className="owner-quiet">{head.lede}</p>
         <span className="owner-bar plan-bar" role="img" aria-label={`${fmtNum(b.used)} credits used this month.`}>
           <span style={{ width: `${b.used > 0 ? Math.max(2, share * 100) : 0}%` }} />
         </span>
@@ -105,10 +106,10 @@ export default function PlanPage() {
             {uses.map((u) => <li key={u.key}><span>{u.label}</span><span className="plan-uses-detail">{u.detail}</span></li>)}
           </ul>
         ) : (
-          <p className="owner-quiet">Nothing yet this month. You only spend credits on what you ask for or say OK to.</p>
+          <p className="owner-quiet">Nothing yet this month.</p>
         )}
         {people.length > 1 && (
-          <p className="owner-quiet">By person: {people.map((p) => `${p.label} ${fmtNum(p.credits)}`).join(" · ")}</p>
+          <p className="owner-quiet">{people.map((p) => `${p.label} ${fmtNum(p.credits)}`).join(" · ")}</p>
         )}
       </section>
 
@@ -132,8 +133,7 @@ export default function PlanPage() {
               </div>
               <p className="plan-card-price"><b>{c.price}</b> {c.per}</p>
               {c.note && <p className="plan-card-note">{c.note}</p>}
-              <p className="plan-card-credits">{c.credits}</p>
-              <p className="plan-card-who">{c.who}</p>
+              <p className="plan-card-credits" title={c.who}>{c.credits}</p>
               {c.action && owner && (
                 c.waiting
                   ? <p className="plan-card-note">Asked for. We'll switch you within a day.</p>
@@ -152,38 +152,42 @@ export default function PlanPage() {
           <>
             <div className={`plan-more-row${intent.buy ? " is-asked" : ""}`}>
               <div>
-                <p className="plan-more-title">Need more this month?</p>
-                <p className="owner-quiet">{CREDIT_PACKS[0]!.credits} extra credits. They don't run out while you have a plan.</p>
+                <p className="plan-more-title">More credits</p>
+                <p className="owner-quiet">They don't run out</p>
               </div>
               <button type="button" className={`btn btn-sm ${intent.buy ? "btn-gold" : "btn-ghost"}`} disabled={!!busy} onClick={() => void act("pack", () => api.buyPack(tenant.id, intent.buy ?? CREDIT_PACKS[0]!.id))}>
                 {busy === "pack" ? "One moment" : packWords(cur, (n, c) => fmtMoney(n, c))}
               </button>
             </div>
-            {current !== "pause" && b.status !== "cancelled" && (
-              <div className="plan-more-row">
-                <div>
-                  <p className="plan-more-title">Taking a break?</p>
-                  <p className="owner-quiet">Pause for {money(pause.price.monthly[cur])} a month. Your team keeps your company brain and you get {pause.allowances.creditsPerMonth} credits a month.</p>
-                </div>
-                <button type="button" className="btn btn-ghost btn-sm" disabled={!!busy} onClick={() => void act("pause", () => api.pausePlan(tenant.id))}>{busy === "pause" ? "One moment" : "Pause"}</button>
-              </div>
+            {b.status !== "cancelled" && (
+              <Reveal tone="row" label="Pause or cancel">
+                {current !== "pause" && (
+                  <div className="plan-more-row">
+                    <div>
+                      <p className="plan-more-title">Taking a break?</p>
+                      <p className="owner-quiet">{money(pause.price.monthly[cur])} a month · {pause.allowances.creditsPerMonth} credits · your brain is kept</p>
+                    </div>
+                    <button type="button" className="btn btn-ghost btn-sm" disabled={!!busy} onClick={() => void act("pause", () => api.pausePlan(tenant.id))}>{busy === "pause" ? "One moment" : "Pause"}</button>
+                  </div>
+                )}
+                {confirmCancel ? (
+                  <div className="plan-cancel" role="group" aria-label="Cancel your plan">
+                    <p className="plan-more-title">Before you cancel: you can pause instead.</p>
+                    <p className="owner-quiet">Pausing keeps your brain, drafts and habits for {money(pause.price.monthly[cur])} a month.</p>
+                    <div className="plan-cancel-actions">
+                      {current !== "pause" && <button type="button" className="btn btn-gold btn-sm" disabled={!!busy} onClick={() => void act("pause", () => api.pausePlan(tenant.id))}>Pause instead</button>}
+                      <button type="button" className="btn btn-ghost btn-sm plan-cancel-go" disabled={!!busy} onClick={() => void act("cancel", () => api.cancelPlan(tenant.id))}>{busy === "cancel" ? "One moment" : "Cancel my plan"}</button>
+                      <button type="button" className="btn btn-quiet btn-sm" onClick={() => setConfirmCancel(false)}>Keep my plan</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" className="btn btn-quiet btn-sm plan-cancel-link" onClick={() => setConfirmCancel(true)}>Cancel my plan</button>
+                )}
+              </Reveal>
             )}
-            {b.status !== "cancelled" && (confirmCancel ? (
-              <div className="plan-cancel" role="group" aria-label="Cancel your plan">
-                <p className="plan-more-title">Before you cancel: you can pause instead.</p>
-                <p className="owner-quiet">Pausing keeps your company brain, your drafts and what your team learned, for {money(pause.price.monthly[cur])} a month. Cancelling stops your plan; you keep this month's credits.</p>
-                <div className="plan-cancel-actions">
-                  {current !== "pause" && <button type="button" className="btn btn-gold btn-sm" disabled={!!busy} onClick={() => void act("pause", () => api.pausePlan(tenant.id))}>Pause instead</button>}
-                  <button type="button" className="btn btn-ghost btn-sm plan-cancel-go" disabled={!!busy} onClick={() => void act("cancel", () => api.cancelPlan(tenant.id))}>{busy === "cancel" ? "One moment" : "Cancel my plan"}</button>
-                  <button type="button" className="btn btn-quiet btn-sm" onClick={() => setConfirmCancel(false)}>Keep my plan</button>
-                </div>
-              </div>
-            ) : (
-              <button type="button" className="btn btn-quiet btn-sm plan-cancel-link" onClick={() => setConfirmCancel(true)}>Cancel my plan</button>
-            ))}
           </>
         ) : (
-          <p className="owner-quiet">{demo ? "This is the demo: nothing can be bought or changed here." : "Only the business owner can change the plan or buy credits."}</p>
+          <p className="owner-quiet">{demo ? "The demo: nothing can be bought here." : "Only the owner can change the plan."}</p>
         )}
       </section>
 
@@ -237,6 +241,7 @@ export default function PlanPage() {
                 <tr><th scope="row">Credits a month</th>{PLANS.map((p) => <td key={p.id} className="num">{fmtNum(p.allowances.creditsPerMonth)}</td>)}</tr>
                 <tr><th scope="row">People</th>{PLANS.map((p) => <td key={p.id} className="num">{p.allowances.seats === null ? "–" : fmtNum(p.allowances.seats)}</td>)}</tr>
                 <tr><th scope="row">Time with us</th>{PLANS.map((p) => <td key={p.id}>{p.human ?? "None"}</td>)}</tr>
+                <tr><th scope="row">For</th>{PLANS.map((p) => <td key={p.id}>{p.who}</td>)}</tr>
               </tbody>
             </table>
           </div>
