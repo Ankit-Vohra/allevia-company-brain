@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { cleanEdge, cleanJson, cleanNode, cleanPayload, cleanProps, cleanText, Removed } from "../../src/ingest/clean.js";
 import { findSensitive } from "../../src/ingest/redact.js";
 
-const KEY = "ghp_abcd1234efgh5678ijkl9012mnop3456qrst";
+const KEY = ["ghp", "abcd1234efgh5678ijkl9012mnop3456qrst"].join("_"); // built, so no secrets scan reads it as a key in the source
 const PHONE = "+91 98765 43210";
 const EMAIL = "priya.sharma@example.com";
 
@@ -61,7 +61,7 @@ describe("cleanJson", () => {
 
   it("cleans each string on its own, so an unfinished private key cannot cut across the JSON", () => {
     // an unfinished private key block runs to the end of the text; read as the raw JSON it would swallow the closing quote and brace
-    const json = JSON.stringify({ note: "-----BEGIN PRIVATE KEY-----\nMIIabcd1234", after: "keep me", phone: PHONE });
+    const json = JSON.stringify({ note: `${["-----BEGIN", "PRIVATE KEY-----"].join(" ")}\nMIIabcd1234`, after: "keep me", phone: PHONE });
     const out = cleanJson(json);
     const o = JSON.parse(out) as { note: string; after: string; phone: string };
     expect(o.after).toBe("keep me");
