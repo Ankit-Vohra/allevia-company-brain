@@ -17,7 +17,7 @@
 //   use: the real executors, with GitHub issues and Discord posts as a dry run unless ALLEVIA_ACTIONS_LIVE=1. The
 //   answer is the card plus `learned` (the learned-rule AgentEvents, in the JSON) and `action`.
 // Focused route files: routes/program.ts (program, capabilities, learning), routes/team.ts (agents, directives),
-// routes/goals.ts (the owner says OK to the suggested goals), routes/numbers.ts (the owner adds a spreadsheet of their numbers), routes/actions.ts (where an approved fix lands: tasks, or the business's own GitHub repo), routes/connectors.ts (connect Search Console), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/graph-work.ts (the Brain page's "what breaks if something stops"), routes/checkup.ts ("Check my website": the check-up in the background, and its weekly setting), routes/credits.ts (credits, the plan, and billing in test mode).
+// routes/goals.ts (the owner says OK to the suggested goals), routes/numbers.ts (the owner adds a spreadsheet of their numbers), routes/actions.ts (where an approved fix lands: tasks, or the business's own GitHub repo), routes/connectors.ts (connect Search Console), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/week.ts (Home's "what your team did this week" counts), routes/graph-work.ts (the Brain page's "what breaks if something stops"), routes/checkup.ts ("Check my website": the check-up in the background, and its weekly setting), routes/credits.ts (credits, the plan, and billing in test mode).
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
@@ -57,6 +57,7 @@ import { registerProgramRoutes } from "./routes/program.js";
 import { registerTeamRoutes } from "./routes/team.js";
 import { LinkTooSoon, type HubService } from "../discord/hub-service.js";
 import { registerUsageRoutes } from "./routes/usage.js";
+import { registerWeekRoutes } from "./routes/week.js";
 import { registerWorkRoutes } from "./routes/work.js";
 import { registerGraphWorkRoutes } from "./routes/graph-work.js";
 import { registerCheckupRoutes } from "./routes/checkup.js";
@@ -739,6 +740,7 @@ export function createApp(deps: ServerDeps): Hono {
   registerCheckupRoutes(app, routeCtx, { jobs: () => deps.checkupJobs ?? checkupJobs(), credits, by: callerBy });
   registerCreditRoutes(app, routeCtx, { credits, billing, ...(deps.registry ? { registry: deps.registry } : {}) });
   registerUsageRoutes(app, routeCtx, { actionsLive: () => deps.actions?.live ?? loadConfig().actionsLive });
+  registerWeekRoutes(app, routeCtx);
 
   app.get("/api/:t/agents/:id", async (c) => {
     const { g } = await tenantOf(c);

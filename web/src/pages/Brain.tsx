@@ -32,6 +32,7 @@ const GraphView = lazy(() => import("../components/GraphView"));
 const PHONE = "(max-width: 760px)";
 const edgeKey = (e: EdgeRef) => `${e.from}|${e.type}|${e.to}`;
 type TabId = "decisions" | "top" | "breaks" | "kinds" | "growth";
+const TAB_IDS: readonly TabId[] = ["decisions", "top", "breaks", "kinds", "growth"];
 
 export default function BrainPage() {
   const { tenant, effectiveTheme, reducedMotion } = useApp();
@@ -50,8 +51,16 @@ export default function BrainPage() {
   const [impact, setImpact] = useState<ImpactShown | null>(null);
   const [grow, setGrow] = useState<{ order: MapNode[]; frames: number[]; i: number } | null>(null);
   const [layoutKey, setLayoutKey] = useState("first");
-  const [tab, setTab] = useState<TabId>("decisions");
+  // ?tab=growth (from Home's "new facts learned") opens that tab and scrolls to it once
+  const [tab, setTab] = useState<TabId>(() => (TAB_IDS.includes(params.get("tab") as TabId) ? (params.get("tab") as TabId) : "decisions"));
   const stageRef = useRef<HTMLDivElement>(null);
+  const askedTab = useRef(params.has("tab"));
+  useEffect(() => {
+    if (!askedTab.current) return;
+    askedTab.current = false;
+    const t = window.setTimeout(() => document.getElementById("bt-panel")?.scrollIntoView({ block: "start", behavior: reducedMotion ? "auto" : "smooth" }), 400);
+    return () => window.clearTimeout(t);
+  }, [reducedMotion]);
 
   useEffect(() => { setHidden(new Set(HIDDEN_AT_FIRST)); setImpact(null); setGrow(null); }, [tenant.id]);
   useEffect(() => { setImpact((x) => (x && x.id !== selected ? null : x)); }, [selected]);

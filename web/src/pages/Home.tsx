@@ -1,6 +1,7 @@
 // Home: what a busy founder reads in five seconds. In order: a greeting and one status line ("3 things need you · Weekly
 // signups up 18%"); the ask box; the living brain; "Needs your OK" as compact rows with OK and Look (the draft opens in a
-// sheet); one row of small tiles (today's note, the goals, the credits); and a "Set up" chip row only while something is not set
+// sheet); one row of small tiles (today's note, the goals, the credits); one compact row of what the team did this week
+// (five counts, each opening its list); and a "Set up" chip row only while something is not set
 // up. Everything else is one tap away: the office, the team and the tools have their own pages. The tiles are data
 // (home-cards.tsx), so another area adds a tile without touching this layout. Words follow docs/owner-words.md.
 import { useEffect, useMemo, useState } from "react";
@@ -9,6 +10,7 @@ import BrainLive from "../components/BrainLive";
 import { AskBox } from "../components/home/AskBox";
 import { NeedsOk } from "../components/home/NeedsOk";
 import { SetupChips } from "../components/home/SetupChips";
+import { WeekRow } from "../components/home/WeekRow";
 import { stakeOf, withoutSim } from "../components/insights-words";
 import { APPROVALS_CHANGED } from "../components/TopBar";
 import { usedShare } from "../lib/credits";
@@ -51,6 +53,7 @@ function HomeBody() {
   const goalSetup = useAsync(() => api.goalSetup(tenant.id).catch(() => []), [tenant.id, tick]);
   const connections = useAsync(() => api.connections(tenant.id).catch(() => null), [tenant.id]);
   const credits = useAsync(() => api.credits(tenant.id).catch(() => null), [tenant.id, tick]);
+  const week = useAsync(() => api.week(tenant.id).catch(() => null), [tenant.id, tick]);
 
   // not memoised: the mock API edits its cards in place, so the list's identity does not change when a card is decided
   // the same idea drafted on several mornings is one row; the count everywhere is the number of rows
@@ -91,7 +94,7 @@ function HomeBody() {
         <p className="hm-status" role="status">{status}</p>
       </header>
 
-      <AskBox suggestions={suggestions} />
+      <AskBox suggestions={suggestions} locale={tenant.locale} />
 
       <section className="hm-brain" aria-label="Your company brain">
         <BrainLive tenant={tenant.id} height={wide ? 260 : 190} />
@@ -102,6 +105,8 @@ function HomeBody() {
       <div className="hm-tiles">
         {tilesInOrder(undefined, ctx).map((t) => <div key={t.id} className={`hm-tile-slot${t.wide ? " is-wide" : ""}`}>{t.render(ctx)}</div>)}
       </div>
+
+      <WeekRow week={week.data} />
 
       <SetupChips tenantId={tenant.id} page={connections.data} goals={program.data?.goals ?? []} toOk={goalsToOk} />
     </div>

@@ -8,6 +8,7 @@ import type {
   LearningFeed, NodeDetail, OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Tenant, TurnRecord, Usage,
 } from "../types-ext";
 import type { AgentPatch } from "../api";
+import type { WeekDto } from "@shared/week";
 import { BRIEF, FRESHNESS, GRAPHS, KNOWS, PLAYBOOKS, TENANTS, seedApprovals, seedRecommendations } from "./data";
 import { type MockGraph, buildGraph, graphData, mapOf, neighborhood, nodeDetail, refOf, searchGraph } from "./graph-kit";
 import type { BrainMapDto } from "../lib/brain-map";
@@ -245,6 +246,16 @@ export const mockApi = {
 
   async program(t: string): Promise<ProgramScorecard | null> { return p90.programOf(t); },
   async usage(t: string, month?: string): Promise<Usage> { return p90.usageOf(t, month); },
+  /** The demo's week: drafts decided here count as they are approved; the rest are the sample business's numbers. */
+  async week(t: string): Promise<WeekDto> {
+    const since = Date.now() - 7 * 86_400_000;
+    const okd = (approvals[t] ?? []).filter((a) => a.status !== "pending" && a.status !== "rejected" && a.decidedAt && Date.parse(a.decidedAt) >= since).length;
+    const base = t === "avs-atelier" ? { approved: 3, sent: 2, practice: 1, filed: 1, learned: 9, answered: 6 } : { approved: 5, sent: 3, practice: 2, filed: 2, learned: 14, answered: 11 };
+    return {
+      since: new Date(since).toISOString(), days: 7, approved: base.approved + okd,
+      sent: { done: base.sent, practice: base.practice }, filed: { done: base.filed, practice: 0 }, learned: base.learned, answered: base.answered,
+    };
+  },
   async goalSetup(t: string): Promise<GoalSetup[]> { return p90.goalSetupOf(t); },
   async setGoal(t: string, id: string, target?: number): Promise<GoalSetup> { return p90.setGoal(t, id, target); },
   async capabilities(t: string): Promise<CapabilityState[]> { return p90.capabilitiesOf(t); },

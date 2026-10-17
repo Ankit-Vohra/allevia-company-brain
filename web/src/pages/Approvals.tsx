@@ -3,8 +3,8 @@
 // on, the earlier ones open under it), and anything over a week old sits under one folded "Older" row; Look opens the whole draft in a sheet with Approve, Change and No thanks, the same call as
 // Home and the Discord buttons. An edit becomes a habit the team keeps (said right after). Your posts, what you decided and
 // what your edits taught sit folded below. /approvals#appr:… (from Insights and the chat) opens that draft at once.
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router";
 import type { LearnedRuleDto } from "@shared/contracts";
 import { api, getPublicMode } from "../api";
 import { ApprovalRow, Decided } from "../components/approval/ApprovalRow";
@@ -45,6 +45,15 @@ export default function ApprovalsPage() {
   const [look, setLook] = useState<string | null>(() => safeDecode(location.hash.slice(1)) || null);
   const [openRule, setOpenRule] = useState<LearnedRuleDto | null>(null);
   const readOnly = getPublicMode();
+  // ?show=decided (from Home's "this week" counts) opens what was decided and scrolls to it once
+  const [params] = useSearchParams();
+  const showDecided = params.get("show") === "decided";
+  const scrolled = useRef(false);
+  useEffect(() => {
+    if (!showDecided || scrolled.current || !list.data) return;
+    scrolled.current = true;
+    document.querySelector(".appr-decided")?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [showDecided, list.data]);
 
   useEffect(() => { setLast(null); }, [tenant.id]);
   useEffect(() => {
@@ -154,7 +163,7 @@ export default function ApprovalsPage() {
           <PostsList tenantId={tenant.id} posts={posts.data ?? []} onChanged={posts.reload} />
         </Reveal>
 
-        <Reveal tone="row" label="Decided" summary={decided.length ? `${decided.length}` : "none yet"}>
+        <Reveal tone="row" className="appr-decided" defaultOpen={showDecided} label="Decided" summary={decided.length ? `${decided.length}` : "none yet"}>
           {decided.length === 0 ? (
             <p className="muted small appr-none">What you decide shows up here.</p>
           ) : (

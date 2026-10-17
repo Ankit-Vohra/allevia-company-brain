@@ -5,6 +5,7 @@ import type { AgentEvent, AgentId, OnboardEvent } from "@shared/contracts";
 import { ApiError, errorFrom, postSse, postSseForm } from "./lib/sse";
 import type { BillingCycle, BillingResultDto, CreditsDto, SubscriptionDto } from "@shared/credits";
 import type { PlanId } from "@shared/plans";
+import type { WeekDto } from "@shared/week";
 import { consumeLinkInAddressBar } from "./lib/link";
 import { accountApi, type Account } from "./lib/account";
 
@@ -274,6 +275,11 @@ export const api = {
   async usage(t: string, month?: string): Promise<Usage> {
     if (mode === "mock") return (await mock()).usage(t, month);
     return getJson(`/api/${enc(t)}/usage${month ? `?month=${enc(month)}` : ""}`);
+  },
+  /** GET /api/:t/week: what the team did in the last 7 days, counted from the graph (Home's "this week" row). */
+  async week(t: string): Promise<WeekDto> {
+    if (mode === "mock") return (await mock()).week(t);
+    return getJson(`/api/${enc(t)}/week`);
   },
   // ---- credits and the plan (src/server/routes/credits.ts) ----
 
