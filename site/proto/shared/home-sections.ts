@@ -136,7 +136,7 @@ export function pricingTeaser(): string {
   <div class="wrap">
     <h2 id="pt-h" class="h2 h2--split"><span class="t1">Simple monthly plans.</span> <span class="t2">Start at $100.</span></h2>
     <ul class="pmini-row">${cards}</ul>
-    <p class="ptease__more"><span class="tag tag--draft">Draft pricing</span> <span>To finalise later.</span> <a class="link" href="/pricing/">See what is in each plan</a></p>
+    <p class="ptease__more"><a class="link" href="/pricing/">See what is in each plan</a></p>
   </div>
 </section>`;
 }

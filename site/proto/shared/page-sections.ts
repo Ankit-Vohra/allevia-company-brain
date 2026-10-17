@@ -191,7 +191,7 @@ const planLines = (p: typeof growth) => {
   out.push(p.id === "growth" ? "A named person reviews your plan each month" : "A strategist two hours a month");
   return out;
 };
-/** The three plans the prototype shows. Starter ($100) is new and marked to finalise; Growth and Pro are the real plans in shared/plans.ts. */
+/** The three plans the site shows. Growth and Pro are the plans in shared/plans.ts; Starter ($100) is defined here only, so shared/plans.ts needs it before the app can sell it. */
 export const PLAN_CARDS: { name: string; note: string; price: number; lines: string[]; lead: boolean }[] = [
   { name: "Starter", note: "All your tools, working together", price: 100, lines: ["All your tools connected together", "A note every morning and your team’s advice", "Questions answered from your brain", "Approvals in the app or in Discord", "Posters, ads and reels start on Growth"], lead: true },
   { name: "Growth", note: "The whole team", price: growth.price.monthly.USD, lines: planLines(growth), lead: false },
@@ -207,7 +207,7 @@ export function pricing(): string {
   </article>`;
   return `<section class="sec pricing" aria-labelledby="pr-h"><div class="wrap">
   <h1 id="pr-h" class="page-h1"><span class="t1">Simple monthly plans.</span> <span class="t2">Start with your tools connected.</span></h1>
-  <p class="draft"><span class="tag tag--draft">Draft pricing</span> To finalise later. Prices in US dollars, excluding tax.</p>
+  <p class="draft">Prices in US dollars, excluding tax.</p>
   <div class="plans">${PLAN_CARDS.map(card).join("")}</div>
   <p class="fine">After the three-month growth plan, Essentials is ${usd(PLANS.find((p) => p.id === "essentials")!.price.monthly.USD)} a month, and Pause is ${usd(PLANS.find((p) => p.id === "pause")!.price.monthly.USD)} a month. The three-month plan has a 14-day refund.</p>
 </div></section>`;
@@ -262,7 +262,7 @@ export function contact(): string {
   <form class="snap" id="snapshot" data-snap action="${href("Free Brain Snapshot")}" method="post" enctype="text/plain" aria-labelledby="snap-h">
     <h2 id="snap-h" class="h3">We read it and send back what we learned and five fixes.</h2>
     <div class="field"><label for="snap-site">Your website</label><input id="snap-site" name="website" type="text" inputmode="url" autocomplete="url" placeholder="yourbusiness.com" required></div>
-    <div class="field"><label for="snap-email">Your email</label><input id="snap-email" name="email" type="email" autocomplete="email" placeholder="you@yourbusiness.com" required></div>
+    <div class="field"><label for="snap-email">Your email</label><input id="snap-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required></div>
     <button class="btn btn-gold" type="submit">Send my website</button>
     <p class="snap__note">This opens your email with the message ready to send.</p>
   </form>

@@ -84,7 +84,7 @@
 }
 /* ?bare=1: the brain alone on a transparent page (used to make the first-paint picture) */
 .is-bare, .is-bare body { background: transparent !important; }
-.is-bare .nav, .is-bare .foot, .is-bare .proto-switch, .is-bare .hero__copy, .is-bare .hero__chips, .is-bare .hero__bubble, .is-bare .hero__answer, .is-bare .hero__glow, .is-bare .hero__floor, .is-bare .hero__still { display: none !important; }
+.is-bare .nav, .is-bare .foot, .is-bare .hero__copy, .is-bare .hero__chips, .is-bare .hero__bubble, .is-bare .hero__answer, .is-bare .hero__glow, .is-bare .hero__floor, .is-bare .hero__still { display: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
   .hero__stage { transition: none; }

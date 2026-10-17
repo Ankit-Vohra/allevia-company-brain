@@ -17,7 +17,7 @@ const read = (p: string) => readFileSync(join(SITE, p), "utf8");
 
 function htmlFiles(dir: string, base = ""): string[] {
   return readdirSync(join(dir, base)).flatMap((n) => {
-    if (["node_modules", "dist", "public", "scripts", "src"].includes(n) && base === "") return [];
+    if (["node_modules", "dist", "dist-main", "dist-proto", "proto", "public", "scripts", "src"].includes(n) && base === "") return [];
     const rel = join(base, n);
     return statSync(join(dir, rel)).isDirectory() ? htmlFiles(dir, rel) : rel.endsWith(".html") ? [rel] : [];
   });
