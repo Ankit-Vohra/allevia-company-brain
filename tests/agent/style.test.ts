@@ -39,6 +39,9 @@ describe("the answer shape reaches the Chief's synthesis and direct prompts", ()
       expect(ANSWER_SHAPE).toMatch(/No closer/);
       expect(ANSWER_SHAPE).toMatch(/real time estimates/);
       expect(ANSWER_SHAPE).toMatch(/already done or going well/);
+      // citations render as small numbers after a clause: a [[id]] never stands in for a noun
+      expect(ANSWER_SHAPE).toMatch(/never stands in for a noun/);
+      expect(ANSWER_SHAPE).toContain('Right: "I made one poster option, waiting for your OK. [[asset:…]] [[approval:…]]"');
       expect(ANSWER_SHAPE).toMatch(/No "uh oh"/);
     });
     it(`${name}: the plain-words table is in the prompt`, () => {

@@ -54,6 +54,7 @@ export const ANSWER_SHAPE = `Shape the answer so a busy reader can act on it (th
 - Give real time estimates ("about 10 minutes", "an afternoon"), never "a bit of work".
 - Say what is already done or going well, in concrete terms ("Enquiries are up this week: 41, from 33"), not buried at the end.
 - Errors and gaps: say what happened and what to do, flat ("Instagram isn't connected, so reach is not recorded. Connect it in Settings."). No "uh oh", no "there seems to be a problem".
+- Citations show as small numbers after a clause, so a [[id]] never stands in for a noun: name the thing in words, then put the citation after it. Wrong: "I made one option, [[asset:…]], waiting on approval [[approval:…]]." Right: "I made one poster option, waiting for your OK. [[asset:…]] [[approval:…]]"
 - The last line is ONE next action the owner can take in under two minutes. No closer ("let me know", "hope this helps"), no second summary.`;
 
 /** What a desk's own write-up looks like: concise, complete, ranked, and every item whole. */
@@ -68,6 +69,7 @@ export const CONTENT_SHAPE = `You write the copy itself, not a summary of it. Th
 - Write each caption in the language the brand posts in (see its voice rules and audience), even when the owner asked in another language. Your notes to the owner stay in the owner's language.
 - A reel script is whole: timed beats from the first second to the last, the words said or shown on screen in each, and what to film. Say what to film as a direction ("Film: the shelves by the window, if you have them"), never as a fact about the business.
 - Every fact (names, places, years, numbers, materials, awards, results) must come from a tool result you cite. Where the record does not hold a detail the post needs, never leave an empty prompt: write a sensible suggestion in that spot, built from the business's own profile (what it does, who it serves, its place, its voice), clearly marked as "[suggested: the suggestion itself]". A suggestion is a proposal for the owner to accept, so keep it modest and plain, never a number, award, price, date, result or named person. Use "[you tell us: …]" only for a hard fact nobody can sensibly suggest (an exact price, a date, a name). Don't drop the whole caption or scene because one detail is missing.
+- Open with two lines: "Made for: <the main goal> · CTA: <its call to action>" and "Built from: <the past posts, edit rules and decisions you used, each cited>" (or "Built from: no post numbers on record yet, so the main goal, the brand's voice and rivals' posts"). Every caption and script closes with that one call to action, by the route the business really has.
 - Give the whole deliverable in the text, in order (day by day, scene by scene), as the owner would post it. The five-point limit does not apply: a week is seven posts, in date order.`;
 
 /**

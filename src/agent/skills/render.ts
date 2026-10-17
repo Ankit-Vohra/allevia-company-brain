@@ -5,6 +5,13 @@ import type { Skill } from "./format.js";
 
 const oneLine = (s: string): string => s.replace(/\s+/g, " ").trim();
 
+// Every skill starts from the brain (the founder, 2026-10-17: "every agent should refer to the brain, that is the whole MVP of this
+// product"). Said once here for all of them, so no method can skip it.
+const CREATIVE_TOOLS = new Set(["content_performance", "what_worked", "make_poster", "generate_image", "make_reel_script_and_clip", "write_copy"]);
+export const isCreativeSkill = (s: Pick<Skill, "tools" | "agents">): boolean => s.tools.some((t) => CREATIVE_TOOLS.has(t)) || s.agents.includes("content-strategist");
+export const BRAIN_FIRST_CREATIVE = "Brain first, before step 1: call what_worked (if you hold it) with your first lookups. Copy the kind of hook and opening of the business's top posts (never their words), avoid what the weakest did, follow the things learned from the owner's edits, and close with the main goal's call to action. Open the draft with \"Made for: <main goal> · CTA: <call to action>\" and its \"Built from: …\" line (cite what it names). If it says there are no post numbers yet, say so in that line and build from the main goal, the brand's voice and rivals' posts.";
+export const BRAIN_FIRST_READ = "Brain first, before step 1: start from what the records already hold (metric_trend, recall, decisions, rules, earlier findings, what we already know). Use connected tools, public data or the web only to fill a gap the records leave, say what they added, and keep their source with it. Say how your answer bears on the main goal.";
+
 /** The prompt's list: each skill's id, name and when to use it. Nothing else loads until the agent opens one. */
 export function skillsBlock(skills: readonly Skill[], opts: { max?: number; phase?: "plan" | "review" | "other" } = {}): string {
   if (!skills.length) return "";
@@ -34,6 +41,7 @@ export async function skillGuidance(skill: Skill, ctx: ToolContext, catalog: Ski
   const parts = [
     `SKILL: ${skill.name}${skill.source === "business" ? " (set up for this business)" : ""}`,
     `Use it for: ${oneLine(skill.when)}. ${ok}`,
+    isCreativeSkill(skill) ? BRAIN_FIRST_CREATIVE : BRAIN_FIRST_READ,
     skill.body,
   ];
   if (rules.length) {

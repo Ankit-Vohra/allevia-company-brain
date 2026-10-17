@@ -114,6 +114,8 @@ export interface TurnDeps {
   publicData?: PublicDataPort;              // public-data lookups (Apify, budgeted); absent or off: the tools say so
   connectionsNote?: string;                 // what is connected for this business, told to the desks that hold the connection tools (ConnectionsPort.note)
   connections?: ConnectionsPort;            // this business's connections; absent: the tools that need one say none is connected
+  // the business's main goal and growth-plan goals (src/northstar), told to every agent; its nodes count as seen, so they may be cited
+  northStar?: { text: string; nodes: Array<{ id: string; label: string; name: string }> };
 }
 
 export interface Plan { steps: PlanStep[]; rationale: string; chiefTask?: string }
@@ -641,6 +643,7 @@ class Turn {
     this.off = new Set((deps.team?.disabled ?? []).filter((id) => id !== CHIEF));
     this.light = new Set(deps.team?.light ?? []);
     if (deps.creative) this.creative = { ...deps.creative, spent: { credits: 0 } };
+    if (deps.northStar?.nodes.length) this.touched.add({ data: deps.northStar.text, nodes: deps.northStar.nodes, edges: [], sources: [] });
   }
 
   private involve(agentId: string): void {
@@ -689,7 +692,7 @@ class Turn {
   private get answerer(): string { return this.targetAgent?.id ?? CHIEF; }
 
   private get promptOpts(): PromptOpts {
-    return { now: this.deps.now, tenant: this.input.tenant, ...(this.deps.timeZone ? { timeZone: this.deps.timeZone } : {}), language: this.languageNote, ...(this.deps.connectionsNote ? { connectionsNote: this.deps.connectionsNote } : {}) };
+    return { now: this.deps.now, tenant: this.input.tenant, ...(this.deps.timeZone ? { timeZone: this.deps.timeZone } : {}), language: this.languageNote, ...(this.deps.connectionsNote ? { connectionsNote: this.deps.connectionsNote } : {}), ...(this.deps.northStar ? { northStar: this.deps.northStar.text } : {}) };
   }
 
   // The answer's language, decided from the question (and the business's own setting), told to every agent.

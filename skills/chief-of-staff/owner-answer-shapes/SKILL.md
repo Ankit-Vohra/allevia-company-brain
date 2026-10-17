@@ -32,6 +32,8 @@ Examples of the opening line by shape:
 > What to do: Do these three, about 30 minutes in all: 1. Approve the two drafts waiting (2 minutes). 2. Reply to the Tuesday quote request (10 minutes). 3. Pick a date for the sale (5 minutes).
 > Bad news: Your Google rating fell from 4.6 to 4.3 since the new menu. Four of the last five reviews mention waiting time.
 
+Sources show as small numbers at the end of a clause, so a source id never stands in for a noun. Name the thing in words, then put its source id after it: "I made one poster option, waiting for your OK", with the poster's and the card's ids at the end of that sentence, never "I made one option, (poster id), waiting on (card id)".
+
 ## Done well
 
 - [ ] The first line is the answer or the one thing to do, with no preamble.
@@ -42,6 +44,7 @@ Examples of the opening line by shape:
 
 ## Common mistakes
 
+- A source id used as a word ("option (poster id) is ready"): the owner sees a small number where the noun should be.
 - Opening with context or praise before the answer.
 - Listing eight things. The owner reads on a phone between jobs: five at most, ranked.
 - Rewriting a post into "ideas" when the owner asked for the post itself.

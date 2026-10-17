@@ -11,6 +11,7 @@ import type { CapabilityModeInfo } from "../capabilities/modes.js";
 import { agentById } from "../../shared/roster.js";
 import { loadTeamSettings } from "../settings/team.js";
 import { loadLanguagePreference } from "./language.js";
+import { loadNorthStar, loadPlanGoals, northStarBlock } from "../northstar/northstar.js";
 import { fillInFromSession, isFillItIn } from "./fillin.js";
 import { meetingNotesIn, rememberMeeting } from "./meeting.js";
 import { VECTOR_DIM } from "../graph/indexes.js";
@@ -181,6 +182,13 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
     let connectionsNote = "";
     if (!outcome && deps.connections) try { connectionsNote = await Promise.race([deps.connections.note(), new Promise<string>((r) => setTimeout(() => r(""), 2500))]); } catch { connectionsNote = ""; }
 
+    // The business's main goal and growth-plan goals, told to every agent (best-effort: unreadable, the turn runs without them).
+    let northStar: { text: string; nodes: Array<{ id: string; label: string; name: string }> } | undefined;
+    if (!outcome) try {
+      const [ns, goals] = await Promise.all([loadNorthStar(g), loadPlanGoals(g)]);
+      northStar = { text: northStarBlock(ns, goals), nodes: [...(ns ? [{ id: ns.id, label: "Memory", name: `Main goal: ${ns.outcome}` }] : []), ...goals.map((x) => ({ id: x.id, label: "Goal", name: x.name }))] };
+    } catch { northStar = undefined; }
+
     // The business's own language setting (best-effort): absent, the answer follows the question's language.
     let language: string | undefined;
     if (!outcome) try { language = await loadLanguagePreference(g); } catch { language = undefined; }
@@ -195,6 +203,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
         ...(capabilities ? { capabilities } : {}), ...(team ? { team } : {}), ...(language ? { language } : {}), ...(skills ? { skills } : {}),
         ...(deps.creative ? { creative: deps.creative } : {}), ...(deps.publicData ? { publicData: deps.publicData } : {}),
         ...(deps.connections ? { connections: deps.connections } : {}), ...(connectionsNote ? { connectionsNote } : {}),
+        ...(northStar ? { northStar } : {}),
       },
       out);
     if (deps.signal?.aborted) failure = STOPPED_MESSAGE;
