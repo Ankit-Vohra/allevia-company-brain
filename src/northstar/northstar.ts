@@ -244,7 +244,7 @@ async function facts(g: Read, businessId: string): Promise<Facts> {
   const products = await g.roQuery<{ name: string | null }>(
     // what the business sells: real products (not app features or funnel steps, never sample records); features only when no product exists
     `MATCH (p) WHERE (p:Product OR p:Feature) AND p.mergedInto IS NULL AND coalesce(p.simulated, false) = false
-     OPTIONAL MATCH (rival:Competitor)-[:OWNS]->(p) WITH p, rival WHERE rival IS NULL
+     OPTIONAL MATCH (rival:Competitor)-[ow:OWNS]->(p) WITH p, ow WHERE ow IS NULL
      OPTIONAL MATCH (p)<-[r]-() WITH p, count(r) AS n
      RETURN p.name AS name ORDER BY CASE WHEN p:Product THEN 0 ELSE 1 END, n DESC, p.id LIMIT 4`).catch(soft);
   const channels = await g.roQuery<Facts["channels"][number]>(

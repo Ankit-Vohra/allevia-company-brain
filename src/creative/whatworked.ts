@@ -61,8 +61,8 @@ interface ObsRow { id: string; name: string | null; format: string | null; hook:
 async function ownPosts(g: Read): Promise<ObsRow[]> {
   return g.roQuery<ObsRow>(
     `MATCH (o:Observation)-[r:MEASURES]->(c:Content) WHERE o.metricKey IN $metrics AND r.until IS NULL
-     OPTIONAL MATCH (rival:Competitor)-[:OWNS]->(c)
-     WITH c, o, rival WHERE rival IS NULL
+     OPTIONAL MATCH (rival:Competitor)-[ow:OWNS]->(c)
+     WITH c, o, ow WHERE ow IS NULL
      WITH c, o.metricKey AS metric, o ORDER BY coalesce(o.windowEnd, o.asOf) DESC, o.id DESC
      WITH c, metric, head(collect(o)) AS o
      RETURN c.id AS id, c.name AS name, c.format AS format, coalesce(c.hook, c.caption) AS hook, c.publishedAt AS publishedAt,

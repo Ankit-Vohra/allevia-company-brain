@@ -42,7 +42,7 @@ export interface ChatPhotoDeps {
 }
 
 type Made = Extract<AgentEvent, { type: "deliverable" }>;
-const BADGE: Record<string, DeliverableOption["badge"]> = { unchanged: "ok", changed: "held", unchecked: "unchecked" };
+const BADGE: Record<string, DeliverableOption["badge"]> = { unchanged: "ok", changed: "held", ["unchecked"]: "unchecked" };
 
 /** The card the pipeline left, as the chat's "made" card: each option with Fact Checker's check, the pick first marked.
  *  `only`: just these options (a change shows the option it made, not the whole card again). */
