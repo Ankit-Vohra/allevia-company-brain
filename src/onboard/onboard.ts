@@ -221,7 +221,8 @@ export async function onboard(typed: OnboardInput, emit: (e: OnboardEvent) => vo
   };
   const write = async (stage: string, w: GraphWrite): Promise<void> => {
     if (!w.nodes.length && !w.edges.length && !w.observations.length) return;
-    const s = await writeBatch(g, w, now());
+    // the write gate (src/graph/gate.ts): a new node without its own source or date gets this onboarding run's
+    const s = await writeBatch(g, w, now(), { gate: { who: "onboard", src: entityId("Event", `onboard ${input.slug} ${asOf}`), asOf: day } });
     for (let attempt = 1; attempt <= 5 && s.errors.some((x) => TRANSIENT.test(x.error)); attempt++) {
       await sleep(300 * attempt);
       const again = s.errors.filter((x) => TRANSIENT.test(x.error));

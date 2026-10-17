@@ -21,4 +21,5 @@ export type { Prim, NodeInput, EdgeInput, ObservationInput } from "./validate.js
 export { upsertNode, type NodeResult } from "./nodes.js";
 export { upsertEdge, closeEdge } from "./edges.js";
 export { addObservation, observationId } from "./observations.js";
-export { writeBatch, type WriteStats } from "./batch.js";
+export { writeBatch, type BatchOpts, type WriteStats } from "./batch.js";
+export { gateNode, gateWrite, RefusedWrite, type GateOpts } from "./gate.js";

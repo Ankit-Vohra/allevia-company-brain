@@ -473,7 +473,7 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
 
   const written = await serial(d.graph.name, async () => {
     if (d.signal?.aborted) throw new Error("Stopped before anything was saved.");
-    return writeBatch(d.graph, { nodes, edges }, d.now);
+    return writeBatch(d.graph, { nodes, edges }, d.now, { gate: { who: "meeting", src: docId, asOf } });
   });
   emit({ type: "agent_done", agent: TASKMASTER, ms: Date.now() - t0, ok: true });
   if (written.errors.length) emit({ type: "error", agent: TASKMASTER, message: `Saved the meeting with ${written.errors.length} skipped write(s): ${written.errors[0]!.error}` });

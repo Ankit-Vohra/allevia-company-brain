@@ -5,7 +5,7 @@
 import { z } from "zod";
 import type { ToolContext } from "../tool.js";
 import { VECTOR_DIM } from "../../graph/indexes.js";
-import { upsertEdge, upsertNode } from "../../graph/upsert.js";
+import { gateNode, upsertEdge, upsertNode } from "../../graph/upsert.js";
 import { DisallowedRelationship } from "../../graph/errors.js";
 import { isoDate } from "../../util/time.js";
 import { cleanText, Removed } from "../../ingest/clean.js";
@@ -202,11 +202,12 @@ async function runRemember(args: { text: string; kind: "preference" | "fact" | "
     const id = await nextId(ctx, `memory:${ctx.turnId}-`);
     // What this replaces, found before the new note exists: an active note of the same kind about the same thing.
     const earlier = await sameSubjectNotes(ctx, { kind: args.kind, text, about: linked });
-    await upsertNode(ctx.graph, {
+    // the write gate (src/graph/gate.ts): a known label, a source (this turn) and a date
+    await upsertNode(ctx.graph, gateNode({
       type: "Memory", id, name: clip(text, 80)!, summary: clip(text, 400),
       props: { kind: args.kind, text: text.slice(0, 2000), at: ctx.now, ...(removed.total ? { redactions: removed.total } : {}) },
       src, asOf, ...(embedding?.length === VECTOR_DIM ? { embedding } : {}),
-    }, ctx.now);
+    }, { src, asOf }), ctx.now);
     for (const to of linked) await upsertEdge(ctx.graph, { from: id, type: "ABOUT", to, src, asOf }, ctx.now);
     // A changed preference or fact does not leave two active: the new note SUPERSEDES the old (recall and the brief skip it from now on).
     const replaced: string[] = [];

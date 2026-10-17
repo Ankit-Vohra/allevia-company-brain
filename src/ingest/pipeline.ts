@@ -444,7 +444,10 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
   const g = await openGraph(tc.slug);
   await ensureIndexes(g);
   const totals = zero();
-  const put = (w: Write) => writeWithRetry(w, (x) => writeBatch(g, x, nowMs));
+  // the write gate (src/graph/gate.ts): a new node without its own source or date gets this run's; an unknown label is refused;
+  // a person, business or product already in the graph is linked to, not created again
+  const gate = { who: "ingest", src: entityId("Event", `ingest ${tc.slug} ${startedAt}`), asOf: startedAt.slice(0, 10) };
+  const put = (w: Write) => writeWithRetry(w, (x) => writeBatch(g, x, nowMs, { gate }));
   const tally = (s: WriteStats) => {
     for (const k of ["nodesCreated", "nodesUpdated", "versions", "edgesCreated", "edgesClosed", "observations", "skippedWeaker"] as const) totals[k] += s[k];
     totals.errors += s.errors.length;
@@ -604,7 +607,7 @@ export async function runIngest(tenant: string | TenantConfig, opts: IngestOptio
     const where = hits.slice(0, 5).map((h) => `${h.id} .${h.prop} (${h.kind})`).join("; "); // ids and prop names only, never values
     throw new Error(`privacy scan found ${hits.length} hit(s) in the graph (${Object.entries(report.privacyScan.byKind).map(([k, n]) => `${k} ${n}`).join(", ")}): ${where}; report: ${reportPath}`);
   }
-  const eventId = entityId("Event", `ingest ${tc.slug} ${startedAt}`);
+  const eventId = gate.src;
   await upsertNode(g, {
     type: "Event", id: eventId, name: `Ingest run ${startedAt}`,
     summary: `Ingested ${[...want].join(", ")}: +${report.stats.nodesCreated} nodes, +${report.stats.edgesCreated} edges, ${report.extraction.docs} documents extracted.`,

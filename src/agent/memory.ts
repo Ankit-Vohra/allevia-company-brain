@@ -356,7 +356,7 @@ export async function saveTurn(g: GraphHandle, t: SaveTurnInput): Promise<SaveTu
 
   const clean = nodes.map((n) => cleanNode(n, removed));
   if (removed.total) clean[0] = { ...clean[0]!, props: { ...clean[0]!.props, redactions: removed.total } }; // how many details were taken out, never what
-  const s = await writeBatch(g, { nodes: clean, edges: edges.map((e) => cleanEdge(e, removed)) }, now);
+  const s = await writeBatch(g, { nodes: clean, edges: edges.map((e) => cleanEdge(e, removed)) }, now, { gate: { who: "turn", src: t.turnId, asOf } });
   await rawWrite(g, "MATCH (s:Entity:Session {id:$id}) SET s.lastAt = CASE WHEN coalesce(s.lastAt, 0) > $at THEN s.lastAt ELSE $at END", { id: t.sessionId, at: t.at });
   await growKnowsAbout(g, t, cited, now);
   return {
