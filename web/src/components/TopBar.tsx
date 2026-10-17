@@ -5,22 +5,32 @@ import { signOut } from "../lib/account";
 import { type ThemeChoice, useApp, useAsync } from "../state/app";
 import { Icon, type IconName } from "./Icon";
 import { CreditsChip } from "./Credits";
+import { draftRows } from "../lib/group";
 
-// At most five primary places; everything else lives under More.
+// Four places one tap away, then More.
 const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
   { to: "/", label: "Home", icon: "home", end: true },
   { to: "/chat", label: "Chat", icon: "ask" },
-  { to: "/insights", label: "Insights", icon: "insights" },
-  { to: "/approvals", label: "Approvals", icon: "approvals" },
-  { to: "/studio", label: "Studio", icon: "sparkle" },
+  { to: "/brain", label: "Brain", icon: "brain" },
+  { to: "/approvals", label: "Needs your OK", icon: "approvals" },
 ];
 
-/** Screens under "More": the growth plan and the plan and credits page (the Studio and Your team have their own entries). */
-const MORE_SCREENS: { to: string; label: string; blurb: string; icon: IconName }[] = [
-  { to: "/program", label: "Your growth plan", blurb: "Your goals, and how the team is helping", icon: "insights" },
-  { to: "/connections", label: "Your tools", blurb: "Gmail, Calendar, Analytics, Instagram, your shop and more", icon: "link" },
-  { to: "/plan", label: "Plan and credits", blurb: "Credits left this month, what used them, and your plan", icon: "layers" },
+/** The More menu: names only, in two groups. Every screen not in the bar is here. */
+const MORE_GROUPS: { label: string; items: { to: string; label: string; icon: IconName }[] }[] = [
+  { label: "Your business", items: [
+    { to: "/office", label: "Office", icon: "office" },
+    { to: "/studio", label: "Studio", icon: "sparkle" },
+    { to: "/program", label: "Growth plan", icon: "insights" },
+    { to: "/insights", label: "Ideas", icon: "insights" },
+  ] },
+  { label: "Settings", items: [
+    { to: "/connections", label: "Your tools", icon: "link" },
+    { to: "/team", label: "Your team", icon: "office" },
+    { to: "/plan", label: "Plan and credits", icon: "layers" },
+    { to: "/onboard", label: "Add a business", icon: "plus" },
+  ] },
 ];
+const MORE_PATHS = MORE_GROUPS.flatMap((g) => g.items.map((i) => i.to));
 
 export const APPROVALS_CHANGED = "allevia:approvals-changed";
 
@@ -33,7 +43,8 @@ export function usePendingApprovals() {
     return () => window.removeEventListener(APPROVALS_CHANGED, on);
   }, []);
   const { data } = useAsync(() => (tenant.id ? api.approvals(tenant.id) : Promise.resolve([])), [tenant.id, tick]);
-  return data?.filter((a) => a.status === "pending").length ?? 0;
+  // after folding repeats, so the bar, Home and Needs your OK show the same number
+  return draftRows((data ?? []).filter((a) => a.status === "pending"));
 }
 
 export function Wordmark() {
@@ -140,15 +151,14 @@ function useDismiss(open: boolean, ref: RefObject<HTMLDivElement | null>, close:
   }, [open, ref, close]);
 }
 
-/** The menu for screens not in the main bar: setting up a business, and the screens that are coming soon. On a phone
- *  it also holds what the top bar has no room for. */
+/** The menu for screens not in the main bar: names only, grouped. */
 function MoreMenu({ variant }: { variant: "desktop" | "mobile" }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const loc = useLocation();
   useEffect(() => { setOpen(false); }, [loc.pathname]);
   useDismiss(open, ref, useCallback(() => setOpen(false), []));
-  const active = MORE_SCREENS.some((x) => loc.pathname === x.to) || ["/office", "/team", "/brain", "/onboard"].includes(loc.pathname);
+  const active = MORE_PATHS.includes(loc.pathname);
   return (
     <div className={`more more-${variant}`} ref={ref}>
       {variant === "desktop" ? (
@@ -156,33 +166,22 @@ function MoreMenu({ variant }: { variant: "desktop" | "mobile" }) {
           More <Icon name="chevron" size={15} />
         </button>
       ) : (
-        <button type="button" className="btn btn-quiet btn-icon more-btn" aria-haspopup="menu" aria-expanded={open} aria-label="More screens" onClick={() => setOpen((o) => !o)}>
+        <button type="button" className="btn btn-quiet btn-icon more-btn" aria-haspopup="menu" aria-expanded={open} aria-label="More" onClick={() => setOpen((o) => !o)}>
           <Icon name="menu" />
         </button>
       )}
       {open && (
-        <div className="switcher-menu more-menu" role="menu" aria-label="More screens">
-          <NavLink to="/office" role="menuitem" className="more-item">
-            <span className="more-icon"><Icon name="office" size={16} /></span>
-            <span className="switcher-text"><span className="switcher-name">The office</span><span className="switcher-domain">Watch your team at work, with the dogs</span></span>
-          </NavLink>
-          <NavLink to="/brain" role="menuitem" className="more-item">
-            <span className="more-icon"><Icon name="brain" size={16} /></span>
-            <span className="switcher-text"><span className="switcher-name">What your team knows</span><span className="switcher-domain">The company brain, and where each fact came from</span></span>
-          </NavLink>
-          <NavLink to="/team" role="menuitem" className="more-item">
-            <span className="more-icon"><Icon name="office" size={16} /></span>
-            <span className="switcher-text"><span className="switcher-name">Your team</span><span className="switcher-domain">Tell your team something, switch people on or off</span></span>
-          </NavLink>
-          <NavLink to="/onboard" role="menuitem" className="more-item">
-            <span className="more-icon"><Icon name="plus" size={16} /></span>
-            <span className="switcher-text"><span className="switcher-name">Add a business</span><span className="switcher-domain">Set up a new office from a website</span></span>
-          </NavLink>
-          {MORE_SCREENS.map((x) => (
-            <NavLink key={x.to} to={x.to} role="menuitem" className="more-item">
-              <span className="more-icon"><Icon name={x.icon} size={16} /></span>
-              <span className="switcher-text"><span className="switcher-name">{x.label}</span><span className="switcher-domain">{x.blurb}</span></span>
-            </NavLink>
+        <div className="switcher-menu more-menu is-plain" role="menu" aria-label="More">
+          {MORE_GROUPS.map((g) => (
+            <div key={g.label} className="more-group" role="group" aria-label={g.label}>
+              <p className="more-group-label" aria-hidden="true">{g.label}</p>
+              {g.items.map((x) => (
+                <NavLink key={x.to} to={x.to} role="menuitem" className="more-item">
+                  <span className="more-icon"><Icon name={x.icon} size={16} /></span>
+                  <span className="switcher-name">{x.label}</span>
+                </NavLink>
+              ))}
+            </div>
           ))}
         </div>
       )}

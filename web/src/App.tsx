@@ -21,7 +21,7 @@ const ConnectedPage = lazy(() => import("./pages/Connections").then((m) => ({ de
 const AccountPage = lazy(() => import("./pages/Account"));
 
 const TITLES: Record<string, string> = {
-  "/": "Home", "/office": "Office", "/chat": "Chat", "/ask": "Ask", "/brain": "Brain", "/insights": "Insights", "/approvals": "Approvals", "/onboard": "Add a business",
+  "/": "Home", "/office": "Office", "/chat": "Chat", "/ask": "Ask", "/brain": "Brain", "/insights": "Ideas", "/approvals": "Needs your OK", "/onboard": "Add a business",
   "/studio": "Studio", "/team": "Your team", "/plan": "Plan and credits", "/program": "Your growth plan", "/connections": "Your tools", "/connected": "Connected",
   "/account": "Your account",
 };
