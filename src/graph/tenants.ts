@@ -18,6 +18,7 @@ export interface TenantInput {
 const OPTIONAL = ["domain", "industry", "city", "country", "currency", "locale", "timeZone", "templateKey"] as const;
 export interface Tenant extends TenantInput {
   demo?: boolean;   // a public demo business: with ALLEVIA_AUTH=1 its read-only pages open without an owner link (setDemo)
+  showcase?: boolean; // a real business shown to the public: a demo whose people, messages and private documents are masked for visitors (setShowcase)
   graph: string;
   businessId: string;
   ontologyVersion: number;
@@ -41,6 +42,7 @@ function toTenant(p: Record<string, unknown>): Tenant {
   };
   for (const k of OPTIONAL) if (typeof p[k] === "string") t[k] = p[k];
   if (p.demo === true) t.demo = true;
+  if (p.showcase === true) t.showcase = true;
   return t;
 }
 
@@ -139,6 +141,18 @@ export async function linkRegistry(opts?: TenantOpts & { now?: number }): Promis
 export async function setDemo(slug: string, demo: boolean, opts?: TenantOpts): Promise<boolean> {
   if (!(await getTenant(slug, opts))) return false;
   const meta = await openGraphByName(metaName(opts));
-  await meta.query("MATCH (t:Tenant {slug:$slug}) SET t.demo = $demo", { slug, demo });
+  // switching the demo off switches the showcase off with it: a showcase is a kind of demo
+  await meta.query(demo ? "MATCH (t:Tenant {slug:$slug}) SET t.demo = true" : "MATCH (t:Tenant {slug:$slug}) SET t.demo = false, t.showcase = false", { slug });
+  return true;
+}
+
+// Marks a registered business as a showcase: a real business (its data from the owner's own inbox, files and customers) that the
+// public may look at. It is a demo (read-only without a link) and, for a visitor, every answer is masked by src/server/showcase.ts:
+// people, customers, leads, messages and private documents are hidden; numbers, insights, goals and the map's shape stay. Off
+// (`showcase: false`) leaves it a plain demo. Returns whether it exists.
+export async function setShowcase(slug: string, showcase: boolean, opts?: TenantOpts): Promise<boolean> {
+  if (!(await getTenant(slug, opts))) return false;
+  const meta = await openGraphByName(metaName(opts));
+  await meta.query(showcase ? "MATCH (t:Tenant {slug:$slug}) SET t.demo = true, t.showcase = true" : "MATCH (t:Tenant {slug:$slug}) SET t.showcase = false", { slug });
   return true;
 }

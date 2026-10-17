@@ -1,4 +1,4 @@
-// `auth:issue`, `auth:list`, `auth:revoke`, `auth:demo`: who may open which business when ALLEVIA_AUTH=1 (src/auth/tokens.ts,
+// `auth:issue`, `auth:list`, `auth:revoke`, `auth:demo` (and `--showcase`): who may open which business when ALLEVIA_AUTH=1 (src/auth/tokens.ts,
 // docs/tenant-isolation.md). An owner link is shown once when it is issued; only its hash is stored, so it cannot be listed
 // again, only revoked and replaced.
 // `auth:users`, `auth:reset-link`, `auth:invite`, `auth:disable`: the operator's side of accounts (src/auth/accounts.ts). There
@@ -8,7 +8,7 @@ import { createInvite, createResetCode, isMemberRole, listUsers, setDisabled } f
 import { seatsFor } from "../auth/seats.js";
 import { OPERATOR_SCOPE, issueToken, listTokens, revokeToken } from "../auth/tokens.js";
 import { loadConfig } from "../config.js";
-import { getTenant, setDemo } from "../graph/tenants.js";
+import { getTenant, setDemo, setShowcase } from "../graph/tenants.js";
 import type { Command } from "./_command.js";
 
 const when = (ms: number | null): string => (ms === null ? "never" : new Date(ms).toISOString().slice(0, 16).replace("T", " "));
@@ -73,15 +73,19 @@ export const commands: Command[] = [
   },
   {
     name: "auth:demo",
-    usage: "auth:demo <tenant> [--off]",
-    summary: "Mark a business as a public demo (read-only without a link when ALLEVIA_AUTH=1), or --off",
+    usage: "auth:demo <tenant> [--showcase] [--off]",
+    summary: "Mark a business as a public demo (read-only without a link when ALLEVIA_AUTH=1); --showcase for a real business (people, messages and private documents masked for visitors); --off to undo",
     async run(args) {
-      const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { off: { type: "boolean" } } });
+      const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { off: { type: "boolean" }, showcase: { type: "boolean" } } });
       const [slug] = positionals;
-      if (!slug || positionals.length > 1) { console.error("Usage: npm run cli -- auth:demo <tenant> [--off]"); return 2; }
-      if (!(await setDemo(slug, !values.off))) { console.error(`No such business "${slug}" in the registry.`); return 1; }
+      if (!slug || positionals.length > 1) { console.error("Usage: npm run cli -- auth:demo <tenant> [--showcase] [--off]"); return 2; }
+      // --showcase --off takes the mask off and leaves a plain demo; --off alone makes the business private again
+      const ok = values.showcase ? await setShowcase(slug, !values.off) : await setDemo(slug, !values.off);
+      if (!ok) { console.error(`No such business "${slug}" in the registry.`); return 1; }
       const t = await getTenant(slug);
-      console.log(`${slug} is ${t?.demo ? "a public demo: anyone can read it, nobody can change it without its link" : "private again: it needs its owner link"} (when ALLEVIA_AUTH=1).`);
+      console.log(`${slug} is ${t?.showcase
+        ? "a public showcase: anyone can read it, with people, customers, messages and private documents hidden; its owner and members see everything"
+        : t?.demo ? "a public demo: anyone can read it, nobody can change it without its link" : "private again: it needs its owner link"} (when ALLEVIA_AUTH=1).`);
       return 0;
     },
   },
