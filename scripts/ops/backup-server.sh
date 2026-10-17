@@ -6,7 +6,7 @@
 # Everything goes to S3 (private, encrypted, deleted after 35 days by the bucket's own rule; the server may add and read
 # backups but never delete them), and the last 7 nights stay on the server's disk.
 set -eu
-BUCKET="${ALLEVIA_BACKUP_BUCKET:-allevia-backups-ap-south-1-123456789012}"
+BUCKET="${ALLEVIA_BACKUP_BUCKET:?set ALLEVIA_BACKUP_BUCKET (the server sets it in allevia-backup.service)}"
 REGION="${AWS_REGION:-ap-south-1}"
 DB="${ALLEVIA_DB_CONTAINER:-allevia-falkordb-1}"
 DATA="${ALLEVIA_DATA_DIR:-$HOME/allevia-public/data}"
