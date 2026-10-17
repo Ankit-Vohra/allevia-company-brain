@@ -40,8 +40,8 @@ export function buildConnections(cfg: AlleviaConfig, over: WiringOver): Connecti
   const legacy: GoogleDeps = { settings: googleSettings({ ...cfg.google, enabled: true }), store, client, now };
   const composioKey = cfg.connections.composioApiKey ?? "";
   const composio = over.composio === undefined ? (composioKey ? realComposioClient(composioKey) : null) : over.composio;
-  // Google products: Composio is the main path. Its Analytics and Ads toolkits cannot run reports (checked against its catalogue),
-  // so when our own Google app is set up those two use it; ALLEVIA_GOOGLE_VIA=own|composio forces every Google product one way.
+  // Google products: Composio is the main path. Its Analytics and Ads toolkits cannot run reports (checked against its catalogue;
+  // Analytics' daily read goes through Composio's proxy instead), so when our own Google app is set up those two use it; ALLEVIA_GOOGLE_VIA=own|composio forces every Google product one way.
   const GOOGLE_FIVE = ["gmail", "google-calendar", "google-analytics", "search-console", "google-ads"];
   const composioOn = !!(composioKey || over.composio);
   const forced = cfg.connections.googleVia;

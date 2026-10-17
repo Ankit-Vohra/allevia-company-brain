@@ -28,8 +28,11 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
 const fmt = (n: number): string => n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 const plural = (n: number, one: string, many: string): string => `${fmt(n)} ${n === 1 ? one : many}`;
 
+/** A read-only call to the provider's own API through the connection (Composio's proxy): for toolkits with no action for the read. */
+export type Proxy = (req: { endpoint: string; method: "GET" | "POST"; body?: Record<string, unknown>; query?: Record<string, string> }) => Promise<unknown>;
+
 export interface FirstRead { headline?: string }
-export type Reader = (execute: Execute, ctx: ConnectorCtx) => Promise<FirstRead>;
+export type Reader = (execute: Execute, ctx: ConnectorCtx, proxy?: Proxy) => Promise<FirstRead>;
 
 const SRC_PREFIX = "document:first-read-";
 
@@ -62,6 +65,80 @@ const searchConsole = (ref: ConnRef): Reader => async (execute, ctx) => {
     { subject: channel, metric: "gsc_impressions", value: x.impressions, unit: "count", windowStart: x.d, windowEnd: x.d, asOf: today, src: doc.id },
   ]);
   const done = await recordRead(ctx, ref, { doc, nodes: await channelNode(ctx, channel, "Google Search"), observations, dataThrough: end, props: { property: site } });
+  return done.ok ? { headline } : {};
+};
+
+// Google Analytics: Composio's toolkit has no report action, so both calls go to Google's own API through the proxy. The property
+// is the one whose name or website matches the business's domain, else the first one the account can see.
+const GA4_ADMIN = "https://analyticsadmin.googleapis.com/v1beta";
+const GA4_DATA = "https://analyticsdata.googleapis.com/v1beta";
+const WEBSITE = "channel:website";
+const rec = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+const ga4Date = (d: string): string | null => (/^\d{8}$/.test(d) ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : null);
+const bare = (d: string): string => d.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
+const slugOf = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+
+async function businessDomain(ctx: ConnectorCtx): Promise<string> {
+  try {
+    const g = await ctx.graph();
+    const rows = ctx.businessId
+      ? await g.roQuery<{ domain: string | null }>("MATCH (b:Entity:Business {id:$id}) RETURN b.domain AS domain", { id: ctx.businessId })
+      : await g.roQuery<{ domain: string | null }>("MATCH (b:Entity:Business) WHERE b.domain IS NOT NULL RETURN b.domain AS domain LIMIT 1", {});
+    return bare(rows[0]?.domain ?? "");
+  } catch {
+    return "";
+  }
+}
+
+async function pickProperty(proxy: Proxy, ctx: ConnectorCtx): Promise<{ property: string; name: string } | null> {
+  const props = list(await proxy({ endpoint: `${GA4_ADMIN}/accountSummaries`, method: "GET", query: { pageSize: "200" } }), ["accountSummaries"])
+    .flatMap((a) => list(a, ["propertySummaries"]))
+    .map(rec).filter((p) => typeof p.property === "string" && /^properties\/\d+$/.test(p.property))
+    .map((p) => ({ property: String(p.property), name: typeof p.displayName === "string" ? p.displayName : String(p.property) }));
+  if (props.length <= 1) return props[0] ?? null;
+  const domain = await businessDomain(ctx);
+  if (!domain) return props[0]!;
+  const stem = domain.split(".")[0] ?? domain;
+  const byName = props.find((p) => p.name.toLowerCase().includes(domain)) ?? props.find((p) => stem.length > 2 && p.name.toLowerCase().includes(stem));
+  if (byName) return byName;
+  for (const p of props.slice(0, 5)) { // the website each property measures, for the few the account has
+    const streams = list(await proxy({ endpoint: `${GA4_ADMIN}/${p.property}/dataStreams`, method: "GET" }).catch(() => null), ["dataStreams"]);
+    if (streams.some((st) => bare(String(rec(rec(st).webStreamData).defaultUri ?? "")) === domain)) return p;
+  }
+  return props[0]!;
+}
+
+const analytics = (ref: ConnRef): Reader => async (_execute, ctx, proxy) => {
+  if (!proxy) return {};
+  const picked = await pickProperty(proxy, ctx);
+  if (!picked) return {};
+  const today = isoDate(ctx.now());
+  const end = addDays(today, -1), start = addDays(end, -27);
+  const report = (body: Record<string, unknown>) => proxy({ endpoint: `${GA4_DATA}/${picked.property}:runReport`, method: "POST", body: { dateRanges: [{ startDate: start, endDate: end }], keepEmptyRows: false, ...body } });
+  const cells = (row: unknown) => {
+    const r = rec(row);
+    return { dims: (Array.isArray(r.dimensionValues) ? r.dimensionValues : []).map((d) => String(rec(d).value ?? "")), vals: (Array.isArray(r.metricValues) ? r.metricValues : []).map((m) => num(rec(m).value) ?? 0) };
+  };
+  const daily = list(await report({ dimensions: [{ name: "date" }], metrics: [{ name: "sessions" }, { name: "totalUsers" }, { name: "newUsers" }, { name: "keyEvents" }], limit: 100 }), ["rows"])
+    .flatMap((row) => { const c = cells(row); const d = ga4Date(c.dims[0] ?? ""); return d ? [{ d, sessions: c.vals[0] ?? 0, users: c.vals[1] ?? 0, newUsers: c.vals[2] ?? 0, keyEvents: c.vals[3] ?? 0 }] : []; });
+  if (!daily.length) return {};
+  const groups = list(await report({ dimensions: [{ name: "sessionDefaultChannelGroup" }], metrics: [{ name: "sessions" }], limit: 25 }).catch(() => null), ["rows"])
+    .flatMap((row) => { const c = cells(row); const name = c.dims[0] ?? ""; return name && slugOf(name) ? [{ name, slug: slugOf(name), sessions: c.vals[0] ?? 0 }] : []; });
+  const sessions = daily.reduce((a, x) => a + x.sessions, 0);
+  const headline = `${plural(sessions, "visit", "visits")} to your website in the last 28 days`;
+  const top = groups.slice().sort((a, b) => b.sessions - a.sessions).slice(0, 3).map((g) => `${g.name} ${fmt(g.sessions)}`).join(", ");
+  const doc = snapshot("ga4", today, `Analytics numbers read on ${today}`, headline, `Visits, visitors, new visitors and key events for ${picked.name} (${picked.property}), ${start} to ${end}.${top ? ` Where visits came from: ${top}.` : ""}`, { property: picked.property });
+  const w = (d: string) => ({ windowStart: d, windowEnd: d, asOf: today, src: doc.id });
+  const observations: ObservationInput[] = [
+    ...daily.flatMap((x) => [
+      { subject: WEBSITE, metric: "ga4_sessions", value: x.sessions, unit: "count", ...w(x.d) },
+      { subject: WEBSITE, metric: "ga4_users", value: x.users, unit: "count", ...w(x.d) },
+      { subject: WEBSITE, metric: "ga4_new_users", value: x.newUsers, unit: "count", ...w(x.d) },
+      { subject: WEBSITE, metric: "ga4_conversions", value: x.keyEvents, unit: "count", ...w(x.d) },
+    ]),
+    ...groups.map((g) => ({ subject: WEBSITE, metric: `ga4_sessions_from_${g.slug}`, value: g.sessions, unit: "count", windowStart: start, windowEnd: end, asOf: today, src: doc.id, evidence: `${g.name}: ${fmt(g.sessions)} sessions` })),
+  ];
+  const done = await recordRead(ctx, ref, { doc, nodes: await channelNode(ctx, WEBSITE, "Website"), observations, dataThrough: end, props: { property: picked.property } });
   return done.ok ? { headline } : {};
 };
 
@@ -137,6 +214,7 @@ export function readerFor(entry: { id: string; toolkit: string; system: { id: st
   const ref: ConnRef = { id: entry.id, system: entry.system, provider: "composio" };
   switch (entry.toolkit) {
     case "google_search_console": return searchConsole(ref);
+    case "google_analytics": return analytics(ref);
     case "instagram": return instagram(ref);
     case "googlecalendar": return calendar(ref);
     case "stripe": return stripe(ref);

@@ -282,7 +282,7 @@ export class ComposioConnector implements Connector {
 
   private async readNow(ctx: ConnectorCtx, reader: Reader): Promise<{ ok: boolean; message: string }> {
     try {
-      const first = await this.run(ctx, (s) => reader(s.execute, ctx));
+      const first = await this.run(ctx, (s) => reader(s.execute, ctx, s.proxy));
       const r = await this.stored(ctx);
       if (r) await ctx.vault.put(ctx.tenant, this.info.id, { ...r, readAt: ctx.now(), ...(first.headline ? { headline: first.headline } : {}) } satisfies Stored);
       return first.headline ? { ok: true, message: first.headline } : { ok: false, message: `${this.info.name} is connected, but there was nothing to read yet.` };
