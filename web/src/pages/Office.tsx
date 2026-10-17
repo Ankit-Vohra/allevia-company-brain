@@ -235,7 +235,7 @@ export function OfficePage() {
     <div className="office-page">
       <header className="office-head">
         <div className="office-titles">
-          <h1 id="office-title" className="office-title">{tenant.name}<span className="office-title-sub">’s office</span></h1>
+          <h1 id="office-title" className="office-title">{tenant.name}<span className="office-title-sub">{/s$/i.test(tenant.name) ? "’" : "’s"} office</span></h1>
           <p className="office-meta">{fmtLongDate()}{off.size > 0 && <> · <Link to="/team" className="office-off-link">{off.size} {off.size === 1 ? "person is" : "people are"} switched off</Link></>}</p>
         </div>
         <div className="office-tools">
