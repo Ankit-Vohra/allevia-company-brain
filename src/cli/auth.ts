@@ -1,10 +1,11 @@
 // `auth:issue`, `auth:list`, `auth:revoke`, `auth:demo` (and `--showcase`): who may open which business when ALLEVIA_AUTH=1 (src/auth/tokens.ts,
 // docs/tenant-isolation.md). An owner link is shown once when it is issued; only its hash is stored, so it cannot be listed
 // again, only revoked and replaced.
-// `auth:users`, `auth:reset-link`, `auth:invite`, `auth:disable`: the operator's side of accounts (src/auth/accounts.ts). There
-// is no email sender yet, so a reset link or an invite is printed here once and sent to the person by hand.
+// `auth:users`, `auth:reset-link`, `auth:invite`, `auth:disable`, `auth:operator`: the operator's side of accounts
+// (src/auth/accounts.ts). There is no email sender yet, so a reset link or an invite is printed here once and sent to the person
+// by hand. `auth:operator` is the only way to make an account the operator (every business opens to it): no HTTP route does.
 import { parseArgs } from "node:util";
-import { createInvite, createResetCode, isMemberRole, listUsers, setDisabled } from "../auth/accounts.js";
+import { createInvite, createResetCode, isMemberRole, listUsers, setDisabled, setOperator } from "../auth/accounts.js";
 import { seatsFor } from "../auth/seats.js";
 import { OPERATOR_SCOPE, issueToken, listTokens, revokeToken } from "../auth/tokens.js";
 import { loadConfig } from "../config.js";
@@ -92,7 +93,7 @@ export const commands: Command[] = [
   {
     name: "auth:users",
     usage: "auth:users [tenant]",
-    summary: "List accounts (email, name, joined, businesses and roles, switched off); never a password or a hash",
+    summary: "List accounts (email, name, joined, businesses and roles, switched off, operator); never a password or a hash",
     async run(args) {
       const { positionals } = parseArgs({ args, allowPositionals: true, options: {} });
       const slug = positionals[0];
@@ -100,7 +101,7 @@ export const commands: Command[] = [
       if (!users.length) { console.log(slug ? `No accounts in ${slug}.` : "No accounts yet."); return 0; }
       for (const u of users) {
         const biz = u.businesses.map((b) => `${b.slug} (${b.role})`).join(", ") || "no business yet";
-        console.log(`${u.id}  ${u.email.padEnd(32)} ${u.disabledAt ? "OFF  " : "     "}joined ${when(u.createdAt)}  "${u.name}"  ${biz}`);
+        console.log(`${u.id}  ${u.email.padEnd(32)} ${u.disabledAt ? "OFF  " : "     "}${u.operator ? "OPERATOR  " : ""}joined ${when(u.createdAt)}  "${u.name}"  ${biz}`);
       }
       console.log(`${users.length} account${users.length === 1 ? "" : "s"}.`);
       return 0;
@@ -152,6 +153,21 @@ export const commands: Command[] = [
       const u = await setDisabled(positionals[0], !values.off);
       if (!u) { console.error(`No account for "${positionals[0]}".`); return 1; }
       console.log(values.off ? `${u.email} can sign in again.` : `${u.email} is switched off and signed out everywhere.`);
+      return 0;
+    },
+  },
+  {
+    name: "auth:operator",
+    usage: "auth:operator <email> [--off]",
+    summary: "Make an account the operator (it opens every business as owner, for the person who runs Allevia), or --off to take that away; takes effect on the next request",
+    async run(args) {
+      const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { off: { type: "boolean" } } });
+      if (positionals.length !== 1) { console.error("Usage: npm run cli -- auth:operator <email> [--off]"); return 2; }
+      const u = await setOperator(positionals[0], !values.off);
+      if (!u) { console.error(`No account for "${positionals[0]}".`); return 1; }
+      console.log(values.off
+        ? `${u.email} is no longer the operator: from the next request it opens only the businesses it is in.`
+        : `${u.email} is the operator: signed in, it opens every business as owner (when ALLEVIA_AUTH=1).`);
       return 0;
     },
   },

@@ -1,10 +1,13 @@
 // Accounts: people who sign in with an email and a password (docs/tenant-isolation.md, "Accounts"). They live in the registry
 // graph (allevia_meta), next to the (:Tenant) nodes and the owner links, never in a business's own graph:
-//   (:User {id, email, name, passHash, createdAt, disabledAt?})              email is lower case and unique
+//   (:User {id, email, name, passHash, createdAt, disabledAt?, operator?})   email is lower case and unique
 //   (:User)-[:MEMBER_OF {role: owner|member, since}]->(:Tenant)              who may open which business, and as what
 //   (:User)-[:HAS_SESSION]->(:Session {idHash, createdAt, expiresAt, lastSeenAt, revokedAt?})
 //   (:Tenant)-[:HAS_INVITE]->(:Invite {codeHash, slug, role, createdAt, expiresAt, createdBy, usedAt?, usedBy?})
 //   (:User)-[:HAS_RESET]->(:PasswordReset {codeHash, createdAt, expiresAt, usedAt?})
+// `operator: true` marks the person who runs Allevia: a session of that account opens every business as its owner (the door in
+// server/app.ts). Only the operator's CLI on the server sets it (`auth:operator <email> [--off]`, setOperator below); no HTTP
+// route writes it, and it is read with the session on every request, so switching it off takes effect on the next one.
 // A password is kept only as its scrypt hash (passwords.ts). A session id, an invite code and a reset code are 32 random bytes
 // (256 bits) shown once, and only their SHA-256 is stored, the way owner links are (tokens.ts): a fast hash is right for a
 // secret that is already long and random, and a stolen registry gives nobody a way in. Each is looked up by its hash, one
@@ -33,7 +36,7 @@ export interface AccountOpts extends TenantOpts { now?: number }
 
 export interface Account { id: string; email: string; name: string; createdAt: number }
 export interface Membership { slug: string; name: string; role: MemberRole }
-export interface SessionView { user: Account; hash: string; expiresAt: number; lastSeenAt: number; memberships: Membership[] }
+export interface SessionView { user: Account; hash: string; expiresAt: number; lastSeenAt: number; memberships: Membership[]; operator: boolean }
 export interface NewSession { id: string; expiresAt: number }
 export interface Member { id: string; name: string; email: string; role: MemberRole; since: number }
 export interface InvitePreview { slug: string; name: string; role: MemberRole; expiresAt: number }
@@ -200,6 +203,18 @@ export async function changePassword(userId: string, current: unknown, next: unk
   return true;
 }
 
+/**
+ * Makes an account the operator (the person who runs Allevia: every business opens to it as owner), or takes that away. Only the
+ * operator's CLI calls this; there is no HTTP route for it. Null when there is no such account.
+ */
+export async function setOperator(emailRaw: unknown, on: boolean, opts?: AccountOpts): Promise<Account | null> {
+  const user = await findUser(emailRaw, opts);
+  if (!user) return null;
+  const meta = await writable(opts);
+  await meta.query("MATCH (u:User {id:$uid}) SET u.operator = $on", { uid: user.id, on: on ? true : null });
+  return user;
+}
+
 /** Switches an account off (or back on). Switching off signs it out everywhere. Null when there is no such account. */
 export async function setDisabled(emailRaw: unknown, disabled: boolean, opts?: AccountOpts): Promise<Account | null> {
   const user = await findUser(emailRaw, opts);
@@ -210,17 +225,17 @@ export async function setDisabled(emailRaw: unknown, disabled: boolean, opts?: A
   return user;
 }
 
-export interface UserListing extends Account { disabledAt: number | null; businesses: Array<{ slug: string; role: MemberRole }> }
+export interface UserListing extends Account { disabledAt: number | null; operator: boolean; businesses: Array<{ slug: string; role: MemberRole }> }
 
 /** Every account, oldest first, with its businesses (for the operator's CLI). Never a hash. */
 export async function listUsers(opts?: AccountOpts): Promise<UserListing[]> {
-  const rows = await read<UserRow & { disabledAt: number | null; ms: Array<{ slug: string | null; role: MemberRole | null }> }>(opts,
+  const rows = await read<UserRow & { disabledAt: number | null; operator: boolean | null; ms: Array<{ slug: string | null; role: MemberRole | null }> }>(opts,
     `MATCH (u:User) OPTIONAL MATCH (u)-[m:MEMBER_OF]->(t:Tenant)
      WITH u, collect({slug: t.slug, role: m.role}) AS ms
-     RETURN u.id AS id, u.email AS email, u.name AS name, u.createdAt AS createdAt, u.disabledAt AS disabledAt, ms ORDER BY createdAt, id LIMIT $limit`,
+     RETURN u.id AS id, u.email AS email, u.name AS name, u.createdAt AS createdAt, u.disabledAt AS disabledAt, u.operator AS operator, ms ORDER BY createdAt, id LIMIT $limit`,
     { limit: MAX_PAGE });
   return rows.map((r) => ({
-    ...account(r), disabledAt: r.disabledAt ?? null,
+    ...account(r), disabledAt: r.disabledAt ?? null, operator: r.operator === true,
     businesses: r.ms.filter((m): m is { slug: string; role: MemberRole } => typeof m.slug === "string" && isMemberRole(m.role)).sort((a, b) => a.slug.localeCompare(b.slug)),
   }));
 }
@@ -247,12 +262,12 @@ export async function createSession(userId: string, opts?: AccountOpts): Promise
 export async function resolveSession(raw: unknown, opts?: AccountOpts): Promise<SessionView | null> {
   if (!isSecret(raw)) return null;
   const hash = sha256(raw);
-  const rows = await read<UserRow & { expiresAt: number; lastSeenAt: number; ms: Array<{ slug: string | null; name: string | null; role: string | null }> }>(opts,
+  const rows = await read<UserRow & { expiresAt: number; lastSeenAt: number; operator: boolean | null; ms: Array<{ slug: string | null; name: string | null; role: string | null }> }>(opts,
     `MATCH (u:User)-[hs:HAS_SESSION]->(s:Session {idHash:$hash})
      WHERE hs IS NOT NULL AND s.revokedAt IS NULL AND s.expiresAt > $now AND u.disabledAt IS NULL
      OPTIONAL MATCH (u)-[m:MEMBER_OF]->(t:Tenant)
      WITH u, s, collect({slug: t.slug, name: t.name, role: m.role}) AS ms
-     RETURN u.id AS id, u.email AS email, u.name AS name, u.createdAt AS createdAt, s.expiresAt AS expiresAt, s.lastSeenAt AS lastSeenAt, ms LIMIT 1`,
+     RETURN u.id AS id, u.email AS email, u.name AS name, u.createdAt AS createdAt, s.expiresAt AS expiresAt, s.lastSeenAt AS lastSeenAt, u.operator AS operator, ms LIMIT 1`,
     { hash, now: nowOf(opts) });
   const r = rows[0];
   if (!r) return null;
@@ -260,7 +275,7 @@ export async function resolveSession(raw: unknown, opts?: AccountOpts): Promise<
     .filter((m): m is { slug: string; name: string | null; role: MemberRole } => isTenantSlug(m.slug) && isMemberRole(m.role))
     .map((m) => ({ slug: m.slug, name: m.name ?? m.slug, role: m.role }))
     .sort((a, b) => a.slug.localeCompare(b.slug));
-  return { user: account(r), hash, expiresAt: r.expiresAt, lastSeenAt: r.lastSeenAt, memberships };
+  return { user: account(r), hash, expiresAt: r.expiresAt, lastSeenAt: r.lastSeenAt, memberships, operator: r.operator === true };
 }
 
 /** Moves a live session's end 30 days on from now. Returns the new end, or null when the session is no longer live. */

@@ -1,6 +1,6 @@
 // The CLI that issues and revokes owner links. The registry is a throwaway graph (ALLEVIA_META_GRAPH), never allevia_meta.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { acceptInvite, checkLogin, createUser, previewInvite, useResetCode } from "../../src/auth/accounts.js";
+import { acceptInvite, checkLogin, createUser, listUsers, previewInvite, useResetCode } from "../../src/auth/accounts.js";
 import { verifyToken } from "../../src/auth/tokens.js";
 import { loadCommands } from "../../src/cli.js";
 import { closeAll, openGraphByName } from "../../src/graph/client.js";
@@ -124,6 +124,21 @@ describe("accounts CLI", () => {
     expect((await run("auth:users")).out).toMatch(/OFF/);
     expect((await run("auth:disable", "cli.owner@example.com", "--off")).code).toBe(0);
     expect(await checkLogin("cli.owner@example.com", "a fresh new password")).not.toBeNull();
+  });
+
+  it("makes an account the operator, shows it in auth:users, and takes it away with --off", async () => {
+    await createUser({ email: "cli.founder@example.com", name: "Cli Founder", password: PW });
+    const on = await run("auth:operator", "CLI.Founder@example.com");
+    expect(on).toMatchObject({ code: 0, out: expect.stringMatching(/cli\.founder@example\.com is the operator/) });
+    expect((await listUsers()).find((u) => u.email === "cli.founder@example.com")?.operator).toBe(true);
+    expect((await run("auth:users")).out).toMatch(/cli\.founder@example\.com\s+OPERATOR/);
+    const off = await run("auth:operator", "cli.founder@example.com", "--off");
+    expect(off).toMatchObject({ code: 0, out: expect.stringMatching(/no longer the operator/) });
+    expect((await listUsers()).find((u) => u.email === "cli.founder@example.com")?.operator).toBe(false);
+    expect((await run("auth:users")).out).not.toMatch(/OPERATOR/);
+    expect((await run("auth:operator")).code).toBe(2);
+    expect((await run("auth:operator", "a@example.com", "b@example.com")).code).toBe(2);
+    expect((await run("auth:operator", "nobody@example.com")).code).toBe(1);
   });
 
   it("refuses bad arguments", async () => {
