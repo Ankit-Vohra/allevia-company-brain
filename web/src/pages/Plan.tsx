@@ -4,7 +4,7 @@
 // business's currency (US dollars, labelled, when we do not price in it yet); credits and answers are GET /api/:t/usage.
 // Billing is not connected, so nothing here is an invoice: it is what the plan would include.
 import { Link } from "react-router";
-import { ALLEVIA_90, ANNUAL_DISCOUNT, CREDIT_RULES, PLANS, PLAN_BY_ID, isCurrency, yearlyMonthly, type Currency, type Plan } from "@shared/plans";
+import { ALLEVIA_90, ANNUAL_DISCOUNT, CREDIT_PACKS, CREDIT_RULES, PLANS, PLAN_BY_ID, isCurrency, yearlyMonthly, type Currency, type Plan } from "@shared/plans";
 import { api } from "../api";
 import { ShowDetails } from "../components/ShowDetails";
 import { currentLocale, fmtDate, fmtMoney, fmtNum } from "../lib/format";
@@ -52,7 +52,7 @@ export default function PlanPage() {
         {usage.data === undefined ? (
           usage.error ? <p className="notice notice-bad" role="alert">This month’s use did not load: {usage.error}</p> : <span className="skeleton owner-skel-line" aria-busy="true" />
         ) : (
-          <Credits usage={usage.data} allowance={plan.allowances.studioCreditsPerMonth} />
+          <Credits usage={usage.data} allowance={plan.allowances.creditsPerMonth} />
         )}
       </section>
 
@@ -69,8 +69,7 @@ export default function PlanPage() {
               <tbody>
                 <tr><th scope="row">Who it’s for</th>{PLANS.map((p) => <td key={p.id}>{p.who}</td>)}</tr>
                 <tr><th scope="row">Each month</th>{PLANS.map((p) => <td key={p.id} className="num">{p.fromPrice ? "from " : ""}{money(p.price.monthly)}{p.price.yearly ? <span className="detail-sub">or {money(yearlyMonthly(p.price.monthly))} a month paid yearly ({money(p.price.yearly)} a year, {Math.round(ANNUAL_DISCOUNT * 100)}% off)</span> : null}</td>)}</tr>
-                <tr><th scope="row">Studio credits</th>{PLANS.map((p) => <td key={p.id} className="num">{fmtNum(p.allowances.studioCreditsPerMonth)}</td>)}</tr>
-                <tr><th scope="row">Answers</th>{PLANS.map((p) => <td key={p.id} className="num">{fmtNum(p.allowances.answersPerMonth)}</td>)}</tr>
+                <tr><th scope="row">Credits a month</th>{PLANS.map((p) => <td key={p.id} className="num">{fmtNum(p.allowances.creditsPerMonth)}</td>)}</tr>
                 <tr><th scope="row">What it reads</th>{PLANS.map((p) => <td key={p.id}>{sourcesText(p)}</td>)}</tr>
                 <tr><th scope="row">People</th>{PLANS.map((p) => <td key={p.id} className="num">{p.allowances.seats === null ? "–" : fmtNum(p.allowances.seats)}</td>)}</tr>
                 <tr><th scope="row">Time with us</th>{PLANS.map((p) => <td key={p.id}>{p.human ?? "None"}</td>)}</tr>
@@ -110,9 +109,8 @@ export default function PlanPage() {
           <h3 id="d-rules" className="detail-h">The fine print on credits</h3>
           <ul className="detail-bullets">
             <li>Credits you don’t use roll over for {CREDIT_RULES.rolloverMonths} month, up to one month’s worth.</li>
-            <li>A job can borrow up to {Math.round(CREDIT_RULES.borrowFraction * 100)}% of next month’s credits, so a busy week doesn’t stop.</li>
-            <li>Need more? {fmtNum(CREDIT_RULES.topUp.credits)} extra credits cost {money(CREDIT_RULES.topUp.price)}.</li>
-            {usage.data && <li>Your team answered {fmtNum(usage.data.answers)} {usage.data.answers === 1 ? "question" : "questions"} this month. Your plan covers {fmtNum(plan.allowances.answersPerMonth)}.</li>}
+            <li>Need more? {fmtNum(CREDIT_PACKS[0]!.credits)} extra credits cost {money(CREDIT_PACKS[0]!.price)}.</li>
+            {usage.data && <li>Your team answered {fmtNum(usage.data.answers)} {usage.data.answers === 1 ? "question" : "questions"} this month.</li>}
           </ul>
         </section>
 

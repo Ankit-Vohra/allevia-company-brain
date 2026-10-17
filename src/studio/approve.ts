@@ -88,7 +88,7 @@ export async function proposeStudioDraft(
   const why = [
     `Tara: ${o.assessment.verdict} (${o.assessment.subject}).`,
     rec ? `Variant ${rec.label} recommended; Nisha: ${o.fidelity.find((f) => f.assetId === rec.id)?.note ?? "not checked"}.` : "No variant passed Nisha's check.",
-    `Uses ${CREDIT_COSTS.static_post} Studio credit on approval.`,
+    `Uses ${CREDIT_COSTS.static_post} credits on approval.`,
   ].join(" ");
   return serial(g.name, async () => {
     const [pending] = await g.roQuery<{ id: string }>(
@@ -205,7 +205,7 @@ export async function finalizeStudioDraft(g: GraphHandle, approvalId: string, p:
     const status = a.id === variantId ? "approved" : a.id === s.originalId ? "used" : "declined";
     await upsertNode(g, { type: "Asset", id: a.id, name: a.name, props: { status } }, now);
   }
-  await addObservation(g, { subject: contentId, metric: "credits_charged", value: s.credits, unit: "credits", asOf, src: approvalId, evidence: "Product design §4.2: a static post uses 1 Studio credit, spent on approval." }, now);
+  await addObservation(g, { subject: contentId, metric: "credits_charged", value: s.credits, unit: "credits", asOf, src: approvalId, evidence: `shared/plans.ts CREDIT_PRICES: a picture or post uses ${CREDIT_COSTS.static_post} credits, spent on approval.` }, now);
   await addObservation(g, { subject: contentId, metric: "usd_cost", value: POST_COST_USD, unit: "USD", asOf, src: approvalId, conf: 0.5, evidence: POST_COST_EVIDENCE }, now);
   const [ap] = await g.roQuery<{ name: string; result: string | null }>("MATCH (a:Entity:Approval {id:$id}) RETURN a.name AS name, a.result AS result", { id: approvalId });
   await upsertNode(g, { type: "Approval", id: approvalId, name: ap?.name ?? approvalId, props: { result: ap?.result || `Draft post saved (${contentId}); not published.`, contentId } }, now);

@@ -187,7 +187,7 @@ export function productPlan(): string {
 const starter = PLAN_BY_ID.starter, growth = PLAN_BY_ID.growth, pro = PLAN_BY_ID.pro;
 const planLines = (p: typeof growth) => {
   const a = p.allowances;
-  const out = [p.id === "growth" ? "Everything in Starter" : "Everything in Growth", `Up to ${Math.floor(a.studioCreditsPerMonth / CREDIT_COSTS.static_post)} posts or ${Math.floor(a.studioCreditsPerMonth / CREDIT_COSTS.reel)} reels a month`, `${a.answersPerMonth} questions a month`, a.locations && a.locations > 1 ? `Up to ${a.locations} locations, ${a.seats} seats` : `${a.locations} location, ${a.seats} seats`];
+  const out = [p.id === "growth" ? "Everything in Starter" : "Everything in Growth", `${a.creditsPerMonth.toLocaleString("en-US")} credits a month`, `Up to ${Math.floor(a.creditsPerMonth / CREDIT_COSTS.static_post)} posts or ${Math.floor(a.creditsPerMonth / CREDIT_COSTS.reel)} short videos`, a.locations && a.locations > 1 ? `Up to ${a.locations} locations, ${a.seats} seats` : `${a.locations} location, ${a.seats} seats`];
   out.push(p.id === "growth" ? "A setup call with a person from our team" : "A strategist an hour a month");
   return out;
 };

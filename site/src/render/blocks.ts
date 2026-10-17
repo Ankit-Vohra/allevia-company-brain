@@ -43,8 +43,8 @@ export function priceLine(): string {
 /** What each plan includes, as short lines. */
 function planLines(p: Plan): string[] {
   const a = p.allowances;
-  if (p.id === "pause") return ["Weekly summary", "Review alerts", `${a.answersPerMonth} questions a month`];
-  const lines = [a.studioCreditsPerMonth ? postsAndReels(a.studioCreditsPerMonth) : "Posters, ads and reels start on Growth", `${a.answersPerMonth} questions a month`];
+  if (p.id === "pause") return ["Weekly summary", "Review alerts", `${a.creditsPerMonth} credits a month`];
+  const lines = [`${a.creditsPerMonth.toLocaleString("en-US")} credits a month`, postsAndReels(a.creditsPerMonth)];
   lines.push(a.locations && a.locations > 1 ? `Up to ${a.locations} locations, ${a.seats} seats` : `${a.locations} location, ${a.seats} seats`);
   if (p.human) lines.push(p.human);
   return lines;

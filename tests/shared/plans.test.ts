@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ALLEVIA_90, ANNUAL_DISCOUNT, CREDIT_COSTS, CREDIT_RULES, CURRENCIES, PLANS, PLAN_BY_ID, isCurrency, yearlyMonthly, type Money } from "../../shared/plans.js";
+import { ALLEVIA_90, ANNUAL_DISCOUNT, CREDIT_COSTS, CREDIT_PACKS, CREDIT_PRICES, CREDIT_RULES, CURRENCIES, TRIAL, PLANS, PLAN_BY_ID, isCurrency, yearlyMonthly, type Money } from "../../shared/plans.js";
 
 function expectPriced(label: string, m: Money): void {
   for (const c of CURRENCIES) {
@@ -24,7 +24,7 @@ describe("plans", () => {
     expectPriced("allevia90 instalment", ALLEVIA_90.instalments.each);
     expectPriced("founding upfront", ALLEVIA_90.founding.upfront);
     expectPriced("founding growth", ALLEVIA_90.founding.growthLocked);
-    expectPriced("top-up", CREDIT_RULES.topUp.price);
+    for (const pack of CREDIT_PACKS) expectPriced(`pack ${pack.id}`, pack.price);
   });
   it("matches the recommended prices (docs/pricing-research.md 4.6)", () => {
     expect(PLAN_BY_ID.starter.price.monthly).toEqual({ USD: 99, GBP: 75, AED: 369, AUD: 145 });
@@ -35,7 +35,8 @@ describe("plans", () => {
     expect(ALLEVIA_90.upfront.USD).toBe(1490);
     expect(ALLEVIA_90.instalments).toEqual({ count: 3, each: { USD: 529, GBP: 399, AED: 1949, AUD: 769 } });
     expect(ALLEVIA_90.founding.upfront.GBP).toBe(749);
-    expect(CREDIT_RULES.topUp).toEqual({ credits: 20, price: { USD: 59, GBP: 45, AED: 219, AUD: 85 } });
+    expect(CREDIT_PACKS).toEqual([{ id: "pack100", credits: 100, price: { USD: 29, GBP: 22, AED: 109, AUD: 42 } }]);
+    expect(TRIAL).toEqual({ credits: 100, days: 14 });
   });
   it("takes 30% off when paid yearly, on every paid plan", () => {
     expect(ANNUAL_DISCOUNT).toBe(0.3);
@@ -62,17 +63,21 @@ describe("plans", () => {
     }
   });
   it("carries the included allowances", () => {
-    expect(PLANS.map((p) => p.allowances.studioCreditsPerMonth)).toEqual([0, 40, 120, 200, 0]);
-    expect(PLANS.map((p) => p.allowances.answersPerMonth)).toEqual([100, 300, 800, 1500, 10]);
+    expect(PLANS.map((p) => p.allowances.creditsPerMonth)).toEqual([300, 800, 2000, 4000, 20]);
     expect(PLANS.map((p) => p.allowances.seats)).toEqual([2, 5, 15, 25, null]);
     expect(PLANS.map((p) => p.allowances.answerModelBudgetUsd ?? null)).toEqual([30, 60, 110, 200, null]);
     expect(PLAN_BY_ID.pause.allowances.sources).toEqual({ kind: "read_only" });
     // Allevia 90 includes Growth-level allowances, and after it the owner moves to Growth, Starter or Pause
-    expect(PLAN_BY_ID[ALLEVIA_90.includesPlan].allowances.studioCreditsPerMonth).toBe(40);
+    expect(PLAN_BY_ID[ALLEVIA_90.includesPlan].allowances.creditsPerMonth).toBe(800);
     expect(ALLEVIA_90.afterProgram.alternatives.map((id) => PLAN_BY_ID[id].name)).toEqual(["Starter", "Pause"]);
   });
-  it("prices outputs in credits", () => {
-    expect(CREDIT_COSTS).toEqual({ static_post: 1, carousel: 2, shoot: 3, reel: 4, text: 0 });
+  it("prices every service from one credit pool, the founder's list of 17 October", () => {
+    const price = (k: keyof typeof CREDIT_PRICES) => CREDIT_PRICES[k].credits;
+    expect([price("question_quick"), price("question_deep"), price("draft_text"), price("meeting_book"), price("website_checkup"), price("public_data")]).toEqual([1, 5, 1, 1, 10, 5]);
+    expect([price("picture"), price("carousel"), price("photo_ad"), price("product_shoot"), price("video_short")]).toEqual([5, 10, 15, 15, 40]);
+    expect([price("todays_note"), price("snapshot")]).toEqual([0, 0]);
+    for (const [k, v] of Object.entries(CREDIT_PRICES)) expect(v.charged === "never", k).toBe(v.credits === 0);
+    expect(CREDIT_COSTS).toEqual({ static_post: 5, carousel: 10, shoot: 15, reel: 40, text: 0 });
   });
   it("recognises currency codes", () => {
     expect(isCurrency("GBP") && !isCurrency("INR") && !isCurrency("usd")).toBe(true);

@@ -13,11 +13,11 @@ export const isCurrency = (s: string): s is Currency => (CURRENCIES as readonly 
 
 export type PlanId = "starter" | "growth" | "pro" | "scale" | "pause";
 
-// What a plan gates: volume, creative, seats, locations and human time. Every plan has every agent in every department of
-// shared/roster.ts, the company brain and every connection.
+// What a plan gates: credits, seats, locations and human time. Every plan has every agent in every department of
+// shared/roster.ts, the company brain, every connection and every service: credits are one pool, and each service costs
+// credits in line with what it costs us (CREDIT_PRICES), so any mix of use keeps the margin (the founder, 17 October 2026).
 export interface PlanAllowances {
-  studioCreditsPerMonth: number;                 // 0: no AI pictures or video (Starter can buy credit packs)
-  answersPerMonth: number;                       // fair use
+  creditsPerMonth: number;                       // one pool for questions, drafts, check-ups, pictures and video
   answerModelBudgetUsd?: number;                 // the hidden model budget behind the answers; never shown to the owner
   // 3 named sources, every source, or the sources kept read-only (Pause)
   sources: { kind: "limited"; max: number; names: string[] } | { kind: "all" } | { kind: "read_only" };
@@ -59,7 +59,7 @@ export const PLANS: readonly Plan[] = [
     who: "Owners who want their tools working together, with advice and follow-ups",
     price: paid({ USD: 99, GBP: 75, AED: 369, AUD: 145 }),
     allowances: {
-      studioCreditsPerMonth: 0, answersPerMonth: 100, answerModelBudgetUsd: 30,
+      creditsPerMonth: 300, answerModelBudgetUsd: 30,
       sources: { kind: "all" }, locations: 1, seats: 2,
     },
     rhythm: "Today's note, the website check-up each month, the growth plan",
@@ -70,10 +70,10 @@ export const PLANS: readonly Plan[] = [
     id: "growth",
     name: "Growth",
     isDefault: true,
-    who: "Owners who want the whole team, pictures and reels included",
+    who: "Owners who want the whole team busy every week",
     price: paid({ USD: 249, GBP: 189, AED: 919, AUD: 359 }),
     allowances: {
-      studioCreditsPerMonth: 40, answersPerMonth: 300, answerModelBudgetUsd: 60,
+      creditsPerMonth: 800, answerModelBudgetUsd: 60,
       sources: { kind: "all" }, locations: 1, seats: 5,
     },
     rhythm: "Everything in Starter, plus a monthly report",
@@ -86,7 +86,7 @@ export const PLANS: readonly Plan[] = [
     who: "More places, more content and a person on our side",
     price: paid({ USD: 499, GBP: 379, AED: 1839, AUD: 719 }),
     allowances: {
-      studioCreditsPerMonth: 120, answersPerMonth: 800, answerModelBudgetUsd: 110,
+      creditsPerMonth: 2000, answerModelBudgetUsd: 110,
       sources: { kind: "all" }, locations: 3, seats: 15,
     },
     rhythm: "The full operating rhythm, per location",
@@ -100,7 +100,7 @@ export const PLANS: readonly Plan[] = [
     who: "Many locations, regulated work, or run it with us",
     price: paid({ USD: 999, GBP: 749, AED: 3669, AUD: 1449 }),
     allowances: {
-      studioCreditsPerMonth: 200, answersPerMonth: 1500, answerModelBudgetUsd: 200,
+      creditsPerMonth: 4000, answerModelBudgetUsd: 200,
       sources: { kind: "all" }, locations: 5, seats: 25,
     },
     rhythm: "The full operating rhythm, per location",
@@ -113,7 +113,7 @@ export const PLANS: readonly Plan[] = [
     who: "Seasonal businesses or a break",
     price: { monthly: { USD: 29, GBP: 22, AED: 109, AUD: 42 } },
     allowances: {
-      studioCreditsPerMonth: 0, answersPerMonth: 10,
+      creditsPerMonth: 20,
       sources: { kind: "read_only" }, locations: null, seats: null,
     },
     rhythm: "Weekly brief, review alerts",
@@ -161,20 +161,52 @@ export const ALLEVIA_90: Allevia90 = {
   afterProgram: { defaultPlan: "growth", alternatives: ["starter", "pause"] },
 };
 
-// ---------- Studio credits (§4.2) ----------
+// ---------- Credits: one pool, priced by what each service costs us ----------
 
-// Credits per finished, approved output. Spent only on approval: a rejected draft costs the owner nothing.
+// One credit is about $0.10 of what the work costs us to make (model, pictures, data), so the price list below keeps every
+// plan's margin whatever the owner spends credits on. The owner's rule in plain words: you only spend credits on what you
+// ask for or approve; what the team does on its own (Today's note, the stand-up, the monthly check-up) is free.
+export type CreditService =
+  | "question_quick" | "question_deep" | "draft_text" | "meeting_book" | "website_checkup" | "public_data"
+  | "picture" | "carousel" | "photo_ad" | "product_shoot" | "video_short" | "todays_note" | "snapshot";
+
+/** When a service is charged: when the answer arrives, when the owner says OK, when the owner runs it, or never. */
+export type CreditCharge = "answered" | "approved" | "run" | "never";
+
+export const CREDIT_PRICES: Readonly<Record<CreditService, { credits: number; label: string; charged: CreditCharge }>> = {
+  question_quick: { credits: 1, label: "Quick question", charged: "answered" },
+  question_deep: { credits: 5, label: "Deep question (the whole team looks into it)", charged: "answered" },
+  draft_text: { credits: 1, label: "Email, reply or caption", charged: "approved" },
+  meeting_book: { credits: 1, label: "Book a meeting", charged: "approved" },
+  website_checkup: { credits: 10, label: "Website check-up", charged: "run" },
+  public_data: { credits: 5, label: "Rivals and public data", charged: "run" },
+  picture: { credits: 5, label: "Picture or post", charged: "approved" },
+  carousel: { credits: 10, label: "Carousel (up to 6 frames)", charged: "approved" },
+  photo_ad: { credits: 15, label: "Photo to premium ad", charged: "approved" },
+  product_shoot: { credits: 15, label: "Product shoot (4 angles from one photo)", charged: "approved" },
+  video_short: { credits: 40, label: "Short video (15 s)", charged: "approved" },
+  todays_note: { credits: 0, label: "Today's note", charged: "never" },
+  snapshot: { credits: 0, label: "Brain Snapshot", charged: "never" },
+};
+
+/** The Studio's outputs in the shared pool (kept for the Studio code that charges on approval). */
 export const CREDIT_COSTS = {
-  static_post: 1,   // post, GBP post or story: 1 image, up to 3 variants, 2 free tweak rounds
-  carousel: 2,      // up to 6 frames
-  shoot: 3,         // project or product shoot: 4 angles from one phone photo
-  reel: 4,          // up to 15 s, with script, cover and captions
-  text: 0,          // answers, briefs, review replies, captions, emails, reports, analysis
+  static_post: CREDIT_PRICES.picture.credits,        // post, GBP post or story: 1 image, up to 3 variants, 2 free tweak rounds
+  carousel: CREDIT_PRICES.carousel.credits,          // up to 6 frames
+  shoot: CREDIT_PRICES.product_shoot.credits,        // project or product shoot: 4 angles from one phone photo
+  reel: CREDIT_PRICES.video_short.credits,           // up to 15 s, with script, cover and captions
+  text: 0,                                           // the text itself is charged as draft_text when approved
 } as const;
 export type CreditOutput = keyof typeof CREDIT_COSTS;
 
+/** Credits bought on top of a plan. They never expire while the business has a plan. */
+export const CREDIT_PACKS: readonly { id: string; credits: number; price: Money }[] = [
+  { id: "pack100", credits: 100, price: { USD: 29, GBP: 22, AED: 109, AUD: 42 } },
+];
+
 export const CREDIT_RULES = {
-  rolloverMonths: 1,         // unused credits roll over for 1 month, up to one month's allowance
-  borrowFraction: 0.2,       // a task may borrow up to 20% of next month's credits
-  topUp: { credits: 20, price: { USD: 59, GBP: 45, AED: 219, AUD: 85 } as Money },
+  rolloverMonths: 1,         // unused plan credits roll over for 1 month, up to one month's allowance
 } as const;
+
+/** A new sign-up starts with these, before choosing a plan. */
+export const TRIAL = { credits: 100, days: 14 } as const;

@@ -3,6 +3,7 @@
 // variants (DERIVED_FROM {step, treatment}, PRODUCED by Tara), Nisha's fidelity check (REVIEWED, badges, fails
 // closed), Dev's caption (voice rules applied), the approval card, and what approving it writes.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { CREDIT_COSTS } from "../../shared/plans.js";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -129,7 +130,7 @@ describe("studio pipeline (integration)", () => {
     const card = (await studioCard(g, r.approvalId))!;
     expect(card.status).toBe("pending");
     expect(card.payload.studio.recommended).toBe(r.variants[0]!.id);
-    expect(card.payload.studio.credits).toBe(1);
+    expect(card.payload.studio.credits).toBe(CREDIT_COSTS.static_post);
     expect(card.payload.studio.pageId).toBe(PAGE);
     expect(card.payload.body).toContain(r.caption.caption);
     const proposal = events.find((e) => e.type === "proposal") as Extract<AgentEvent, { type: "proposal" }>;
@@ -153,7 +154,7 @@ describe("studio pipeline (integration)", () => {
     expect(await one("MATCH (:Content {id:$c})-[:PROMOTES]->(p:Content) RETURN p.id AS p", { c: ok.contentId })).toEqual({ p: PROJECT });
     const obs = await g.roQuery<{ metric: string; value: number; unit: string }>(
       "MATCH (o:Observation)-[:MEASURES]->(:Content {id:$c}) RETURN o.metric AS metric, o.value AS value, o.unit AS unit ORDER BY metric, o.id", { c: ok.contentId });
-    expect(obs).toEqual([{ metric: "credits_charged", value: 1, unit: "credits" }, { metric: "usd_cost", value: 0.5, unit: "USD" }]);
+    expect(obs).toEqual([{ metric: "credits_charged", value: CREDIT_COSTS.static_post, unit: "credits" }, { metric: "usd_cost", value: 0.5, unit: "USD" }]);
     const statuses = await g.roQuery<{ label: string | null; status: string }>(
       "MATCH (a:Asset) WHERE a.id IN $ids RETURN a.label AS label, a.status AS status ORDER BY label, a.id", { ids: [r.original.id, ...r.variants.map((v) => v.id)] });
     expect(statuses.map((s) => s.status).sort()).toEqual(["approved", "declined", "used"]);
