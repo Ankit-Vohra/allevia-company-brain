@@ -16,9 +16,12 @@
 // A month's plan credits are granted lazily on the first read or spend in it, with what carries over from the month before
 // (ledger.ts). A per-business lock in this process keeps the writes of one business in order.
 //
-// The plan comes from the subscription (src/billing/subscription.ts). A business with no subscription record is on Growth:
-// that is the founder's own businesses, the demos and every business set up before credits existed, so nothing they do now
-// stops. A business that signs up starts on the trial instead (grant "trial" writes its subscription).
+// The plan comes from the subscription (src/billing/subscription.ts). A business with no subscription record:
+//   - registered on or after CREDITS_SINCE, not a demo: it is new, so it starts on the trial (TRIAL: 100 credits for 14 days
+//     from the day it was set up), written on its first use (a read-only view works it out without writing);
+//   - otherwise (the founder's own businesses, the demos, every business set up before credits existed, or one not in the
+//     registry): Growth, so nothing they do now stops.
+// The login work's sign-up calls grant(slug, 100, "trial", ref); a business has one trial, so that and the default agree.
 //
 // Graph rules (src/graph/safety.ts): sums are done here, never in Cypher; every ORDER BY ends in an id; entries are found by
 // `key` (indexed), never by an `{id: ...}` anchor, which the codebase keeps for Entity nodes.
@@ -42,8 +45,12 @@ export { monthOf } from "./ledger.js";
 /** The ledger's indexes (part of the schema in graph/indexes.ts; made here too for a graph made before them). */
 export const CREDIT_INDEXES = INDEXES.filter((i) => i.label === "CreditEntry");
 
-/** The plan a business with no subscription record is on. */
+/** The plan a business with no subscription record is on, when it is not new (see CREDITS_SINCE). */
 export const DEFAULT_PLAN: PlanId = "growth";
+
+/** A business registered from this moment on, with no subscription record, starts on the trial (credits began 17 October 2026). */
+export const CREDITS_SINCE = Date.UTC(2026, 9, 17);
+const DAY = 86_400_000;
 
 /** Out of credits: the API answers 402 with this sentence, and the web app and Discord show it with two buttons. */
 export class OutOfCredits extends Error {
@@ -88,7 +95,8 @@ export interface Hold {
   release(): void;
 }
 
-interface Plan { plan: PlanId | null; status: SubscriptionStatus; allowance: number; implicit: boolean; trialEndsAt?: number }
+// autoTrial: a new business on the trial that has not been written yet (a read-only view): its trial credits are counted as if granted
+interface Plan { plan: PlanId | null; status: SubscriptionStatus; allowance: number; implicit: boolean; trialEndsAt?: number; autoTrial?: boolean }
 
 interface Row extends EntryRow { opens?: boolean | null; implicit?: boolean | null; id: string }
 
@@ -152,6 +160,22 @@ export class Credits {
     if (sub.status === "paused") return { plan: "pause", status: "paused", allowance: PLAN_BY_ID.pause.allowances.creditsPerMonth, implicit: false, ...trial };
     const plan = sub.plan ?? def;
     return { plan, status: "active", allowance: PLAN_BY_ID[plan].allowances.creditsPerMonth, implicit: false, ...trial };
+  }
+
+  // What the business is on. Called outside the lock: starting a new business's trial is a grant, which takes it.
+  private async resolve(slug: string, g: GraphHandle, readOnly?: boolean): Promise<Plan> {
+    const sub = await this.subscription(slug);
+    if (sub) return this.planOf(sub);
+    const t = await getTenant(slug, this.o.tenantOpts).catch(() => null);
+    if (!t || t.demo === true || !(Number(t.createdAt) >= CREDITS_SINCE)) return this.planOf(null);
+    const start = Number(t.createdAt);
+    if (readOnly) {
+      const trial: Subscription = { slug, plan: null, cycle: "monthly", status: "trial", startedAt: start, trialEndsAt: start + TRIAL.days * DAY, provider: "test", updatedAt: start };
+      return { ...this.planOf(trial), autoTrial: true };
+    }
+    await this.grant(slug, TRIAL.credits, "trial", "default", { g, trialStart: start });
+    this.log(`${slug}: a new business with no plan: started its trial`);
+    return this.planOf(await this.subscription(slug));
   }
 
   // ---------- reading ----------
@@ -231,8 +255,8 @@ export class Credits {
     const out = await g.query<{ key: string; created: boolean }>(
       `UNWIND $rows AS r
        MERGE (e:CreditEntry {key: r.key})
-       ON CREATE SET e.id = r.id, e.month = r.month, e.service = r.service, e.credits = r.credits, e.reason = r.reason, e.by = r.by, e.ref = r.ref,
-                     e.at = r.at, e.opens = r.opens, e.implicit = r.implicit, e.nonce = r.nonce
+       ON CREATE SET e += {id: r.id, month: r.month, service: r.service, credits: r.credits, reason: r.reason, by: r.by, ref: r.ref,
+                           at: r.at, opens: r.opens, implicit: r.implicit, nonce: r.nonce}
        RETURN r.key AS key, e.nonce = r.nonce AS created`, { rows });
     for (const r of out) created.set(r.key, r.created === true);
     const links = entries.flatMap((e) => (created.get(e.key) ? (e.for ?? []) : []).map((f) => ({ key: e.key, for: f, at: e.at, asOf: isoDate(e.at) })));
@@ -255,6 +279,7 @@ export class Credits {
       const opening = await this.openingRows(g, month, plan, "allevia");
       if (o.readOnly) {
         rows = [...rows, ...opening.filter((e) => e.month === month).map((e) => ({ key: e.key, id: entryId(e.key), service: e.service, credits: e.credits, at: e.at, opens: e.opens ?? null, implicit: e.implicit ?? null }))];
+        if (plan.autoTrial && !rows.some((r) => r.key === "trial")) rows.push({ key: "trial", id: entryId("trial"), service: "trial", credits: TRIAL.credits, at: this.now(), opens: null, implicit: null });
       } else {
         await this.write(g, opening);
         this.log(`${slug}: opened ${month} (${opening.length} entr${opening.length === 1 ? "y" : "ies"})`);
@@ -275,7 +300,7 @@ export class Credits {
   /** The month as it stands. `readOnly` (the public demo view) writes nothing: a month not opened yet is worked out as if it were. */
   async balance(slug: string, o: At & { readOnly?: boolean } = {}): Promise<BalanceDto> {
     const g = await this.graph(slug, o);
-    const plan = this.planOf(await this.subscription(slug));
+    const plan = await this.resolve(slug, g, o.readOnly);
     const read = async () => {
       const { month, rows } = await this.month(g, slug, plan, o);
       return this.dto(month, this.stateOf(rows, plan, this.now()), plan);
@@ -357,9 +382,9 @@ export class Credits {
     const g = await this.graph(slug, o);
     const needed = neededFor(service);
     const rec = { amount: needed, until: this.now() + (this.o.holdMs ?? 30 * 60_000) };
+    const plan = needed === 0 ? undefined : await this.resolve(slug, g);
     await this.locked(g.name, async () => {
-      if (needed === 0) return;
-      const plan = this.planOf(await this.subscription(slug));
+      if (!plan) return;
       const { month, rows } = await this.month(g, slug, plan);
       const b = this.dto(month, this.stateOf(rows, plan, this.now()), plan);
       const heldNow = this.held(g.name);
@@ -390,8 +415,8 @@ export class Credits {
     if (!o.ref) throw new Error("a spend needs a ref (what it is for)");
     const g = await this.graph(slug, o);
     const key = `${service}:${o.ref}${o.part ? `:${o.part}` : ""}`;
+    const plan = await this.resolve(slug, g);
     return this.locked(g.name, async () => {
-      const plan = this.planOf(await this.subscription(slug));
       const { month, rows } = await this.month(g, slug, plan);
       if (rows.some((r) => r.key === key) || (await this.exists(g, key))) return { charged: 0, duplicate: true, key };
       if (!o.allowNegative) {
@@ -420,13 +445,14 @@ export class Credits {
    * a bought pack, "plan" tops this month's plan credits up to the plan's allowance (after an upgrade), anything else is
    * an addition from the Allevia team. Once per ref for each reason.
    */
-  async grant(slug: string, credits: number, reason: string, ref: string, o: At & { by?: string } = {}): Promise<{ granted: number; duplicate?: boolean }> {
+  async grant(slug: string, credits: number, reason: string, ref: string, o: At & { by?: string; trialStart?: number } = {}): Promise<{ granted: number; duplicate?: boolean }> {
     if (!Number.isInteger(credits) || credits === 0) throw new Error(`credits must be a whole number other than 0, got ${credits}`);
     if (!ref) throw new Error("a grant needs a ref");
     const now = this.now();
     let sub = await this.subscription(slug);
     if (reason === "trial" && !sub) {
-      sub = await putSubscription({ slug, plan: null, cycle: "monthly", status: "trial", startedAt: now, trialEndsAt: now + TRIAL.days * 86_400_000, provider: "test", updatedAt: now }, this.o.tenantOpts);
+      const start = o.trialStart ?? now;
+      sub = await putSubscription({ slug, plan: null, cycle: "monthly", status: "trial", startedAt: start, trialEndsAt: start + TRIAL.days * DAY, provider: "test", updatedAt: now }, this.o.tenantOpts);
     }
     const g = await this.graph(slug, o);
     return this.locked(g.name, async () => {
@@ -440,7 +466,7 @@ export class Credits {
         if (planned > 0 && rows.some((r) => r.opens === true && r.implicit === true) && sub?.status === "trial") {
           entries.push({ key: `plan:${month}:trial-start`, month, service: "plan", credits: -planned, reason: "The trial starts instead of a plan", by, ref, at: now });
         }
-        entries.push({ key: `trial:${ref}`, month, service: "trial", credits, reason: `Your ${TRIAL.days}-day trial`, by, ref, at: now });
+        entries.push({ key: "trial", month, service: "trial", credits, reason: `Your ${TRIAL.days}-day trial`, by, ref, at: now }); // one trial a business
       } else if (reason === "pack") {
         entries.push({ key: `pack:${ref}`, month, service: "pack", credits, reason: `${credits} credits bought`, by, ref, at: now });
       } else if (reason === "plan") {
@@ -457,7 +483,7 @@ export class Credits {
   /** After a plan change: this month's plan credits go up to the new plan's allowance (never down). */
   async topUpPlan(slug: string, ref: string, o: At = {}): Promise<number> {
     const g = await this.graph(slug, o);
-    const plan = this.planOf(await this.subscription(slug));
+    const plan = await this.resolve(slug, g);
     const granted = await this.locked(g.name, async () => {
       const { rows } = await this.month(g, slug, plan);
       return rows.filter((r) => r.service === "plan").reduce((s, r) => s + whole(r.credits), 0);

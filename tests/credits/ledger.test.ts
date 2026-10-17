@@ -219,6 +219,32 @@ describe("the credits service (test database)", () => {
     expect((await c.balance("cr_up")).allowance).toBe(2000); // this month's credits stay; Starter's start next month
   });
 
+  it("starts a new business with no subscription on the trial from the day it was set up; a demo, an older business or an unregistered one is on Growth", async () => {
+    at(Date.UTC(2026, 9, 18, 9, 0));
+    const meta = await openGraphByName(metaGraph);
+    const register = (slug: string, createdAt: number, demo = false) =>
+      meta.query("CREATE (t:Tenant {slug:$slug, name:$slug, createdAt:$createdAt, demo:$demo})", { slug, createdAt, demo });
+    const setUp = Date.UTC(2026, 9, 18, 8, 0);
+    await register("cr_new", setUp);
+    await register("cr_demo", setUp, true);
+    await register("cr_old", Date.UTC(2026, 8, 1));
+
+    const fresh = await setup("cr_new");
+    const ro = await fresh.c.balance("cr_new", { readOnly: true }); // the demo-style read writes nothing
+    expect(ro).toMatchObject({ status: "trial", plan: null, allowance: 0, trial: 100, left: 100 });
+    expect(await count(fresh.g)).toBe(0);
+    const b = await fresh.c.balance("cr_new");
+    expect(b).toMatchObject({ status: "trial", trial: 100, left: 100, trialEndsAt: new Date(setUp + 14 * 86_400_000).toISOString() });
+    // the sign-up's own grant finds the trial already there: one trial a business
+    expect(await fresh.c.grant("cr_new", 100, "trial", "user:new-owner")).toEqual({ granted: 0, duplicate: true });
+    expect((await fresh.c.balance("cr_new")).left).toBe(100);
+
+    for (const slug of ["cr_demo", "cr_old", "cr_unregistered"]) {
+      const { c } = await setup(slug);
+      expect(await c.balance(slug), slug).toMatchObject({ status: "active", plan: "growth", allowance: 800, left: 800 });
+    }
+  });
+
   it("prices from the shared list", () => {
     expect(CREDIT_PRICES.question_quick.credits).toBe(1);
     expect(CREDIT_PRICES.question_deep.credits).toBe(5);

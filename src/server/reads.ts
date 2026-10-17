@@ -1,5 +1,6 @@
 // What the API reads from a tenant graph, shaped into the web app's JSON (types.ts). Every query here is a
 // GRAPH.RO_QUERY with a timeout and a LIMIT; embeddings and bookkeeping props never leave this file.
+import { approvalCharges, chargesTotal, studioBlockOf } from "../../shared/credits.js";
 import { z } from "zod";
 import type { AgentEvent, EdgeRef, NodeRef, SourceRef, TurnChecks } from "../../shared/contracts.js";
 import { AGENTS, agentById } from "../../shared/roster.js";
@@ -554,6 +555,7 @@ function toApproval(r: Record<string, unknown>): ApprovalDto {
     ...(iso(r.decidedAt) ? { decidedAt: iso(r.decidedAt) } : {}),
     ...(typeof r.result === "string" && r.result ? { result: r.result } : {}),
     ...(r.simulated === true || r.recSimulated === true || kind === "pause_ad" ? { simulated: true } : {}),
+    ...(status === "pending" ? { credits: chargesTotal(approvalCharges(kind, studioBlockOf(r.payload))) } : {}),
   };
 }
 

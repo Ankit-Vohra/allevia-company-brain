@@ -161,6 +161,12 @@ export function buttonPort(i: ButtonInteraction): ButtonPort {
       if (i.deferred || i.replied) await i.followUp(p);
       else await i.reply(p);
     },
+    replyWith: async (m, opts) => {
+      const out = payload(m);
+      const p = { content: out.content ?? "", components: out.components ?? [], allowedMentions: NO_PINGS, ...(opts?.ephemeral ? { flags: MessageFlags.Ephemeral as const } : {}) };
+      if (i.deferred || i.replied) await i.followUp(p);
+      else await i.reply(p);
+    },
     update: async (m) => {
       const p = payload(m);
       if (i.deferred || i.replied) await i.editReply({ content: p.content ?? null, components: p.components ?? [] });

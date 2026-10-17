@@ -37,6 +37,8 @@ import { personOfDiscordUser } from "./hub-graph.js";
 import { pathViewUrl, renderAnswer, renderCitations, splitMessage, threadName } from "./format.js";
 import { findThreadSession, linkSessionThread, openThreadSession, recentUnlinkedSessions } from "./sessions.js";
 import { ThrottledEditor, WorkLogState } from "./worklog.js";
+import type { Credits } from "../credits/index.js";
+import { isOutOfCredits, outOfCreditsMessage } from "./credits.js";
 
 // ---------- ports ----------
 
@@ -96,6 +98,7 @@ export interface ButtonPort {
   createThread?(name: string): Promise<ThreadPort>; // a new public thread in the channel the card is in (for /continue)
   thread?(): ThreadPort | null;                 // the thread the button is in (a quick reply carries the conversation on)
   reply(text: string, opts?: { ephemeral?: boolean }): Promise<void>;
+  replyWith?(m: Outgoing, opts?: { ephemeral?: boolean }): Promise<void>; // a reply with link buttons (out of credits)
   update(m: Outgoing): Promise<void>;           // edit the card the button is on
 }
 
@@ -135,6 +138,9 @@ export interface BotDeps {
   // The buttons on a post that waits for its time (Cancel) or did not go out (Try again): the same functions the web page calls
   // (src/publish/executor.ts), for this business only. Absent: the buttons say to use the web app.
   publish?: { cancel(postId: string): Promise<{ ok: boolean; message: string }>; retry(postId: string, o: { anyway: boolean }): Promise<{ ok: boolean; message: string }> };
+  // Credits (src/credits): /checkup holds its 10 and charges when it finishes; an OK spends what the card costs. Absent: the
+  // process's own (the business's graph is this bot's). Questions are charged by `ask` (src/credits/ask.ts chargedAsk).
+  credits?: Credits;
   log?: (line: string) => void;
 }
 
@@ -454,10 +460,28 @@ export class AlleviaBot {
     const site = await tenantSite(this.d.graph, this.d.tenant);
     if (!site?.url) return c.respond("We don't have your website address yet, so there is nothing to check.");
     const host = site.url.replace(/^https?:\/\//, "");
+    // 10 credits, held now (none left: the owner's sentence and the plan page's buttons) and charged when it finishes
+    let hold: Awaited<ReturnType<Credits["hold"]>> | undefined;
+    const busy = (this.d.checkup as { busy?: (t: string) => boolean }).busy?.(this.d.tenant) ?? false;
+    if (this.d.credits && !busy) {
+      try {
+        hold = await this.d.credits.hold(this.d.tenant, "website_checkup", { g: this.d.graph });
+      } catch (e) {
+        if (isOutOfCredits(e)) return c.respond(outOfCreditsMessage(e, this.d.webBase), { ephemeral: true });
+        throw e;
+      }
+    }
     const thread = c.thread() ?? await c.createThread(`Website check-up: ${clip(host, 60)}`);
+    let mine = false;
     const { started } = this.d.checkup.start(this.d.tenant, "owner", (o) => {
+      if (hold) {
+        if (mine && o.ok) void hold.commit({ ref: `checkup:${this.d.tenant}:${this.now()}`, by: "owner" }).catch((e) => this.log(`the check-up was not charged: ${message(e)}`));
+        else hold.release();
+      }
       void this.postCheckup(thread, o).catch((e) => this.log(`posting the check-up failed: ${message(e)}`));
     });
+    mine = started;
+    if (!started) hold?.release();
     await c.respond(started
       ? `Checking ${host} now. It takes about 3 minutes; I'll post the top five fixes in <#${thread.id}> when it's done.`
       : `A check-up of ${host} is already running. I'll post the top five fixes in <#${thread.id}> when it's done.`);
@@ -602,10 +626,15 @@ export class AlleviaBot {
       const actor = await personOfDiscordUser(this.d.graph, b.userId).catch(() => null);
       const after = await decideAndNotify(this.d.graph, this.d.tenant, id, { decision }, {
         now: this.now(), log: (l) => this.log(l), ...(actor ? { actor } : {}), ...(this.d.onDecision ? { onDecision: this.d.onDecision } : {}), ...(this.d.actions ? { actions: this.d.actions } : {}),
+        ...(this.d.credits ? { credits: this.d.credits } : {}),
       });
       const verdict = after.status === "rejected" ? "❌ Rejected by the owner" : `✅ Approved by the owner${after.status === "edited" ? " (edited)" : ""}`;
       await b.update({ content: `${approvalCard(after, { buttons: false }).content}\n${verdict}${after.result ? ` · ${clip(after.result, 200)}` : ""}`, buttons: [] });
     } catch (e) {
+      if (isOutOfCredits(e)) {
+        const m = outOfCreditsMessage(e, this.d.webBase);
+        return b.replyWith ? b.replyWith(m, { ephemeral: true }) : b.reply(`${m.content} ${m.links.map((l) => l.url).join(" ")}`, { ephemeral: true });
+      }
       if (e instanceof DecisionError && e.status === 409) return b.reply(`This one was already decided: ${e.message}`, { ephemeral: true });
       if (e instanceof DecisionError && e.status === 404) return b.reply("That approval no longer exists.", { ephemeral: true });
       this.log(`decision on ${id} failed: ${message(e)}`);
@@ -681,6 +710,12 @@ export class AlleviaBot {
       try {
         result = await this.d.ask({ tenant: this.d.tenant, question, sessionId, asker, channel: "discord" }, emit);
       } catch (e) {
+        if (isOutOfCredits(e)) {
+          // nothing ran: the work log becomes the owner's sentence, with the plan page's two buttons
+          await editor.flush();
+          await logMsg.edit(outOfCreditsMessage(e, this.d.webBase));
+          return;
+        }
         lastError = isDbUnavailable(e) ? WAKING_UP_MESSAGE : message(e);
       }
       await editor.flush();

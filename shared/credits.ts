@@ -42,6 +42,17 @@ export function approvalCharges(kind: string, studio?: StudioPriceCard | null, v
 
 export const chargesTotal = (cs: readonly Charge[]): number => cs.reduce((s, c) => s + CREDIT_PRICES[c.service].credits, 0);
 
+/** The `studio` block of a stored card payload (JSON), when the card is a Studio card. */
+export function studioBlockOf(raw: unknown): StudioPriceCard | null {
+  if (typeof raw !== "string" || !raw.includes('"studio"')) return null;
+  try {
+    const s = (JSON.parse(raw) as { studio?: StudioPriceCard }).studio;
+    return s && Array.isArray(s.variants) ? s : null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------- words ----------
 
 export const creditsWord = (n: number): string => `${Math.abs(n) === 1 ? "credit" : "credits"}`;

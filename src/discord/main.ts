@@ -2,7 +2,8 @@
 // every surface uses (wiring.ts), the API's approval hook, and the discord.js client (client.ts).
 // `npm run cli -- discord [--tenant aamdani]` calls startDiscordBot.
 import { loadConfig, type AlleviaConfig } from "../config.js";
-import { ask } from "../agent/ask.js";
+import { chargedAsk } from "../credits/ask.js";
+import { credits } from "../credits/index.js";
 import type { GraphHandle } from "../graph/client.js";
 import { AlleviaBot } from "./bot.js";
 import { checkupJobs } from "../checkup/jobs.js";
@@ -49,7 +50,9 @@ export async function startDiscordBot(o: { tenant: string; model?: string; log?:
 
   const bot = new AlleviaBot({
     tenant: o.tenant, guildId, channelId, webBase: cfg.webBaseUrl, graph,
-    ask: (input, emit) => ask(input, { ...deps, ...(timeZone ? { timeZone } : {}) }, emit),
+    // the same credits as the web app: a credit held before any work, the answer charged when it arrives (src/credits/ask.ts)
+    ask: (input, emit) => chargedAsk(input, { ...deps, ...(timeZone ? { timeZone } : {}) }, emit, { credits: credits(), g: graph, log }),
+    credits: credits(),
     ...(onDecision ? { onDecision } : {}),
     ...(actions ? { actions } : {}),
     checkup: checkupJobs(), // /checkup: the business's own site, in the background

@@ -13,6 +13,7 @@ import { readFileSync } from "node:fs";
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { AgentEvent } from "../../shared/contracts.js";
+import type { CreditService } from "../../shared/plans.js";
 import type { GraphHandle } from "../graph/client.js";
 import { approveStudioDraft, finalizeStudioDraft, studioCard } from "../studio/approve.js";
 import { BrandUploadRejected, ingestBrandUpload } from "../brand/upload.js";
@@ -55,8 +56,10 @@ export interface StudioHelpers {
   refuseInPublicMode: () => void;
   fail: (status: Status, message: string) => never;
   studio?: () => Promise<StudioWiring | null>;
-  // records a decision the way every surface does (server/approvals.ts `decide`: executors, learning loop, hooks)
+  // records a decision the way every surface does (server/approvals.ts `decide`: executors, learning loop, hooks, credits)
   decide: (g: GraphHandle, tenant: string, id: string, d: Decision) => Promise<{ status: string }>;
+  // credits (src/credits): throws OutOfCredits (402) when work of this kind may not start; absent, nothing is checked
+  gate?: (g: GraphHandle, tenant: string, service: CreditService) => Promise<void>;
   heartbeatMs: number;
   now: () => number;
   log: (line: string) => void;
@@ -87,6 +90,7 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
       const { reg, g } = await h.tenantOf(c);
       h.refuseInPublicMode();
       const w = await wiring();
+      await h.gate?.(g, reg.slug, "picture"); // a post is charged when the owner says OK; the work needs credits left to start
       let form: Record<string, string | File | (string | File)[]>;
       try {
         form = await c.req.parseBody();
@@ -140,6 +144,7 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
     if (!approvalId || approvalId.length > 200) h.fail(400, "Say which card: approvalId.");
     if (!instruction && !retryOf) h.fail(400, "Say what to change.");
     if (busy) h.fail(429, "The Studio is already working on a photo. Try again in a minute.");
+    await h.gate?.(g, reg.slug, "picture");
     busy = true;
     try {
       return sse<AgentEvent>(c, { heartbeatMs: h.heartbeatMs, log: h.log }, async (send, signal) => {
@@ -258,13 +263,13 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
     const variantId = typeof body!.variantId === "string" && body!.variantId.length <= 200 ? body!.variantId : undefined;
     const caption = typeof body!.caption === "string" ? body!.caption.slice(0, 5000) : undefined;
     const r = await approveStudioDraft(g, { approvalId, ...(variantId ? { variantId } : {}), ...(caption !== undefined ? { caption } : {}), now: h.now() },
-      (id, edited) => h.decide(g, reg.slug, id, { decision: "approve", ...(edited ? { editedPayload: edited } : {}) }));
+      (id, edited, picked) => h.decide(g, reg.slug, id, { decision: "approve", ...(edited ? { editedPayload: edited } : {}), ...(picked ? { variantId: picked } : {}) }));
     return c.json({ ...r, approval: await readApproval(g, approvalId) });
   });
 
   // A 5 second clip from a picture Nisha passed: without confirm it only quotes (nothing is spent); with confirm it makes it.
   app.post("/api/:t/studio/clip", async (c) => {
-    const { reg } = await h.tenantOf(c);
+    const { reg, g } = await h.tenantOf(c);
     h.refuseInPublicMode();
     const w = await wiring();
     if (!w.clip) h.fail(501, "Clips are not switched on here.");
@@ -280,6 +285,7 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
     const ids = { tenant: reg.slug, businessId: reg.businessId, approvalId, ...(variantId ? { variantId } : {}) };
     if (body!.confirm !== true) return c.json(await w.clip!.offer(ids));
     if (busy) h.fail(429, "The Studio is already working. Try again in a minute.");
+    await h.gate?.(g, reg.slug, "video_short");
     busy = true;
     try {
       const r = await w.clip!.make(ids);

@@ -3,8 +3,9 @@
 //   title, Dev's caption, and the studio block (the original, the variants with Nisha's badges, the recommended one).
 // - finalizeStudioDraft (on approve): Content{format:'post', status:'draft'} -USES_ASSET-> the chosen variant; the
 //   variant (and the original) DEPICTS the project Page when the note named one; Approval -RESULTED_IN-> Action
-//   -RESULTED_IN-> Content; the credits the post would cost recorded as Observations (credits_charged, usd_cost).
-//   Credits are spent only on approval: a rejected card costs nothing (§4.2). Nothing is published.
+//   -RESULTED_IN-> Content; what the post cost us to make recorded as an Observation (usd_cost). The owner's credits are spent
+//   by the decision itself (server/approvals.ts, the ledger in src/credits), only on approval: a rejected card costs nothing
+//   (§4.2). Nothing is published.
 import { CREDIT_COSTS } from "../../shared/plans.js";
 import type { GraphHandle } from "../graph/client.js";
 import { addObservation, upsertEdge, upsertNode } from "../graph/upsert.js";
@@ -28,7 +29,8 @@ export const POST_COST_EVIDENCE = "Product design Appendix B.3: a post costs abo
 
 export interface StudioCard {
   originalId: string;
-  variants: Array<{ id: string; label: string; badge: string; note: string; aiEdited: boolean; credits?: number; request?: string; canRetry?: boolean }>;
+  // premium: made by "make this a premium ad" (premium.ts), so approving it is a premium ad (CREDIT_PRICES photo_ad), not a picture
+  variants: Array<{ id: string; label: string; badge: string; note: string; aiEdited: boolean; credits?: number; request?: string; canRetry?: boolean; premium?: boolean }>;
   recommended: string;
   altText: string;
   hashtags: string[];
@@ -128,7 +130,8 @@ export interface ApproveInput { approvalId: string; variantId?: string; caption?
 
 // How a decision is recorded: the server passes its own (server/approvals.ts `decide`: the status change, the executor
 // that writes the draft Content and its Action, the learning loop). Returns the status it recorded.
-export type DecideFn = (approvalId: string, editedPayload?: { title: string; body: string; target: string }) => Promise<{ status: string }>;
+// `variantId` is the option the owner picked: what approving costs depends on it (an ad, a clip).
+export type DecideFn = (approvalId: string, editedPayload?: { title: string; body: string; target: string }, variantId?: string) => Promise<{ status: string }>;
 
 // The owner picks a variant (it must have passed Nisha) and may edit the caption; the decision is recorded through
 // `decide`, then the draft gets the Studio's part: the chosen variant, the project page, the credits.
@@ -146,7 +149,7 @@ export async function approveStudioDraft(g: GraphHandle, input: ApproveInput, de
   const edited = caption && caption !== current.body ? { ...current, body: caption.slice(0, 5000) } : undefined;
   // a card that posts must know which option the owner picked when its executor runs (the OK is on that picture, not the recommended one)
   if (card.payload.publish) await g.query("MATCH (a:Entity:Approval {id:$id}) WHERE a.status = 'pending' SET a.chosenVariant = $v", { id: input.approvalId, v: variantId });
-  const d = await decide(input.approvalId, edited);
+  const d = await decide(input.approvalId, edited, variantId);
   const contentId = await finalizeStudioDraft(g, input.approvalId, card.payload, variantId, edited?.body ?? current.body, input.now);
   return { contentId, status: d.status, variantId };
 }
@@ -205,7 +208,6 @@ export async function finalizeStudioDraft(g: GraphHandle, approvalId: string, p:
     const status = a.id === variantId ? "approved" : a.id === s.originalId ? "used" : "declined";
     await upsertNode(g, { type: "Asset", id: a.id, name: a.name, props: { status } }, now);
   }
-  await addObservation(g, { subject: contentId, metric: "credits_charged", value: s.credits, unit: "credits", asOf, src: approvalId, evidence: `shared/plans.ts CREDIT_PRICES: a picture or post uses ${CREDIT_COSTS.static_post} credits, spent on approval.` }, now);
   await addObservation(g, { subject: contentId, metric: "usd_cost", value: POST_COST_USD, unit: "USD", asOf, src: approvalId, conf: 0.5, evidence: POST_COST_EVIDENCE }, now);
   const [ap] = await g.roQuery<{ name: string; result: string | null }>("MATCH (a:Entity:Approval {id:$id}) RETURN a.name AS name, a.result AS result", { id: approvalId });
   await upsertNode(g, { type: "Approval", id: approvalId, name: ap?.name ?? approvalId, props: { result: ap?.result || `Draft post saved (${contentId}); not published.`, contentId } }, now);

@@ -6,7 +6,8 @@ import { botPublishPort } from "./publish-notice.js";
 import { loadConfig } from "../config.js";
 import { checkupJobs } from "../checkup/jobs.js";
 import { businessId } from "../graph/tenants.js";
-import { ask } from "../agent/ask.js";
+import { chargedAsk } from "../credits/ask.js";
+import { credits } from "../credits/index.js";
 import type { GraphHandle } from "../graph/client.js";
 import { approval as readApproval } from "../server/reads.js";
 import { AlleviaBot } from "./bot.js";
@@ -58,7 +59,9 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
       const timeZone = await tenantTimeZone(area.slug, graph);
       return new AlleviaBot({
         tenant: area.slug, guildId, channelId: area.channels["your-team"]!, webBase: cfg.webBaseUrl, graph, shared,
-        ask: (input, emit) => ask(input, { ...deps, ...(timeZone ? { timeZone } : {}) }, emit),
+        // the same credits as the web app: a credit held before any work, the answer charged when it arrives (src/credits/ask.ts)
+        ask: (input, emit) => chargedAsk(input, { ...deps, ...(timeZone ? { timeZone } : {}) }, emit, { credits: credits(), g: graph, log }),
+        credits: credits(),
         ...(onDecision ? { onDecision } : {}), ...(actions ? { actions } : {}), log,
         // what the team makes comes back here as files with Approve and Change, read from this business's own storage
         deliverables: { file: (assetId) => loadAssetFile(graph, studioDeps.store, area.slug, assetId) },
@@ -78,6 +81,7 @@ export async function startHubBot(o: { model?: string; log?: (line: string) => v
     },
     studioFor: async (area) => new StudioDiscord({
       tenant: area.slug, businessId: businessId(area.slug), graph: await tenantGraph(area.slug), studio: studioDeps, ffmpeg, gate, brandLibrary: true,
+      credits: credits(), webBase: cfg.webBaseUrl,
       ...(clip ? { clip } : {}),
       ...(onDecision ? { onDecision } : {}), ...(actions ? { actions } : {}), log,
     }),

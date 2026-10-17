@@ -17,7 +17,7 @@
 //   use: the real executors, with GitHub issues and Discord posts as a dry run unless ALLEVIA_ACTIONS_LIVE=1. The
 //   answer is the card plus `learned` (the learned-rule AgentEvents, in the JSON) and `action`.
 // Focused route files: routes/program.ts (program, capabilities, learning), routes/team.ts (agents, directives),
-// routes/goals.ts (the owner says OK to the suggested goals), routes/numbers.ts (the owner adds a spreadsheet of their numbers), routes/actions.ts (where an approved fix lands: tasks, or the business's own GitHub repo), routes/connectors.ts (connect Search Console), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/graph-work.ts (the Brain page's "what breaks if something stops"), routes/checkup.ts ("Check my website": the free check-up in the background, and its weekly setting).
+// routes/goals.ts (the owner says OK to the suggested goals), routes/numbers.ts (the owner adds a spreadsheet of their numbers), routes/actions.ts (where an approved fix lands: tasks, or the business's own GitHub repo), routes/connectors.ts (connect Search Console), routes/work.ts (insights and brief runs), routes/usage.ts (this month's Studio credits and answers, for the plan page), routes/graph-work.ts (the Brain page's "what breaks if something stops"), routes/checkup.ts ("Check my website": the check-up in the background, and its weekly setting), routes/credits.ts (credits, the plan, and billing in test mode).
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
@@ -54,6 +54,11 @@ import { registerUsageRoutes } from "./routes/usage.js";
 import { registerWorkRoutes } from "./routes/work.js";
 import { registerGraphWorkRoutes } from "./routes/graph-work.js";
 import { registerCheckupRoutes } from "./routes/checkup.js";
+import { callerBy, registerCreditRoutes } from "./routes/credits.js";
+import { Credits, OutOfCredits } from "../credits/index.js";
+import { beginQuestion } from "../credits/ask.js";
+import { testProvider, type BillingProvider } from "../billing/provider.js";
+import type { TenantOpts } from "../graph/tenants.js";
 import { checkupJobs, type CheckupJobs } from "../checkup/jobs.js";
 import * as reads from "./reads.js";
 import { sse } from "./sse.js";
@@ -126,6 +131,11 @@ export interface ServerDeps {
   connections?: () => Promise<ConnectionsWiring | null>; // the connections framework (src/connections): the page, /c/<code>, the callback; absent: "not switched on yet"
   google?: () => Promise<GoogleWiring | null>;      // the Google connectors (Search Console): settings, token store, client; absent: "not switched on yet"
   checkupJobs?: CheckupJobs;                        // the background check-ups ("Check my website"); default: one queue per process
+  // Credits (src/credits): default one ledger per server over openGraph, subscriptions in the registry. Billing in test mode
+  // (src/billing/provider.ts): default from ALLEVIA_BILLING. `registry` points both at another registry graph (tests).
+  credits?: Credits;
+  billing?: BillingProvider;
+  registry?: TenantOpts;
   // The daily team stand-up run now (src/proactive/wiring.ts runDaily: stand-up, goals, Today's note); absent: 501.
   standup?: (slug: string, g: GraphHandle, businessId: string) => Promise<{ standup: unknown; brief: unknown }>;
   now?: () => number;
@@ -279,6 +289,9 @@ export function createApp(deps: ServerDeps): Hono {
   const refuseInPublicMode = () => { if (isPublic()) throw new HttpError(403, PUBLIC_REFUSAL); };
   // Studio cards approved anywhere become draft posts; then the server's own hook runs.
   const onDecision = studioDecisionHook(deps.openGraph, now, deps.onDecision);
+  const credits = deps.credits ?? new Credits({ openGraph: deps.openGraph, now, log, ...(deps.registry ? { tenantOpts: deps.registry } : {}) });
+  let billingProvider: BillingProvider | undefined = deps.billing;
+  const billing = (): BillingProvider => (billingProvider ??= testProvider(loadConfig().billing, { credits, now, ...(deps.registry ? { tenantOpts: deps.registry } : {}) }));
 
   // ---- middleware ----
   app.use("*", secureHeaders({ crossOriginResourcePolicy: "same-origin", xFrameOptions: "DENY" }));
@@ -327,6 +340,8 @@ export function createApp(deps: ServerDeps): Hono {
   app.onError((err, c) => {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status);
     if (err instanceof DecisionError) return c.json({ error: err.message }, err.status);
+    // out of credits: the owner's sentence, and what its two buttons do (buy the pack, move up a plan)
+    if (err instanceof OutOfCredits) return c.json({ error: err.message, outOfCredits: err.info }, 402);
     // FalkorDB restarting (issue #28): a plain sentence and 503, so the web app says it and the owner tries again
     if (isDbUnavailable(err)) {
       log(`[api] ${c.req.method} ${c.req.path}: the database is restarting (${err instanceof Error ? err.message : String(err)})`);
@@ -606,7 +621,8 @@ export function createApp(deps: ServerDeps): Hono {
   registerMediaRoute(app, async () => (await deps.media?.()) ?? null);
   registerWorkRoutes(app, routeCtx, deps.standup);
   registerGraphWorkRoutes(app, routeCtx);
-  registerCheckupRoutes(app, routeCtx, { jobs: () => deps.checkupJobs ?? checkupJobs() });
+  registerCheckupRoutes(app, routeCtx, { jobs: () => deps.checkupJobs ?? checkupJobs(), credits, by: callerBy });
+  registerCreditRoutes(app, routeCtx, { credits, billing, ...(deps.registry ? { registry: deps.registry } : {}) });
   registerUsageRoutes(app, routeCtx, { actionsLive: () => deps.actions?.live ?? loadConfig().actionsLive });
 
   app.get("/api/:t/agents/:id", async (c) => {
@@ -631,7 +647,7 @@ export function createApp(deps: ServerDeps): Hono {
     refuseInPublicMode();
     const body = await readBody(c, DecisionBody);
     return c.json(await decide(g, reg.slug, c.req.param("id"), body, {
-      now: now(), log, onDecision, ...(deps.actions ? { actions: deps.actions } : {}),
+      now: now(), log, onDecision, credits, by: callerBy(), ...(deps.actions ? { actions: deps.actions } : {}),
     }));
   });
 
@@ -654,6 +670,9 @@ export function createApp(deps: ServerDeps): Hono {
 
     if (!question) throw new HttpError(400, "Ask a question first.");
     if (live >= maxLive) throw new HttpError(429, "The team is already working on other questions. Try again in a minute.");
+    // Credits (src/credits/ask.ts): one is held before any work (a 402 with the owner's sentence when there is none), and the
+    // answer is charged when it arrives: quick when one person answered, deep when the team worked on it.
+    const charge = await beginQuestion({ credits, tenant: reg.slug, by: callerBy(), g, log });
     // The live slot is held until the turn ends, not until this client leaves: the turn runs on (turns.ts).
     live++;
     let released = false;
@@ -662,13 +681,22 @@ export function createApp(deps: ServerDeps): Hono {
     try {
       const tz = (await tenantDto(reg, g)).timeZone;
       const askDeps = await deps.askDeps(reg.slug, tz ? { timeZone: tz } : {});
-      turn = turns.start(reg.slug, question, (emit, signal) => ask(
-        { tenant: reg.slug, question, channel: "web", ...(body.sessionId ? { sessionId: body.sessionId } : {}), ...(body.target ? { target: body.target } : {}) },
-        { ...askDeps, ...(tz ? { timeZone: tz } : {}), signal },
-        emit,
-      ), body.target !== "chief-of-staff" ? body.target : undefined);
+      turn = turns.start(reg.slug, question, async (emit, signal) => {
+        let r: Awaited<ReturnType<typeof ask>> | undefined;
+        try {
+          r = await ask(
+            { tenant: reg.slug, question, channel: "web", ...(body.sessionId ? { sessionId: body.sessionId } : {}), ...(body.target ? { target: body.target } : {}) },
+            charge.deps({ ...askDeps, ...(tz ? { timeZone: tz } : {}), signal }),
+            emit,
+          );
+          return r;
+        } finally {
+          await charge.settle(r);
+        }
+      }, body.target !== "chief-of-staff" ? body.target : undefined);
     } catch (e) {
       release();
+      await charge.settle(undefined);
       throw e;
     }
     void turn.done.then(release, release);
@@ -681,8 +709,9 @@ export function createApp(deps: ServerDeps): Hono {
     // the Studio's own approve route records the decision the way every surface does (executors, learning loop and the
     // server's hook), then attaches the chosen variant itself; so the studio hook is left out here
     decide: (g, tenant, id, d) => decide(g, tenant, id, d, {
-      now: now(), log, ...(deps.onDecision ? { onDecision: deps.onDecision } : {}), ...(deps.actions ? { actions: deps.actions } : {}),
+      now: now(), log, credits, by: callerBy(), ...(deps.onDecision ? { onDecision: deps.onDecision } : {}), ...(deps.actions ? { actions: deps.actions } : {}),
     }),
+    gate: (g, tenant, service) => credits.assertCanSpend(tenant, service, { g }),
     fail: (status, message) => { throw new HttpError(status, message); },
     ...(deps.studio ? { studio: deps.studio } : {}),
   });

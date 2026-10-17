@@ -43,7 +43,7 @@ describe("studio pipeline (integration)", () => {
   const one = async <T>(cypher: string, params?: Record<string, unknown>) => (await g.roQuery<T>(cypher, params))[0]!;
   // decisions go through the server's own path: the status change, the content_draft executor (its markdown under the temp
   // data dir) and the learning loop
-  const decideWith: DecideFn = (id, edited) => decide(g, "kestrel_oak", id, { decision: "approve", ...(edited ? { editedPayload: edited } : {}) }, { now: now(), actions: { config: { dataDir: dir } } });
+  const decideWith: DecideFn = (id, edited, variantId) => decide(g, "kestrel_oak", id, { decision: "approve", ...(edited ? { editedPayload: edited } : {}), ...(variantId ? { variantId } : {}) }, { now: now(), actions: { config: { dataDir: dir } } });
 
   it("streams asset, assessment, variant A and B, reviews, a proposal and a final; writes the graph", async () => {
     const vision = new FakeVision({ "content-strategist": TARA_ANSWER, "fact-checker": nishaAnswer(true), "copy-editor": DEV_ANSWER });
@@ -154,7 +154,11 @@ describe("studio pipeline (integration)", () => {
     expect(await one("MATCH (:Content {id:$c})-[:PROMOTES]->(p:Content) RETURN p.id AS p", { c: ok.contentId })).toEqual({ p: PROJECT });
     const obs = await g.roQuery<{ metric: string; value: number; unit: string }>(
       "MATCH (o:Observation)-[:MEASURES]->(:Content {id:$c}) RETURN o.metric AS metric, o.value AS value, o.unit AS unit ORDER BY metric, o.id", { c: ok.contentId });
-    expect(obs).toEqual([{ metric: "credits_charged", value: CREDIT_COSTS.static_post, unit: "credits" }, { metric: "usd_cost", value: 0.5, unit: "USD" }]);
+    expect(obs).toEqual([{ metric: "usd_cost", value: 0.5, unit: "USD" }]);
+    // the OK spent the picture's credits once, in the ledger, linked to the card (src/credits)
+    const spent = await g.roQuery<{ service: string; credits: number }>(
+      "MATCH (e:CreditEntry)-[f:FOR]->(a:Entity:Approval {id:$id}) WHERE ID(f) >= 0 RETURN e.service AS service, e.credits AS credits", { id: r.approvalId });
+    expect(spent).toEqual([{ service: "picture", credits: -CREDIT_COSTS.static_post }]);
     const statuses = await g.roQuery<{ label: string | null; status: string }>(
       "MATCH (a:Asset) WHERE a.id IN $ids RETURN a.label AS label, a.status AS status ORDER BY label, a.id", { ids: [r.original.id, ...r.variants.map((v) => v.id)] });
     expect(statuses.map((s) => s.status).sort()).toEqual(["approved", "declined", "used"]);

@@ -14,7 +14,7 @@ import { openGraph, type GraphHandle } from "../graph/client.js";
 
 export const OFF_WORDS = "Public data lookups aren't switched on.";
 
-export type PublicRunRefusal = "off" | "not_allowed" | "month" | "day" | "error";
+export type PublicRunRefusal = "off" | "not_allowed" | "month" | "day" | "error" | "credits"; // credits: the business is out of credits (src/credits/ask.ts)
 
 export type PublicRun =
   | { ok: true; actor: ActorId; items: unknown[]; usd: number; asOf: string }

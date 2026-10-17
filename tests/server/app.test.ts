@@ -213,6 +213,7 @@ describe("server: reads (integration)", () => {
       // the idea's reason, as one line, for the card on Home
       preview: { why: "The salary reveal reel did 6x the median views" },
       createdAt: expect.stringMatching(/^2026-/),
+      credits: 1, // saying OK to a draft uses 1 credit (shared/credits.ts)
     });
   });
 

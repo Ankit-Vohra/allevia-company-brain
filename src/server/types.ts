@@ -175,6 +175,8 @@ export interface ApprovalDto {
   decidedAt?: string;
   result?: string;
   simulated?: boolean;
+  /** What saying OK spends, in credits (shared/credits.ts approvalCharges; the recommended option of a Studio card). */
+  credits?: number;
 }
 
 // POST /api/:t/approvals/:id answers with the card as it stands plus what the decision did: the `learned` AgentEvents

@@ -138,7 +138,7 @@ export async function makePremiumAd(
       ...s,
       variants: [
         ...s.variants,
-        { id: variant.id, label, badge: fidelity.badge, note: fidelity.note, aiEdited: true, request: clip(requested, 200), ...(variant.credits !== undefined ? { credits: variant.credits } : {}) },
+        { id: variant.id, label, badge: fidelity.badge, note: fidelity.note, aiEdited: true, request: clip(requested, 200), premium: true, ...(variant.credits !== undefined ? { credits: variant.credits } : {}) },
       ],
       recommended: passed ? variant.id : s.recommended,
     },

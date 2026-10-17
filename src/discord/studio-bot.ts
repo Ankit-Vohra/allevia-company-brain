@@ -10,6 +10,8 @@
 // identity is stored). Videos are kept as raw Assets; the first frame is assessed when ffmpeg is here, and the owner is
 // told plainly what the team can and cannot do with video. Nobody's Discord id or name is written to the graph.
 // One Studio run at a time across every business on the hub (the same limit as the API's `busy`): the rest queue.
+import type { Credits } from "../credits/index.js";
+import { isOutOfCredits, outOfCreditsMessage } from "./credits.js";
 import type { AgentEvent } from "../../shared/contracts.js";
 import { DecisionError, decide, type ActionOpts, type OnDecision } from "../server/approvals.js";
 import { studioErrorMessage } from "../server/studio.js";
@@ -87,6 +89,10 @@ export interface StudioBotDeps {
   brandLibrary?: boolean;
   onDecision?: OnDecision;
   actions?: ActionOpts;
+  // Credits (src/credits): a photo is only taken on while some are left, and an OK spends what the option costs. webBase: where
+  // the out-of-credits message's buttons go (the plan page).
+  credits?: Credits;
+  webBase?: string;
   now?: () => number;
   workLogIntervalMs?: number;
   log?: (line: string) => void;
@@ -182,6 +188,13 @@ export class StudioDiscord {
   // ----- a photo -----
 
   private async photo(thread: ThreadPort, bytes: Buffer, note: string): Promise<void> {
+    try {
+      await this.d.credits?.assertCanSpend(this.d.tenant, "picture", { g: this.d.graph });
+    } catch (e) {
+      if (!isOutOfCredits(e)) throw e;
+      await thread.send(this.d.webBase ? outOfCreditsMessage(e, this.d.webBase) : e.message);
+      return;
+    }
     if (this.d.gate.busy) await thread.send("The Studio is working on another photo. Yours is next.");
     await this.d.gate.run(async () => {
       const state = new WorkLogState();
@@ -404,8 +417,8 @@ export class StudioDiscord {
       if (!card) return void await b.reply("That photo's card no longer exists.", { ephemeral: true }), true;
       const v = card.payload.studio.variants.find((x) => x.label === label);
       if (!v) return void await b.reply("I can't find that option any more.", { ephemeral: true }), true;
-      const decideWith: DecideFn = (id, edited) => decide(this.d.graph, this.d.tenant, id, { decision: "approve", ...(edited ? { editedPayload: edited } : {}) },
-        { now: this.now(), log: (l) => this.log(l), ...(this.d.onDecision ? { onDecision: this.d.onDecision } : {}), ...(this.d.actions ? { actions: this.d.actions } : {}) });
+      const decideWith: DecideFn = (id, edited, variantId) => decide(this.d.graph, this.d.tenant, id, { decision: "approve", ...(edited ? { editedPayload: edited } : {}), ...(variantId ? { variantId } : {}) },
+        { now: this.now(), log: (l) => this.log(l), ...(this.d.onDecision ? { onDecision: this.d.onDecision } : {}), ...(this.d.actions ? { actions: this.d.actions } : {}), ...(this.d.credits ? { credits: this.d.credits } : {}) });
       await approveStudioDraft(this.d.graph, { approvalId, variantId: v.id, now: this.now() }, decideWith);
       // a card that posts says what became of it (posted with its address, scheduled, a dry run, or why not); a draft says it is only a draft
       const after = card.payload.publish ? await readApproval(this.d.graph, approvalId).catch(() => null) : null;
@@ -414,6 +427,12 @@ export class StudioDiscord {
         buttons: [],
       });
     } catch (e) {
+      if (isOutOfCredits(e)) {
+        const m = this.d.webBase ? outOfCreditsMessage(e, this.d.webBase) : { content: e.message, links: [] };
+        if (b.replyWith) await b.replyWith(m, { ephemeral: true });
+        else await b.reply(m.content, { ephemeral: true });
+        return true;
+      }
       if (e instanceof DecisionError && e.status === 409) await b.reply(e.message.includes("Nisha") ? "That option was held back, so it can't be approved." : "This photo was already decided.", { ephemeral: true });
       else if (e instanceof DecisionError) await b.reply("That photo's card no longer exists.", { ephemeral: true });
       else {
