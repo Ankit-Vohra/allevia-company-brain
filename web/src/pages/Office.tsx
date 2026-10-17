@@ -116,8 +116,8 @@ export function OfficePage() {
     setStandupPlay((n) => n + 1);
   }, [stage]);
   // the drafts waiting, repeats folded (the same count as the top bar)
-  const waiting = useAsync(() => api.approvals(tenant.id).catch(() => []), [tenant.id, pendingTick]);
-  const waitingRows = useMemo(() => waitingGroups(waiting.data, standup.data), [waiting.data, standup.data]);
+  const waiting = useAsync(() => api.approvals(tenant.id).catch(() => null), [tenant.id, pendingTick]);
+  const waitingRows = useMemo(() => waitingGroups(waiting.data ?? undefined, standup.data), [waiting.data, standup.data]);
   const firstTwo = waitingRows.slice(0, 2);
 
   const off = useMemo(() => new Set((team.data ?? []).filter((a) => !a.enabled).map((a) => a.id)), [team.data]);
@@ -343,7 +343,7 @@ export function OfficePage() {
                   </li>
                 ))}
               </ul>
-            ) : waiting.data ? (
+            ) : waiting.data && !waiting.loading ? (
               <p className="home-calm">Nothing needs you right now.</p>
             ) : null}
             {waitingRows.length > firstTwo.length && <Link to="/approvals" className="home-ok office-all">See all<Icon name="chevron-right" size={15} /></Link>}
