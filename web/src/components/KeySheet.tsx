@@ -46,7 +46,7 @@ export function KeySheet({ form, onSave, onClose }: { form: KeyForm; onSave: (va
               autoFocus={i === 0} value={values[b.name] ?? ""} disabled={busy}
               onChange={(e) => setValues((v) => ({ ...v, [b.name]: e.target.value }))}
             />
-            {b.help && <span className="cx-sheet-help">{b.help}</span>}
+            {/* the tool's own field notes are long and technical; the link above says where the key is */}
           </label>
         ))}
         {error && <p className="notice notice-bad" role="alert">{error}</p>}
