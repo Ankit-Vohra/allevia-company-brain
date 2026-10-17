@@ -44,11 +44,11 @@ export type AgentEvent =
   | { type: "text"; agent: AgentId; delta: string; reset?: true }
   | { type: "path"; nodes: NodeRef[]; edges: EdgeRef[] }                              // the explanation path, ordered
   | { type: "final"; turnId: string; answer: string; citations: string[]; checks: TurnChecks; agents: AgentId[]; ms: number }
-  // Studio (product design §6, §7): an Asset appeared, Tara assessed a photo, a rule was learned from an approval
+  // Studio (product design §6, §7): an Asset appeared, Miss Influencer assessed a photo, a rule was learned from an approval
   | { type: "asset"; agent: AgentId; assetId: string; kind: AssetKind; parentId?: string; thumb?: string; simulated?: boolean }
   | { type: "assessment"; agent: AgentId; assetId: string; verdict: AssessmentVerdict; overlays: AssessmentOverlay[] }
   | { type: "learned"; ruleId: string; text: string; fromApprovalId: string }
-  // An agent loaded one of its skills (how it does this kind of work here): "Tara is using: Instagram post craft".
+  // An agent loaded one of its skills (how it does this kind of work here): "Miss Influencer is using: Instagram post craft".
   | { type: "skill_used"; agent: AgentId; skillId: string; name: string; source: "code" | "business" }
   // Something the team made on request (a poster, an image, a clip): the options, each checked, with a card waiting for the owner's OK
   | { type: "deliverable"; agent: AgentId; kind: DeliverableKind; title: string; approvalId: string; recommended: string; options: DeliverableOption[]; notes: string[]; credits?: number }
@@ -62,7 +62,7 @@ export type DeliverableKind = "poster" | "image" | "clip";
 export interface DeliverableOption {
   assetId: string;
   label: string;                         // "A", "B", "C"
-  badge: "ok" | "held" | "unchecked";    // Nisha's check: passed, held back, or could not be checked
+  badge: "ok" | "held" | "unchecked";    // Fact Checker's check: passed, held back, or could not be checked
   note: string;
   thumb: string;                         // the asset proxy URL of a small copy
   layout?: string;
@@ -92,7 +92,7 @@ export interface Lineage {
 
 // An Asset node's role: the owner's upload, a generated or edited variant of it, or the approved final.
 export type AssetKind = "original" | "variant" | "final" | "poster" | "image" | "clip" | "artwork";
-// Tara's call on an uploaded photo (product design §6, step 3).
+// Miss Influencer's call on an uploaded photo (product design §6, step 3).
 export type AssessmentVerdict = "use" | "enhance" | "recompose" | "reshoot";
 // A box drawn over the photo, in 0..1 coordinates of its width and height (x, y is the top-left corner). `kind` is open
 // so new overlay types need no contract change; today: "clutter", "privacy", "text", "lock".
@@ -182,7 +182,7 @@ export type DirectivePatch =
   | { kind: "agent.autonomy"; agent: AgentId; autonomy: number }
   | { kind: "memory.instruction"; agents: AgentId[]; text: string; channel?: string; limit?: { kind: "max_daily_spend"; amount: number; currency: string } }
   | { kind: "brand_rule.add"; text: string; ruleKind: "voice" | "visual" }
-  // A rule for one skill ("our posts always end with a question" -> Tara's Instagram post craft); skill "*" = all the agent's skills.
+  // A rule for one skill ("our posts always end with a question" -> Miss Influencer's Instagram post craft); skill "*" = all the agent's skills.
   | { kind: "skill.rule"; agents: AgentId[]; skill: string; text: string; channel?: string }
   // A skill of this business's own (or one that replaces a shipped skill of the same id) for the named agents.
   | { kind: "skill.add"; agents: AgentId[]; id: string; name: string; when: string; text: string };
@@ -191,7 +191,7 @@ export interface DirectiveDiffLine {
   patch: number;              // index into patches
   op: "change" | "add" | "same";
   target: string;             // the node it writes (agent:allevia-tech-lead, memory:…, brand-rule:…)
-  label: string;              // "Arjun (Tech Lead)"
+  label: string;              // "Techie · Tech"
   before?: string;
   after: string;
 }

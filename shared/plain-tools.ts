@@ -1,4 +1,4 @@
-// What each tool does, in the owner's words, for the Team page ("what Tara can look at and do"). Tool names are the
+// What each tool does, in the owner's words, for the Team page ("what Miss Influencer can look at and do"). Tool names are the
 // agents' own vocabulary; the owner never reads them (docs/owner-words.md).
 export const PLAIN_TOOLS: Record<string, string> = {
   search: "Search your records",
