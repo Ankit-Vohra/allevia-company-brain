@@ -21,6 +21,7 @@ import { plain } from "../lib/words";
 import { useApp, useAsync } from "../state/app";
 import { type RunView, deriveRun, laneOf } from "../state/derive";
 import { type RunRecord, runStore, useRunStore } from "../state/runs";
+import { savedAnswer } from "../lib/chat";
 import type { SessionSummary, TurnRecord } from "../types-ext";
 import { FIRST_DAY_QUESTIONS, SUGGESTIONS } from "./Office";
 import "./ask.css";
@@ -109,7 +110,8 @@ export default function AskPage() {
       const ended: RunRecord["status"] = t.ended === "stopped" || liveTwin?.status === "stopped" ? "stopped" : t.ended === "failed" ? "error" : "done";
       return {
         key: t.id, turnId: t.id, question: t.question, at: t.at, record: t,
-        events: rp ? rp.events : liveTwin?.events ?? logs[t.id] ?? [],
+        // the saved answer stands in until the work log arrives, or when there is none (never an endless grey box)
+        events: rp ? rp.events : liveTwin?.events ?? (logs[t.id]?.length ? logs[t.id]! : savedAnswer(t)),
         status: rp ? rp.status : ended,
         replaying: rp?.status === "running",
         ...(ended === "error" && t.error ? { error: t.error } : {}),
@@ -385,7 +387,7 @@ function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onRe
     requestAnimationFrame(() => document.getElementById(`lane-${key.replace(/[^a-z0-9-]/gi, "-")}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   };
   const agents = view.final?.agents ?? [...new Set(view.laneOrder.map((k) => view.lanes[k]!.agent))];
-  const loadingLog = !turn.events.length && !live;
+  const loadingLog = !turn.events.length && turn.status === "done";
   const checks = view.final?.checks;
   const checksOk = !!checks && checks.citationsValid && checks.numbersGrounded && checks.simulatedDisclosed && checks.freshnessDisclosed;
   const nSteps = view.laneOrder.reduce((n, k) => n + view.lanes[k]!.steps.length, 0);
@@ -429,7 +431,7 @@ function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onRe
                 <>
                   <p className={`answer-line${checksOk ? "" : " is-warn"}`}>
                     <Icon name={checksOk ? "check" : "warn"} size={14} />
-                    <span>{checksOk ? "Sources checked" : "A few numbers could not be matched to a source"} · {agents.length} {agents.length === 1 ? "person" : "people"} · {fmtMs(view.final.ms)}</span>
+                    <span>{checksOk ? "Sources checked" : "A few numbers could not be matched to a source"} · {agents.length} {agents.length === 1 ? "person" : "people"}{view.final.ms > 0 ? ` · ${fmtMs(view.final.ms)}` : ""}</span>
                   </p>
                   {latest && /\[suggested:/i.test(view.answer) && (
                     <p className="answer-line fill-it-in" role="note">
@@ -461,7 +463,7 @@ function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onRe
               <Reveal
                 label="Show how the team worked"
                 openLabel="Hide how the team worked"
-                summary={view.final ? `${agents.length} ${agents.length === 1 ? "person" : "people"} · ${fmtMs(view.final.ms)}` : undefined}
+                summary={view.final ? `${agents.length} ${agents.length === 1 ? "person" : "people"}${view.final.ms > 0 ? ` · ${fmtMs(view.final.ms)}` : ""}` : undefined}
                 open={how}
                 onToggle={setHow}
               >
