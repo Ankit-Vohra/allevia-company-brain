@@ -15,7 +15,7 @@ describe.skipIf(process.env.ALLEVIA_LIVE_LLM !== "1")("live directive parse (Age
       await ensureRoster(g);
       const started = Date.now();
       // Rules read the first clause (a toggle); the second goes to haiku.
-      const pv = await previewDirective(g, { text: "Switch Arjun off till the new site launches; give Rohan a lighter load this month and keep Tara's LinkedIn captions under 30 words" });
+      const pv = await previewDirective(g, { text: "Switch Techie off till the new site launches; give Growth Hacker a lighter load this month and keep Miss Influencer's LinkedIn captions under 30 words" });
       console.log(JSON.stringify({ ms: Date.now() - started, parser: pv.parser, patches: pv.patches, unparsed: pv.unparsed, notes: pv.notes }, null, 1));
       expect(pv.parser).toBe("rules+llm");
       expect(pv.patches[0]).toEqual({ kind: "agent.enabled", agent: "tech-lead", enabled: false, note: "till the new site launches" });

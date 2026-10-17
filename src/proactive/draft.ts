@@ -1,4 +1,4 @@
-// Each thing Meera picked becomes something already drafted, waiting for the owner's OK: a post, a post with a poster, a
+// Each thing The Chief picked becomes something already drafted, waiting for the owner's OK: a post, a post with a poster, a
 // reply to a review, new words for the website, a follow-up message or an offer to test. The words come from the drafting
 // port (production: Claude on the subscription, with the business's voice check and claims check, wiring.ts); the poster
 // from the existing creating tools (src/creative/poster.ts). Nothing is posted or sent: an approved post or message is a
@@ -27,7 +27,7 @@ export type TextKind = "post" | "reply" | "website_text" | "follow_up" | "offer"
 export interface TextJob {
   agent: string;                // roster id of who drafts it
   kind: TextKind;
-  brief: string;                // Meera's purpose-first brief
+  brief: string;                // The Chief's purpose-first brief
   facts: string[];              // what the drafter may use beyond the business's own record
   skill?: { name: string; guidance: string };
   question: string;             // what the claims check grounds against (the brief and the facts)
@@ -313,7 +313,7 @@ async function draftSales(g: GraphHandle, p: Picked, ctx: DraftCtx, skill: TextJ
   return { ...base, status: "drafted", approvalId, recommendationId: recId, notes: [...notes, ...t.warnings] };
 }
 
-/** "Tara drafted a Dussehra post" for the note. */
+/** "Miss Influencer drafted a Dussehra post" for the note. */
 export function draftedLine(d: Pick<DraftedItem, "agent" | "title">): string {
   const who = agentById(d.agent)?.name ?? "Your team";
   const t = oneLine(d.title);

@@ -1,5 +1,5 @@
-// Makes posters with the real composer (makePoster: real material, layouts, code checks, Rohan's review and revisions,
-// Nisha's check) on a tenant graph, and writes the options and a run record to a folder. For the side-by-side proofs in
+// Makes posters with the real composer (makePoster: real material, layouts, code checks, Growth Hacker's review and revisions,
+// Fact Checker's check) on a tenant graph, and writes the options and a run record to a folder. For the side-by-side proofs in
 // docs/creative-live/v2/. Run it against a COPY of the tenant graph on a throwaway server (ALLEVIA_FALKORDB_URL); the files
 // go through the product's own store under ALLEVIA_DATA_DIR. Generated scenes use the founder's Higgsfield CLI with a hard cap.
 //   ALLEVIA_FALKORDB_URL=redis://127.0.0.1:6411 ALLEVIA_DATA_DIR=~/jarvis/data \

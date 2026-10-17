@@ -29,7 +29,7 @@ try {
     if (await fresh.count()) await fresh.first().click();
     await page.locator("input[type=file]").setInputFiles(join(photos, FILES[c]));
     await page.locator(".drop-note textarea").fill(NOTES[c]);
-    await page.getByRole("button", { name: "Send to Tara" }).click();
+    await page.getByRole("button", { name: "Send to Miss Influencer" }).click();
     // wait for the run to end: a card, a stop, or an error
     await page.waitForFunction(() => document.querySelector(".approve") || document.querySelector(".studio-error") || /can't save|can't use|Nothing was made|Nothing was kept/i.test(document.body.innerText) || document.querySelector(".verdict-reshoot"), null, { timeout: 240_000 });
     await page.waitForTimeout(2500);

@@ -1,8 +1,8 @@
 // The variants (product design §6, steps 4 and 6). Both start from the same straightened 4:5 frame of the owner's photo
-// (straightenedBase), so Nisha can compare each one against exactly what it was made from.
+// (straightenedBase), so Fact Checker can compare each one against exactly what it was made from.
 // - A, "Safe": local and free (renderVariantA), never labelled AI.
 // - B, "Best bet": one generative edit from the engine (Higgsfield), prompted from the graph, labelled AI-edited.
-// Each becomes Asset{kind:'variant'} DERIVED_FROM the original {step, treatment}, PRODUCED by Tara.
+// Each becomes Asset{kind:'variant'} DERIVED_FROM the original {step, treatment}, PRODUCED by Miss Influencer.
 import sharp from "sharp";
 import type { GraphHandle } from "../graph/client.js";
 import { upsertEdge, upsertNode } from "../graph/upsert.js";
@@ -71,7 +71,7 @@ export async function makeVariantA(
 }
 
 // The engine edits the owner's whole photo (metadata already stripped), keeping its framing; the code then applies the
-// same straighten-and-crop plan as variant A, so A, B and the frame Nisha compares against line up pixel for pixel.
+// same straighten-and-crop plan as variant A, so A, B and the frame Fact Checker compares against line up pixel for pixel.
 // null when the engine has nothing for this photo (RecordedEngine without a recording): no variant B, and the caller
 // says so instead of inventing one.
 export async function makeVariantB(

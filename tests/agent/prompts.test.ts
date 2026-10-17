@@ -12,7 +12,7 @@ const finding = { id: "finding:turn:t1-data-analyst", agent: "data-analyst", tex
 describe("prompts", () => {
   it("a department agent's system prompt carries persona, department, tools, date and the house rules", () => {
     const p = agentSystemPrompt(analyst, [fakeTool("metric_trend", result({ data: null }))], { now: NOW, tenant: "aamdani" });
-    expect(p).toContain("You are Kabir, Data Analyst in the Analytics department");
+    expect(p).toContain("You are Data Detective, Data Analyst in the Analytics department");
     expect(p).toContain(analyst.persona);
     expect(p).toContain("- metric_trend: fake metric_trend");
     expect(p).toContain("Today is 2026-10-15");
@@ -51,8 +51,8 @@ describe("prompts", () => {
     expect(p).toContain('The owner asked: "Why did signups drop?"');
     expect(p).toContain("Your task from the Chief of Staff: Find the channel");
     expect(p).toContain("[[turn:old]]");
-    expect(p).toContain("### Kabir (Data Analyst) [finding:turn:t1-data-analyst]");
-    expect(p).toContain("Arjun (Tech Lead) could not finish");
+    expect(p).toContain("### Data Detective (Data Analyst) [finding:turn:t1-data-analyst]");
+    expect(p).toContain("Techie (Tech Lead) could not finish");
     expect(p).toMatch(/at most 1200 characters/);
   });
 
@@ -62,7 +62,7 @@ describe("prompts", () => {
     expect(r).toContain("the right period");
     expect(r).toContain("It cites: metric:signups");
     const v = revisePrompt({ question: "q", task: "t", finding, notes: [{ reviewer: "coe-lead", verdict: "fix", note: "41 is the week to 2026-10-05" }] });
-    expect(v).toContain("- Isha (CoE Lead): fix, 41 is the week to 2026-10-05");
+    expect(v).toContain("- Number Cruncher (CoE Lead): fix, 41 is the week to 2026-10-05");
   });
 
   it("the synthesis prompt shows findings with reviews, marks rejections, names failed desks and requires show_path", () => {
@@ -71,9 +71,9 @@ describe("prompts", () => {
       findings: [{ ...finding, reviews: [{ reviewer: "coe-lead", verdict: "ok", note: "checked" }] }, { ...finding, id: "finding:x", agent: "growth-marketer", rejected: true }],
       failed: ["tech-lead"],
     });
-    expect(p).toContain("Reviews: Isha (CoE Lead): ok, checked");
+    expect(p).toContain("Reviews: Number Cruncher (CoE Lead): ok, checked");
     expect(p).toContain("[finding:x] REJECTED");
-    expect(p).toContain("Desks that could not finish: Arjun (Tech Lead)");
+    expect(p).toContain("Desks that could not finish: Techie (Tech Lead)");
     expect(p).toMatch(/call show_path once/);
     expect(p).toMatch(/never the finding ids/);
     expect(directPrompt({ question: "q", recall: "" })).toMatch(/call show_path once/);
@@ -96,7 +96,7 @@ describe("prompts", () => {
       question: "q", reviewer: agentById("coe-lead")!, finding, toolRounds: 1,
       evidence: { citedNodes: [{ id: "metric:signups", label: "Metric", name: "Signups" }], autoCheck: "ok", toolData: [{ tool: "metric_trend", agent: "data-analyst", data: '{"v":41}' }] },
     });
-    expect(r).toContain('The tool data behind the cited ids (as the tools returned it this turn):\n- metric_trend (Kabir): {"v":41}');
+    expect(r).toContain('The tool data behind the cited ids (as the tools returned it this turn):\n- metric_trend (Data Detective): {"v":41}');
     expect(r).toMatch(/decide from this evidence/);
     const partial = { ...finding, partial: true };
     expect(synthesisPrompt({ question: "q", recall: "", findings: [partial], failed: [] })).toContain("PARTIAL: it ran out of turns before finishing");
@@ -106,7 +106,7 @@ describe("prompts", () => {
   // Content trial 2026-10-15 (AVS and Aamdani): a week of captions plus a script cannot fit 1200 characters, captions came back
   // as bare labels ("Project, place, year."), the revision dropped the whole script to satisfy one note, and the Chief
   // turned the captions into "Caption: tell us what happened" and told the owner to fix things already fixed.
-  describe("content work (Tara)", () => {
+  describe("content work (Miss Influencer)", () => {
     const content = { ...finding, id: "finding:turn:t1-content-strategist", agent: "content-strategist", text: "Caption 1: ..." };
     it("a content desk may write the whole deliverable (4000 characters), other desks keep 1200", () => {
       expect(findingMaxChars("content-strategist")).toBe(CONTENT_FINDING_MAX_CHARS);

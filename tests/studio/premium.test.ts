@@ -92,7 +92,7 @@ describe("the premium ad, end to end (fake engine)", () => {
     expect(shot.opts.productContext).toContain("a glass jar of honey");
     const m = await sharp(shot.input.image).metadata();
     expect(m.width! / m.height!).toBeCloseTo(0.8, 1); // the straightened 4:5 frame, the reference the product must match
-    // Nisha was asked about the product, not the building, and a new scene is allowed
+    // Fact Checker was asked about the product, not the building, and a new scene is allowed
     const nishaCall = w.vision.calls.filter((c) => c.agent === "fact-checker").at(-1)!;
     expect(nishaCall.system).toMatch(/same product/);
     expect(nishaCall.prompt).toMatch(/a new setting, background and surface/);
@@ -104,7 +104,7 @@ describe("the premium ad, end to end (fake engine)", () => {
     expect(card.payload.studio.variants.find((v) => v.label === "C")!.note).toMatch(/^Product unchanged/);
   }, 60_000);
 
-  it("writes the chain into the graph: the job, its cost, the rules it was built from, Nisha's check, and reads it back as lineage", async () => {
+  it("writes the chain into the graph: the job, its cost, the rules it was built from, Fact Checker's check, and reads it back as lineage", async () => {
     fail.clear();
     const w = await world();
     const out = await makePremiumAd(g, { ...w.ids, request: { words: "premium UGC ad" } }, w.deps);

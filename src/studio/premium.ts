@@ -6,7 +6,7 @@
 // the business and the product are, the backend writes the prompt for the mode (a lifestyle scene with hands and atmosphere is the
 // UGC look), and the owner's photo goes to the model as the reference so the product stays the product. Nothing is generated until
 // the engine has quoted it (about 6.5 credits at 2k), checked it against the per-run cap, the daily cap and the balance floor.
-// Nisha then checks the PRODUCT against the original (not the place): a new scene is the point, a changed label or shape is not,
+// Fact Checker then checks the PRODUCT against the original (not the place): a new scene is the point, a changed label or shape is not,
 // and a picture she holds back cannot be approved. Words on the ad are never generated: if the owner gave a message, the studio
 // sets it afterwards in the brand's own colours and font (ad.ts).
 import sharp from "sharp";

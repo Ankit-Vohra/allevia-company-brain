@@ -62,8 +62,8 @@ export async function seedMini(g: GraphHandle): Promise<void> {
   await node({ type: "Person", id: "person:founder", name: "Ankit", summary: "Founder of Aamdani", props: { role: "founder" } });
   await node({ type: "Person", id: "person:priya", name: "Priya", summary: "Marketing associate", props: { role: "marketing" } });
   await node({ type: "Agent", id: "agent:jarvis", name: "Jarvis", summary: "The founder's ops agent", props: { kind: "assistant" } });
-  await node({ type: "Agent", id: "agent:allevia-librarian", name: "Sara", summary: "Allevia librarian", props: { kind: "allevia" } });
-  await node({ type: "Agent", id: "agent:allevia-content-strategist", name: "Tara", summary: "Allevia content strategist", props: { kind: "allevia" } });
+  await node({ type: "Agent", id: "agent:allevia-librarian", name: "Memory Keeper", summary: "Allevia librarian", props: { kind: "allevia" } });
+  await node({ type: "Agent", id: "agent:allevia-content-strategist", name: "Miss Influencer", summary: "Allevia content strategist", props: { kind: "allevia" } });
   await node({ type: "Team", id: "team:marketing", name: "Marketing team" });
   await node({ type: "Team", id: "team:tech", name: "Tech team" });
   await edge("person:priya", "MEMBER_OF", "team:marketing");

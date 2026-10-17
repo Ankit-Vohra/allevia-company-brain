@@ -1,8 +1,8 @@
 // A text reply under the variants ("make it warmer") adjusts the NEXT variant. The owner's words become a small, local
 // change of light and colour (warmer or cooler, lighter or darker, more or less contrast, more or less colour),
 // applied on top of the latest local variant, so "warmer" and then "a bit more" add up. It becomes a new Asset{kind:
-// 'variant'} DERIVED_FROM the original (and from the variant it adjusted, with the words kept), PRODUCED by Tara, checked
-// by Nisha against the same straightened frame as every other variant, and added to the pending card so it can be
+// 'variant'} DERIVED_FROM the original (and from the variant it adjusted, with the words kept), PRODUCED by Miss Influencer, checked
+// by Fact Checker against the same straightened frame as every other variant, and added to the pending card so it can be
 // approved like the others. Nothing here calls a generative model: asking for a change to what is IN the photo is said
 // plainly to be something the team cannot do yet, not faked.
 import sharp from "sharp";
@@ -93,7 +93,7 @@ export const nextLabel = (labels: string[]): string => {
 };
 
 // What every revision (a local adjustment, a generative request, a retry) starts from: the pending card, the owner's photo as
-// kept, Tara's assessment, the straightened frame every variant is checked against, and what is to be blurred in it.
+// kept, Miss Influencer's assessment, the straightened frame every variant is checked against, and what is to be blurred in it.
 export interface RevisionBase {
   card: { status: string; payload: StudioPayload };
   s: StudioPayload["studio"];

@@ -22,7 +22,7 @@ needs_ok: false
 
 Answer first: what breaks, how soon. Then at most five effects, customer-visible first, then what to do before it happens.
 
-> If the Instagram connection stops, your website's feed and the weekly post report stop (2 things depend on it; Arjun owns both). It expires on 30 Oct, so you have about two weeks. Renewing takes about 10 minutes.
+> If the Instagram connection stops, your website's feed and the weekly post report stop (2 things depend on it; Techie owns both). It expires on 30 Oct, so you have about two weeks. Renewing takes about 10 minutes.
 
 ## Done well
 

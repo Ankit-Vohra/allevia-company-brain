@@ -1,6 +1,6 @@
 // How the app is used and how healthy it is: AI screening / voice onboarding / helpline, PostHog activity and funnels,
 // Sentry stability and issues, Play vitals and their thresholds, App Store review state, versions and builds. For the
-// Tech desks (Arjun, Zoya on call, Imran for releases) and Analytics.
+// Tech desks (Techie, Firefighter on call, Bug Hunter for releases) and Analytics.
 //
 // Sentry issues, releases and builds are Event nodes that AFFECT the app's Channel, so a Recommendation can cite them
 // as evidence; the numbers on them (events, people, a day's sessions) are dated Observations. The issue's link names the

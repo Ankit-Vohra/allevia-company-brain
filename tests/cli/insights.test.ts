@@ -45,7 +45,7 @@ describe("insights, brief and approvals from the terminal", () => {
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/^Insights for test_[0-9a-f]+: 16 findings \(16 new\), 12 with a card, 0 resolved/);
     expect(r.out).toContain("ADS (simulated)");
-    expect(r.out).toContain(`Rohan  Pause "Employers: hire in 24h" (simulated): CPA ₹300 vs ₹150 median\n         card: ${insightApprovalId("ads.high_cpa:campaign:meta-employers")} (pause_ad)`);
+    expect(r.out).toContain(`Growth Hacker Pause "Employers: hire in 24h" (simulated): CPA ₹300 vs ₹150 median\n         card: ${insightApprovalId("ads.high_cpa:campaign:meta-employers")} (pause_ad)`);
   });
 
   it("approvals lists what waits, and approve runs the (simulated) executor", async () => {

@@ -110,7 +110,7 @@ export async function retireSkillNote(g: GraphHandle, id: string, now: number): 
 const STYLE_OPS = new Set(["replace", "remove_emoji", "no_exclaim", "avoid_words"]);
 
 // The skills a rule learned from an edit belongs to: the skill the edited draft came from, and, for a style rule (a word,
-// an emoji, hype words), Dev's voice check, which holds every draft to those.
+// an emoji, hype words), Wordsmith's voice check, which holds every draft to those.
 export function skillsForLearnedRule(o: { agentId?: string | undefined; draft: string; op: string }): string[] {
   const out: string[] = [];
   if (o.agentId) {

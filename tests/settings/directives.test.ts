@@ -17,40 +17,40 @@ describe("parseDirective (deterministic rules)", () => {
   const p = (text: string) => parseDirective(text);
 
   it("switches a desk off by name or title, with the 'till …' note, and back on", () => {
-    expect(p("switch Arjun off till the new site launches")).toEqual({
+    expect(p("switch Techie off till the new site launches")).toEqual({
       patches: [{ kind: "agent.enabled", agent: "tech-lead", enabled: false, note: "till the new site launches" }], unparsed: [], notes: [],
     });
-    for (const t of ["Turn off the tech lead", "disable Arjun", "pause the Tech Lead for now", "Arjun is off"]) {
+    for (const t of ["Turn off the tech lead", "disable Techie", "pause the Tech Lead for now", "Techie is off"]) {
       expect(p(t).patches, t).toMatchObject([{ kind: "agent.enabled", agent: "tech-lead", enabled: false }]);
     }
-    for (const t of ["turn Arjun back on", "switch on the tech lead", "enable Arjun", "bring back Arjun"]) {
+    for (const t of ["turn Techie back on", "switch on the tech lead", "enable Techie", "bring back Techie"]) {
       expect(p(t).patches, t).toEqual([{ kind: "agent.enabled", agent: "tech-lead", enabled: true }]);
     }
-    expect(p("switch Rohan and Kabir off").patches.map((x) => (x as { agent: string }).agent)).toEqual(["data-analyst", "growth-marketer"]);
+    expect(p("switch Growth Hacker and Data Detective off").patches.map((x) => (x as { agent: string }).agent)).toEqual(["data-analyst", "growth-marketer"]);
   });
 
   it("never switches the Chief of Staff off, and says why", () => {
-    const r = p("switch Meera off");
+    const r = p("switch The Chief off");
     expect(r.patches).toEqual([]);
     expect(r.unparsed).toEqual([]);
-    expect(r.notes[0]).toMatch(/Meera can't be switched off/);
+    expect(r.notes[0]).toMatch(/The Chief can't be switched off/);
   });
 
   it("does not mistake other uses of on/off for a switch", () => {
-    expect(p("take Rohan off ads").patches).toEqual([]);
-    expect(p("put Rohan on light mode").patches).toEqual([{ kind: "agent.mode", agent: "growth-marketer", mode: "light" }]);
+    expect(p("take Growth Hacker off ads").patches).toEqual([]);
+    expect(p("put Growth Hacker on light mode").patches).toEqual([{ kind: "agent.mode", agent: "growth-marketer", mode: "light" }]);
     expect(p("turn off notifications").patches).toEqual([]);
   });
 
   it("sets mode and autonomy", () => {
-    expect(p("set Tara's autonomy to 2").patches).toEqual([{ kind: "agent.autonomy", agent: "content-strategist", autonomy: 2 }]);
-    expect(p("Kabir: autonomy level 1").patches).toEqual([{ kind: "agent.autonomy", agent: "data-analyst", autonomy: 1 }]);
+    expect(p("set Miss Influencer's autonomy to 2").patches).toEqual([{ kind: "agent.autonomy", agent: "content-strategist", autonomy: 2 }]);
+    expect(p("Data Detective: autonomy level 1").patches).toEqual([{ kind: "agent.autonomy", agent: "data-analyst", autonomy: 1 }]);
     expect(p("run the data analyst in full mode").patches).toEqual([{ kind: "agent.mode", agent: "data-analyst", mode: "full" }]);
   });
 
   it("'no emojis on LinkedIn' is an instruction for the content desks, scoped to LinkedIn; an address narrows it", () => {
     expect(p("No emojis on LinkedIn").patches).toEqual([{ kind: "memory.instruction", agents: CONTENT, text: "No emojis on LinkedIn.", channel: "channel:linkedin" }]);
-    expect(p("Tara, no emojis on LinkedIn").patches).toEqual([{ kind: "memory.instruction", agents: ["content-strategist"], text: "No emojis on LinkedIn.", channel: "channel:linkedin" }]);
+    expect(p("Miss Influencer, no emojis on LinkedIn").patches).toEqual([{ kind: "memory.instruction", agents: ["content-strategist"], text: "No emojis on LinkedIn.", channel: "channel:linkedin" }]);
   });
 
   it("'always mention free consultation' goes to everyone who writes promotion", () => {
@@ -73,17 +73,17 @@ describe("parseDirective (deterministic rules)", () => {
   });
 
   it("splits several orders in one message", () => {
-    expect(splitClauses("No emojis on LinkedIn; switch Arjun off till the new site launches")).toEqual(["No emojis on LinkedIn", "switch Arjun off till the new site launches"]);
-    expect(splitClauses("No emojis on LinkedIn, switch Arjun off and always mention free consultation.")).toEqual(["No emojis on LinkedIn", "switch Arjun off", "always mention free consultation"]);
-    const r = p("Tara, no emojis on LinkedIn. And switch Arjun off till the new site launches.");
+    expect(splitClauses("No emojis on LinkedIn; switch Techie off till the new site launches")).toEqual(["No emojis on LinkedIn", "switch Techie off till the new site launches"]);
+    expect(splitClauses("No emojis on LinkedIn, switch Techie off and always mention free consultation.")).toEqual(["No emojis on LinkedIn", "switch Techie off", "always mention free consultation"]);
+    const r = p("Miss Influencer, no emojis on LinkedIn. And switch Techie off till the new site launches.");
     expect(r.patches.map((x) => x.kind)).toEqual(["memory.instruction", "agent.enabled"]);
   });
 
   it("finds desks and channels by any of their names", () => {
-    expect(agentsIn("ask the copy editor and Nisha")).toEqual(["copy-editor", "fact-checker"]);
-    expect(agentsIn("restart the dev server")).toEqual([]); // "Dev" only capitalised
+    expect(agentsIn("ask the copy editor and Fact Checker")).toEqual(["copy-editor", "fact-checker"]);
+    expect(agentsIn("restart the dev server")).toEqual([]); // "Wordsmith" only capitalised
     expect(agentsIn("the on-call engineer and the release manager")).toEqual(["oncall-engineer", "qa-release"]);
-    expect(agentsIn("Zoya, page me on every crash; Imran owns QA")).toEqual(["oncall-engineer", "qa-release"]);
+    expect(agentsIn("Firefighter, page me on every crash; Bug Hunter owns QA")).toEqual(["oncall-engineer", "qa-release"]);
     expect(channelRef("linked in")).toEqual({ id: "channel:linkedin", name: "LinkedIn" });
     expect(channelRef("insta")).toEqual({ id: "channel:instagram", name: "Instagram" });
     expect(channelRef("Houzz")).toEqual({ id: "channel:houzz", name: "Houzz" });
@@ -144,16 +144,16 @@ describe("preview and apply (integration)", () => {
 
   let previewId = "";
 
-  it("previews 'No emojis on LinkedIn; switch Arjun off' as a diff, stored but not applied, with no model call", async () => {
+  it("previews 'No emojis on LinkedIn; switch Techie off' as a diff, stored but not applied, with no model call", async () => {
     const llm = new FakeDirectiveLlm({ patches: [], unclear: [] });
-    const pv = await previewDirective(g, { text: "No emojis on LinkedIn; switch Arjun off till the new site launches" }, { llm, now: NOW });
+    const pv = await previewDirective(g, { text: "No emojis on LinkedIn; switch Techie off till the new site launches" }, { llm, now: NOW });
     previewId = pv.id;
     expect(llm.calls).toEqual([]);
     expect(pv.id).toMatch(/^document:directive-2026-10-15-[0-9a-f]{8}$/);
     expect(pv).toMatchObject({ status: "preview", parser: "rules", unparsed: [], actor: "person:founder" });
     expect(pv.diff).toEqual([
-      { patch: 0, op: "add", target: `memory:${pv.id.slice(9)}-1`, label: "Instruction for Tara, Dev on LinkedIn", after: "No emojis on LinkedIn." },
-      { patch: 1, op: "change", target: "agent:allevia-tech-lead", label: "Arjun (Tech Lead)", before: "on", after: "off (till the new site launches)" },
+      { patch: 0, op: "add", target: `memory:${pv.id.slice(9)}-1`, label: "Instruction for Miss Influencer, Wordsmith on LinkedIn", after: "No emojis on LinkedIn." },
+      { patch: 1, op: "change", target: "agent:allevia-tech-lead", label: "Techie · Tech", before: "on", after: "off (till the new site launches)" },
     ]);
     // nothing applied yet
     expect((await listAgentsWithSettings(g)).find((a) => a.id === "tech-lead")).toMatchObject({ enabled: true, mode: "full", autonomy: 0, instructions: [] });
@@ -161,7 +161,7 @@ describe("preview and apply (integration)", () => {
     expect((await getDirective(g, pv.id))!.patches).toEqual(pv.patches);
   });
 
-  it("applies it: Arjun off with the old state kept as a Version, the instruction ABOUT Tara, Dev and LinkedIn, STATED by the owner", async () => {
+  it("applies it: Techie off with the old state kept as a Version, the instruction ABOUT Miss Influencer, Wordsmith and LinkedIn, STATED by the owner", async () => {
     const r = await applyDirective(g, previewId, { now: NOW + 1000 });
     expect(r.errors).toEqual([]);
     expect(r.status).toBe("applied");
@@ -192,13 +192,13 @@ describe("preview and apply (integration)", () => {
 
   it("a repeated instruction previews as 'same' and is not written again; the model reads what the rules can't", async () => {
     const llm = new FakeDirectiveLlm({ patches: [{ kind: "agent.mode", agents: ["growth-marketer"], mode: "light" }], unclear: [] });
-    const pv = await previewDirective(g, { text: "No emojis on LinkedIn. Give Rohan a lighter load this month" }, { llm, now: NOW + 10_000 });
+    const pv = await previewDirective(g, { text: "No emojis on LinkedIn. Give Growth Hacker a lighter load this month" }, { llm, now: NOW + 10_000 });
     expect(pv.parser).toBe("rules+llm");
     expect(llm.calls).toHaveLength(1);
     expect(llm.calls[0]!.model).toBe("haiku");
-    expect(llm.calls[0]!.prompt).toContain("- Give Rohan a lighter load this month");
+    expect(llm.calls[0]!.prompt).toContain("- Give Growth Hacker a lighter load this month");
     expect(llm.calls[0]!.system).toContain("The business's channels: LinkedIn.");
-    expect(pv.diff.map((l) => [l.op, l.label])).toEqual([["same", "Instruction for Tara, Dev on LinkedIn"], ["change", "Rohan (Growth Marketer) mode"]]);
+    expect(pv.diff.map((l) => [l.op, l.label])).toEqual([["same", "Instruction for Miss Influencer, Wordsmith on LinkedIn"], ["change", "Growth Hacker · Marketing mode"]]);
     const memories = await count("MATCH (m:Memory) RETURN count(m) AS c");
     await applyDirective(g, pv.id, { now: NOW + 11_000 });
     expect(await count("MATCH (m:Memory) RETURN count(m) AS c")).toBe(memories);
@@ -206,7 +206,7 @@ describe("preview and apply (integration)", () => {
   });
 
   it("without a model (llm: null) the rest stays unparsed and toggles still work; a failing model is reported", async () => {
-    const pv = await previewDirective(g, { text: "turn Arjun back on; make the captions punchier" }, { llm: null, now: NOW + 20_000 });
+    const pv = await previewDirective(g, { text: "turn Techie back on; make the captions punchier" }, { llm: null, now: NOW + 20_000 });
     expect(pv.patches).toEqual([{ kind: "agent.enabled", agent: "tech-lead", enabled: true }]);
     expect(pv.unparsed).toEqual(["make the captions punchier"]);
     const failing: LlmRunner = { structured: async () => { throw new Error("offline"); } };

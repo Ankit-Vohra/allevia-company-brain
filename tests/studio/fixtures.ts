@@ -1,5 +1,5 @@
 // Shared fixtures for the Studio tests: a synthetic "phone photo" of a building (with EXIF GPS planted, tilted 5°), a
-// small brand graph for a made-up studio (Kestrel & Oak, Bristol), and scripted answers for Tara, Nisha and Dev.
+// small brand graph for a made-up studio (Kestrel & Oak, Bristol), and scripted answers for Miss Influencer, Fact Checker and Wordsmith.
 import sharp from "sharp";
 import type { GraphHandle } from "../../src/graph/client.js";
 import { upsertEdge, upsertNode } from "../../src/graph/upsert.js";

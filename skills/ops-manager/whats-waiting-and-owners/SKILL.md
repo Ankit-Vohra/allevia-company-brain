@@ -22,7 +22,7 @@ needs_ok: false
 Group by who has to act. Each line: what, who, how long, why it matters.
 
 > Waiting on you (2): the Diwali post draft, 3 days (the sale starts in 4); a reply to the venue quote, 6 days.
-> Waiting on the team (1): the new menu page, Arjun, 2 days.
+> Waiting on the team (1): the new menu page, Techie, 2 days.
 > Nobody owns: the supplier invoice from 2 Oct.
 > Next: approve the Diwali draft (1 minute).
 

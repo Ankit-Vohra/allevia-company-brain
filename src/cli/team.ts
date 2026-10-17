@@ -20,7 +20,7 @@ export const commands: Command[] = [
   {
     name: "tell",
     usage: 'tell <tenant> "<instruction>" [--apply] [--no-llm] [--json]',
-    summary: 'Tell your team (e.g. "No emojis on LinkedIn; switch Arjun off"): preview the change, --apply to make it',
+    summary: 'Tell your team (e.g. "No emojis on LinkedIn; switch Techie off"): preview the change, --apply to make it',
     async run(args) {
       const { values, positionals } = parseArgs({
         args, allowPositionals: true,

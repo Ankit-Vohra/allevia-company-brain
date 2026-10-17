@@ -1,8 +1,8 @@
-// Content trials: do Dev and Nisha catch what they are there to catch? Tara's first draft is scripted (it holds a planted
-// problem); everyone else (the Chief's plan, Dev, Nisha, Tara's revision, the answer) is the real team on the
+// Content trials: do Wordsmith and Fact Checker catch what they are there to catch? Miss Influencer's first draft is scripted (it holds a planted
+// problem); everyone else (the Chief's plan, Wordsmith, Fact Checker, Miss Influencer's revision, the answer) is the real team on the
 // subscription, through the real orchestrator.
-//   ai       : the facts are all real, but the writing is full of AI tells and hard sell      -> Dev should send it back
-//   claim    : calm, plain writing, but it states an award and a project count the graph does not hold -> Nisha should
+//   ai       : the facts are all real, but the writing is full of AI tells and hard sell      -> Wordsmith should send it back
+//   claim    : calm, plain writing, but it states an award and a project count the graph does not hold -> Fact Checker should
 //   clean    : the control: plain writing, only recorded facts                                        -> both should pass
 // Usage: npx tsx scripts/trials/planted.ts <tenant> <ai|claim|clean>   (JSON events on stdout, one per line)
 import type { AgentEvent } from "../../shared/contracts.js";

@@ -143,7 +143,7 @@ export async function saveDeliverable(g: GraphHandle, deps: SaveDeps, request: S
   const recId = entityId("Recommendation", `made ${r.kind} ${short}`);
   const why = [
     `Made on request: ${JSON.stringify(r.request.slice(0, 200))}.`,
-    ...saved.map((s) => `Option ${s.o.label}: ${s.o.badge === "ok" ? "Nisha checked it" : s.o.badge === "held" ? `Nisha held it back (${s.o.note})` : "not double-checked"}.`),
+    ...saved.map((s) => `Option ${s.o.label}: ${s.o.badge === "ok" ? "Fact Checker checked it" : s.o.badge === "held" ? `Fact Checker held it back (${s.o.note})` : "not double-checked"}.`),
     ...r.notes.slice(0, 3),
     ...(removed.total ? [removed.note()] : []),
     `Uses ${credits} credit${credits === 1 ? "" : "s"} on approval.`,

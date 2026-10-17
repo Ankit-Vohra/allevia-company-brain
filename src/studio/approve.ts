@@ -1,6 +1,6 @@
 // The Studio's approval card and what approving it does (product design §6, steps 8 and 9).
-// - proposeStudioDraft: Tara's Recommendation and a pending Approval{kind:'content_draft'} whose payload is the card:
-//   title, Dev's caption, and the studio block (the original, the variants with Nisha's badges, the recommended one).
+// - proposeStudioDraft: Miss Influencer's Recommendation and a pending Approval{kind:'content_draft'} whose payload is the card:
+//   title, Wordsmith's caption, and the studio block (the original, the variants with Fact Checker's badges, the recommended one).
 // - finalizeStudioDraft (on approve): Content{format:'post', status:'draft'} -USES_ASSET-> the chosen variant; the
 //   variant (and the original) DEPICTS the project Page when the note named one; Approval -RESULTED_IN-> Action
 //   -RESULTED_IN-> Content; what the post cost us to make recorded as an Observation (usd_cost). The owner's credits are spent
@@ -43,7 +43,7 @@ export interface StudioCard {
   // Plain sentences for the owner that go with the card (a child kept the photo to a simple clean-up; why there is no AI edit).
   notices?: string[];
   // Set when the card is for something the team MADE on request (src/creative): a poster, an image, a clip. The options are
-  // then made assets rather than variants of a photo, and an option Nisha could not check ("unchecked") may be approved
+  // then made assets rather than variants of a photo, and an option Fact Checker could not check ("unchecked") may be approved
   // (the owner is told it was not double-checked); one she held back ("held") never can.
   creative?: { kind: "poster" | "image" | "clip"; aspect: string; channel: string; by: string; allowUnchecked: boolean; format?: string };
   // Things made from one of the options that go with the card but are not themselves a choice (the 5 second clip made from the
@@ -88,8 +88,8 @@ export async function proposeStudioDraft(
   };
   const payload: StudioPayload = { title, body, target: "instagram", studio };
   const why = [
-    `Tara: ${o.assessment.verdict} (${o.assessment.subject}).`,
-    rec ? `Variant ${rec.label} recommended; Nisha: ${o.fidelity.find((f) => f.assetId === rec.id)?.note ?? "not checked"}.` : "No variant passed Nisha's check.",
+    `Miss Influencer: ${o.assessment.verdict} (${o.assessment.subject}).`,
+    rec ? `Variant ${rec.label} recommended; Fact Checker: ${o.fidelity.find((f) => f.assetId === rec.id)?.note ?? "not checked"}.` : "No variant passed Fact Checker's check.",
     `Uses ${CREDIT_COSTS.static_post} credits on approval.`,
   ].join(" ");
   return serial(g.name, async () => {
@@ -133,7 +133,7 @@ export interface ApproveInput { approvalId: string; variantId?: string; caption?
 // `variantId` is the option the owner picked: what approving costs depends on it (an ad, a clip).
 export type DecideFn = (approvalId: string, editedPayload?: { title: string; body: string; target: string }, variantId?: string) => Promise<{ status: string }>;
 
-// The owner picks a variant (it must have passed Nisha) and may edit the caption; the decision is recorded through
+// The owner picks a variant (it must have passed Fact Checker) and may edit the caption; the decision is recorded through
 // `decide`, then the draft gets the Studio's part: the chosen variant, the project page, the credits.
 export async function approveStudioDraft(g: GraphHandle, input: ApproveInput, decide: DecideFn): Promise<{ contentId: string; status: string; variantId: string }> {
   const card = await studioCard(g, input.approvalId);
@@ -143,7 +143,7 @@ export async function approveStudioDraft(g: GraphHandle, input: ApproveInput, de
   const v = card.payload.studio.variants.find((x) => x.id === variantId);
   if (!v) throw new DecisionError(404, `${variantId} is not one of this card's variants.`);
   const mayApprove = v.badge === "unchanged" || (v.badge === "unchecked" && card.payload.studio.creative?.allowUnchecked === true);
-  if (!mayApprove) throw new DecisionError(409, `Nisha held variant ${v.label} back (${v.note || v.badge}); pick a variant marked "building unchanged".`);
+  if (!mayApprove) throw new DecisionError(409, `Fact Checker held variant ${v.label} back (${v.note || v.badge}); pick a variant marked "building unchanged".`);
   const current = { title: card.payload.title, body: card.payload.body, target: card.payload.target };
   const caption = input.caption?.trim();
   const edited = caption && caption !== current.body ? { ...current, body: caption.slice(0, 5000) } : undefined;

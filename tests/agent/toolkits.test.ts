@@ -86,7 +86,7 @@ describe("toolkits", () => {
     const chief = agentById("chief-of-staff")!;
     const domains = new Set(chief.tools.map((t) => toolMeta(t)!.domain));
     for (const d of ["knowledge", "memory", "answer", "brand", "creative", "content", "research"] as const) expect(domains.has(d), d).toBe(true);
-    // the desks that review (Dev, Nisha) never get the tools that make things
+    // the desks that review (Wordsmith, Fact Checker) never get the tools that make things
     for (const id of ["copy-editor", "fact-checker"]) for (const t of agentById(id)!.tools) expect(toolMeta(t)!.mode, `${id} ${t}`).toBe("read");
     // only the Chief makes pictures (credits): the cost class stays with one desk
     for (const a of AGENTS) if (a.id !== "chief-of-staff") for (const t of a.tools) expect(toolMeta(t)!.cost, `${a.id} ${t}`).not.toBe("credits");

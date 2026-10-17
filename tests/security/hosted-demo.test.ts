@@ -112,7 +112,7 @@ describe("a stranger at the hosted demo", () => {
       ["POST", "/api/demo_co/discord/invite", {}],
       ["PUT", "/api/demo_co/studio/settings", { blurFaces: true }],
       ["POST", "/api/demo_co/studio/approve", { approvalId: "approval:t-001-1" }],
-      ["POST", "/api/demo_co/directives", { text: "switch Arjun off" }],
+      ["POST", "/api/demo_co/directives", { text: "switch Techie off" }],
       ["PATCH", "/api/demo_co/agents/tech-lead", { enabled: false }],
       ["POST", "/api/demo_co/insights/run", {}],
       ["POST", "/api/demo_co/checkup", {}],

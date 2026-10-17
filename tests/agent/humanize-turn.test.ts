@@ -1,4 +1,4 @@
-// The standing last pass in a turn: the Chief's answer is cleaned without a model, Dev (cheapest model) rewrites it once
+// The standing last pass in a turn: the Chief's answer is cleaned without a model, Wordsmith (cheapest model) rewrites it once
 // only when strong tells are left, the owner's stream is replaced with the cleaned answer, and nothing it cites moves.
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
@@ -37,7 +37,7 @@ describe("the last pass on the Chief's answer", () => {
     expect(last).toMatchObject({ reset: true, delta: out.answer });
   });
 
-  it("Dev rewrites once on the cheapest model when a strong tell is left; a rewrite that moves a number is refused", async () => {
+  it("Wordsmith rewrites once on the cheapest model when a strong tell is left; a rewrite that moves a number is refused", async () => {
     const tell = "Sign-ups fell from 58 to 41 [[metric:signups]]. It's not just a blip, it's a signal. Check the services page first.";
     const fixed = "Sign-ups fell from 58 to 41 [[metric:signups]], more than a normal week. Check the services page first.";
     const good = run(tell, { "copy-editor:polish": { structured: { text: fixed } } });

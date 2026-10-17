@@ -29,8 +29,8 @@ One page. The summary in two sentences first, then who was hit, the timeline, th
 > Hit: 23 failed booking attempts (booking records, 12 Oct).
 > Cause (confirmed): payment keys expire every 90 days and the date was not tracked.
 > Follow-ups:
-> 1. Alert 14 days before any key expires (Arjun, 19 Oct).
-> 2. Add "check payment keys" to the release check (Imran, 17 Oct).
+> 1. Alert 14 days before any key expires (Techie, 19 Oct).
+> 2. Add "check payment keys" to the release check (Bug Hunter, 17 Oct).
 > Customer message: "On Sunday afternoon our online booking was down for about two hours. It's fixed now. If you tried to book then, reply here and we'll hold your slot."
 
 ## Done well

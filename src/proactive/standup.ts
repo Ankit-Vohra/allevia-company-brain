@@ -1,5 +1,5 @@
-// The daily team stand-up, one per business per day. Meera reviews what changed since yesterday (signals.ts), the team
-// turns it into what is worth doing (opportunities.ts), Meera picks at most three with a one-line reason each and hands
+// The daily team stand-up, one per business per day. The Chief reviews what changed since yesterday (signals.ts), the team
+// turns it into what is worth doing (opportunities.ts), The Chief picks at most three with a one-line reason each and hands
 // them to the right people with a purpose-first brief (choose.ts), and each is drafted and left waiting for the owner's
 // OK (draft.ts). Today's note then leads with it ("Your team noticed 2 things and drafted them"), or says "Nothing new
 // worth your time today" when nothing cleared the bar.
@@ -29,7 +29,7 @@ export interface StandupOpts {
   graph?: GraphHandle;
   now?: number;
   since?: number;
-  runner?: LlmRunner;           // Meera's choice; absent: the rule order chooses
+  runner?: LlmRunner;           // The Chief's choice; absent: the rule order chooses
   drafters: Drafters;
   paidPerDay?: number;
   force?: boolean;
@@ -82,7 +82,7 @@ export async function runStandup(tenant: string, opts: StandupOpts): Promise<Sta
   const opps = opportunitiesFrom(signals);
   const screened = screen(opps, await loadHistory(g, now), now, opts.minScore !== undefined ? { minScore: opts.minScore } : {});
   const choice = await choose(screened.kept, { ...(opts.runner ? { runner: opts.runner } : {}), business: signals.business, today: signals.today, ...(opts.max ? { max: opts.max } : {}), log });
-  log(`stand-up ${tenant}: ${opps.length} opportunities, ${screened.kept.length} cleared the bar, ${choice.picks.length} picked by ${choice.by === "meera" ? "Meera" : "the rule order"}`);
+  log(`stand-up ${tenant}: ${opps.length} opportunities, ${screened.kept.length} cleared the bar, ${choice.picks.length} picked by ${choice.by === "meera" ? "The Chief" : "the rule order"}`);
 
   // impact first: the big problems that already have a fix waiting lead the note, with why they matter this week
   const waiting = await explainWaiting(bigWaiting(signals.findings, signals.goals), { ...(opts.runner ? { runner: opts.runner } : {}), business: signals.business, log });

@@ -2,7 +2,7 @@
 //   POST /api/:t/studio/intake    multipart {photo, note?}; the run streams back as AgentEvents (SSE): asset, assessment,
 //                                 asset (variant A), asset (variant B), review, proposal, final
 //   GET  /api/:t/assets/:id       the asset's file (?w= for a smaller copy), only when the Asset is in this tenant's graph
-//   GET  /api/:t/assets/:id/lineage  how it was made: parents, jobs and cost, rules, Nisha's check, the card and the post
+//   GET  /api/:t/assets/:id/lineage  how it was made: parents, jobs and cost, rules, Fact Checker's check, the card and the post
 //   GET  /api/:t/studio/latest    the last run's events and where its card stands (for the page after a reload)
 //   POST /api/:t/studio/approve   {approvalId, variantId?, caption?}: the owner picks a variant; writes the draft post
 //   POST /api/:t/studio/revise    {approvalId, instruction | retryOf}: a change in the owner's words (free light and colour, or the AI editor)
@@ -70,8 +70,8 @@ export function studioErrorMessage(e: unknown): string {
   if (e instanceof ImageRejected) return e.message;
   if (e instanceof VisionError) {
     return /rate.?limit|limit/i.test(e.message)
-      ? "Tara can't look at photos right now: the team's model allowance is used up for the moment. Try again in a little while."
-      : "Tara couldn't look at the photo this time. Try again in a moment.";
+      ? "Miss Influencer can't look at photos right now: the team's model allowance is used up for the moment. Try again in a little while."
+      : "Miss Influencer couldn't look at the photo this time. Try again in a moment.";
   }
   return "The Studio stopped on an unexpected problem; nothing was posted. Try again in a moment.";
 }
@@ -126,7 +126,7 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
 
   // The owner's words under the options, on the web: the same routing as the Discord thread (studio/request.ts). Light and
   // colour changes are free and local; "make it festive", "change the background", "make this into an ad saying ..." and
-  // "try again" go to the AI editor, quoted and capped. Streams AgentEvents: status lines, the new option (asset), Nisha's
+  // "try again" go to the AI editor, quoted and capped. Streams AgentEvents: status lines, the new option (asset), Fact Checker's
   // check (review) and a final line the page shows.
   app.post("/api/:t/studio/revise", async (c) => {
     const { reg, g } = await h.tenantOf(c);
@@ -179,7 +179,7 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
             send({ type: "review", agent: NISHA, findingId: r.variant.id, verdict: r.passed ? "ok" : "reject", note: `Variant ${r.variant.label}: ${r.fidelity.note}` });
             const cost = r.variant.credits !== undefined && r.variant.credits > 0 ? ` It used ${creditsWords(r.variant.credits, { about: true })}.` : "";
             return say(r.passed
-              ? `Option ${r.variant.label} is your premium ad picture, and Nisha checked that the product is unchanged.${cost} Ask for "a clip" and I will price a 5 second vertical clip from it first.`
+              ? `Option ${r.variant.label} is your premium ad picture, and Fact Checker checked that the product is unchanged.${cost} Ask for "a clip" and I will price a 5 second vertical clip from it first.`
               : `Option ${r.variant.label} was held back: ${r.fidelity.note}${cost} You can ask for it again in other words, or pick another option.`);
           }
           const request = req.kind === "retry" ? { kind: "retry" as const, ...(retryOf ? { of: retryOf } : {}) }
@@ -191,7 +191,7 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
           send({ type: "asset", agent: TARA, assetId: r.variant.id, kind: "variant", parentId: "", thumb: assetUrl(reg.slug, r.variant.id, 640) });
           send({ type: "review", agent: NISHA, findingId: r.variant.id, verdict: r.passed ? "ok" : "reject", note: `Variant ${r.variant.label}: ${r.fidelity.note}` });
           const cost = r.variant.credits !== undefined ? ` It used ${creditsWords(r.variant.credits, { about: true })}.` : "";
-          return say(r.passed ? `Option ${r.variant.label} is ready and Nisha checked it.${cost}` : `Option ${r.variant.label} was held back: ${r.fidelity.note}${cost}${r.canRetry ? ` I can try once more${r.retryQuote ? ` (${r.retryQuote})` : ""}.` : ""}`);
+          return say(r.passed ? `Option ${r.variant.label} is ready and Fact Checker checked it.${cost}` : `Option ${r.variant.label} was held back: ${r.fidelity.note}${cost}${r.canRetry ? ` I can try once more${r.retryQuote ? ` (${r.retryQuote})` : ""}.` : ""}`);
         } catch (e) {
           if (!signal.aborted) {
             h.log(`[studio] ${reg.slug}: ${e instanceof Error ? e.message : String(e)}`);
@@ -208,7 +208,7 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
   });
 
   // How a Studio picture or clip was made, read from the graph (studio/lineage.ts): the photo it came from, each step, the Higgsfield
-  // jobs and what they cost, the rules, Nisha's check, the card and the post.
+  // jobs and what they cost, the rules, Fact Checker's check, the card and the post.
   app.get("/api/:t/assets/:id/lineage", async (c) => {
     const { g } = await h.tenantOf(c);
     const lineage = await assetLineage(g, c.req.param("id"));
@@ -271,7 +271,7 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
     return c.json({ ...r, approval: await readApproval(g, approvalId) });
   });
 
-  // A 5 second clip from a picture Nisha passed: without confirm it only quotes (nothing is spent); with confirm it makes it.
+  // A 5 second clip from a picture Fact Checker passed: without confirm it only quotes (nothing is spent); with confirm it makes it.
   app.post("/api/:t/studio/clip", async (c) => {
     const { reg, g } = await h.tenantOf(c);
     h.refuseInPublicMode();

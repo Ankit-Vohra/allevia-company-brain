@@ -112,7 +112,7 @@ describe("company skills from a business's own graph (integration)", () => {
     expect(r.guidance).toMatch(/SKILL: Harbour Bakery reels \(set up for this business\)/);
     expect(r.guidance).toMatch(/No music under speech\./);
     expect(r.data).toMatchObject({ skill: "harbour-bakery-reel", source: "business" });
-    // Rohan sees the ad skill first too
+    // Growth Hacker sees the ad skill first too
     expect(skillsBlock(catalog.forAgent("growth-marketer")).indexOf("harbour-bakery-ad")).toBeLessThan(skillsBlock(catalog.forAgent("growth-marketer")).indexOf("- ad-budget-check"));
   });
 

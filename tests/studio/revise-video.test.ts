@@ -1,4 +1,4 @@
-// "Make it warmer": a text reply adjusts the next variant (a new Asset with its lineage, checked by Nisha, added to the
+// "Make it warmer": a text reply adjusts the next variant (a new Asset with its lineage, checked by Fact Checker, added to the
 // pending card), and videos: kept as a raw Asset, honest about ffmpeg. Fake vision and a fake engine; no credits, no network.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
@@ -139,7 +139,7 @@ describe("revising a variant (integration)", () => {
     expect(await reviseVariant(g, { tenant: "kestrel_oak", businessId: BIZ, approvalId: "approval:nope", instruction: "warmer" }, { store, vision, now: now() }))
       .toMatchObject({ ok: false, reason: "missing" });
     expect(await nodes()).toBe(before);
-    // a revision Nisha holds back is on the card but not recommended and cannot be approved
+    // a revision Fact Checker holds back is on the card but not recommended and cannot be approved
     const held = await reviseVariant(g, { tenant: "kestrel_oak", businessId: BIZ, approvalId: r.approvalId, instruction: "warmer" }, { store, vision, now: now() });
     expect(held.ok && held.fidelity.badge).not.toBe("unchanged");
     if (held.ok) expect((await studioCard(g, r.approvalId))!.payload.studio.recommended).not.toBe(held.variant.id);
@@ -192,7 +192,7 @@ describe("videos", () => {
     expect(a!.key).toMatch(/^[0-9a-f]{64}\.mp4$/);
   });
 
-  it("with ffmpeg: metadata removed, first frame handed over, and Tara's look at it kept on the video", async () => {
+  it("with ffmpeg: metadata removed, first frame handed over, and Miss Influencer's look at it kept on the video", async () => {
     const frame = await facadePhoto({ gps: false });
     const ff = fakeFfmpeg({ available: true, frame, strip: (b) => Buffer.concat([b, Buffer.from("-clean")]) });
     const r = await storeVideo(g, { tenant: "kestrel_oak", bytes: MP4, mime: "video/mp4" }, { store, now: NOW, ffmpeg: ff });

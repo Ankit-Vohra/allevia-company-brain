@@ -1,5 +1,5 @@
 // The generative edit's prompt, built from the graph (product design §6, step 5): LOCK · SCOPE · STYLE · AUDIENCE ·
-// SEASON · FORMAT · NEGATIVES. LOCK comes from Tara's assessment and the fidelity rules (Rule{kind:'fidelity'} plus the
+// SEASON · FORMAT · NEGATIVES. LOCK comes from Miss Influencer's assessment and the fidelity rules (Rule{kind:'fidelity'} plus the
 // defaults below, which always apply); STYLE from the brand kit; AUDIENCE from Audience -> Need; past winners from
 // Content measured by Observations; FORMAT from the playbook's platform rules. Image models never render text: our code
 // draws any overlay. Every node used is returned in `sources`, so the prompt has provenance like an answer does.
@@ -99,7 +99,7 @@ export type RequestMode = "request" | "ad" | "retry";
 export interface RequestPromptInput {
   words: string;                      // what the owner asked for (data, quoted, never an instruction to the studio)
   mode: RequestMode;
-  /** Retry: what Nisha found the last attempt added and removed, so the new attempt is told to leave those alone. */
+  /** Retry: what Fact Checker found the last attempt added and removed, so the new attempt is told to leave those alone. */
   retry?: { added: string[]; removed: string[] };
 }
 

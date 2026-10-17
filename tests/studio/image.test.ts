@@ -1,5 +1,5 @@
 // Studio image utilities (product design §6, steps 1, 4 and 7): metadata stripped on intake, a perceptual dHash, a
-// local tilt estimate, the 4:5 straighten-and-crop plan, variant A's grade, and the SSIM-like structure score Nisha uses.
+// local tilt estimate, the 4:5 straighten-and-crop plan, variant A's grade, and the SSIM-like structure score Fact Checker uses.
 import { randomBytes } from "node:crypto";
 import { describe, it, expect } from "vitest";
 import sharp from "sharp";

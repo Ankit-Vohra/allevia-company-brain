@@ -1,5 +1,5 @@
-// End to end: the owner says "No emojis on LinkedIn; switch Arjun off", applies it, then asks for a LinkedIn post. The
-// plan skips Arjun, Tara's prompt carries the instruction, and the saved Turn and her Finding are GUIDED_BY it.
+// End to end: the owner says "No emojis on LinkedIn; switch Techie off", applies it, then asks for a LinkedIn post. The
+// plan skips Techie, Miss Influencer's prompt carries the instruction, and the saved Turn and her Finding are GUIDED_BY it.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { z } from "zod";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
@@ -38,7 +38,7 @@ describe("Tell your team, then ask (integration)", () => {
     }, NOW);
     expect(s.errors).toEqual([]);
     await ensureRoster(g, { businessId: "business:kestrel-oak" }, NOW);
-    const pv = await previewDirective(g, { text: "No emojis on LinkedIn; switch Arjun off till the new site launches" }, { llm: null, now: NOW });
+    const pv = await previewDirective(g, { text: "No emojis on LinkedIn; switch Techie off till the new site launches" }, { llm: null, now: NOW });
     const applied = await applyDirective(g, pv.id, { now: NOW });
     expect(applied.errors).toEqual([]);
     memoryId = pv.diff.find((l) => l.op === "add")!.target;
@@ -48,7 +48,7 @@ describe("Tell your team, then ask (integration)", () => {
     await closeAll();
   });
 
-  it("the plan skips Arjun, Tara works under the instruction, and the Turn and her Finding are GUIDED_BY it", async () => {
+  it("the plan skips Techie, Miss Influencer works under the instruction, and the Turn and her Finding are GUIDED_BY it", async () => {
     const post = "Harbour House: a Victorian terrace, opened up to the garden [[content:harbour-house]].";
     const scripts: Record<string, FakeScript> = {
       "chief-of-staff:plan": { structured: { rationale: "content, and the site", steps: [

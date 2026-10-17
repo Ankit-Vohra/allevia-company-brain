@@ -1,4 +1,4 @@
-// Which skill an owner's words are about. "Our posts always end with a question" is about Tara's Instagram post craft;
+// Which skill an owner's words are about. "Our posts always end with a question" is about Miss Influencer's Instagram post craft;
 // "no music in reels" is about her reel script skill. The words are what an owner says, not skill ids. A rule that names
 // none of these stays a standing instruction for the team (src/settings/directives.ts).
 

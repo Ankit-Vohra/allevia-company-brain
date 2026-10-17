@@ -1,7 +1,7 @@
 // The owner's own requests to the generative engine (founder's brief, 2026-10-15): "make it festive", "change the
-// background", "remove the pole", "make this into an ad saying ...", and "try again" when Nisha held an AI edit back.
+// background", "remove the pole", "make this into an ad saying ...", and "try again" when Fact Checker held an AI edit back.
 // Each becomes a new Asset{kind:'variant'} on the pending card, made from the straightened frame (so it lines up with the
-// other options with no guessing), checked by Nisha against the original with the owner's request as the allowed change,
+// other options with no guessing), checked by Fact Checker against the original with the owner's request as the allowed change,
 // and offered like any other option. The engine is quoted before it generates, capped per run and per day, and may decline
 // (not signed in, a cap, low balance): then nothing is added and the owner is told why in plain words.
 // A photo with a child in it never goes to the engine. Light and colour words never come here (revise.ts, free).
@@ -42,7 +42,7 @@ export interface GenerateDeps {
 export type GenerateResult =
   | {
     ok: true; variant: VariantRecord; fidelity: FidelityResult; card: StudioPayload; passed: boolean;
-    /** Held back by Nisha and a retry is on offer (one per option). */
+    /** Held back by Fact Checker and a retry is on offer (one per option). */
     canRetry: boolean;
     /** What a retry would cost, in the owner's words, when the engine can say. */
     retryQuote?: string;
@@ -132,7 +132,7 @@ export async function generateVariant(
     },
   }, deps.now);
   const variant: VariantRecord = { ...saved, model: res.model, recorded: res.recorded, ...(res.jobId ? { jobId: res.jobId } : {}), ...(res.credits !== undefined ? { credits: res.credits } : {}) };
-  if (retryOf) await upsertEdge(g, { from: variant.id, type: "DERIVED_FROM", to: retryOf.id, props: { step: "retry", reason: "held back by Nisha" } }, deps.now);
+  if (retryOf) await upsertEdge(g, { from: variant.id, type: "DERIVED_FROM", to: retryOf.id, props: { step: "retry", reason: "held back by Fact Checker" } }, deps.now);
 
   const [fidelity] = await checkFidelity(g, { businessName: ctx.business.name, original: originalBytes, base, locks: assessment.locks, variants: [variant], ...(requested ? { requested } : {}) },
     { vision: deps.vision, model: { ...DEFAULT_MODELS, ...deps.models }.fidelity, now: deps.now });

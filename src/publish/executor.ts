@@ -77,7 +77,7 @@ export interface Media { assetId: string; sha: string; kind: "image" | "video"; 
 interface StudioLike { variants?: Array<{ id: string; label?: string; badge?: string; note?: string }>; recommended?: string; creative?: { allowUnchecked?: boolean } }
 
 // The one picture or video this approval posts: the option the owner picked (remembered on the card), else the one we recommended,
-// else the single asset the card names. An option Nisha held back is never posted.
+// else the single asset the card names. An option Fact Checker held back is never posted.
 async function resolveMedia(g: GraphHandle, approvalId: string, p: Payload, block: PublishBlock, spec: PlatformSpec): Promise<{ ok: true; media?: Media } | { ok: false; words: string }> {
   const studio = (p.studio && typeof p.studio === "object" ? p.studio : undefined) as StudioLike | undefined;
   const [chosen] = await g.roQuery<{ v: string | null }>("MATCH (a:Entity:Approval {id:$id}) RETURN a.chosenVariant AS v", { id: approvalId });
@@ -89,14 +89,14 @@ async function resolveMedia(g: GraphHandle, approvalId: string, p: Payload, bloc
     const v = studio.variants.find((x) => x.id === assetId);
     if (!v) return { ok: false, words: "Nothing was posted: the picture chosen isn't one of this card's options." };
     const may = v.badge === "unchanged" || (v.badge === "unchecked" && studio.creative?.allowUnchecked === true);
-    if (!may) return { ok: false, words: `Nothing was posted: Nisha held ${v.label ? `option ${v.label}` : "that option"} back${v.note ? ` (${clip(oneLine(v.note), 120)})` : ""}. Pick another option.` };
+    if (!may) return { ok: false, words: `Nothing was posted: Fact Checker held ${v.label ? `option ${v.label}` : "that option"} back${v.note ? ` (${clip(oneLine(v.note), 120)})` : ""}. Pick another option.` };
   }
   const a = await assessAsset(g, assetId, spec, { checked: !!studio?.variants?.length });
   return a.ok ? { ok: true, media: a.media } : { ok: false, words: `Nothing was posted: ${a.words}` };
 }
 
 /**
- * Whether one picture or video can be posted to a platform, and what it is. `checked`: Nisha's verdict on the card already covered
+ * Whether one picture or video can be posted to a platform, and what it is. `checked`: Fact Checker's verdict on the card already covered
  * it (a card with options), so the asset's own check is not asked again.
  */
 export async function assessAsset(g: Pick<GraphHandle, "roQuery">, assetId: string, spec: PlatformSpec, o: { checked?: boolean } = {}): Promise<{ ok: true; media: Media; check: string | null } | { ok: false; words: string }> {

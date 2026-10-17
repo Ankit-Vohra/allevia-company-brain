@@ -2,7 +2,7 @@
 //   1. each chosen layout is rendered and its code findings fixed for free (a stronger shade under words that measure
 //      low, the logo on a plate, a supporting line dropped when the headline cannot breathe...), up to four passes; a
 //      layout that still breaks (a headline that cannot fit, words in a story's covered band) is set aside for the next;
-//   2. Rohan reviews the clean ones together (critique.ts), and every issue he raises becomes a concrete change (a crop
+//   2. Growth Hacker reviews the clean ones together (critique.ts), and every issue he raises becomes a concrete change (a crop
 //      moved, a shade raised, a line dropped, the other photo, the dark ground); the revised piece is checked by code
 //      again and reviewed again, at most `rounds` times;
 //   3. each option keeps the version with the best review, and the result says honestly what the reviewer still wanted

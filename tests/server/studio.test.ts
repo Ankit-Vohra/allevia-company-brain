@@ -80,7 +80,7 @@ describe("server: studio (integration)", () => {
     const readStory = async () => {
       const res = await app.request(`/api/mini/assets/${encodeURIComponent(assets[0]!.assetId)}/lineage`);
       expect(res.status).toBe(200);
-      return lineageStory(await res.json() as Lineage, (id) => (id === "fact-checker" ? "Nisha" : undefined));
+      return lineageStory(await res.json() as Lineage, (id) => (id === "fact-checker" ? "Fact Checker" : undefined));
     };
     const before = await readStory();
     expect(before.steps.map((x) => [x.key, x.state])).toEqual([["photo", "done"], ["options", "done"], ["approved", "waiting"], ["posted", "none"]]);
@@ -88,7 +88,7 @@ describe("server: studio (integration)", () => {
     expect(before.steps[1]!.assets.map((a) => a.label)).toEqual(["A", "B"]);
     expect(before.steps[1]!.assets.every((a) => !a.chosen)).toBe(true);
 
-    // approve variant B (Nisha passed it) with the caption as written
+    // approve variant B (Fact Checker passed it) with the caption as written
     const ok = await post(app, "/api/mini/studio/approve", { approvalId: proposal.approvalId, variantId: assets[2]!.assetId });
     expect(ok.status).toBe(200);
     const body = await ok.json() as { contentId: string; status: string; approval: { status: string } };
@@ -145,7 +145,7 @@ describe("server: studio (integration)", () => {
     const asset = festive.find((e): e is Extract<AgentEvent, { type: "asset" }> => e.type === "asset")!;
     expect(asset).toBeTruthy();
     expect(festive.some((e) => e.type === "review")).toBe(true);
-    expect(finalOf(festive)).toMatch(/is ready and Nisha checked it/);
+    expect(finalOf(festive)).toMatch(/is ready and Fact Checker checked it/);
     const [step] = await h.g.roQuery<{ step: string; ai: boolean }>("MATCH (a:Asset {id:$id}) RETURN a.step AS step, a.aiEdited AS ai", { id: asset.assetId });
     expect(step).toEqual({ step: "generative-request", ai: true });
 
@@ -193,7 +193,7 @@ describe("server: studio (integration)", () => {
     const on = await put(app, { blurFaces: true });
     expect(await on.json()).toEqual({ blurFaces: true, language: "auto" });
     expect(await (await put(app, { language: "Hindi" })).json()).toEqual({ blurFaces: true, language: "hindi" });
-    // a run now blurs the person Tara flagged, and says so on the card
+    // a run now blurs the person Miss Influencer flagged, and says so on the card
     const events = sseEvents(await (await upload(app, await facadePhoto({ tilt: 1 }), "blur on")).text());
     const proposal = events.find((e): e is Extract<AgentEvent, { type: "proposal" }> => e.type === "proposal")!;
     const [card] = await h.g.roQuery<{ p: string }>("MATCH (a:Approval {id:$id}) RETURN a.payload AS p", { id: proposal.approvalId });

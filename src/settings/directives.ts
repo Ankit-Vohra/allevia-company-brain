@@ -1,10 +1,10 @@
 // "Tell your team" (product design §2.4, §8, §9 item 7). The owner types a plain-language instruction ("No emojis on
-// LinkedIn; switch Arjun off till the new site launches"); it becomes a typed patch list and a diff preview, and the
+// LinkedIn; switch Techie off till the new site launches"); it becomes a typed patch list and a diff preview, and the
 // owner confirms it before anything is written.
 // - parseDirective: deterministic rules first, for the common shapes: switching a desk on or off by name or title (with
 //   a "till …" note), light/full mode, autonomy 0-3, a channel-scoped instruction ("no emojis on LinkedIn"), an
 //   always-instruction ("always mention free consultation"), a daily spend cap ("never spend above $50/day") and a
-//   brand voice rule ("never say cheap"). A clause that names a desk first ("Tara, …") is for that desk only.
+//   brand voice rule ("never say cheap"). A clause that names a desk first ("Miss Influencer, …") is for that desk only.
 // - What the rules leave goes to haiku through the Agent SDK on the subscription (AgentSdkRunner, structured output);
 //   every patch it returns is validated against the roster and the patch kinds. No runner (llm: null) or a failed call
 //   leaves those parts in `unparsed`, so toggles keep working without the model.
@@ -15,7 +15,8 @@
 //   Memory{kind:'skill_rule'} (a rule for one skill: "our posts always end with a question") or Memory{kind:'skill'} (the
 //   business's own skill) ABOUT the agents (src/agent/skills/business.ts). Applying twice writes nothing more.
 import { randomBytes } from "node:crypto";
-import { AGENTS, agentById } from "../../shared/roster.js";
+import { AGENTS, agentById, plainWho } from "../../shared/roster.js";
+import { LEGACY_NAMES } from "../../shared/legacy-names.js";
 import type { AgentMode, AgentSettings, DirectiveDiffLine, DirectivePatch, DirectivePreview } from "../../shared/contracts.js";
 import type { GraphHandle } from "../graph/client.js";
 import { upsertNode, writeBatch, type EdgeInput, type NodeInput, type Prim } from "../graph/upsert.js";
@@ -71,10 +72,13 @@ const ALIASES: Record<string, string[]> = {
   "librarian": ["librarian"],
 };
 const words = (alts: string[], flags: string) => new RegExp(`(?<![\\p{L}\\p{N}-])(?:${alts.map(escapeRe).join("|")})(?![\\p{L}\\p{N}-])`, flags);
-// Names match in any case, except "Dev", which only counts capitalised ("the dev server" is no one).
+// Role names match in any case. A name the desk had before the rename (shared/legacy-names.ts) still counts, but only
+// capitalised, since some are everyday words in lower case ("the dev server" is no one).
+const oldNamesOf = (id: string): string[] => Object.entries(LEGACY_NAMES).filter(([, to]) => to === id).map(([old]) => old);
 const AGENT_RES = AGENTS.map((a) => {
-  const any = [a.id, a.id.replace(/-/g, " "), a.title, ...(ALIASES[a.id] ?? []), ...(a.name === "Dev" ? [] : [a.name])];
-  return { id: a.id, any: words(any, "iu"), cased: words([a.name], "u"), strip: words(any, "giu"), stripCased: words([a.name], "gu") };
+  const any = [a.id, a.id.replace(/-/g, " "), a.title, ...(ALIASES[a.id] ?? []), a.name];
+  const cased = oldNamesOf(a.id);
+  return { id: a.id, any: words(any, "iu"), cased: words(cased, "u"), strip: words(any, "giu"), stripCased: words(cased, "gu") };
 });
 
 // The desks a text names, in roster order.
@@ -82,7 +86,7 @@ export function agentsIn(text: string): string[] {
   return AGENT_RES.filter((r) => r.any.test(text) || r.cased.test(text)).map((r) => r.id);
 }
 
-// The text names desks and nothing else ("Arjun", "the tech lead", "Tara and Dev").
+// The text names desks and nothing else ("Techie", "the tech lead", "Miss Influencer and Wordsmith").
 function onlyAgents(text: string): boolean {
   if (!agentsIn(text).length) return false;
   let rest = text;
@@ -150,7 +154,7 @@ const SPLIT = new RegExp(String.raw`[;\n]+|(?<=[.!?])\s+|,?\s+(?:and|also|plus)\
 
 export function splitClauses(text: string): string[] {
   const parts = text.split(SPLIT).map((s) => (s ?? "").trim().replace(/^(?:and|also|plus|then|&)\s+/i, "").replace(/[.!]+$/, "").trim()).filter(Boolean);
-  // "Tara, no emojis" split by a sentence end ("Tara. No emojis") is rare; "Tara" alone before a clause is an address.
+  // "Miss Influencer, no emojis" split by a sentence end ("Miss Influencer. No emojis") is rare; "Miss Influencer" alone before a clause is an address.
   const out: string[] = [];
   for (let i = 0; i < parts.length; i++) {
     if (onlyAgents(parts[i]!) && i + 1 < parts.length && !onlyAgents(parts[i + 1]!)) { parts[i + 1] = `${parts[i]}, ${parts[i + 1]}`; continue; }
@@ -159,7 +163,7 @@ export function splitClauses(text: string): string[] {
   return out;
 }
 
-// After "off": nothing, or when/why ("till the new site launches", "for now"); "take Rohan off ads" is not a switch-off.
+// After "off": nothing, or when/why ("till the new site launches", "for now"); "take Growth Hacker off ads" is not a switch-off.
 const WHEN = String.raw`(?<rest>\s*[,;:]?\s*(?:till|until|for|while|during|through|now|please|today|this|next)\b.*)?`;
 const OFF = [
   new RegExp(String.raw`^(?:please\s+)?(?:switch|turn|shut|put|take)\s+(?<who>.+?)\s+off\b${WHEN}$`, "i"),
@@ -221,7 +225,7 @@ function modeOrAutonomy(clause: string, to: string[]): ClauseResult | undefined 
   return undefined;
 }
 
-// "our posts always end with a question" -> a rule for Tara's Instagram post craft (and Dev's voice check holds it too).
+// "our posts always end with a question" -> a rule for Miss Influencer's Instagram post craft (and Wordsmith's voice check holds it too).
 // Only for a sentence that is a rule (it starts like one, or says always/never) and names what the skill is about
 // (posts, reels, carousels, ads…); anything else stays a standing instruction.
 function skillRuleClause(rest: string, to: string[], text: string): ClauseResult | undefined {
@@ -236,7 +240,7 @@ function skillRuleClause(rest: string, to: string[], text: string): ClauseResult
   return { patches, notes: [] };
 }
 
-// "Tara, add a skill called Festival post: always open with the greeting, then the offer" -> the business's own skill.
+// "Miss Influencer, add a skill called Festival post: always open with the greeting, then the offer" -> the business's own skill.
 const ADD_SKILL = /^(?:please\s+)?(?:add|create|teach|set up|make)\s+(?:a\s+|an\s+)?(?:new\s+)?skill\s+(?:called|named|for)?\s*["“']?(?<name>[^:"”']{3,60}?)["”']?\s*[:\-–]\s*(?<body>.{10,})$/i;
 
 export function skillIdFor(name: string): string {
@@ -248,7 +252,7 @@ export function skillIdFor(name: string): string {
 function addSkillClause(rest: string, to: string[]): ClauseResult | undefined {
   const g = ADD_SKILL.exec(rest)?.groups;
   if (!g?.name || !g.body) return undefined;
-  if (!to.length) return { patches: [], notes: ['Say who the skill is for, e.g. "Tara, add a skill called Festival post: …".'] };
+  if (!to.length) return { patches: [], notes: ['Say who the skill is for, e.g. "Miss Influencer, add a skill called Festival post: …".'] };
   const name = g.name.trim().replace(/^\w/, (c) => c.toUpperCase());
   return { patches: [{ kind: "skill.add", agents: to, id: skillIdFor(name), name, when: clip(`When the request is about ${name.toLowerCase()}`, 140), text: clip(sentence(g.body), MAX_SKILL_TEXT) }], notes: [] };
 }
@@ -257,11 +261,11 @@ function addSkillClause(rest: string, to: string[]): ClauseResult | undefined {
 export function parseClause(clause: string): ClauseResult | undefined {
   const c = clause.trim();
   if (!c) return undefined;
-  // An address first ("Tara, no emojis on LinkedIn"; "Rohan: never spend above ₹2,000 a day").
+  // An address first ("Miss Influencer, no emojis on LinkedIn"; "Growth Hacker: never spend above ₹2,000 a day").
   const addr = /^(?<to>[^,:]{1,60})[,:]\s+(?<rest>.+)$/.exec(c)?.groups;
   const to = addr && onlyAgents(addr.to!) ? agentsIn(addr.to!) : [];
   const rest = to.length ? addr!.rest! : c;
-  // Mode and autonomy before the switches: "put Rohan on light mode" is not "put Rohan on".
+  // Mode and autonomy before the switches: "put Growth Hacker on light mode" is not "put Growth Hacker on".
   const m = modeOrAutonomy(c, to);
   if (m) return m;
   const t = toggle(c);
@@ -470,7 +474,7 @@ const skillLabel = (skill: string, agents: string[]): string => {
   const k = codeCatalog().skills.find((x) => x.id === skill);
   return `${who}'s ${k ? k.name : skill}`;
 };
-const agentLabel = (id: string): string => { const a = agentById(id); return a ? `${a.name} (${a.title})` : id; };
+const agentLabel = (id: string): string => plainWho(id);
 
 function diffOf(patches: DirectivePatch[], agents: AgentSettings[], existingRules: Set<string>, previewId: string, skillRules: readonly SkillRule[] = []): DirectiveDiffLine[] {
   const byId = new Map(agents.map((a) => [a.id, a]));

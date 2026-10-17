@@ -23,7 +23,7 @@ describe("work log", () => {
     { type: "finding", agent: "data-analyst", findingId: "finding:t-data-analyst", text: "Signups fell [[metric:signups]].", citations: ["metric:signups"] },
     { type: "review", agent: "coe-lead", findingId: "finding:t-data-analyst", verdict: "fix", note: "Add the week." },
     { type: "agent_done", agent: "data-analyst", ms: 1500, ok: true },
-    { type: "handoff", from: "data-analyst", to: "growth-marketer", note: "Kabir's finding: Signups fell" },
+    { type: "handoff", from: "data-analyst", to: "growth-marketer", note: "Data Detective's finding: Signups fell" },
     { type: "agent_done", agent: "growth-marketer", ms: 800, ok: false },
     { type: "text", agent: "chief-of-staff", delta: "Signups fell " },
     { type: "text", agent: "chief-of-staff", delta: "[[metric:signups]]." },
@@ -38,16 +38,16 @@ describe("work log", () => {
     for (const e of events) log(e);
     expect(out).toContain("Why did signups drop?\naamdani · session:s · turn:t");
     expect(out).toContain("Recall: 1 things we already know");
-    expect(out).toContain("Meera planned: Numbers first\n  1. Kabir Explain signups\n  2. Rohan Move (after Kabir)");
-    expect(out).toContain("> Kabir Data Analyst, Analytics: Explain signups");
-    expect(out).toContain("    Kabir -> metric_trend {\"metric\":\"signups\"}");
-    expect(out).toContain("    Kabir <- metric_trend: 2 results · Signups");
-    expect(out).toContain("  Isha reviewed finding:t-data-analyst: FIX Add the week.");
-    expect(out).toContain("< Kabir done in 1.5s");
-    expect(out).toContain("< Rohan failed after 0.8s");
+    expect(out).toContain("The Chief planned: Numbers first\n  1. Data Detective Explain signups\n  2. Growth Hacker Move (after Data Detective)");
+    expect(out).toContain("> Data Detective Data Analyst, Analytics: Explain signups");
+    expect(out).toContain("    Data Detective -> metric_trend {\"metric\":\"signups\"}");
+    expect(out).toContain("    Data Detective <- metric_trend: 2 results · Signups");
+    expect(out).toContain("  Number Cruncher reviewed finding:t-data-analyst: FIX Add the week.");
+    expect(out).toContain("< Data Detective done in 1.5s");
+    expect(out).toContain("< Growth Hacker failed after 0.8s");
     expect(out).toContain("\nAnswer\nSignups fell [[metric:signups]].\nPath: Signups -> Sitemap");
     expect(out).toContain("Checks: citations ok · numbers FAIL (56) · simulated ok · freshness ok");
-    expect(out).toContain("4.2s · Meera, Kabir · turn:t");
+    expect(out).toContain("4.2s · The Chief, Data Detective · turn:t");
     expect(out).not.toContain("\x1b[");
   });
 
@@ -66,7 +66,7 @@ describe("work log", () => {
     let out = "";
     const log = workLog({ color: true, write: (s) => { out += s; } });
     log({ type: "agent_start", agent: "data-analyst", task: "x" });
-    expect(out).toContain(`\x1b[1;38;5;${hueTo256(230)}mKabir\x1b[0m`);
+    expect(out).toContain(`\x1b[1;38;5;${hueTo256(230)}mData Detective\x1b[0m`);
     expect(hueTo256(0)).not.toBe(hueTo256(160));
   });
 });

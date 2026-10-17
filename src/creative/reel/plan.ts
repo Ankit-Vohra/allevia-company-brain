@@ -28,7 +28,7 @@ export interface ReelPlan {
   scenes: ReelScene[];
   caption: string;
   endCard: { logo: boolean; line?: string };
-  source: "writer" | "skill";   // who wrote it: Tara's writer, or a per-company reel skill
+  source: "writer" | "skill";   // who wrote it: Miss Influencer's writer, or a per-company reel skill
   music?: string;               // a short instrumental bed to generate (priced, agreed); the reel is silent without it
 }
 

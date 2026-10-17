@@ -1,6 +1,6 @@
 // The standing last pass that makes what the owner reads sound written by a person (src/agent/humanize.ts, from the
 // humanizer skill vendored in vendor/skills/humanizer). Before/after samples of an answer, a caption and a note: the
-// no-model pass strips wrappers and dashes, Dev's one rewrite handles the rest, and nothing the reader relies on moves
+// no-model pass strips wrappers and dashes, Wordsmith's one rewrite handles the rest, and nothing the reader relies on moves
 // (numbers, names, [[sources]], "waiting for your OK"). A flat detector finds the tells that must not survive.
 import { describe, expect, it } from "vitest";
 import { aiTells, cleanDeterministic, factsOf, hasStrongTells, humanPass, isDataText, rewritePrompt, rewriteSystem, sameFacts, VOICE_RULES } from "../../src/agent/humanize.js";
@@ -12,18 +12,18 @@ export const ANSWER_BEFORE = `Great question! Let's dive in.
 Sign-ups fell from 58 to 41 in the week to 12 Oct [[metric:signups]] — and it's not just a blip, it's a signal that search is shifting. Search visits dropped from 190 to 120 [[metric:search-visits]], which reflects a pivotal change in the landscape.
 
 1. Check the services page title (about 20 minutes).
-2. Ask Arjun to confirm the sitemap.
+2. Ask Techie to confirm the sitemap.
 
-Rohan's ads were not the cause: they're running as planned. That's the real win.
+Growth Hacker's ads were not the cause: they're running as planned. That's the real win.
 
 Your next step: approve the two drafts waiting for your OK. I hope this helps! Let me know if you'd like me to dig deeper.`;
 
 export const ANSWER_AFTER = `Sign-ups fell from 58 to 41 in the week to 12 Oct [[metric:signups]]. Search is the reason: visits from search dropped from 190 to 120 [[metric:search-visits]].
 
 1. Check the services page title (about 20 minutes).
-2. Ask Arjun to confirm the sitemap.
+2. Ask Techie to confirm the sitemap.
 
-Rohan's ads were not the cause: they're running as planned.
+Growth Hacker's ads were not the cause: they're running as planned.
 
 Your next step: approve the two drafts waiting for your OK.`;
 
@@ -32,13 +32,13 @@ export const CAPTION_AFTER = `Anantam Villa is a home in Raipur, designed with c
 
 export const NOTE_BEFORE = `Here's what you need to know — your team has been busy.
 - Enquiries: 41, from 33 this week. [[obs:enquiries]]
-- Rohan paused the Spring brochure ad; it is waiting for your OK. [[approval:spring-pause]]
-- Tara drafted next week's posts. This isn't about volume, it's about quality.
+- Growth Hacker paused the Spring brochure ad; it is waiting for your OK. [[approval:spring-pause]]
+- Miss Influencer drafted next week's posts. This isn't about volume, it's about quality.
 Let that sink in.`;
 export const NOTE_AFTER = `Your team has been busy.
 - Enquiries: 41, from 33 this week. [[obs:enquiries]]
-- Rohan paused the Spring brochure ad; it is waiting for your OK. [[approval:spring-pause]]
-- Tara drafted next week's posts.`;
+- Growth Hacker paused the Spring brochure ad; it is waiting for your OK. [[approval:spring-pause]]
+- Miss Influencer drafted next week's posts.`;
 
 const ids = (text: string) => aiTells(text).map((t) => t.id).sort();
 
@@ -130,7 +130,7 @@ describe("what an edit must not change", () => {
   it("catches a changed number, a lost or new source, a changed name and lost approval wording", () => {
     expect(sameFacts(ANSWER_AFTER, ANSWER_AFTER.replace("from 58 to 41", "from 58 to 14"))[0]).toMatch(/numbers lost: 41/);
     expect(sameFacts(ANSWER_AFTER, ANSWER_AFTER.replace(" [[metric:signups]]", ""))[0]).toMatch(/sources lost: \[\[metric:signups\]\]/);
-    expect(sameFacts(ANSWER_AFTER, ANSWER_AFTER.replace("Ask Arjun", "Ask Zoya")).join()).toMatch(/names lost: Arjun[\s\S]*names added: Zoya/);
+    expect(sameFacts(ANSWER_AFTER, ANSWER_AFTER.replace("Ask Techie", "Ask Firefighter")).join()).toMatch(/names lost: Techie[\s\S]*names added: Firefighter/);
     expect(sameFacts(ANSWER_AFTER, ANSWER_AFTER.replace("waiting for your OK", "ready")).join()).toMatch(/wording lost: "waiting for your OK"/);
     expect(sameFacts(ANSWER_AFTER, ANSWER_AFTER.replace("20 minutes", "twenty minutes")).join()).toMatch(/numbers lost: 20/);
   });
@@ -140,10 +140,10 @@ describe("what an edit must not change", () => {
   });
 });
 
-describe("the pass with Dev's rewrite", () => {
+describe("the pass with Wordsmith's rewrite", () => {
   const dev = (to: string) => async () => to;
 
-  it("an answer: the no-model pass, then Dev's one rewrite for the 'not just X, it's Y' that is left", async () => {
+  it("an answer: the no-model pass, then Wordsmith's one rewrite for the 'not just X, it's Y' that is left", async () => {
     let asked: string[] = [];
     const r = await humanPass(ANSWER_BEFORE, { rewrite: async (text, tells) => { asked = tells.map((t) => t.id); expect(text).not.toContain("hope this helps"); return ANSWER_AFTER; } });
     expect(asked).toEqual(["not-x-but-y"]);
@@ -153,7 +153,7 @@ describe("the pass with Dev's rewrite", () => {
     expect(hasStrongTells(r.text)).toBe(false);
   });
 
-  it("a caption: after Dev's rewrite no tell is left, and the name and place are the same", async () => {
+  it("a caption: after Wordsmith's rewrite no tell is left, and the name and place are the same", async () => {
     const r = await humanPass(CAPTION_BEFORE, { rewrite: dev(CAPTION_AFTER) });
     expect(r.by).toBe("dev");
     expect(r.tells).toEqual([]);
@@ -176,9 +176,9 @@ describe("the pass with Dev's rewrite", () => {
     for (const bad of [
       ANSWER_AFTER.replace("190 to 120", "190 to 12"),
       ANSWER_AFTER.replace(" [[metric:signups]]", ""),
-      ANSWER_AFTER.replace("Ask Arjun", "Ask Zoya"),
+      ANSWER_AFTER.replace("Ask Techie", "Ask Firefighter"),
       ANSWER_AFTER.replace("waiting for your OK", "ready for you"),
-      ANSWER_AFTER.replace("2. Ask Arjun to confirm the sitemap.\n", ""),     // a list item dropped
+      ANSWER_AFTER.replace("2. Ask Techie to confirm the sitemap.\n", ""),     // a list item dropped
       "Done.",                                                                  // shrunk out of shape
       `${ANSWER_AFTER} That's the real win.`,                                    // a new tell
     ]) {
@@ -218,7 +218,7 @@ describe("the pass with Dev's rewrite", () => {
   });
 });
 
-describe("what Dev is told", () => {
+describe("what Wordsmith is told", () => {
   it("the voice rules cover the six groups, keep the answer shape first and the owner's markets", () => {
     for (const w of ["not just X, but Y", "Let's dive in", "Don't force rhythm", "pivotal", "Format plainly", "re-explain", "US, UK, Australian or UAE", "Hindi or Hinglish", "the shape wins", "Never add or change a fact"]) {
       expect(VOICE_RULES, w).toContain(w.replace("re-explain", "re-explain"));

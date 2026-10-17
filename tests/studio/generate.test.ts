@@ -1,6 +1,6 @@
 // The owner's own requests to the AI editor: "make it festive", "remove the pole", "make this into an ad saying ...",
 // "try again". Fake engine, fake vision: no credits. Checks what the engine is given (the frame, the brand's rules, the owner's
-// words), Nisha's check with the request allowed, the card, retries, ads drawn by code, and the refusals (a child, a decline).
+// words), Fact Checker's check with the request allowed, the card, retries, ads drawn by code, and the refusals (a child, a decline).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -87,7 +87,7 @@ describe("generateVariant (integration)", () => {
     for (const d of dirs) rmSync(d, { recursive: true, force: true });
   });
 
-  it("a free-form request: the engine gets the frame, the brand's rules and the owner's words; Nisha allows that change; the card offers it", async () => {
+  it("a free-form request: the engine gets the frame, the brand's rules and the owner's words; Fact Checker allows that change; the card offers it", async () => {
     fail.clear();
     const { r, deps, engine, vision: v } = await card();
     engine.prompts.length = 0;
@@ -108,7 +108,7 @@ describe("generateVariant (integration)", () => {
     expect(call.input.tenant).toBe("kestrel_oak");
     const m = await sharp(call.input.image).metadata();
     expect(m.width! / m.height!).toBeCloseTo(0.8, 1); // the straightened 4:5 frame, not the whole photo
-    // Nisha was told the owner asked for it
+    // Fact Checker was told the owner asked for it
     const nishaCall = v.calls.filter((c) => c.agent === "fact-checker").at(-1)!;
     expect(nishaCall.prompt).toContain("The owner asked for this change");
     expect(nishaCall.prompt).toContain("make it festive for Diwali");
@@ -123,7 +123,7 @@ describe("generateVariant (integration)", () => {
     expect(lineage!.c).toBe(1);
   }, 60_000);
 
-  it("held back by Nisha: a retry is offered once, with a tighter lock naming what went wrong, and only once", async () => {
+  it("held back by Fact Checker: a retry is offered once, with a tighter lock naming what went wrong, and only once", async () => {
     fail.clear();
     const { r, deps, engine } = await card();
     fail.add("C");

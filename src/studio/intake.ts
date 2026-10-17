@@ -37,7 +37,7 @@ export const assetIdFor = (sha256: string): string => entityId("Asset", sha256.s
 
 export interface IntakeResult { asset: AssetRecord; normalized: Normalized; event: Extract<AgentEvent, { type: "asset" }> }
 
-// persist:false holds the photo in memory only (content trial 2026-10-15): the pipeline decides after Tara's look whether
+// persist:false holds the photo in memory only (content trial 2026-10-15): the pipeline decides after Miss Influencer's look whether
 // the photo may be kept at all, and in what form (keepOriginal), so an unblurred person never reaches the disk.
 export async function intake(
   g: GraphHandle, input: IntakeInput, deps: { store: AssetStore; now: number; agent: string; normalize?: NormalizeOpts; persist?: boolean },

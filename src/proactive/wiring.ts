@@ -1,9 +1,9 @@
 // The stand-up's production deps, and the daily job the scheduler, the CLI and the API share:
-//  - Meera's pick: Claude (sonnet) on the founder's subscription (AgentSdkRunner: no API key, fails closed off it).
+//  - The Chief's pick: Claude (sonnet) on the founder's subscription (AgentSdkRunner: no API key, fails closed off it).
 //  - The words: the same writer the copy tool uses (Claude through the Studio's cached vision runner, on the subscription),
 //    held to the business's voice (cleanVoice) and its record (groundClaims): an unsupported claim is shown to the owner as
 //    a "check before you use it" note, never smuggled in. Each person writes with their skill's method (skills/).
-//  - The poster: the existing creating tools (src/creative/poster.ts): layouts composed by code and Nisha's check; artwork
+//  - The poster: the existing creating tools (src/creative/poster.ts): layouts composed by code and Fact Checker's check; artwork
 //    from the image engine only when the day's paid allowance is left (and the engine's own caps agree), else the free
 //    brand-colour ground.
 import { agentById } from "../../shared/roster.js";

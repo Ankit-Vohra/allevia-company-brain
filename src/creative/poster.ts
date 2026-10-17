@@ -1,8 +1,8 @@
 // make a poster, end to end: the brand kit and its design system, the claims check, the copy check, the business's REAL
 // material first (its own photos, its real app screens), a generated scene only where a layout needs a picture and none
 // exists (quoted, capped, specific to this business and place), layouts chosen by the brief from the library and never
-// the one used last, each composed as a real web page in Chromium and measured, fixed by code, reviewed by Rohan and
-// revised (design/engine.ts), then Nisha's word-for-word check and the deliverable (assets with lineage, a card waiting
+// the one used last, each composed as a real web page in Chromium and measured, fixed by code, reviewed by Growth Hacker and
+// revised (design/engine.ts), then Fact Checker's word-for-word check and the deliverable (assets with lineage, a card waiting
 // for the owner). Whatever cannot be done is said in plain words and the rest is still delivered. Never a fake result:
 // a picture the engine did not make is never described as one it did.
 //
@@ -207,11 +207,11 @@ export async function makePoster(g: GraphHandle, req: PosterRequest, deps: Creat
     notes.push("This server can't run the page renderer, so these were made with the simpler composer.");
   }
 
-  // 6. Nisha's word-for-word look at each
+  // 6. Fact Checker's word-for-word look at each
   const toCheck = legacy ?? options.map((o) => ({ label: o.label, buffer: o.design.jpeg, manifest: o.design.manifest }));
   const verdicts = await checkPosters(toCheck.map((c) => ({ label: c.label, image: c.buffer, manifest: c.manifest })), { businessName: kit.brand.businessName, hasLogoFile: !!kit.brand.logo }, { vision: deps.vision });
   if (verdicts.some((v) => v.badge === "unchecked")) notes.push("I couldn't double-check these (the checker wasn't available), so please read the words and the logo yourself before approving.");
-  if (verdicts.every((v) => v.badge === "held")) notes.push(`Nisha held every option back: ${[...new Set(verdicts.flatMap((v) => v.reasons))].slice(0, 3).join("; ")}.`);
+  if (verdicts.every((v) => v.badge === "held")) notes.push(`Fact Checker held every option back: ${[...new Set(verdicts.flatMap((v) => v.reasons))].slice(0, 3).join("; ")}.`);
   if (kit.logoRow?.needsBetter && !notes.some((n) => /logo/i.test(n) && /soft|small/i.test(n))) notes.push("Heads up: the logo file is small, so it may look soft.");
 
   // 7. save, with lineage, and the card

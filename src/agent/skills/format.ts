@@ -3,7 +3,7 @@
 //
 //   ---
 //   id: instagram-post                      the folder name; lowercase words joined by dashes
-//   name: Instagram post craft              what the owner reads ("Tara is using: Instagram post craft")
+//   name: Instagram post craft              what the owner reads ("Miss Influencer is using: Instagram post craft")
 //   when: A post for Instagram that sounds like the brand      one line, plain words, when to reach for it
 //   agents: [content-strategist]            roster ids; optional in an agent's own folder, two or more in shared/
 //   tools: [content_performance, playbook]  the tools the method uses; each must be one of those agents' tools

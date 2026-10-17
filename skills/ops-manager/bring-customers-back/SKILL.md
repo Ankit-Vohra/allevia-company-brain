@@ -22,7 +22,7 @@ needs_ok: true
    - Welcome (same day): what to expect, one tip, how to book again.
    - Refer-a-friend (after a happy moment: a five-star review, a repeat booking): a two-sided reward ("you both get a free blow-dry") said as the bigger-feeling number ("£10 off" reads bigger than "15% off" on a small bill), one tap to share a pre-written message.
    Name the brand in the first line (many people have not saved the number), keep a WhatsApp or text message to two or three short sentences, and a text under 160 characters.
-6. Cost and limits. A text costs money per message; WhatsApp marketing messages are charged per message by country, and from October 2026 service replies past 1,000 a month are too. Never quote a cost from memory: ask the owner for their current rate, or leave "[you tell us: your WhatsApp rate]" (Rohan can look up Meta's current rate card for the country).
+6. Cost and limits. A text costs money per message; WhatsApp marketing messages are charged per message by country, and from October 2026 service replies past 1,000 a month are too. Never quote a cost from memory: ask the owner for their current rate, or leave "[you tell us: your WhatsApp rate]" (Growth Hacker can look up Meta's current rate card for the country).
 7. Say how you will judge it: the number that decides (rebookings, repeat orders, reviews or referred customers per week, with today's level from step 1) and when to look (after 4 weeks). Opt-outs above 2 in 100 per send means the messages are too frequent or not wanted.
 8. Hand over with `propose_action` (kind content_draft, body = the series and the timing) so nothing is sent until the owner says yes.
 

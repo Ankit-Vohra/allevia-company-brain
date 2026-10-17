@@ -14,7 +14,7 @@ needs_ok: true
 0. Purpose first: a public reply is read by every future customer, not just the reviewer. The goal is that a stranger reading it thinks "they care and they fix things".
 1. Collect the reviews of the last 90 days (a shorter window often holds nothing for a small business). `search` for reviews, ratings and complaints; `cypher` lists those with no reply yet, oldest first, when they are recorded. If the review sites are not connected, ask the owner to paste the reviews or a screenshot, and say which sites you could not see.
 2. Check `recall` for the reviewer: an earlier complaint, a refund, a thread with the owner. Never reveal private details in public (what they bought, what they paid, a booking date) unless the reviewer wrote it themselves.
-3. Find the patterns before replying: group the reviews into two or three themes ("waiting time", "the fit", "friendly staff"), each with a count and two short quotes in the customer's exact words. Patterns are what the owner can fix; single reviews are what Vikram replies to.
+3. Find the patterns before replying: group the reviews into two or three themes ("waiting time", "the fit", "friendly staff"), each with a count and two short quotes in the customer's exact words. Patterns are what the owner can fix; single reviews are what Taskmaster replies to.
 4. Write a reply to every review, not only the bad ones, under 60 words each, in the owner's voice:
    - Praise: thank them for the specific thing they mentioned. Short and human.
    - Complaint: name what went wrong, say what has changed or will, and take it offline with a real contact ("Call me on the studio number, ask for Noor"). No defending, no policy, no "sorry you feel that way".

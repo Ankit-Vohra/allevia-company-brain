@@ -22,7 +22,7 @@ needs_ok: false
 
 Severity and what to do first, then the facts.
 
-> Stops customers: payments have failed since 14:10 today (errors went from 2 an hour to 61). The payment page depends on the card service; Arjun owns it. First 15 minutes: roll back this morning's update. Tell the owner now.
+> Stops customers: payments have failed since 14:10 today (errors went from 2 an hour to 61). The payment page depends on the card service; Techie owns it. First 15 minutes: roll back this morning's update. Tell the owner now.
 
 ## Done well
 

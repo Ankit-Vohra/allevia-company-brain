@@ -1,4 +1,4 @@
-// A standing rule for a skill said in a plain Discord message ("Tara, our posts always end with a question"): the bot
+// A standing rule for a skill said in a plain Discord message ("Miss Influencer, our posts always end with a question"): the bot
 // shows what would change and asks; only the owner's Yes writes it (the same preview and apply as "Tell your team" in the
 // web app). A question or anything the rules don't read as a skill rule is asked of the team as before.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -18,11 +18,11 @@ const text = (m: Outgoing): string => (typeof m === "string" ? m : m.content);
 
 describe("isSkillRule", () => {
   it("is a standing rule for a skill, not a question and not anything else", () => {
-    expect(isSkillRule("Tara, our posts always end with a question")).toBe(true);
-    expect(isSkillRule("Tara, add a skill called Festival post: open with the greeting in Hindi")).toBe(true);
+    expect(isSkillRule("Miss Influencer, our posts always end with a question")).toBe(true);
+    expect(isSkillRule("Miss Influencer, add a skill called Festival post: open with the greeting in Hindi")).toBe(true);
     expect(isSkillRule("Why did we pause daily stories?")).toBe(false);
     expect(isSkillRule("Should our posts always end with a question?")).toBe(false);
-    expect(isSkillRule("Switch Arjun off")).toBe(false);
+    expect(isSkillRule("Switch Techie off")).toBe(false);
     expect(isSkillRule("make the captions punchier")).toBe(false);
     expect(isSkillRule("Write two posts for next week")).toBe(false); // a request to make something now, not a rule
     expect(isSkillRule("No emojis on LinkedIn posts")).toBe(false);
@@ -66,19 +66,19 @@ describe("the bot offers a rule and applies it on the owner's Yes", () => {
   };
 
   it("shows the change with Yes and Not now, and writes nothing yet", async () => {
-    const { m, replies } = message("Tara, our posts always end with a question");
+    const { m, replies } = message("Miss Influencer, our posts always end with a question");
     await bot.onMessage(m);
     expect(replies).toHaveLength(1);
     const r = replies[0] as Exclude<Outgoing, string>;
     expect(r.content).toMatch(/I can set this up for your team:/);
-    expect(r.content).toMatch(/Rule for Tara's Instagram post craft: "Our posts always end with a question\."/);
+    expect(r.content).toMatch(/Rule for Miss Influencer's Instagram post craft: "Our posts always end with a question\."/);
     expect(r.buttons?.map((b) => b.label)).toEqual(["Yes, set it up", "Not now"]);
     expect((await loadBusinessSkills(g)).rules).toEqual([]);
     expect(asked).toEqual([]);
   });
 
   it("only the owner's Yes applies it; a member's press does nothing", async () => {
-    const { m, replies } = message("Tara, our posts always end with a question");
+    const { m, replies } = message("Miss Influencer, our posts always end with a question");
     await bot.onMessage(m);
     const yes = (replies[0] as Exclude<Outgoing, string>).buttons![0]!.customId;
 
@@ -96,7 +96,7 @@ describe("the bot offers a rule and applies it on the owner's Yes", () => {
   });
 
   it("'Not now' changes nothing; saying the same rule again says it is already set", async () => {
-    const again = message("Tara, our posts always end with a question");
+    const again = message("Miss Influencer, our posts always end with a question");
     await bot.onMessage(again.m);
     expect(text(again.replies[0]!)).toMatch(/already works this way/);
     expect((again.replies[0] as Exclude<Outgoing, string>).buttons).toEqual([]);
@@ -111,7 +111,7 @@ describe("the bot offers a rule and applies it on the owner's Yes", () => {
   });
 
   it("a member's plain message is never read as a rule", async () => {
-    const { m, replies } = message("Tara, our posts always end with a question", { authorIsOwner: false, startThread: async () => { throw new Error("asked as a question"); } });
+    const { m, replies } = message("Miss Influencer, our posts always end with a question", { authorIsOwner: false, startThread: async () => { throw new Error("asked as a question"); } });
     await expect(bot.onMessage(m)).rejects.toThrow(/asked as a question/);
     expect(replies).toEqual([]);
   });

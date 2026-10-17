@@ -19,7 +19,7 @@ import { CachedVision, ClaudeVision, VisionError, type VisionRunner } from "./vi
 export const studioCacheDir = (dataDir: string): string => join(dataDir, "cache", "studio");
 
 // ALLEVIA_STUDIO_CACHE_ONLY=1 replays recorded answers and never calls Claude (a miss fails closed: the assessment
-// errors, Nisha's check is "unchecked"); for demos and screenshots that must not spend the subscription.
+// errors, Fact Checker's check is "unchecked"); for demos and screenshots that must not spend the subscription.
 // The edit engine for a data dir. `live: false` is the recordings only.
 export function studioEngine(dataDir: string, o: { live?: boolean; log?: (line: string) => void } = {}): GenerationEngine {
   const recorded = new RecordedEngine(recordingsManifest(dataDir));

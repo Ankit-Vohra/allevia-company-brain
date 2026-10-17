@@ -1,6 +1,6 @@
 // One Studio run, streamed as AgentEvents so the office and the Studio page show who did what (product design §6):
-//   intake (asset) → Tara assesses (assessment) → the plan straightens and crops → variant A, local (asset) →
-//   variant B, generative, prompted from the graph (asset) → Nisha checks both (review) → Dev writes the caption →
+//   intake (asset) → Miss Influencer assesses (assessment) → the plan straightens and crops → variant A, local (asset) →
+//   variant B, generative, prompted from the graph (asset) → Fact Checker checks both (review) → Wordsmith writes the caption →
 //   the approval card (proposal) → final.
 // The run's events are kept on the original Asset (studioEvents), so the page can show the last run after a reload.
 import type { ActionKind, AgentEvent, AgentId, TurnChecks } from "../../shared/contracts.js";
@@ -30,13 +30,13 @@ export const DEFAULT_MODELS: StudioModels = { assess: "sonnet", fidelity: "sonne
 
 export interface StudioDeps {
   store: AssetStore;
-  vision: VisionRunner;            // Tara and Nisha look at photos
+  vision: VisionRunner;            // Miss Influencer and Fact Checker look at photos
   engine: GenerationEngine;        // variant B
   models?: Partial<StudioModels>;
   // This business's connections. With Instagram connected, the card that waits for the owner's OK is a post (approving posts the
-  // chosen option with Dev's caption); without it, or when this is absent, it is a draft as before.
+  // chosen option with Wordsmith's caption); without it, or when this is absent, it is a draft as before.
   connections?: (tenant: string) => ConnectionsPort | undefined;
-  // Dev rewrites Tara's draft with the model (one more call per photo). Off by default: Dev's voice check runs in code
+  // Wordsmith rewrites Miss Influencer's draft with the model (one more call per photo). Off by default: Wordsmith's voice check runs in code
   // either way, and two calls per post keep within Appendix B.3's $0.10 of Claude per post.
   devRewrite?: boolean;
   now?: () => number;
@@ -57,8 +57,8 @@ export interface StudioResult {
   recommendationId: string;
   approvalId: string;
   title: string;
-  // Set when the run ended without a card: Tara said reshoot, or privacy stopped it (the owner's setting blurs people's
-  // faces and Tara could not place them). Then variants and fidelity are empty, there is no card (approvalId is ""),
+  // Set when the run ended without a card: Miss Influencer said reshoot, or privacy stopped it (the owner's setting blurs people's
+  // faces and Miss Influencer could not place them). Then variants and fidelity are empty, there is no card (approvalId is ""),
   // and `message` is what the owner is told.
   stopped?: { reason: "reshoot" | "privacy"; message: string };
   // What was done about the people and plates in the photo, for the owner's message.
@@ -79,7 +79,7 @@ export function assessContextFor(ctx: StudioContext, note: string, a: Pick<Asset
   };
 }
 
-// The tilt to straighten by: the photo's own edges when they agree on one angle, Tara's estimate otherwise.
+// The tilt to straighten by: the photo's own edges when they agree on one angle, Miss Influencer's estimate otherwise.
 export function chooseTilt(edges: { deg: number; confidence: number }, tara: number): StudioResult["tilt"] {
   if (edges.confidence >= 0.08 && Math.abs(edges.deg) <= 12) return Math.abs(edges.deg) < 0.3 ? { deg: 0, source: "level" } : { deg: edges.deg, source: "edges" };
   return Math.abs(tara) < 0.3 ? { deg: 0, source: "level" } : { deg: tara, source: "tara" };
@@ -110,9 +110,9 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
   let original = got.asset;
   stopIfAborted();
 
-  // 2. Tara's assessment, then what privacy allows. People are kept as they are unless the business setting blurs them;
+  // 2. Miss Influencer's assessment, then what privacy allows. People are kept as they are unless the business setting blurs them;
   // a plate or a number is always blurred; a child keeps the run to the free local clean-up (faces blurred, no AI edit);
-  // with the setting on, people Tara could not place stop the run, with nothing kept.
+  // with the setting on, people Miss Influencer could not place stop the run, with nothing kept.
   status(TARA, "Looking at the photo: subject, light, clutter, what must not change");
   const assessment = await assessPhoto(g, original.id, got.normalized.buffer, assessContextFor(ctx, note, original), { vision: deps.vision, model: models.assess, now: now(), record: false });
   stopIfAborted();
@@ -155,10 +155,10 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
   const tilt = chooseTilt(await estimateTilt(got.normalized.buffer), assessment.quality.tiltDeg);
   const plan = planCrop({ w: original.w, h: original.h }, tilt.deg, assessment.overlays);
 
-  // A photo that cannot be saved stops here with Tara's one line on how to take it again: no variant, no generative edit,
+  // A photo that cannot be saved stops here with Miss Influencer's one line on how to take it again: no variant, no generative edit,
   // no card to approve (content trial 2026-10-15: the studio used to carry on and offer the hopeless photo for approval).
   if (assessment.verdict === "reshoot") {
-    const message = `Tara can't save this photo${assessment.coaching ? `: ${assessment.coaching}` : "."} Nothing was made and no Studio credit was used.`;
+    const message = `Miss Influencer can't save this photo${assessment.coaching ? `: ${assessment.coaching}` : "."} Nothing was made and no Studio credit was used.`;
     status(TARA, "This photo can't be saved: no edit made");
     done(TARA);
     send({ type: "final", turnId: original.id, answer: message, citations: [original.id], checks: CHECKS_NA, agents: [TARA], ms: Math.max(0, now() - t0) });
@@ -214,7 +214,7 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
   send({ type: "handoff", from: TARA, to: NISHA, note: `${variants.length} variant${variants.length === 1 ? "" : "s"} to check against the original` });
   stopIfAborted();
 
-  // 6. Nisha's fidelity check
+  // 6. Fact Checker's fidelity check
   start(NISHA, `Check every variant against the original: same ${assessment.subjectKind === "exterior" ? "building" : "subject"}, nothing invented`);
   status(NISHA, "Comparing edges and shapes with the original");
   const fidelity = await checkFidelity(g, { businessName: ctx.business.name, original: kept, base, locks: assessment.locks, variants }, {
@@ -225,9 +225,9 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
   send({ type: "handoff", from: NISHA, to: DEV, note: "Checked; caption the post" });
   stopIfAborted();
 
-  // 7. Dev's caption
+  // 7. Wordsmith's caption
   start(DEV, "Write the caption in the brand's voice");
-  status(DEV, deps.devRewrite ? "Rewriting Tara's draft caption, then holding it to the voice rules" : "Holding Tara's draft caption to the voice rules and the brand's don'ts");
+  status(DEV, deps.devRewrite ? "Rewriting Miss Influencer's draft caption, then holding it to the voice rules" : "Holding Miss Influencer's draft caption to the voice rules and the brand's don'ts");
   const pick = variants.find((v) => fidelity.find((f) => f.assetId === v.id)?.badge === "unchanged") ?? a;
   const caption = await writeCaption(ctx, assessment, note, deps.devRewrite ? await thumbnail(pick.buffer, 768) : null,
     { vision: deps.devRewrite ? deps.vision : null, model: models.caption });
@@ -258,9 +258,9 @@ export async function runStudio(g: GraphHandle, input: StudioInput, rawDeps: Stu
 
   const okCount = fidelity.filter((f) => f.badge === "unchanged").length;
   const answer = [
-    `Tara: ${assessment.verdict} (${assessment.subject}).`,
-    `${variants.length} variant${variants.length === 1 ? "" : "s"}; Nisha passed ${okCount} as "${assessment.subjectKind === "exterior" ? "building" : "subject"} unchanged".`,
-    `Dev's caption is on the card, waiting for your approval (1 Studio credit when approved).${postsWords ? ` ${postsWords}` : ""}`,
+    `Miss Influencer: ${assessment.verdict} (${assessment.subject}).`,
+    `${variants.length} variant${variants.length === 1 ? "" : "s"}; Fact Checker passed ${okCount} as "${assessment.subjectKind === "exterior" ? "building" : "subject"} unchanged".`,
+    `Wordsmith's caption is on the card, waiting for your approval (1 Studio credit when approved).${postsWords ? ` ${postsWords}` : ""}`,
     ...notices,
   ].join(" ");
   send({

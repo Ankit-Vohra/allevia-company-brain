@@ -1,4 +1,4 @@
-// Nisha's fidelity check (product design §6, step 7; fails closed). Structural only: is it the same building, with no
+// Fact Checker's fidelity check (product design §6, step 7; fails closed). Structural only: is it the same building, with no
 // element added or removed? Light, colour, noise, straightening and cropping are allowed changes. Two kinds of evidence:
 // - numbers, against the straightened frame each variant was made from: dHash distance (64 bits) and an SSIM-like
 //   structure score (image.ts `similarity`; the correlation of edges, so a relight does not count as a change);
@@ -59,9 +59,9 @@ export type FidelitySubject = "building" | "product";
 
 export function fidelitySystem(businessName: string, subject: FidelitySubject = "building"): string {
   return subject === "product"
-    ? `You are Nisha, the fact checker on ${businessName}'s AI team. You check advertising pictures made from the owner's product photo ` +
+    ? `You are the Fact Checker on ${businessName}'s AI team. You check advertising pictures made from the owner's product photo ` +
       "before the owner sees them. Your one question is: is it still exactly the same product? You never judge taste."
-    : `You are Nisha, the fact checker on ${businessName}'s AI team. You check edited photos against the original before ` +
+    : `You are the Fact Checker on ${businessName}'s AI team. You check edited photos against the original before ` +
       "the owner sees them. Your one question is structural: is it still the same real place? You never judge taste.";
 }
 

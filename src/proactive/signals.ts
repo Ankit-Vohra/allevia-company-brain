@@ -1,4 +1,4 @@
-// What Meera reads at the daily stand-up: everything that changed in the business's own graph since the last one, plus
+// What The Chief reads at the daily stand-up: everything that changed in the business's own graph since the last one, plus
 // the dates coming up in its country. Read-only, numbers straight from the graph (never from a model):
 //   numbers      new readings and the two biggest like-for-like moves (the brief's own changesSince)
 //   uploads      spreadsheets the owner added

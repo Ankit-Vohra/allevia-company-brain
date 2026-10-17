@@ -3,7 +3,7 @@
 // credit ledger, and a hard budget (ALLEVIA_STUDIO_DAILY_CREDIT_CAP, set by the caller). Nothing here is committed; the photo
 // must show no real person. Every generation is quoted first by the engine and refused above the caps.
 //
-//   run <photo>                       the whole pipeline: Option A (free) and Option B (AI edit), Nisha's checks, the caption
+//   run <photo>                       the whole pipeline: Option A (free) and Option B (AI edit), Fact Checker's checks, the caption
 //   request "<words>"                 a free-form request on that card ("make it festive")
 //   ad "<message>"                    "make this into an ad saying <message>"
 //   clip                              the priced offer for a 5 second clip (add --yes to make it)
@@ -59,7 +59,7 @@ async function main(): Promise<void> {
         const f = r.fidelity.find((x) => x.assetId === v.id)!;
         console.log(`Option ${v.label} (${v.aiEdited ? `AI${v.credits !== undefined ? `, ${v.credits} credits` : ""}` : "local"}): ${f.badge}: ${f.note}`);
       }
-      console.log("Tara:", r.assessment.verdict, "|", r.assessment.subject);
+      console.log("Miss Influencer:", r.assessment.verdict, "|", r.assessment.subject);
       console.log("notices:", JSON.stringify(r.notices));
       const c = await studioCard(g, r.approvalId);
       console.log("recommended:", c?.payload.studio.variants.find((v) => v.id === c.payload.studio.recommended)?.label ?? "none");

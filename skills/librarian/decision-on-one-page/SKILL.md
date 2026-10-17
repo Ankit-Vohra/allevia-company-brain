@@ -25,7 +25,7 @@ needs_ok: false
 
 One page with five short labelled parts, the most important line first. No long paragraphs.
 
-> Still stands. Decided 29 Sep by you; Tara knows most about it.
+> Still stands. Decided 29 Sep by you; Miss Influencer knows most about it.
 > Question: should we keep posting a story every day?
 > Options: keep daily stories; post three a week; stop and put the time into reels.
 > Chosen: stop and put the time into reels, because stories reached 153 people against 1,282 for the best reel (Instagram, to 28 Sep, measured).

@@ -91,7 +91,7 @@ describe("writing the records", () => {
     const r = await run(crmWrite, { action: "add_lead", name: "Omar Khan", email: "omar@client.example", channel: "email", message: "Office fit-out for 40 desks", external_id: "m3" });
     expect(r.data.crm).toMatchObject({ connected: true, name: "HubSpot" });
     expect(r.note).toMatch(/connection_act/);
-    // Neel may read HubSpot and propose changes in it, and nothing is sent by proposing
+    // Deal Closer may read HubSpot and propose changes in it, and nothing is sent by proposing
     const read = await run(connectionRead, { connection: "hubspot", tool: "HUBSPOT_LIST_DEALS" });
     expect(read.data.result).toMatchObject({ results: [{ id: "d1" }] });
     const act = await run(connectionAct, { connection: "hubspot", tool: "HUBSPOT_CREATE_CONTACT", args: { email: "omar@client.example" }, title: "Add Omar Khan to HubSpot", summary: "Contact: Omar Khan, omar@client.example, asked about an office fit-out for 40 desks", why: "New lead" });

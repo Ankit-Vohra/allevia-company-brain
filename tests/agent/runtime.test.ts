@@ -318,8 +318,8 @@ describe("ClaudeAgentSdkRuntime", () => {
 
   it("tells the model the full names its tools are called by (a short name gets 'No such tool available')", async () => {
     const { sdk, queries } = fakeSdk(async function* () { yield OK; });
-    await new ClaudeAgentSdkRuntime({ sdk, cwd: "/tmp" }).run(input({ tools: [fakeTool("metric_trend", signups)], system: "You are Kabir." }), () => {});
-    expect(queries[0]!.params.options.systemPrompt).toMatch(/^You are Kabir\.\n\nHow to call your tools: .*mcp__allevia__<name>.*mcp__allevia__metric_trend.*never answer as if your tools were unavailable/);
+    await new ClaudeAgentSdkRuntime({ sdk, cwd: "/tmp" }).run(input({ tools: [fakeTool("metric_trend", signups)], system: "You are Data Detective." }), () => {});
+    expect(queries[0]!.params.options.systemPrompt).toMatch(/^You are Data Detective\.\n\nHow to call your tools: .*mcp__allevia__<name>.*mcp__allevia__metric_trend.*never answer as if your tools were unavailable/);
     const bare = fakeSdk(async function* () { yield OK; });
     await new ClaudeAgentSdkRuntime({ sdk: bare.sdk, cwd: "/tmp" }).run(input({ tools: [], system: "Plan." }), () => {});
     expect(bare.queries[0]!.params.options.systemPrompt).toBe("Plan.");

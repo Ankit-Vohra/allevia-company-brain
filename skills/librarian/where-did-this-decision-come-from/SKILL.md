@@ -22,7 +22,7 @@ needs_ok: false
 
 Answer first in one sentence, then the story in four short lines.
 
-> We paused daily stories on 29 Sept because they reached few people: 153 views against 1,282 for the best reel (Instagram, to 28 Sept). You decided; Tara carried it out. It still holds. Not recorded: whether a restart date was set.
+> We paused daily stories on 29 Sept because they reached few people: 153 views against 1,282 for the best reel (Instagram, to 28 Sept). You decided; Miss Influencer carried it out. It still holds. Not recorded: whether a restart date was set.
 
 ## Done well
 

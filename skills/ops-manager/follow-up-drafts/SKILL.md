@@ -22,7 +22,7 @@ needs_ok: true
 
 The message itself, in quotes, then one line saying which nudge it is and when to try next.
 
-> "Hi Meera, it's Aarav from the studio. Following up on the 14 Oct quote for the kitchen (₹3,20,000). Shall I hold the 3 Nov start date for you until Friday?"
+> "Hi the Chief, it's Aarav from the studio. Following up on the 14 Oct quote for the kitchen (₹3,20,000). Shall I hold the 3 Nov start date for you until Friday?"
 > First nudge, 3 days after the quote. If no reply by Wednesday, call.
 
 ## Done well

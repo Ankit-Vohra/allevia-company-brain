@@ -7,7 +7,7 @@
 //   2. What changed since the last note: new Observations (with the two biggest moves), facts that ended, things the
 //      team learned from the owner's edits.
 //   3. What we noticed: the top 3 open Recommendations (not the on-call ones).
-//   4. On call: open tech Recommendations from Zoya (errors, crashes) and Imran (releases, app stores). Only when
+//   4. On call: open tech Recommendations from Firefighter (errors, crashes) and Bug Hunter (releases, app stores). Only when
 //      something is open.
 //   5. Waiting for your OK: the pending Approvals.
 //   6. One next step.
@@ -211,7 +211,7 @@ async function closedSince(g: Read, since: number): Promise<{ count: number; exa
   return { count: c?.n ?? 0, examples: ex };
 }
 
-// ---------- on call: open tech recommendations from Zoya and Imran ----------
+// ---------- on call: open tech recommendations from Firefighter and Bug Hunter ----------
 
 export async function onCallOpen(g: Read): Promise<Brief["onCall"]> {
   return g.roQuery<Brief["onCall"][number]>(

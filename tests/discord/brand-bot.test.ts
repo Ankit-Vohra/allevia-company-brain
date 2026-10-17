@@ -101,7 +101,7 @@ describe("brand files on Discord", () => {
     const t = m.started[0]!;
     const said = t.texts().join("\n");
     expect(said).toMatch(/Got your logo/);
-    expect(said).not.toMatch(/Tara looked|Work log/); // the Studio did not run
+    expect(said).not.toMatch(/Miss Influencer looked|Work log/); // the Studio did not run
     const first = t.sent[0]!.first as Exclude<Outgoing, string>;
     expect(first.files).toHaveLength(1); // a preview of what was kept
     expect((await activeLogo(g))?.origin).toBe("upload");
@@ -125,7 +125,7 @@ describe("brand files on Discord", () => {
     const before = (await listBrandAssets(g, { kinds: ["product-photo"] })).length;
     const m = message("Harbour House from the street", [file("house.jpg", "image/jpeg")]);
     await studio.onMedia(m);
-    expect(m.started[0]!.texts().join("\n")).toMatch(/Tara looked at your photo/);
+    expect(m.started[0]!.texts().join("\n")).toMatch(/Miss Influencer looked at your photo/);
     expect((await listBrandAssets(g, { kinds: ["product-photo"] })).length).toBe(before);
   });
 
@@ -140,7 +140,7 @@ describe("brand files on Discord", () => {
     });
     const m = message("the front", [file("house.jpg", "image/jpeg")]);
     await flaky.onMedia(m);
-    expect(m.started[0]!.texts().join("\n")).toMatch(/Tara looked at your photo/);
+    expect(m.started[0]!.texts().join("\n")).toMatch(/Miss Influencer looked at your photo/);
   });
 
   it("says why when a file is refused, and does not file a child's picture", async () => {

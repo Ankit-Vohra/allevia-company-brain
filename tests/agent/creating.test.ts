@@ -40,7 +40,7 @@ describe("a request becomes a made thing (integration)", () => {
       "chief-of-staff:plan": { structured: { steps: [{ agent: "chief-of-staff", task: "Make the poster" }], rationale: "A request to make something" } },
       "chief-of-staff:direct": {
         calls: [{ name: "make_poster", args: { brief: { goal: "offer", promoting: "Design consultation", audience: "homeowners in Bristol", message: "A festival of light for your home", cta: "Visit kestrel.example", offer: "20% off", placement: "insta_post" }, eyebrow: "Diwali sale", scene: ["warm lamps on a wooden table", "a brass diya at dusk"] } }],
-        text: "I made two poster options for your Diwali sale: option A (our pick) and B. Nisha checked the words and your logo. They're waiting for your OK, and nothing has been posted.",
+        text: "I made two poster options for your Diwali sale: option A (our pick) and B. Fact Checker checked the words and your logo. They're waiting for your OK, and nothing has been posted.",
       },
     });
     const events: AgentEvent[] = [];

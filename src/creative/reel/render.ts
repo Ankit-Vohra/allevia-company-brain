@@ -3,7 +3,7 @@
 // colours) given a slow push with ffmpeg, or (priced, agreed) a short clip the engine animated from that still. The words are
 // set by code on a shade inside the story-safe band, the hook words are on screen from the first frame, and the reel ends on a
 // card with the owner's real logo. Then it is CHECKED and, when something is wrong, REPAIRED the cheapest way first:
-//   check  - the file is probed (size, length, frame rate), one frame per scene is read back by Nisha (vision) against the
+//   check  - the file is probed (size, length, frame rate), one frame per scene is read back by Fact Checker (vision) against the
 //            words that were set, and the end card must show the logo;
 //   repair - a scene whose generated picture came back with lettering or a defect is swapped for a brand card (free) and the
 //            reel is assembled again (ffmpeg, free); it is checked once more. Nothing is regenerated without a new OK.
@@ -239,7 +239,7 @@ export async function frameAt(video: ReelVideo, mp4: Buffer, t: number): Promise
   }
 }
 
-// Nisha reads one frame per scene and the end card against the words that were set there.
+// Fact Checker reads one frame per scene and the end card against the words that were set there.
 export async function checkReel(video: ReelVideo, mp4: Buffer, a: { plan: ReelPlan; overlays: Overlay[]; endTexts: PosterManifest["texts"]; endLogo: "file" | "wordmark"; brand: BrandForCompose }, vision: VisionRunner): Promise<OptionVerdict[]> {
   const frames: Array<{ label: string; image: Buffer; manifest: PosterManifest }> = [];
   let t = 0;

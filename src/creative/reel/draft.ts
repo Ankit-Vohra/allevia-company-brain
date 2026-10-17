@@ -4,7 +4,7 @@
 //                (confirmSpend), the way the founder's pipeline stops at a card before paying for clips;
 //   3. make    - each scene's picture (an approved picture, a new still, or a brand card), the words set by code, the
 //                slow push or the agreed clip, the end card with the real logo, one ffmpeg pass;
-//   4. check   - Nisha reads a frame of each scene and the end card against the words that were set;
+//   4. check   - Fact Checker reads a frame of each scene and the end card against the words that were set;
 //   5. repair  - the cheapest fix first: a generated still that came back with lettering or a defect is swapped for a
 //                brand card and the reel is assembled again (free); then checked once more;
 //   6. save    - Asset{kind: clip} with lineage (the pictures it used, the logo, the fonts) and a card for the owner's OK.

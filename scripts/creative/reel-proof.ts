@@ -1,5 +1,5 @@
 // Makes a reel draft with the real reel path (makeReelDraft: claims check, price, real photos and screens, HTML captions
-// timed to the words, clips and music through a capped engine, Nisha's frame check) and writes it with a contact sheet.
+// timed to the words, clips and music through a capped engine, Fact Checker's frame check) and writes it with a contact sheet.
 //   ALLEVIA_FALKORDB_URL=redis://127.0.0.1:6411 ALLEVIA_DATA_DIR=~/jarvis/data \
 //   npx tsx scripts/creative/reel-proof.ts --tenant avs_atelier --plan plan.json --question "..." --out docs/creative-live/v2/reel --cap 12
 import { execFileSync } from "node:child_process";

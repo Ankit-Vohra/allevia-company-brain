@@ -65,7 +65,7 @@ describe.skipIf(!hasFfmpeg)("reel drafts (ffmpeg)", () => {
   }, 60_000);
   afterAll(async () => { await cleanup(); await closeAll(); rmSync(dir, { recursive: true, force: true }); });
 
-  // Nisha reads each frame back as it was set (S1..Sn and END)
+  // Fact Checker reads each frame back as it was set (S1..Sn and END)
   const nisha = (over: Record<string, Record<string, unknown>> = {}) => new FakeVision({ "fact-checker": (i: VisionInput) => nishaReads(over as never)(i) });
   const deps = (over: Partial<CreativeDeps> = {}, engine = new FakeCreativeEngine()) => ({ store, vision: nisha(), engine, maxCreditsPerRequest: 10, spent: { credits: 0 }, video, ...over }) as CreativeDeps & { video: typeof video };
   const job = (plan: ReelPlan, confirmSpend = false) => ({ tenant: TENANT, businessId: BIZ, agentId: "chief-of-staff", turnId: `r${++n}`, now: NOW + n * 1000, question: "a reel about a morning at the studio, Kestrel & Oak, Bristol", plan, confirmSpend });

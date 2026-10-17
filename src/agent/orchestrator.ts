@@ -221,7 +221,7 @@ export function normalisePlan(raw: unknown, question: string, opts: { disabled?:
   steps = steps.slice(0, deskCap(question));
   const planned = new Set(steps.map((s) => s.agent));
   for (const s of steps) {
-    // A task that names another planned desk ("using the data-analyst's breakdown", "after Kabir's numbers") needs its
+    // A task that names another planned desk ("using the data-analyst's breakdown", "after Data Detective's numbers") needs its
     // finding, even when the model forgot to say so in `after`.
     for (const other of steps) if (other.agent !== s.agent && mentionsDesk(s.task, other.agent)) s.after.push(other.agent);
     s.after = unique(s.after.filter((a) => a !== s.agent && planned.has(a)));
@@ -1110,8 +1110,8 @@ class Turn {
 
   // ----- the last pass: the answer reads as a person wrote it -----
 
-  // The no-model pass always (wrappers, dashes, curly quotes); Dev on the cheapest model only when strong tells are left,
-  // and not for copy Dev already checked (the content desk's captions) or when Dev is switched off. A table or pure data
+  // The no-model pass always (wrappers, dashes, curly quotes); Wordsmith on the cheapest model only when strong tells are left,
+  // and not for copy Wordsmith already checked (the content desk's captions) or when Wordsmith is switched off. A table or pure data
   // is left alone. The owner sees the cleaned answer replace the streamed one; nothing it relies on can move (sameFacts).
   async polish(text: string, plan: Plan): Promise<string> {
     if (this.deps.humanize === false || !text.trim()) return text;

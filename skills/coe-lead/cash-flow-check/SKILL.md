@@ -15,7 +15,7 @@ needs_ok: false
 3. Collect money going out, by date: rent, wages, loan payments, suppliers, subscriptions, tax. `search` for each by name; a regular cost the records do not hold is written as "[you tell us: monthly rent]", never guessed.
 4. Lay out three windows: the next 30 days, 31 to 60, and 61 to 90. In each: money expected in (moved later by each customer's usual delay), money going out, and the difference. Give a low and a high case from the normal weekly swing, not one exact number. Do the arithmetic only on figures the tools returned, and show each figure with its source and date.
 5. Name the risks, biggest money first, at most five: a big bill landing before a slow payer pays ("Mehta & Co usually pays 18 days late, so their 2,400 arrives around 3 Dec, after rent on 1 Dec"); a week where the low case goes below zero; a cost with no record; data too thin to judge.
-6. End with the one move that helps most this week: chase one invoice (Vikram can draft it with the chase-unpaid-invoices skill), move a supplier payment, ask for a deposit on a big order, or hold a spend.
+6. End with the one move that helps most this week: chase one invoice (Taskmaster can draft it with the chase-unpaid-invoices skill), move a supplier payment, ask for a deposit on a big order, or hold a spend.
 7. Keep every amount in the currency the records give, with its code (AED 4,200, GBP 1,150). Never convert currencies.
 
 ## House style

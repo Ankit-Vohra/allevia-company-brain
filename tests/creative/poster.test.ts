@@ -1,5 +1,5 @@
-// makePoster end to end on a throwaway graph with a fake engine and a fake Nisha: artwork through the capped engine, two
-// layouts composed by code with the real logo, Nisha's check, assets with lineage, a card that Approve turns into a draft
+// makePoster end to end on a throwaway graph with a fake engine and a fake Fact Checker: artwork through the capped engine, two
+// layouts composed by code with the real logo, Fact Checker's check, assets with lineage, a card that Approve turns into a draft
 // post; and every way it can fall short says so and still delivers what it can.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -76,7 +76,7 @@ describe("makePoster (integration)", () => {
       expect(a).toMatchObject({ w: 1080, h: 1350, logo: "file" });
       expect((await sharp(store.get(TENANT, a!.key)!).metadata()).width).toBe(1080);
     }
-    // lineage: each poster derives from its own artwork, uses the logo and the font files, is guided by the brand rules, and was reviewed by Nisha
+    // lineage: each poster derives from its own artwork, uses the logo and the font files, is guided by the brand rules, and was reviewed by Fact Checker
     const [first, second] = r.saved.options;
     const parents = await g.roQuery<{ p: string }>("MATCH (a:Asset)-[:DERIVED_FROM]->(p:Asset {kind:'artwork'}) WHERE a.id IN $ids RETURN p.id AS p ORDER BY p", { ids: [first!.assetId, second!.assetId] });
     expect(new Set(parents.map((x) => x.p)).size).toBe(2);
@@ -178,7 +178,7 @@ describe("makePoster (integration)", () => {
     await expect(makePoster(g, req({ content: { headline: long }, question: `a poster that says ${long}`, turnId: "t-fit" }), deps())).rejects.toMatchObject({ code: "fit" });
   }, 60_000);
 
-  it("holds back an option Nisha found wrong, still lets an unchecked one be approved with a warning, and never approves a held one", async () => {
+  it("holds back an option Fact Checker found wrong, still lets an unchecked one be approved with a warning, and never approves a held one", async () => {
     engine = new FakeCreativeEngine();
     const held = await makePoster(g, req({ turnId: "t-held" }), deps({ vision: fakeVisionFor(nishaReads({ A: { garbled: true } })) }));
     expect(held.saved.options.map((o) => o.badge)).toEqual(["held", "ok"]);

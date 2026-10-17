@@ -88,7 +88,7 @@ describe("a desk switched off is never planned and never reviews", () => {
     expect(planSchema(enabled).properties.steps.items.properties.agent.enum).toEqual(enabled);
     const p = planSystemPrompt({ now: NOW, tenant: "t", disabled: ["tech-lead", "chief-of-staff"] });
     expect(p).not.toMatch(/- tech-lead:/);
-    expect(p).toContain('Switched off by the owner (never plan them; if the question needs one, plan only "chief-of-staff" and say that desk is off): Arjun (Tech Lead).');
+    expect(p).toContain('Switched off by the owner (never plan them; if the question needs one, plan only "chief-of-staff" and say that desk is off): Techie (Tech Lead).');
     expect(planSystemPrompt({ now: NOW, tenant: "t" })).not.toContain("Switched off");
   });
 
@@ -99,7 +99,7 @@ describe("a desk switched off is never planned and never reviews", () => {
     expect(normalisePlan({ steps: [{ agent: "chief-of-staff", task: "x" }] }, "q", { disabled: ["chief-of-staff"] }).steps[0]!.agent).toBe("chief-of-staff");
   });
 
-  it("'switch Arjun off': the turn never plans or runs tech-lead", async () => {
+  it("'switch Techie off': the turn never plans or runs tech-lead", async () => {
     const s = setup({
       "chief-of-staff:plan": { structured: { steps: [{ agent: "tech-lead", task: "Check the contact form" }, { agent: "content-strategist", task: "Draft a post" }], rationale: "both" } },
       "content-strategist": { structured: { text: "A draft post.", citations: [] } },
@@ -144,7 +144,7 @@ describe("the owner's standing instructions reach the right prompts and become G
   });
   const team: TeamSettings = { disabled: [], instructions: [NO_EMOJIS, FREE_CONSULT] };
 
-  it("'no emojis on LinkedIn' lands in Tara's and Dev's prompts, not Nisha's; the turn and Tara's finding are guided by it", async () => {
+  it("'no emojis on LinkedIn' lands in Miss Influencer's and Wordsmith's prompts, not Fact Checker's; the turn and Miss Influencer's finding are guided by it", async () => {
     const s = setup(scripts("Harbour House: a Victorian terrace opened to the garden [[content:harbour-house]]."), { team }, { question: "Draft a LinkedIn post about Harbour House" });
     const out = await s.run();
     const tara = s.runtime.runs.find((r) => r.agentId === "content-strategist" && r.phase === "work")!;

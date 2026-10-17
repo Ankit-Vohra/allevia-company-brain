@@ -1,4 +1,4 @@
-// Nisha: claims are grounded in the request and the graph before anything is drawn, and after drawing she reads the poster
+// Fact Checker: claims are grounded in the request and the graph before anything is drawn, and after drawing she reads the poster
 // back with vision and compares it with the words that were set. A look that cannot run is "unchecked", never a pass.
 import { describe, it, expect } from "vitest";
 import { checkPosters, claimTokens, coverage, groundClaims, NISHA } from "../../src/creative/compose/check.js";

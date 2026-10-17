@@ -1,5 +1,5 @@
 // A short clip from a picture the owner likes (founder's brief, 2026-10-15): 5 seconds, 9:16, from the recommended option that
-// Nisha passed. It is always an explicit, priced choice: the offer says what it costs and what a clip cannot do, and nothing is
+// Fact Checker passed. It is always an explicit, priced choice: the offer says what it costs and what a clip cannot do, and nothing is
 // spent until the owner presses the button. The content trials found 4:5 output with no sound or text and lettering artifacts at
 // the edge, so the start frame is cropped to 9:16 here (the aspect is asked for and fixed in code, not hoped for), the clip is
 // silent, and the offer says plainly that it has no text, no voice-over and can invent small details.
@@ -51,7 +51,7 @@ export class ClipService implements ClipPort {
 
   private graph(tenant: string): Promise<GraphHandle> | GraphHandle { return typeof this.o.g === "function" ? this.o.g(tenant) : this.o.g; }
 
-  // The option the clip comes from: the one named, else the recommended one, and it must have passed Nisha's check.
+  // The option the clip comes from: the one named, else the recommended one, and it must have passed Fact Checker's check.
   private async source(r: ClipRequest) {
     const g = await this.graph(r.tenant);
     const loaded = await loadRevision(g, r, { store: this.o.store });
@@ -59,7 +59,7 @@ export class ClipService implements ClipPort {
     if (loaded.r.privacy.localOnly) return { err: `${CHILD_NOTICE} That includes video.` } as const;
     const s = loaded.r.s;
     const v = s.variants.find((x) => x.id === (r.variantId ?? s.recommended));
-    if (!v || v.badge !== "unchanged") return { err: "A clip needs an option Nisha has checked and passed. Pick one of those first." } as const;
+    if (!v || v.badge !== "unchanged") return { err: "A clip needs an option Fact Checker has checked and passed. Pick one of those first." } as const;
     const [row] = await g.roQuery<{ key: string | null; step: string | null }>("MATCH (a:Entity:Asset {id:$id}) RETURN a.storageKey AS key, a.step AS step", { id: v.id });
     const bytes = row?.key ? this.o.store.get(r.tenant, row.key) : null;
     if (!bytes) return { err: "I can't find that option's picture any more." } as const;

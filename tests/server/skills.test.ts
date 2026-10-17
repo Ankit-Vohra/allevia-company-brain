@@ -45,8 +45,8 @@ describe("server: skills on the team (integration)", () => {
   });
 
   it("a rule said in plain words shows on the right skill, and can be removed", async () => {
-    const pv = (await (await req(h.app, "POST", "/api/mini/directives", { text: "Tara, our posts always end with a question" })).json()) as DirectivePreview;
-    expect(pv.diff.map((l) => l.label)).toEqual(["Rule for Tara's Instagram post craft", "Rule for Dev's Brand voice check"]);
+    const pv = (await (await req(h.app, "POST", "/api/mini/directives", { text: "Miss Influencer, our posts always end with a question" })).json()) as DirectivePreview;
+    expect(pv.diff.map((l) => l.label)).toEqual(["Rule for Miss Influencer's Instagram post craft", "Rule for Wordsmith's Brand voice check"]);
     expect((await req(h.app, "POST", `/api/mini/directives/${pv.id}/apply`)).status).toBe(200);
 
     const list = await team();
@@ -63,7 +63,7 @@ describe("server: skills on the team (integration)", () => {
   });
 
   it("a skill of the business's own shows only on the person it is for, as the business's own", async () => {
-    const pv = (await (await req(h.app, "POST", "/api/mini/directives", { text: "Tara, add a skill called Festival post: open with the greeting in Hindi, then the offer" })).json()) as DirectivePreview;
+    const pv = (await (await req(h.app, "POST", "/api/mini/directives", { text: "Miss Influencer, add a skill called Festival post: open with the greeting in Hindi, then the offer" })).json()) as DirectivePreview;
     await req(h.app, "POST", `/api/mini/directives/${pv.id}/apply`);
     const list = await team();
     expect(list.find((a) => a.id === "content-strategist")!.skills.find((s) => s.id === "festival-post")).toMatchObject({ name: "Festival post", source: "business" });

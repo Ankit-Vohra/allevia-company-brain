@@ -4,7 +4,7 @@
 //   Asset -SOURCED_FROM-> Document{kind:'generation'}   the Higgsfield job it came from (model, mode, credits, the prompt used)
 //   Observation{studio_credits_spent} -MEASURES-> Asset   what that job cost, with the job as its source
 //   Asset -GUIDED_BY-> BrandRule|Rule                    the brand and fidelity rules the prompt was built from
-//   Nisha -REVIEWED-> Asset{verdict}                     her check; Approval -> Action -> Content -USES_ASSET-> Asset   the OK and the post
+//   Fact Checker -REVIEWED-> Asset{verdict}                     her check; Approval -> Action -> Content -USES_ASSET-> Asset   the OK and the post
 // `assetLineage` walks it: up through DERIVED_FROM to the photo it all started from, down to what was made from it, and out to
 // the job, the cost, the rules, the review, the card and the post, so "how was this ad made and what did it cost" is a read.
 import type { Lineage, LineageAsset, LineageStep } from "../../shared/contracts.js";

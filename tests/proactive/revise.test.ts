@@ -88,7 +88,7 @@ describe("Change on Discord", () => {
     await bot.onMessage(msg);
     expect(out).toHaveLength(1);
     const card = out[0] as { content: string; buttons: Array<{ customId: string }> };
-    expect(card.content).toContain("drafted by Tara");
+    expect(card.content).toContain("drafted by Miss Influencer");
     expect(card.buttons.map((b) => b.customId)).toEqual(["allevia:approve:approval:standup-diwali-1", "allevia:change:approval:standup-diwali-1", "allevia:reject:approval:standup-diwali-1"]);
 
     // a "Change:" with no Change pressed is just a question for the team

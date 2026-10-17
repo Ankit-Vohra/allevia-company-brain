@@ -23,7 +23,7 @@ needs_ok: false
 
 The answer first: where people leave and whether it changed. Then at most three numbers, then what to check first.
 
-> People are leaving at the form: 310 visited the booking page and 22 started it in the week to 12 Oct; a month ago it was 305 and 41. The top is flat, so it is the form, not the traffic. Check first: does the phone number field accept spaces? Owner: Arjun.
+> People are leaving at the form: 310 visited the booking page and 22 started it in the week to 12 Oct; a month ago it was 305 and 41. The top is flat, so it is the form, not the traffic. Check first: does the phone number field accept spaces? Owner: Techie.
 
 ## Done well
 

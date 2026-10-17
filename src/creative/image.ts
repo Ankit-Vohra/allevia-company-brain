@@ -1,5 +1,5 @@
 // generate_image, end to end: a picture from a description, in the brand's look, through the capped engine (quoted first),
-// looked at by Nisha (no lettering that was not asked for, no obvious defects, shows what was asked), saved as Asset{kind:
+// looked at by Fact Checker (no lettering that was not asked for, no obvious defects, shows what was asked), saved as Asset{kind:
 // image} with its prompt, model, job and cost, and a card waiting for the owner. When the engine is not available it says
 // so, exactly, and makes nothing: there is no stand-in picture.
 import type { GraphHandle } from "../graph/client.js";
@@ -42,7 +42,7 @@ export async function makeImages(g: GraphHandle, job: ImageJob, deps: CreativeDe
   const verdicts = await checkPictures(got.made.map((m, i) => ({ label: labels[i]!, image: m.jpeg })), { brief: job.scene }, { vision: deps.vision });
   const notes = [...got.notes];
   if (verdicts.some((v) => v.badge === "unchecked")) notes.push("I couldn't double-check these pictures (the checker wasn't available), so please look them over before approving.");
-  if (verdicts.every((v) => v.badge === "held")) notes.push(`Nisha held every picture back: ${[...new Set(verdicts.flatMap((v) => v.reasons))].slice(0, 3).join("; ")}.`);
+  if (verdicts.every((v) => v.badge === "held")) notes.push(`Fact Checker held every picture back: ${[...new Set(verdicts.flatMap((v) => v.reasons))].slice(0, 3).join("; ")}.`);
   const saveDeps: SaveDeps = { store: deps.store, tenant: job.tenant, agentId: job.agentId, turnId: job.turnId, now: job.now };
   const options: OptionToSave[] = got.made.map((m, i) => {
     const v = verdicts[i]!;

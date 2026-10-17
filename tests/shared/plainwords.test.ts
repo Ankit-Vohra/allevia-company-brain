@@ -7,7 +7,7 @@ import { checkInNote, goalState, goalView, monthWeek, nextCheckIn, usdOnlyNote }
 
 const goal = (over: Partial<ProgramGoal> = {}): ProgramGoal => ({
   id: "goal:weekly-signups", name: "Weekly signups", metricKey: "new_accounts", unit: "signups", period: "week",
-  owner: { id: "growth-marketer", name: "Rohan" }, baseline: 264, baselineConf: "measured", baselineAt: "2026-09-20", target: 360, targetBasis: "baseline",
+  owner: { id: "growth-marketer", name: "Growth Hacker" }, baseline: 264, baselineConf: "measured", baselineAt: "2026-09-20", target: 360, targetBasis: "baseline",
   current: 312, currentAt: "2026-10-14", progress: 0.5, status: "on_track", dueAt: "2026-12-19", ...over,
 });
 
@@ -34,7 +34,7 @@ describe("goalView", () => {
   const f = (n: number) => String(n);
   it("reads as a sentence with the numbers, and says where it started and where it is now", () => {
     const v = goalView(goal(), 23, f);
-    expect(v).toMatchObject({ name: "Weekly signups", title: "Get to 360 signups a week", start: "264", now: "312", known: true, owner: "Rohan" });
+    expect(v).toMatchObject({ name: "Weekly signups", title: "Get to 360 signups a week", start: "264", now: "312", known: true, owner: "Growth Hacker" });
     expect(v.progress).toBe(0.5);
   });
   it("uses 'a month' for monthly goals, and the name alone when there is no target", () => {
@@ -54,7 +54,7 @@ describe("goalView", () => {
     const off = goalView(goal({ status: "off_track", current: 250, progress: 0 }), 45, f);
     expect(off.status).toEqual({ word: "Behind", tone: "bad" });
     expect(off.why).toMatch(/down from 264|below/i);
-    expect(off.why).toMatch(/Rohan/);
+    expect(off.why).toMatch(/Growth Hacker/);
   });
   it("achieved reads as Going well: you've reached it", () => {
     const v = goalView(goal({ status: "achieved", current: 365, progress: 1 }), 60, f);
@@ -108,10 +108,10 @@ describe("check-ins", () => {
     expect(checkInNote(cp(0, "done", "Day 0 of Allevia 90: goals set and baselines locked from the data on hand."), card(0, [goal()]))).toMatch(/set up your plan/i);
   });
   it("a done monthly check-in is the team's own note: what changed, and what it does next", () => {
-    const note = checkInNote(cp(30, "done", "Day 30 of Allevia 90: report one."), card(35, [goal(), goal({ id: "g2", name: "Search clicks", unit: "clicks", status: "at_risk", baseline: 9800, current: 10100, owner: { id: "data-analyst", name: "Kabir" } })]));
+    const note = checkInNote(cp(30, "done", "Day 30 of Allevia 90: report one."), card(35, [goal(), goal({ id: "g2", name: "Search clicks", unit: "clicks", status: "at_risk", baseline: 9800, current: 10100, owner: { id: "data-analyst", name: "Data Detective" } })]));
     expect(note).toMatch(/Weekly signups/);
     expect(note).toMatch(/264/);
-    expect(note).toMatch(/Next:.*Search clicks.*Kabir/);
+    expect(note).toMatch(/Next:.*Search clicks.*Data Detective/);
     expect(note).not.toMatch(/Allevia 90|Day 30/);
   });
   it("keeps a summary that is already in the team's own words", () => {

@@ -1,10 +1,10 @@
 // Content trial 2026-10-15 (docs/content-trials.md): what the Studio does when the photo should not become a post.
-// - reshoot: Tara says it cannot be saved; the studio used to carry on (a variant, Nisha's "unchanged", a card to approve).
-// - use: Tara says post it as it is; the studio used to spend a generative edit on it anyway.
+// - reshoot: Miss Influencer says it cannot be saved; the studio used to carry on (a variant, Fact Checker's "unchanged", a card to approve).
+// - use: Miss Influencer says post it as it is; the studio used to spend a generative edit on it anyway.
 // - a person: kept as they are (the owner's own content); the setting "Blur people's faces in my content" blurs them in
 //   everything made and kept, and the unblurred original is then never written to disk. No question is asked per photo.
 // - a child: no stop, but the free local clean-up only (no AI edit), faces blurred in what is kept, one plain sentence.
-// - a person Tara could not place, with the blur setting on: nothing is kept and nothing is made.
+// - a person Miss Influencer could not place, with the blur setting on: nothing is kept and nothing is made.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -61,7 +61,7 @@ describe("readPrivacy (pure)", () => {
     expect(readPrivacy(a({ subjectKind: "people", overlays: [] }), { blurFaces: true })).toMatchObject({ people: true, located: false, stop: "unlocated" });
     expect(readPrivacy(a({ subjectKind: "people", overlays: [privacyBox("face")] }), { blurFaces: true }).stop).toBeUndefined();
   });
-  it("a kids' room with nobody in it is not a child in the photo (only boxes Tara marked as privacy count)", () => {
+  it("a kids' room with nobody in it is not a child in the photo (only boxes Miss Influencer marked as privacy count)", () => {
     expect(readPrivacy(a({ subject: "a children's room with a green slide", story: "A kids' room", overlays: [] }))).toMatchObject({ people: false, minor: false });
   });
 });
@@ -99,7 +99,7 @@ describe("studio stops and privacy (integration)", () => {
     for (const d of dirs) rmSync(d, { recursive: true, force: true });
   });
 
-  it("a reshoot verdict stops with Tara's coaching: no variants, no generative edit, no Nisha, no Dev, no card", async () => {
+  it("a reshoot verdict stops with Miss Influencer's coaching: no variants, no generative edit, no Fact Checker, no Wordsmith, no card", async () => {
     const { store } = fresh();
     const vision = new FakeVision({ "content-strategist": { ...noPeople, verdict: "reshoot", coaching: "Retake it with the lights on, standing square to the wall." }, "fact-checker": nishaAnswer(false), "copy-editor": DEV_ANSWER });
     const eng = engine();
@@ -246,12 +246,12 @@ describe("studio stops and privacy (integration)", () => {
     const card = (await studioCard(g, r.approvalId))!;
     expect(card.payload.studio.notices).toEqual([CHILD_NOTICE]);
     expect(card.payload.studio.privacy!.note).toMatch(/child/i);
-    // Nisha was shown the blurred copy, never the child
+    // Fact Checker was shown the blurred copy, never the child
     const nisha = vision.calls.find((c) => c.agent === "fact-checker")!;
     expect(sha256Hex(nisha.images[0]!.data)).not.toBe(sha256Hex(await visionCopy(plain.buffer, 1024)));
   }, 60_000);
 
-  it("people Tara could not place: fine by default; with blurring on they cannot be blurred, so the run stops rather than keep them", async () => {
+  it("people Miss Influencer could not place: fine by default; with blurring on they cannot be blurred, so the run stops rather than keep them", async () => {
     const { store } = fresh();
     const unplaced = { ...noPeople, subjectKind: "people", overlays: [] };
     const vision = new FakeVision({ "content-strategist": unplaced, "fact-checker": nishaAnswer(false), "copy-editor": DEV_ANSWER });

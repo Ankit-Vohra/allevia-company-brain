@@ -37,7 +37,7 @@ export interface SetupOptions {
   weeks?: number;
   standup?: boolean;           // default true
   drafters?: Drafters;         // default: the production drafters (the words are written on the subscription)
-  runner?: LlmRunner | null;   // Meera's choice in the stand-up; null: the rule order picks
+  runner?: LlmRunner | null;   // The Chief's choice in the stand-up; null: the rule order picks
   skills?: (agent: string, id: string) => { name: string; guidance: string } | undefined;
   embed?: (text: string) => number[];
   tenantOpts?: TenantOpts;

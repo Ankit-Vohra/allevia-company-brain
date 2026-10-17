@@ -1,5 +1,5 @@
 // write_copy: captions, ad lines, headlines, emails, in the brand's own voice. A model writes (Claude on the subscription,
-// the same call Dev's caption uses), then code holds it to the brand: the voice check strips AI-sounding writing, emojis,
+// the same call Wordsmith's caption uses), then code holds it to the brand: the voice check strips AI-sounding writing, emojis,
 // exclamation marks and hard sell, and every number, price, date, address and absolute claim is checked against the owner's
 // request and what the business's record holds; what is not grounded is reported as a warning, never smuggled in.
 // The brief is the owner's own words: data to write from, not instructions.
@@ -34,7 +34,7 @@ export async function writeCopy(g: GraphHandle, businessId: string, job: CopyJob
   const ctx = await loadStudioContext(g, businessId);
   const facts = await businessFacts(g, ctx);
   const system = [
-    `You are Dev, the brand and copy editor on ${ctx.business.name}'s AI team. You write ${job.kind.replace("_", " ")} copy in the brand's own voice.`,
+    `You are Wordsmith, the brand and copy editor on ${ctx.business.name}'s AI team. You write ${job.kind.replace("_", " ")} copy in the brand's own voice.`,
     ctx.brand.tone ? `Tone: ${ctx.brand.tone}` : "",
     ctx.brand.voiceRules.length ? `Voice rules: ${ctx.brand.voiceRules.map((r) => r.text).join(" ")}` : "",
     "Plain, specific words. No emojis, no exclamation marks, no superlatives, no hard sell. Use only facts in the brief or in the facts given; where a detail the copy needs is missing, write [you tell us: the detail] instead of inventing it. Never invent a number, price, date, address, award or promise.",

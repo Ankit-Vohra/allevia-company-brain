@@ -15,7 +15,7 @@ needs_ok: false
 2. Read crash-free rate, crash count, error count and store rating with `metric_trend`, groupBy day, covering the same number of days before and after. Compare like with like: same length, and include the same weekdays. Use the tool's first, last, delta and pctChange; no own arithmetic.
 3. Judge by the rollout stage. Rule of thumb for a staged rollout: judge at 24 hours and again at 72 hours, because early users are not typical. A rating needs enough new ratings; a move on a handful is noise (check the count).
 4. Decide: fine (within the earlier normal range), watch (a small move, look again on a named date), hotfix (a clear rise tied to one crash or flow that can be fixed in a day), roll back (a main flow broken or crashes clearly above normal for a meaningful share of users). The owner decides; you give the call and why.
-5. Say what to hand off: Zoya for a live incident, Arjun for the fix (`search` and `get_entity` for the owner of the affected part).
+5. Say what to hand off: Firefighter for a live incident, Techie for the fix (`search` and `get_entity` for the owner of the affected part).
 6. Missing data: "not recorded", and what to connect. Date the newest reading.
 
 ## House style

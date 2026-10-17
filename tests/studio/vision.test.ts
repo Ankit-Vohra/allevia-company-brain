@@ -8,7 +8,7 @@ import type { Options, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-a
 import { CachedVision, ClaudeVision, FakeVision, visionKey, type VisionInput, type VisionQueryFn } from "../../src/studio/vision.js";
 
 const INPUT: VisionInput = {
-  agent: "content-strategist", model: "sonnet", system: "You are Tara.", prompt: "Assess it.", schema: { type: "object" },
+  agent: "content-strategist", model: "sonnet", system: "You are Miss Influencer.", prompt: "Assess it.", schema: { type: "object" },
   images: [{ label: "the owner's photo", mime: "image/jpeg", data: Buffer.from([0xff, 0xd8, 0xff, 0xd9]) }],
 };
 

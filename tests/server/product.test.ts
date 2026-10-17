@@ -84,7 +84,7 @@ describe("server: product endpoints (integration)", () => {
   });
 
   it("directives: preview writes nothing to the agents, apply does; applying twice adds nothing", async () => {
-    const preview = await json<DirectivePreview>(await post(h.app, "/api/mini/directives", { text: "Tara, no emojis on LinkedIn" }));
+    const preview = await json<DirectivePreview>(await post(h.app, "/api/mini/directives", { text: "Miss Influencer, no emojis on LinkedIn" }));
     expect(preview).toMatchObject({ status: "preview", parser: "rules" });
     expect(preview.patches).toContainEqual(expect.objectContaining({ kind: "memory.instruction", agents: ["content-strategist"] }));
     expect((await json<AgentViewDto[]>(await h.app.request("/api/mini/agents"))).find((a) => a.id === "content-strategist")!.instructions).toEqual([]);

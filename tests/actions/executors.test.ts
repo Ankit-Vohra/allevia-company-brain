@@ -56,7 +56,7 @@ describe("github_issue", () => {
     const args = gh.calls[0]!;
     expect(args.slice(0, 4)).toEqual(["issue", "create", "--repo", REPO]);
     expect(args).toEqual(expect.arrayContaining(["--label", ISSUE_LABEL, "--title", payload.title]));
-    expect(args[args.indexOf("--body") + 1]).toContain(`Proposed by Allevia (Arjun) and approved by the owner. Approval: ${id}.`);
+    expect(args[args.indexOf("--body") + 1]).toContain(`Proposed by Allevia (Techie) and approved by the owner. Approval: ${id}.`);
     expect(await count(`MATCH (:Approval {id:$id})-[:RESULTED_IN]->(a:Action {id:'action:exec-1'})-[:RESULTED_IN]->(t:Task) WHERE t.ref = $url AND a.kind = 'github_issue' RETURN count(*) AS c`,
       { id, url: a.url })).toBe(1);
     // exactly once: a second call returns the same Action and never runs gh again

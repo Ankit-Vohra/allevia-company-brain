@@ -1,5 +1,5 @@
 // Fixtures for the creating tools: a business with a brand kit (colours, fonts as real files, a real logo), a fake image engine
-// that counts what it was asked and charges credits, and a fake Nisha that reads a poster back exactly as it was set.
+// that counts what it was asked and charges credits, and a fake Fact Checker that reads a poster back exactly as it was set.
 import { readFileSync } from "node:fs";
 import sharp from "sharp";
 import { ensureRoster } from "../../src/agent/memory.js";
@@ -74,7 +74,7 @@ export class FakeCreativeEngine implements CreativeEngine {
 
 const GOOD = { garbled: false, logoVisible: true, logoIntact: true, extraText: [] as string[], inventedClaims: [] as string[], note: "clean" };
 
-// Nisha reads each poster back exactly as the expected text in the prompt says it was set, unless `over` changes an option.
+// Fact Checker reads each poster back exactly as the expected text in the prompt says it was set, unless `over` changes an option.
 export function nishaReads(over: Record<string, Partial<typeof GOOD> & { textRead?: string }> = {}): (i: VisionInput) => unknown {
   return (input) => ({
     posters: input.images.map((img) => {

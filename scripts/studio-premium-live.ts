@@ -64,14 +64,14 @@ async function main(): Promise<void> {
   const hf = new HiggsfieldEngine({ cli: execCli(), ledger, caps, balanceFloor: 20, log });
   const live = new ChainEngine([new RecordedEngine(recordingsManifest(cfg.dataDir)), hf]);
 
-  log("Studio run: Tara looks, the free clean-up, Nisha checks, Dev writes the caption");
+  log("Studio run: Miss Influencer looks, the free clean-up, Fact Checker checks, Wordsmith writes the caption");
   const events: string[] = [];
   const r = await runStudio(g, { tenant, businessId: t.businessId, bytes, note }, { ...base, now: () => Date.now() }, (e) => {
     if (e.type === "agent_status") events.push(`${e.agent}: ${e.text}`);
   });
   for (const e of events.slice(0, 40)) log(`  ${e}`);
   if (r.stopped) throw new Error(`the Studio stopped: ${r.stopped.message}`);
-  log(`Tara: ${r.assessment.verdict} (${r.assessment.subjectKind}: ${r.assessment.subject}); card ${r.approvalId}; variants ${r.variants.map((v) => v.label).join(", ")}`);
+  log(`Miss Influencer: ${r.assessment.verdict} (${r.assessment.subjectKind}: ${r.assessment.subject}); card ${r.approvalId}; variants ${r.variants.map((v) => v.label).join(", ")}`);
 
   // the premium ad: quote first, stop above the cap
   const ids = { tenant, businessId: t.businessId, approvalId: r.approvalId };
@@ -79,7 +79,7 @@ async function main(): Promise<void> {
   log(`Premium ad request: "${words}"`);
   const premium = await makePremiumAd(g, { ...ids, request: { words } }, deps);
   if (!premium.ok) throw new Error(`premium ad: ${premium.message}`);
-  log(`Option ${premium.variant.label} (${premium.mode}): Nisha says ${premium.fidelity.badge}: ${premium.fidelity.note}; credits ${premium.variant.credits ?? 0}; job ${premium.variant.jobId ?? "-"}`);
+  log(`Option ${premium.variant.label} (${premium.mode}): Fact Checker says ${premium.fidelity.badge}: ${premium.fidelity.note}; credits ${premium.variant.credits ?? 0}; job ${premium.variant.jobId ?? "-"}`);
   writeFileSync(join(out, "01-premium-ad.jpg"), premium.variant.buffer);
 
   let clipAsset: string | undefined;
@@ -95,7 +95,7 @@ async function main(): Promise<void> {
     log(`Clip made: ${made.assetId}, ${made.credits} credits, job ${made.jobId}`);
     writeFileSync(join(out, "02-clip.mp4"), made.video);
     clipAsset = made.assetId;
-  } else if (!premium.passed) log("Nisha held the picture back, so no clip was offered.");
+  } else if (!premium.passed) log("Fact Checker held the picture back, so no clip was offered.");
 
   const lineage = await assetLineage(g, clipAsset ?? premium.variant.id);
   writeFileSync(join(out, "lineage.json"), JSON.stringify(lineage, null, 1));

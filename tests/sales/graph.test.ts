@@ -18,7 +18,7 @@ let cleanup: () => Promise<void>;
 beforeAll(async () => {
   ({ g, cleanup } = await testGraph());
   await upsertNode(g, { type: "Business", id: "business:kestrel", name: "Kestrel Interiors", props: { slug: "kestrel" } }, T0);
-  await upsertNode(g, { type: "Agent", id: "agent:allevia-sales-lead", name: "Neel", props: { rosterId: "sales-lead" } }, T0);
+  await upsertNode(g, { type: "Agent", id: "agent:allevia-sales-lead", name: "Deal Closer", props: { rosterId: "sales-lead" } }, T0);
 });
 afterAll(async () => { await cleanup(); await closeAll(); });
 

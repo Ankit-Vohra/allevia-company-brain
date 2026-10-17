@@ -117,9 +117,9 @@ describe("the clip option (integration)", () => {
     expect(w.fake.calls).toEqual([]);
   }, 60_000);
 
-  it("only an option Nisha passed can become a clip", async () => {
+  it("only an option Fact Checker passed can become a clip", async () => {
     const w = await world();
     const o = await w.clip.offer({ ...w.ids, variantId: "asset:nope" });
-    expect(!o.ok && o.message).toMatch(/needs an option Nisha has checked and passed/);
+    expect(!o.ok && o.message).toMatch(/needs an option Fact Checker has checked and passed/);
   }, 60_000);
 });

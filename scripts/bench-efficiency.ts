@@ -8,8 +8,8 @@
 //             documents the brain was built from.
 //   solo  - one agent with the graph tools (search, get_entity, neighbors, find_paths, trace_decision, who_owns, who_knows,
 //             impact_of, important, topics, metric_trend, history, recall, cypher): no documents in the prompt.
-//   team  - the product as it ships: ask() with `ephemeral` (nothing is written), Meera plans, desks work, reviewers
-//             check, Meera answers. Sums every agent run.
+//   team  - the product as it ships: ask() with `ephemeral` (nothing is written), The Chief plans, desks work, reviewers
+//             check, The Chief answers. Sums every agent run.
 // Tokens are the Agent SDK's own usage numbers for each run ("read" = fresh + cached + stored prompt tokens, i.e. everything
 // the model had in front of it; "fresh" = not served from the prompt cache). Time is wall-clock for the whole answer.
 // Correctness is crude on purpose: regexes for what a right answer must say (the same ones the eval sets use).

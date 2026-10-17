@@ -5,7 +5,7 @@
 // Neither calls a language model.
 //   GET  /api/:t/standup        today's team stand-up (src/proactive): what the team noticed and drafted, or that it was quiet;
 //                               404 when it has not run today
-//   POST /api/:t/standup/run    run it now (Meera on the subscription; drafts wait for the owner's OK), then today's note
+//   POST /api/:t/standup/run    run it now (The Chief on the subscription; drafts wait for the owner's OK), then today's note
 import type { Hono } from "hono";
 import { runInsights } from "../../insights/recommend.js";
 import { writeBrief } from "../../insights/brief.js";

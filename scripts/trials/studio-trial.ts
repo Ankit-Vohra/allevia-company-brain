@@ -2,10 +2,10 @@
 // vision calls on the subscription (cached under the data dir) and the Higgsfield edit recorded once and replayed.
 // Nothing here is committed: photos, recordings and outputs live under <dataDir>/trials (gitignored).
 //
-//   plan <photo> --name p1 --note "..."   intake + Tara's assessment + the straightened frame + the graph-built edit prompt
+//   plan <photo> --name p1 --note "..."   intake + Miss Influencer's assessment + the straightened frame + the graph-built edit prompt
 //   record <name> <file> <model> <jobId> <credits>
 //                                          register a generated edit with the RecordedEngine, keyed by the original
-//   run <name>                             the whole pipeline; writes variants, Nisha's verdicts and a side-by-side image
+//   run <name>                             the whole pipeline; writes variants, Fact Checker's verdicts and a side-by-side image
 //
 // Usage: npx tsx scripts/trials/studio-trial.ts <step> [args] [--tenant avs_atelier]
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";

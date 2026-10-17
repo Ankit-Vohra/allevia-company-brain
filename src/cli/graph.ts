@@ -64,7 +64,7 @@ export const commands: Command[] = [
   {
     name: "graph:lineage",
     usage: "graph:lineage <tenant> <assetId> [--json]",
-    summary: "How a Studio picture or clip was made: the photo it came from, each step, the Higgsfield jobs and what they cost, the rules, Nisha's check, the card and the post (read-only)",
+    summary: "How a Studio picture or clip was made: the photo it came from, each step, the Higgsfield jobs and what they cost, the rules, Fact Checker's check, the card and the post (read-only)",
     async run(args) {
       const [tenant, assetId] = args.filter((a) => !a.startsWith("--"));
       if (!tenant || !assetId) { console.error("Usage: npm run cli -- graph:lineage <tenant> <assetId> [--json]"); return 2; }
@@ -73,7 +73,7 @@ export const commands: Command[] = [
       if (!l.root) { console.error(`${assetId} is not an asset in ${tenant}`); return 1; }
       if (args.includes("--json")) { console.log(JSON.stringify(l, null, 1)); return 0; }
       const line = (a: { id: string; name: string; kind: string; step?: string; badge?: string; credits?: number }): string =>
-        `${a.kind}${a.step ? ` (${a.step})` : ""} ${a.id}${a.badge ? `, Nisha: ${a.badge}` : ""}${a.credits ? `, ${a.credits} credits` : ""}`;
+        `${a.kind}${a.step ? ` (${a.step})` : ""} ${a.id}${a.badge ? `, Fact Checker: ${a.badge}` : ""}${a.credits ? `, ${a.credits} credits` : ""}`;
       console.log(`${line(l.root)}`);
       for (const a of l.ancestors) console.log(`  made from  ${line(a)}`);
       for (const a of l.descendants) console.log(`  led to     ${line(a)}`);

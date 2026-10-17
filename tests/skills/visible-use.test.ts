@@ -57,9 +57,9 @@ describe("a skill used in a turn (integration)", () => {
     expect(detail.turns[0]!.skills).toEqual(["content-strategist/instagram-post", "copy-editor/brand-voice-check"]);
   });
 
-  it("says so in plain words on the office floor: 'Tara is using: Instagram post craft'", () => {
+  it("says so in plain words on the office floor: 'Miss Influencer is using: Instagram post craft'", () => {
     const said = events.filter((e) => e.type === "agent_status").map((e) => e.type === "agent_status" && e.text);
-    expect(said).toContain("Tara is using: Instagram post craft");
-    expect(said).toContain("Dev is using: Brand voice check");
+    expect(said).toContain("Miss Influencer is using: Instagram post craft");
+    expect(said).toContain("Wordsmith is using: Brand voice check");
   });
 });

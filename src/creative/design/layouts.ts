@@ -115,7 +115,7 @@ const logo = (i: LayoutInput, o: { on: "ground" | "deep" | "photo"; cls?: string
   return `<div class="logo ${o.cls ?? ""}${plate ? " plate" : ""}" data-role="logo" data-kind="image" data-text=""><img src="${l.url}" alt=""></div>`;
 };
 // The part of a real screen the words are about, lifted out as a card at a readable size (the whole screen at phone size is
-// too small to read on a phone: Rohan's note on the first Aamdani proof).
+// too small to read on a phone: Growth Hacker's note on the first Aamdani proof).
 const screenCard = (s: Picture, width: number, cls = "card"): string => {
   const f = s.focus ?? { x: 0, y: 0, w: 1, h: Math.min(1, (s.w * 0.6) / s.h) };
   const scale = width / (f.w * s.w);
@@ -176,7 +176,7 @@ body{font-family:var(--body);color:var(--ink);font-kerning:normal;font-feature-s
 
 const deviceHero: LayoutDef = {
   key: "device-hero", name: "Product hero: the real app in a phone",
-  use: "An app or software launch, or 'it's live / coming soon': the real screen IS the product, so it is the hero. The words at the top, one large phone rising straight after them and running off the bottom edge (no gap, no second tilted phone: Rohan found it added nothing). Needs one real app screen.",
+  use: "An app or software launch, or 'it's live / coming soon': the real screen IS the product, so it is the hero. The words at the top, one large phone rising straight after them and running off the bottom edge (no gap, no second tilted phone: Growth Hacker found it added nothing). Needs one real app screen.",
   needs: { screens: 1 }, goals: ["announce", "sell", "awareness"],
   build: (i) => {
     const a = i.screens[0]!;

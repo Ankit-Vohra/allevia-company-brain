@@ -44,7 +44,7 @@ describe("the answer shape reaches the Chief's synthesis and direct prompts", ()
     it(`${name}: the plain-words table is in the prompt`, () => {
       expect(prompt).toContain(OWNER_WORDS_RULE);
       for (const w of ["baseline", "Day 0", "first-pass", "capability", "approval card", "finding", "detector", "agent", "desk"]) expect(OWNER_WORDS_RULE).toContain(w);
-      for (const w of ["where you started", "monthly check-in", "waiting for your OK", "what we noticed", "how we know", "sample numbers", "Tara, content"]) {
+      for (const w of ["where you started", "monthly check-in", "waiting for your OK", "what we noticed", "how we know", "sample numbers", "Miss Influencer, content"]) {
         expect(OWNER_WORDS_RULE, w).toContain(w);
       }
     });
@@ -91,17 +91,17 @@ describe("ownerJargon", () => {
     expect(ownerJargon("An approval card from the Tech desk, a finding from the agent, via the knowledge graph")).toEqual(
       expect.arrayContaining(["approval card", "finding", "agent", "desk", "graph"]));
     expect(ownerJargon("Signups are up, you started at 5. Waiting for your OK: a draft post. [[approval:x]] [[finding:y]]")).toEqual([]);
-    expect(ownerJargon("Tara, content, has 3 ideas. These are sample numbers.")).toEqual([]);
+    expect(ownerJargon("Miss Influencer, content, has 3 ideas. These are sample numbers.")).toEqual([]);
     expect(ownerJargon("Needs a push")).toEqual([]);
     expect(ownerJargon("On track, simulated")).toEqual(["simulated", "on track / at risk / off track"]);
   });
 });
 
 describe("plainWho", () => {
-  it("is the name and the job, for every person on the team", () => {
-    expect(plainWho("content-strategist")).toBe("Tara, content");
-    expect(plainWho("oncall-engineer")).toBe("Zoya, on call");
-    expect(plainWho("qa-release")).toBe("Imran, app releases");
+  it("is the role name and the team beside it, for every person on the team", () => {
+    expect(plainWho("content-strategist")).toBe("Miss Influencer · Content Studio");
+    expect(plainWho("oncall-engineer")).toBe("Firefighter · Tech");
+    expect(plainWho("qa-release")).toBe("Bug Hunter · Tech");
     expect(plainWho("nobody")).toBe("nobody");
     for (const a of AGENTS) expect(ownerJargon(plainWho(a.id)), a.id).toEqual([]);
   });

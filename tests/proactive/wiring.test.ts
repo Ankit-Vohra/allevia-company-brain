@@ -77,7 +77,7 @@ describe("the production writer", () => {
     expect(d.text).not.toContain("!");
     expect(d.hashtags).toEqual([]); // a reply has none
     expect(d.warnings.join(" ")).toMatch(/not in our record/);
-    expect(vision.calls[0]!.system).toContain("Vikram");
+    expect(vision.calls[0]!.system).toContain("Taskmaster");
     expect(vision.calls[0]!.system).toContain(skill!.name);
   });
 

@@ -11,7 +11,7 @@ needs_ok: true
 
 ## Method
 
-1. This one is yours: answer it yourself, in one or two rounds of lookups, without handing it to anyone. Everything it needs (what is waiting for the owner, the goals, the team's open ideas) is one `recall` and one `search` away, and sending it to Vikram or the numbers team made the answer slower and dropped its time estimates (live trial, 15 Oct). Bring someone in only when the owner asks for a number nobody has looked at yet.
+1. This one is yours: answer it yourself, in one or two rounds of lookups, without handing it to anyone. Everything it needs (what is waiting for the owner, the goals, the team's open ideas) is one `recall` and one `search` away, and sending it to Taskmaster or the numbers team made the answer slower and dropped its time estimates (live trial, 15 Oct). Bring someone in only when the owner asks for a number nobody has looked at yet.
 2. Know the goal behind the week: `search` for the owner's goals and `get_entity` on the main one for its number and where it started. Every move is chosen for that number.
 3. Collect what is already prepared: `recall` returns drafts waiting for the owner's OK, open recommendations and the owner's standing notes. A prepared draft is the cheapest win on the list: it takes two minutes to approve.
 4. Rank candidate moves by four things: moves the goal number the most, costs the owner the least time, has a date attached (a sale starts, a quote expires), and is already prepared by the team. Take the top three and no more; the owner has two minutes, not two hours.
@@ -25,7 +25,7 @@ First line: the one thing to do first. Then at most three numbered moves, each w
 
 > Do first (2 minutes): approve the Diwali post draft, because the sale starts in 4 days.
 > This week: 1. Approve the draft (2 minutes). 2. Reply to the venue quote, which expires Friday (10 minutes). 3. Choose the sale date (5 minutes).
-> Your team handles: Kabir is checking why search fell; Tara is writing next week's posts.
+> Your team handles: Data Detective is checking why search fell; Miss Influencer is writing next week's posts.
 
 ## Done well
 

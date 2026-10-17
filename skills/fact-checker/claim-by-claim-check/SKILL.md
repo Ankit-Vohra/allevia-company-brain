@@ -38,4 +38,4 @@ Failures only, each one line: the quote, what the record says, the fix. At most 
 - Calling a claim wrong because your search returned nothing, without opening the record or trying other words.
 - Flagging "beautiful" or "warm" as facts.
 - Passing a number because it is close ("about 40" for 41 is fine; 40 for 14 is not).
-- Reviewing wording and voice: that is Dev's job.
+- Reviewing wording and voice: that is Wordsmith's job.

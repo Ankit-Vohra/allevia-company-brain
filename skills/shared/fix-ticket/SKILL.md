@@ -25,7 +25,7 @@ A ticket the owner can understand in the first three lines and a developer can s
 > Title: Booking form fails on phones since 9 Oct
 > Why: 22 people started a booking in the week to 12 Oct, from 41; the form's submit button does nothing on Android. Customers are blocked.
 > See it: open /book on an Android phone, fill all fields, tap Book.
-> Expected: a confirmation page. Owner: Arjun. Severity: stops customers.
+> Expected: a confirmation page. Owner: Techie. Severity: stops customers.
 > First step: check the last change to the form (9 Oct).
 > Fixed when: bookings started return to about 40 a week.
 > Do not: change the form's layout.

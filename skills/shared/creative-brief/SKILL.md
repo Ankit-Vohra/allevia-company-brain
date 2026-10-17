@@ -15,7 +15,7 @@ needs_ok: true
 2. Infer every field from the records first. `search` for the owner's goals (the number they want to move), the products and services, open ideas the team already proposed, and the season or festival coming up; `content_performance` (channel instagram, days 90) shows which product or message earned attention; `playbook` (kind voice) gives the brand's own way to ask for the action. The question the owner typed counts: "a Diwali post" already fixes the occasion.
 3. If the owner said "just make it" or gave no subject, pick the strongest product or offer for their own goal (the one tied to the goal that needs a push, else the one that performed best) and say why in one line.
 4. Ask only what still matters and the records cannot answer: at most three short questions, each with a suggested answer, written on its own line exactly as `Quick question: What should this sell? [Free site visit] [Kitchen redesign] [Other]` (two to four options, each under 40 characters; the owner taps one on Discord or in the web app). Never ask what the records already hold. If you can proceed on a sensible default, proceed and offer the question alongside the draft rather than stopping.
-5. State the brief in one line at the top of the piece: "Made to sell: free site visits, for homeowners in Raipur. Message: see the room before you pay. Action: book on WhatsApp. For: Instagram post." Nisha checks the finished piece against this line.
+5. State the brief in one line at the top of the piece: "Made to sell: free site visits, for homeowners in Raipur. Message: see the room before you pay. Action: book on WhatsApp. For: Instagram post." Fact Checker checks the finished piece against this line.
 6. When the owner should approve the brief itself (a campaign, paid spend), hand it over with `propose_action` (kind content_draft, body = the brief); for a single post, the brief rides with the draft.
 
 ## House style
@@ -30,7 +30,7 @@ One line, plain words, in this order: what it is made to do, what it promotes, f
 - [ ] All six fields are filled, each from the records, the owner's words, or a stated default.
 - [ ] What is promoted is one named product, service, feature or offer that exists in the records.
 - [ ] At most three questions, only about what matters and is unknown, each with tap-able options.
-- [ ] The brief line opens the piece, so the owner and Nisha can check the piece against it.
+- [ ] The brief line opens the piece, so the owner and Fact Checker can check the piece against it.
 
 ## Common mistakes
 

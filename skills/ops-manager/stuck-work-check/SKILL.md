@@ -21,7 +21,7 @@ needs_ok: false
 
 Short list: what is stuck, why, who acts, the smallest unblock.
 
-> Stuck (3): the new menu page, blocked by the photos, which nobody owns since 2 Oct. Owner needed: you (assign in 1 minute). The supplier invoice: no change for 4 weeks, owner Vikram, needs a call.
+> Stuck (3): the new menu page, blocked by the photos, which nobody owns since 2 Oct. Owner needed: you (assign in 1 minute). The supplier invoice: no change for 4 weeks, owner Taskmaster, needs a call.
 > Not stuck: the website refresh, updated weekly.
 
 ## Done well

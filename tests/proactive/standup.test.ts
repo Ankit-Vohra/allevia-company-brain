@@ -1,6 +1,6 @@
-// The daily stand-up (src/proactive): what Meera reviews, what the team turns into opportunities, the no-spam rules,
-// Meera's pick, the drafts waiting for the owner's OK, and Today's note leading with them. On the test-only FalkorDB
-// (vitest.config.ts), with fake drafters and a fake Meera: no model, no image engine, no network.
+// The daily stand-up (src/proactive): what The Chief reviews, what the team turns into opportunities, the no-spam rules,
+// The Chief's pick, the drafts waiting for the owner's OK, and Today's note leading with them. On the test-only FalkorDB
+// (vitest.config.ts), with fake drafters and a fake The Chief: no model, no image engine, no network.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
 import { upsertEdge, upsertNode, writeBatch } from "../../src/graph/upsert.js";
@@ -63,7 +63,7 @@ function fakeDrafters(): Drafters & { texts: TextJob[]; posters: PosterJob[] } {
   };
 }
 
-// A fake Meera: answers with the given picks (ids o1..), and records what she was shown.
+// A fake The Chief: answers with the given picks (ids o1..), and records what she was shown.
 function fakeMeera(answer: (input: StructuredInput) => unknown): LlmRunner & { calls: StructuredInput[] } {
   const calls: StructuredInput[] = [];
   return { calls, async structured(input) { calls.push(input); return answer(input); } };
@@ -195,7 +195,7 @@ describe("no spam", () => {
   });
 });
 
-describe("Meera's pick", () => {
+describe("The Chief's pick", () => {
   const ops = (): Opportunity[] => [
     { key: "k1", kind: "reply", source: "review", agent: "ops-manager", title: "A reply to Ravi's review", reason: "Ravi left 2 stars on Google.", brief: "Purpose: listen.", facts: [], skill: { agent: "ops-manager", id: "follow-up-drafts" }, evidence: [], goals: [], score: 0.8 },
     { key: "k2", kind: "post", source: "season", agent: "content-strategist", title: "A Dussehra post", reason: "Dussehra is in about 5 days.", brief: "Purpose: be there.", facts: [], skill: { agent: "content-strategist", id: "instagram-post" }, evidence: [], goals: [], score: 0.6 },
@@ -439,7 +439,7 @@ describe("runStandup", () => {
     expect(lines[3]).toMatch(/^1\. .+\. \[\[approval:insight-/);
     const drafted = lines.findIndex((l) => /^Your team noticed \d things? and drafted (it|them)$/.test(l));
     expect(drafted).toBeGreaterThan(3);
-    expect(lines[drafted + 1]).toMatch(/^1\. \w+ drafted .+\. \[\[approval:/);
+    expect(lines[drafted + 1]).toMatch(/^1\. \w+(?: \w+)? drafted .+\. \[\[approval:/);
     expect(b.next).toMatch(/^Say OK to the biggest fix first/);
     expect(ownerJargon(b.text)).toEqual([]);
     expect(b.text.indexOf("What we noticed")).toBeGreaterThan(b.text.indexOf("Your team noticed"));

@@ -21,7 +21,7 @@ needs_ok: false
 
 The answer you can stand behind first, then the gap, then who or what settles it.
 
-> Sign-ups fell last week; the cause is not certain. Search visits dropped (190 to 120), which would explain most of it; ads spend also changed, and that was not checked against the same dates. A check of the ads would settle it (Rohan, about 20 minutes).
+> Sign-ups fell last week; the cause is not certain. Search visits dropped (190 to 120), which would explain most of it; ads spend also changed, and that was not checked against the same dates. A check of the ads would settle it (Growth Hacker, about 20 minutes).
 > Not recorded: your Instagram reach, because Instagram is not connected.
 
 ## Done well

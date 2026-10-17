@@ -115,7 +115,7 @@ describe("the learning loop, end to end", () => {
   });
 
   it("draft -> owner edits villa to home -> a rule is learned -> the next draft says home, with USES_RULE -> first-pass moves", async () => {
-    // 1. Tara's first draft says "villa".
+    // 1. Miss Influencer's first draft says "villa".
     const first = await writeRecommendation(g, draft("test:draft-1", "Villa tour in Raipur", "Tour this villa in Raipur: light from three sides."), { now: SEED_NOW });
     expect(first.approvalId).toBeDefined();
 
@@ -128,7 +128,7 @@ describe("the learning loop, end to end", () => {
     expect(r1.approval).toMatchObject({ status: "executed", firstPass: false, decisionMs: 3_600_000, decision: "approve" });
     expect(r1.approval.editDistance).toBeGreaterThan(0);
 
-    // 3. A rule is learned: LEARNED_FROM the approval, APPLIES_TO Tara and Instagram, PRODUCED by Dev, announced.
+    // 3. A rule is learned: LEARNED_FROM the approval, APPLIES_TO Miss Influencer and Instagram, PRODUCED by Wordsmith, announced.
     expect(r1.learned?.map((r) => r.text)).toEqual(['Say "home", not "villa".']);
     const ruleId = "rule:learned-say-home-not-villa";
     expect(events).toEqual([{ type: "learned", ruleId, text: 'Say "home", not "villa".', fromApprovalId: first.approvalId }]);

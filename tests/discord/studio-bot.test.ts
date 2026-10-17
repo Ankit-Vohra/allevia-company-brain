@@ -49,7 +49,7 @@ const A_NISHA = { variants: [
   { label: "B", sameBuilding: true, structuralChange: false, added: [], removed: [], note: "relit; nothing added" },
 ] };
 
-// Nisha passes whichever variants she is shown (the labels are on the images she is given)
+// Fact Checker passes whichever variants she is shown (the labels are on the images she is given)
 const nishaFor = (input: { images: Array<{ label: string }> }) => ({
   variants: input.images.filter((i) => !["original", "frame"].includes(i.label)).map((i) => ({ label: i.label, sameBuilding: true, structuralChange: false, added: [], removed: [], note: "nothing added" })),
 });
@@ -125,7 +125,7 @@ describe("photos in the Studio on Discord", () => {
     const [log, tara, ...rest] = thread.sent;
     expect(text(log!.first)).toMatch(/^\*\*Work log\*\*/);
     expect(log!.edits.length).toBeGreaterThan(0); // one message, edited as the team worked
-    expect(text(tara!.first)).toMatch(/^Tara looked at your photo: it needs a little polish\./);
+    expect(text(tara!.first)).toMatch(/^Miss Influencer looked at your photo: it needs a little polish\./);
     expect(text(tara!.first)).not.toMatch(/blurred/); // a person is kept as they are unless the business asked for blurring
     expect(text(tara!.first)).not.toMatch(/verdict|overlay|asset|graph/i);
 
@@ -138,7 +138,7 @@ describe("photos in the Studio on Discord", () => {
       expect({ format: meta.format, w: meta.width, h: meta.height }).toEqual({ format: "jpeg", w: 1080, h: 1350 });
       expect(first.content).toContain("Checked:");
       expect(first.content).toMatch(/> /); // the caption, quoted
-      expect(first.content).not.toMatch(/like a promise|Book now/i); // Dev's voice check ran: no hard sell
+      expect(first.content).not.toMatch(/like a promise|Book now/i); // Wordsmith's voice check ran: no hard sell
       expect(first.buttons!.map((b) => b.label)).toEqual(["Approve", "Change"]);
     }
     const ids = (options[0]!.first as Exclude<Outgoing, string>).buttons!.map((b) => b.customId);
@@ -276,7 +276,7 @@ describe("videos", () => {
     await w.cleanup();
   });
 
-  it("with ffmpeg: the details are stripped, Tara looks at the first frame, and the limits are still stated", async () => {
+  it("with ffmpeg: the details are stripped, Miss Influencer looks at the first frame, and the limits are still stated", async () => {
     const w = await world("kestrel_oak");
     w.ffmpeg.available = true;
     w.ffmpeg.frame = await facadePhoto({ gps: false });
@@ -284,7 +284,7 @@ describe("videos", () => {
     await w.studio.onMedia(m);
     const said = m.started[0]!.texts().join("\n");
     expect(said).toMatch(/removed the location and device details/);
-    expect(said).toMatch(/Tara looked at its first frame: it needs a little polish/);
+    expect(said).toMatch(/Miss Influencer looked at its first frame: it needs a little polish/);
     expect(said).toMatch(/can't edit or restyle video yet/);
     expect(w.vision.calls.map((c) => c.agent)).toEqual(["content-strategist"]); // one look at one frame, no variants
     const [a] = await w.g.roQuery<{ v: string }>("MATCH (a:Asset) WHERE a.mediaType = 'video' RETURN a.verdict AS v");

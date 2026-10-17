@@ -94,7 +94,7 @@ describe("the stand-up", () => {
     const standup = await runStandup(GROWTH_TENANT, { graph: g, now: GROWTH_NOW, drafters: drafters(), force: true });
     expect(standup.items.map((i) => [i.kind, i.agent, i.status])).toEqual([["sales_reply", "sales-lead", "drafted"], ["sales_reminder", "sales-lead", "drafted"], ["sales_nudge", "sales-lead", "drafted"]]);
     expect(standup.heading).toBe("Your team noticed 3 things and drafted them");
-    expect(standup.lines[0]).toMatch(/Neel drafted a reply to Rohit Desai's enquiry/);
+    expect(standup.lines[0]).toMatch(/Deal Closer drafted a reply to Rohit Desai's enquiry/);
     expect(ownerJargon([standup.heading, ...standup.lines].join("\n"))).toEqual([]);
 
     const reply = (await approval(g, standup.items[0]!.approvalId!))!;

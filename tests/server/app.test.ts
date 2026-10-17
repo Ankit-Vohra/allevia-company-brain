@@ -171,13 +171,13 @@ describe("server: reads (integration)", () => {
     expect(list.map((a) => a.id)).toEqual(AGENTS.map((a) => a.id));
     const strategist = list.find((a) => a.id === "content-strategist")!;
     expect(strategist.stats).toMatchObject({ proposals: 1, requests: 0, findings: 0, reviewsGiven: 0, checksPassed: 0, checksTotal: 0 });
-    expect(list.find((a) => a.id === "librarian")!.stats.requests).toBe(1); // turn:t-001 HANDLED_BY Sara
+    expect(list.find((a) => a.id === "librarian")!.stats.requests).toBe(1); // turn:t-001 HANDLED_BY Memory Keeper
   });
 
   it("agent profile: roster info, playbooks it reads, the knowledge map and recent findings", async () => {
     const before = await json<AgentDetailDto>("/api/mini/agents/content-strategist");
     expect(before.id).toBe("content-strategist");
-    expect(before.knowledge.nodes[0]).toEqual({ id: "agent:allevia-content-strategist", label: "Agent", name: "Tara · Content Strategist", weight: 1 });
+    expect(before.knowledge.nodes[0]).toEqual({ id: "agent:allevia-content-strategist", label: "Agent", name: "Miss Influencer · Content Strategist", weight: 1 });
     expect(before.playbooks.map((p) => p.id)).toEqual(expect.arrayContaining(["playbook:reel-hooks"]));
     expect(before.stats.proposals).toBe(1);
     await json("/api/mini/agents/nobody", 404);

@@ -274,7 +274,7 @@ describe("server: a direct chat with one agent (integration)", () => {
     const res = await post(h.app, "/api/mini/ask", { question: "Who knows about the sitemap?", target: "librarian" });
     const events = sseEvents(await res.text());
     const err = events.find((e) => e.type === "error") as Extract<AgentEvent, { type: "error" }> | undefined;
-    expect(err?.message).toMatch(/Sara is switched off/);
+    expect(err?.message).toMatch(/Memory Keeper is switched off/);
     expect(events.at(-1)?.type).toBe("final");
     await patch(true);
   });
@@ -286,13 +286,13 @@ describe("tone (chat support)", () => {
     try {
       const { TONES, toneDirective } = await import("../../web/src/lib/chat.js");
       for (const tone of TONES) {
-        const res = await post(h.app, "/api/mini/directives", { text: toneDirective("Tara", tone) });
+        const res = await post(h.app, "/api/mini/directives", { text: toneDirective("Miss Influencer", tone) });
         expect(res.status, tone.id).toBe(200);
         const pv = await res.json() as { diff: Array<{ op: string; label: string }>; unparsed: string[] };
         expect(pv.unparsed, tone.id).toEqual([]);
         const added = pv.diff.filter((d) => d.op === "add").map((d) => d.label);
         expect(added.length, tone.id).toBeGreaterThan(0);
-        expect(added.every((l) => /Tara/.test(l)), `${tone.id}: ${added.join("; ")}`).toBe(true); // only ever about the person asked
+        expect(added.every((l) => /Miss Influencer/.test(l)), `${tone.id}: ${added.join("; ")}`).toBe(true); // only ever about the person asked
       }
     } finally {
       await h.cleanup();

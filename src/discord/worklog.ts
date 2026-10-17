@@ -1,5 +1,5 @@
 // The live work log in a Discord thread (spec §16.3): one message, edited as the agents work, that says who is active
-// and on which step ("Kabir · Checking the signups trend"). WorkLogState folds the AgentEvent stream into that text;
+// and on which step ("Data Detective · Checking the signups trend"). WorkLogState folds the AgentEvent stream into that text;
 // ThrottledEditor edits the message at most once per interval (1.5 s by default, inside Discord's edit rate limits),
 // always ending on the latest text, and never runs two edits at once.
 import { agentById } from "../../shared/roster.js";
@@ -55,7 +55,7 @@ export class WorkLogState {
     }
   }
 
-  // "finding:t-data-analyst" was written by Kabir; finding ids end in the roster id.
+  // "finding:t-data-analyst" was written by Data Detective; finding ids end in the roster id.
   private ownerOf(findingId: string): string {
     const agent = [...this.lines.keys()].find((a) => findingId.endsWith(a));
     return agent ? nameOf(agent) : "a colleague";

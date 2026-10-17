@@ -2,7 +2,7 @@
 //  - the upload is kept as a raw Asset{kind:'original', mediaType:'video'}, content-addressed like a photo, AUTHORED by the
 //    owner, never edited or restyled (there is no video editing in the Studio yet);
 //  - if ffmpeg is on this machine: the file's metadata (location, device) is removed without re-encoding it, and its FIRST
-//    FRAME is assessed by Tara the same way a photo is (her assessment is kept on the video Asset);
+//    FRAME is assessed by Miss Influencer the same way a photo is (her assessment is kept on the video Asset);
 //  - if it is not: the file is kept as it is, nothing is looked at, and the owner is told so in plain words.
 // ffmpeg is reached through a small port, so tests run with and without it. Nothing leaves this machine.
 import { execFile } from "node:child_process";
@@ -118,12 +118,12 @@ export async function storeVideo(
   return { asset: { id, kind: "original", w: 0, h: 0, sha256: sha, dhash: "", storageKey, mime: "video/mp4", mediaType: "video" }, stripped: !!clean, hasFfmpeg, frame };
 }
 
-// Tara looks at the video's first frame the way she looks at a photo; her assessment is kept on the video Asset.
+// Miss Influencer looks at the video's first frame the way she looks at a photo; her assessment is kept on the video Asset.
 export async function assessFirstFrame(
   g: GraphHandle, o: { businessId: string; assetId: string; frame: Buffer; note?: string },
   deps: { vision: VisionRunner; models?: Partial<StudioModels>; now: number },
 ): Promise<PhotoAssessment> {
-  await ensureRoster(g, { businessId: o.businessId }, deps.now); // Tara has to exist in the graph to review anything
+  await ensureRoster(g, { businessId: o.businessId }, deps.now); // Miss Influencer has to exist in the graph to review anything
   const norm = await normalizeUpload(o.frame, { minSide: 64 });
   const ctx = await loadStudioContext(g, o.businessId, o.note ?? "");
   return assessPhoto(g, o.assetId, norm.buffer, assessContextFor(ctx, o.note?.trim() ?? "", norm), { vision: deps.vision, model: { ...DEFAULT_MODELS, ...deps.models }.assess, now: deps.now });

@@ -46,7 +46,7 @@ async function run(g: GraphHandle, skills: boolean) {
   return { work, events };
 }
 
-const SAID = "Tara, add a skill called Festival post: open with the greeting in Hindi, then the offer";
+const SAID = "Miss Influencer, add a skill called Festival post: open with the greeting in Hindi, then the offer";
 
 describe("ask() and a business's own skills", () => {
   it("the business that added a skill sees it in the prompt and can open it; another business does not", async () => {

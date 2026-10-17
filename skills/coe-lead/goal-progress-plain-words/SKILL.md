@@ -22,8 +22,8 @@ needs_ok: false
 
 One block per goal, at most three goals.
 
-> Get to 40 enquiries a week. Started at 22, now 31 (week to 12 Oct): going well. Rohan is testing a new offer from Monday.
-> Get 500 more Instagram followers. Started at 2,300, now 2,350: needs a push. Tara is moving to two posts a week.
+> Get to 40 enquiries a week. Started at 22, now 31 (week to 12 Oct): going well. Growth Hacker is testing a new offer from Monday.
+> Get 500 more Instagram followers. Started at 2,300, now 2,350: needs a push. Miss Influencer is moving to two posts a week.
 
 ## Done well
 

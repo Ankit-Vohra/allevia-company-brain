@@ -23,7 +23,7 @@ const poster = {
 
 describe("previewOf", () => {
   it("a poster: every option, our pick, the one that was held back, and no machine note as the reason", () => {
-    const v = previewOf(JSON.stringify(poster), { kind: "content_draft", why: "Tara: looks usable (kitchen). Variant B recommended; Nisha: unchanged." });
+    const v = previewOf(JSON.stringify(poster), { kind: "content_draft", why: "Miss Influencer: looks usable (kitchen). Variant B recommended; Fact Checker: unchanged." });
     expect(v?.why).toBeUndefined();
     expect(v?.media?.kind).toBe("poster");
     expect(v?.media?.options).toEqual([

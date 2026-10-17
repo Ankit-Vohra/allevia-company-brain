@@ -1,4 +1,4 @@
-// `standup <tenant>`: run the daily team stand-up now (the server runs it each morning on its own). Meera reviews what
+// `standup <tenant>`: run the daily team stand-up now (the server runs it each morning on its own). The Chief reviews what
 // changed, picks at most three things, the team drafts them and they wait for the owner's OK; then today's note is written,
 // leading with them. Nothing is posted or sent. --no-llm: the rule order picks (the words are still drafted on the
 // subscription); --no-paid: no paid picture today; --json: the whole stand-up.
@@ -26,7 +26,7 @@ export const commands: Command[] = [
         force: true, ...(values["no-llm"] ? { runner: null } : {}), ...(values["no-paid"] ? { paid: false } : {}), log: (l) => console.error(l),
       });
       if (values.json) { console.log(JSON.stringify({ standup, brief: { id: brief.id, text: brief.text } }, null, 2)); return 0; }
-      console.log(`Stand-up for ${tenant} (${standup.localDate}), picked by ${standup.by === "meera" ? "Meera" : "the rule order"}: ${standup.considered} opportunities looked at, ${standup.skipped.length} set aside.`);
+      console.log(`Stand-up for ${tenant} (${standup.localDate}), picked by ${standup.by === "meera" ? "The Chief" : "the rule order"}: ${standup.considered} opportunities looked at, ${standup.skipped.length} set aside.`);
       for (const i of standup.items) {
         console.log(`\n${i.status === "drafted" ? "Drafted" : "Could not draft"}: ${i.title} (${agentById(i.agent)?.name ?? i.agent})`);
         console.log(`  why: ${i.why}`);

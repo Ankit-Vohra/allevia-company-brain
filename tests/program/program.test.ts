@@ -170,9 +170,9 @@ describe("enrol an existing business, then the scorecard (integration)", () => {
     expect(p.learnedRules).toMatchObject({ active: 0, learnedSinceStart: 0 });
     expect(p.deliverables).toEqual({ approved: 0, approvedSinceStart: 0, editedSinceStart: 0, rejectedSinceStart: 0, pending: 0 });
     expect(p.goals.map((x) => [x.name, x.baseline, x.current, x.target, x.status, x.owner?.name])).toEqual([
-      ["Weekly signups", week, week, Math.ceil(week * 1.5), "on_track", "Rohan"],
-      ["Instagram reach", 2100, 2100, 3150, "on_track", "Tara"],
-      ["Search clicks", null, null, 50, "no_data", "Kabir"],
+      ["Weekly signups", week, week, Math.ceil(week * 1.5), "on_track", "Growth Hacker"],
+      ["Instagram reach", 2100, 2100, 3150, "on_track", "Miss Influencer"],
+      ["Search clicks", null, null, 50, "no_data", "Data Detective"],
     ]);
     expect(Object.values(p.capabilities.byMode).reduce((a, b) => a + b, 0)).toBe(9);
   });

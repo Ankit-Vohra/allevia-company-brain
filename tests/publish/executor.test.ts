@@ -83,13 +83,13 @@ describe("Instagram", () => {
     expect((await readPost(h.g, contentIdFor(id)))?.assetId).toBe("asset:poster-b");
   });
 
-  it("never posts an option Nisha held back, a picture the wrong shape, or a card with no picture", async () => {
+  it("never posts an option Fact Checker held back, a picture the wrong shape, or a card with no picture", async () => {
     scriptInstagram(h);
     reset();
     const held = nextId();
     const r1 = await run(held, await addCard(h.g, { id: held, assets: [{ id: "asset:poster-a", badge: "held" }] }));
     expect(r1).toMatchObject({ status: "failed" });
-    expect(r1.result).toMatch(/^Nothing was posted: Nisha held/);
+    expect(r1.result).toMatch(/^Nothing was posted: Fact Checker held/);
     const tall = nextId();
     const r2 = await run(tall, await addCard(h.g, { id: tall, assets: [{ id: "asset:story" }] }));
     expect(r2.result).toMatch(/Nothing was posted: this picture is 1080 by 1920, and Instagram's feed takes shapes between 4:5/);

@@ -5,7 +5,7 @@
 //   3. images are re-encoded without metadata (EXIF, GPS, XMP, ICC all gone), auto-oriented, capped at 4096 px; an SVG is
 //      drawn to a PNG and never kept (a stored SVG could carry script), and an SVG that runs script or fetches anything
 //      is refused; WOFF fonts are refused (the poster composer needs the .ttf or .otf);
-//   4. Claude vision (Sara, the librarian) says what an image is; a child's photo is refused and nothing is kept;
+//   4. Claude vision (Memory Keeper, the librarian) says what an image is; a child's photo is refused and nothing is kept;
 //   5. the file is stored under data/assets/<tenant>/ by content address, and a BrandAsset node is written (OWNED by the
 //      business, AUTHORED by the owner, a new logo SUPERSEDES the old one). Nothing from a Discord person is stored but
 //      the owner entity the caller passes.

@@ -1,4 +1,4 @@
-// The on-call and release detectors (Zoya: errors, crashes, Play vitals; Imran: App Store review, release health), run on
+// The on-call and release detectors (Firefighter: errors, crashes, Play vitals; Bug Hunter: App Store review, release health), run on
 // the SYNTHETIC ops snapshot (tests/fixtures/ops) mapped into a throwaway graph, plus a one-off App Store snapshot. Every
 // candidate has evidence ids that exist, plain words (no engineer terms), and a stable key. Talks to the local FalkorDB.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -66,7 +66,7 @@ const run = (name: DetectorName, extra: Record<string, number> = {}): Promise<Ca
 const exists = async (ids: string[]): Promise<string[]> =>
   (await g.roQuery<{ id: string }>("UNWIND $ids AS id MATCH (n:Entity {id:id}) RETURN n.id AS id", { ids })).map((r) => r.id);
 
-describe("Sentry: new errors and the one hitting the most people (Zoya)", () => {
+describe("Sentry: new errors and the one hitting the most people (Firefighter)", () => {
   it("a pile of new app errors: counted over the period, the crashing ones named, the worst one first, a GitHub issue to triage", async () => {
     const [c] = await run("tech.sentry_new_issues");
     expect(c).toMatchObject({ key: "tech.sentry_new_issues:channel:app", area: "tech", agent: "oncall-engineer", title: "95 new app errors in the last 14 days" });
@@ -127,7 +127,7 @@ describe("Sentry: new errors and the one hitting the most people (Zoya)", () => 
   });
 });
 
-describe("crashes and Play vitals (Zoya)", () => {
+describe("crashes and Play vitals (Firefighter)", () => {
   it("sessions that crashed, said in plain percentages, only with enough sessions behind them", async () => {
     const [c] = await run("tech.crash_free_low");
     expect(c).toMatchObject({ key: "tech.crash_free_low:channel:app", agent: "oncall-engineer", title: "The app crashed in 1.5% of sessions over 14 days" });
@@ -148,7 +148,7 @@ describe("crashes and Play vitals (Zoya)", () => {
   });
 });
 
-describe("the App Store and releases (Imran)", () => {
+describe("the App Store and releases (Bug Hunter)", () => {
   it("an update waiting for review for days, with the version, the day it was sent and where it stands", async () => {
     const [c] = await run("tech.app_review_waiting");
     expect(c).toMatchObject({ key: "tech.app_review_waiting:channel:app-ios", agent: "qa-release", title: "The iPhone app update 2.5.0 has waited 6 days for Apple's review" });
@@ -215,7 +215,7 @@ describe("every tech candidate", () => {
 });
 
 describe("recommendations and Today's note", () => {
-  it("become Recommendations by Zoya and Imran in the tech area, and the note gets an On call section in plain words", async () => {
+  it("become Recommendations by Firefighter and Bug Hunter in the tech area, and the note gets an On call section in plain words", async () => {
     await runInsights("test", { graph: g, now: NOW, only: TECH });
     const recs = await g.roQuery<{ id: string; by: string; area: string; status: string }>(
       "MATCH (a:Agent)-[:PRODUCED]->(r:Recommendation) WHERE r.area = 'tech' RETURN r.id AS id, r.by AS by, r.area AS area, r.status AS status ORDER BY id");
@@ -230,7 +230,7 @@ describe("recommendations and Today's note", () => {
     const section = lines.slice(at + 1, lines.indexOf("Waiting for your OK")).filter(Boolean);
     expect(section.length).toBeGreaterThanOrEqual(1);
     expect(section.length).toBeLessThanOrEqual(4);
-    expect(section[0]).toMatch(/\((?:Zoya, on call|Imran, app releases)\)\. \[\[recommendation:/);
+    expect(section[0]).toMatch(/\((?:Firefighter · Tech|Bug Hunter · Tech)\)\. \[\[recommendation:/);
     expect(brief.onCall.length).toBeGreaterThanOrEqual(3);
     expect(ownerJargon(brief.text)).toEqual([]);
     // the top three above it are not the on-call ones

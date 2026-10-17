@@ -1,7 +1,7 @@
 // The Studio thin slice end to end on a throwaway graph, with a fake vision model and a fake generation engine:
-// intake (EXIF stripped, fingerprints, AUTHORED by the owner), Tara's assessment (clamped overlays, REVIEWED), the two
-// variants (DERIVED_FROM {step, treatment}, PRODUCED by Tara), Nisha's fidelity check (REVIEWED, badges, fails
-// closed), Dev's caption (voice rules applied), the approval card, and what approving it writes.
+// intake (EXIF stripped, fingerprints, AUTHORED by the owner), Miss Influencer's assessment (clamped overlays, REVIEWED), the two
+// variants (DERIVED_FROM {step, treatment}, PRODUCED by Miss Influencer), Fact Checker's fidelity check (REVIEWED, badges, fails
+// closed), Wordsmith's caption (voice rules applied), the approval card, and what approving it writes.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { CREDIT_COSTS } from "../../shared/plans.js";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
@@ -47,7 +47,7 @@ describe("studio pipeline (integration)", () => {
 
   it("streams asset, assessment, variant A and B, reviews, a proposal and a final; writes the graph", async () => {
     const vision = new FakeVision({ "content-strategist": TARA_ANSWER, "fact-checker": nishaAnswer(true), "copy-editor": DEV_ANSWER });
-    // the "generative" edit: the frame, relit, with a fake second roofline painted on (Nisha must catch it)
+    // the "generative" edit: the frame, relit, with a fake second roofline painted on (Fact Checker must catch it)
     const engine = new FakeEngine(async (input) => {
       const m = await sharp(input.image).metadata();
       const bar = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${m.width}" height="${m.height}"><rect x="0" y="${Math.round(m.height! * 0.1)}" width="${m.width}" height="${Math.round(m.height! * 0.08)}" fill="#3a2a1a"/></svg>`);
@@ -82,7 +82,7 @@ describe("studio pipeline (integration)", () => {
     expect(await one("MATCH (:Agent {id:'agent:allevia-content-strategist'})-[r:REVIEWED]->(:Asset {id:$id}) RETURN r.verdict AS v", { id: r.original.id })).toEqual({ v: "enhance" });
     expect(await one("MATCH (:Asset {id:$id})-[:DEPICTS]->(p:Page) RETURN p.id AS p", { id: r.original.id })).toEqual({ p: PAGE });
 
-    // the plan: the edges' tilt estimate wins over Tara's, and the crop keeps the facade and leaves the person out
+    // the plan: the edges' tilt estimate wins over Miss Influencer's, and the crop keeps the facade and leaves the person out
     expect(r.tilt.source).toBe("edges");
     expect(r.tilt.deg).toBeGreaterThan(3.5);
     expect(r.plan.lockCovered).toBeGreaterThan(0.6);
@@ -109,7 +109,7 @@ describe("studio pipeline (integration)", () => {
     expect(prompt).toContain("the Harbour House project");
     expect(prompt).toMatch(/NEGATIVES: No text/);
 
-    // Nisha: A passes, B (with the invented roofline) is held back, both REVIEWED
+    // Fact Checker: A passes, B (with the invented roofline) is held back, both REVIEWED
     expect(r.fidelity.map((f) => [f.label, f.badge])).toEqual([["A", "unchanged"], ["B", "changed"]]);
     expect(r.fidelity[0]!.note).toMatch(/^Building unchanged/);
     expect(r.fidelity[1]!.note).toBe("Changed: added a second roofline");
@@ -118,12 +118,12 @@ describe("studio pipeline (integration)", () => {
     expect(reviews.map((e) => [e.agent, e.verdict])).toEqual([["fact-checker", "ok"], ["fact-checker", "reject"]]);
     expect(await one("MATCH (:Agent {id:'agent:allevia-fact-checker'})-[r:REVIEWED]->(:Asset) RETURN count(r) AS c")).toEqual({ c: 2 });
 
-    // Dev: the voice rules applied (no "Nestled", no "seamlessly", no "!"), hashtags tidied
+    // Wordsmith: the voice rules applied (no "Nestled", no "seamlessly", no "!"), hashtags tidied
     expect(r.caption.by).toBe("dev-model");
     expect(r.caption.caption).not.toMatch(/nestled|seamlessly|!/i);
     expect(r.caption.edits.join("; ")).toMatch(/Nestled → /);
     expect(r.caption.hashtags).toEqual(["#bristolarchitecture", "#victorianterrace"]);
-    // Dev saw the post he captioned (variant A, the one that passed)
+    // Wordsmith saw the post he captioned (variant A, the one that passed)
     expect(vision.calls.find((c) => c.agent === "copy-editor")!.images).toHaveLength(1);
 
     // the card: pending, recommending A (B failed), 1 credit
@@ -175,7 +175,7 @@ describe("studio pipeline (integration)", () => {
     const events: AgentEvent[] = [];
     const r1 = await runStudio(g, { tenant: "kestrel_oak", businessId: BIZ, bytes: photo, note: "street view" }, { store, vision, engine: empty, now }, (e) => events.push(e));
     expect(r1.variants.map((v) => v.label)).toEqual(["A"]);
-    // no Dev rewrite configured: Tara's draft, held to the voice rules and the brand's don'ts in code (no model call)
+    // no Wordsmith rewrite configured: Miss Influencer's draft, held to the voice rules and the brand's don'ts in code (no model call)
     expect(vision.calls.map((c) => c.agent)).toEqual(["content-strategist", "fact-checker"]);
     expect(r1.caption.by).toBe("tara-draft");
     expect(r1.caption.caption).toBe("Seven tall windows let the afternoon in.\n\nHarbour House, Bristol");
@@ -206,8 +206,8 @@ describe("studio pipeline (integration)", () => {
     expect(r2.approvalId).toBe(r1.approvalId);
   }, 60_000);
 
-  it("fails closed: when Nisha's look cannot run, every variant is 'unchecked' and none is recommended as passed", async () => {
-    const vision = new FakeVision({ "content-strategist": TARA_ANSWER, "copy-editor": DEV_ANSWER }); // no answer for Nisha: it throws
+  it("fails closed: when Fact Checker's look cannot run, every variant is 'unchecked' and none is recommended as passed", async () => {
+    const vision = new FakeVision({ "content-strategist": TARA_ANSWER, "copy-editor": DEV_ANSWER }); // no answer for Fact Checker: it throws
     const r = await runStudio(g, { tenant: "kestrel_oak", businessId: BIZ, bytes: await facadePhoto({ tilt: 2 }), note: "" },
       { store, vision, engine: { name: "declining", edit: async () => { throw new EngineDecline("not-logged-in", "The AI editor isn't signed in right now, so I made the simple clean-up only."); } }, now }, () => undefined);
     expect(r.variants.map((v) => v.label)).toEqual(["A"]); // the engine declines; B is skipped, the run goes on
@@ -217,7 +217,7 @@ describe("studio pipeline (integration)", () => {
     await expect(approveStudioDraft(g, { approvalId: r.approvalId, now: now() }, decideWith)).rejects.toThrow(/held variant A back/);
   }, 60_000);
 
-  it("chooseTilt trusts confident edges, falls back to Tara, and calls a small angle level", () => {
+  it("chooseTilt trusts confident edges, falls back to Miss Influencer, and calls a small angle level", () => {
     expect(chooseTilt({ deg: 5.2, confidence: 0.2 }, 3)).toEqual({ deg: 5.2, source: "edges" });
     expect(chooseTilt({ deg: 5.2, confidence: 0.02 }, 3)).toEqual({ deg: 3, source: "tara" });
     expect(chooseTilt({ deg: 0.1, confidence: 0.5 }, 4)).toEqual({ deg: 0, source: "level" });

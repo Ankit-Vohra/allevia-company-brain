@@ -22,7 +22,7 @@ needs_ok: false
 Verdict, then at most five problems, ranked by harm, one line each, then the one fix to start with.
 
 > The site works and customers can book, but two things hurt: the booking page takes 6 seconds on a phone (hurts customers), and 3 pages have no description (untidy). Nothing stops customers right now (as of 12 Oct).
-> Start with the booking page images: Arjun, about 30 minutes.
+> Start with the booking page images: Techie, about 30 minutes.
 
 ## Done well
 

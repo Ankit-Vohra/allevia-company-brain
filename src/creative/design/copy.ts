@@ -1,6 +1,6 @@
 // The words on a design, held to the craft before they are set: ONE sharp selling line (the headline), at most one
 // supporting line, ONE call to action, and an eyebrow only when it adds a fact. Code does what code can be trusted with:
-//   - Dev's humanizer pass (cleanVoice: no emojis, no exclamation marks, no hard sell, AI-sounding words swapped);
+//   - Wordsmith's humanizer pass (cleanVoice: no emojis, no exclamation marks, no hard sell, AI-sounding words swapped);
 //   - no phrase twice: two words in a row shared by any two blocks ("coming soon" in the eyebrow, the headline AND the
 //     button was the founder's complaint), and an eyebrow that only repeats the headline is dropped;
 //   - lengths a phone can take in at a glance: a headline over 9 words, a support line over 22, a button over 6 words.

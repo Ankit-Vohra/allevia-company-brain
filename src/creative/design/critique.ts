@@ -1,4 +1,4 @@
-// The design review: after the code's own checks pass, Rohan (growth marketer: he judges whether an ad sells) looks at
+// The design review: after the code's own checks pass, Growth Hacker (growth marketer: he judges whether an ad sells) looks at
 // the finished pieces with Claude vision on the subscription, as a stranger scrolling past would, and scores each against
 // the checklist in docs/design-research.md:
 //   one idea · hierarchy · legible on a phone · contrast · crop · text fit · brand fit · the brief's call to action ·
@@ -53,7 +53,7 @@ const SCHEMA = {
   required: ["designs"],
 } as const;
 
-const SYSTEM = `You are ${agentById(REVIEWER)?.name ?? "Rohan"}, the growth marketer on a small business's AI team, reviewing social posts and ads before the owner sees them. You judge like a strong in-house designer at a good agency and like a stranger scrolling a phone feed: harsh, specific, fair.
+const SYSTEM = `You are ${agentById(REVIEWER)?.name ?? "Growth Hacker"}, the growth marketer on a small business's AI team, reviewing social posts and ads before the owner sees them. You judge like a strong in-house designer at a good agency and like a stranger scrolling a phone feed: harsh, specific, fair.
 Score each design 1-5 on:
 - oneIdea: one message a stranger gets in three seconds (5) vs several competing things (1)
 - hierarchy: an obvious first, second and third thing to read

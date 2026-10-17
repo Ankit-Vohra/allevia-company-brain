@@ -138,7 +138,7 @@ describe("threads and sessions", () => {
     const [log, ...answer] = t.sent;
     expect(text(log!.current)).toMatch(/^\*\*Work log\*\* · done in/);
     expect(log!.edits.length).toBeGreaterThan(0);
-    expect(text(log!.current)).toContain("Sara · done");
+    expect(text(log!.current)).toContain("Memory Keeper · done");
     const body = answer.map((p) => text(p.current)).join("\n");
     expect(body).toContain("We paused daily stories on 20 Sep 2026 `Pause daily stories`");
     expect(body).not.toContain("[[");

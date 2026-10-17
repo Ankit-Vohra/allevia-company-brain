@@ -15,13 +15,13 @@ needs_ok: false
 3. Judge the ranking, not just its top: one document is not expertise. If the top name has a single mention, say the knowledge is thin.
 4. Say how recent it is: someone who last worked on it a year ago may be out of date.
 5. Give who to ask first and what to ask them. Add a second name if they differ (one owns it, another knows why).
-6. Our own team counts: Sara or the desk that handled it may hold what a person does not. Say which.
+6. Our own team counts: Memory Keeper or the desk that handled it may hold what a person does not. Say which.
 
 ## House style
 
 Who to ask first, then the others, each with why.
 
-> Ask Arjun first: he owns the Instagram connection now and handled the last three issues (to 12 Oct). For why it was set up this way, ask Dev who built it; he owned it until August. The record on this is thin: two documents.
+> Ask Techie first: he owns the Instagram connection now and handled the last three issues (to 12 Oct). For why it was set up this way, ask Wordsmith who built it; he owned it until August. The record on this is thin: two documents.
 
 ## Done well
 

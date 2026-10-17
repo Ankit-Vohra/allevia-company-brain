@@ -180,7 +180,7 @@ const CHANGE_BUTTON = new RegExp(`^${BUTTON_PREFIX}:change:(.+)$`);
 const CHANGE_WORDS = /^change\s*[:\-,]\s*/i;
 const CHANGE_WAIT_MS = 30 * 60_000;
 
-// A plain message that is clearly a standing rule for one of the team's skills ("Tara, our posts always end with a
+// A plain message that is clearly a standing rule for one of the team's skills ("Miss Influencer, our posts always end with a
 // question"): not a question, and the rules (no model) read all of it as skill rules or skills.
 export function isSkillRule(text: string): boolean {
   if (text.includes("?") || text.length > 600) return false;

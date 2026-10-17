@@ -387,7 +387,7 @@ export async function learnFromEdit(g: GraphHandle, input: LearnInput, deps: Lea
       props: {
         kind: "learned", text: s.text, op: s.op, confidence, status: "active", appliedCount: old?.applied ?? 0,
         learnedCount: (old?.n ?? 0) + 1, learnedAt: now,
-        // the skills it belongs to, so use_skill shows it with the right skill (Tara's post craft, Dev's voice check)
+        // the skills it belongs to, so use_skill shows it with the right skill (Miss Influencer's post craft, Wordsmith's voice check)
         ...(skills.length ? { skills } : {}),
         ...(s.find ? { find: s.find } : {}), ...(s.replace !== undefined ? { replace: s.replace } : {}),
         ...(s.words ? { words: s.words } : {}), ...(s.max !== undefined ? { max: s.max } : {}),

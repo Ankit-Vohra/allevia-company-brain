@@ -1,4 +1,4 @@
-// Claude looking at photos, for Tara's assessment and Nisha's fidelity check. ClaudeVision runs on the founder's Claude
+// Claude looking at photos, for Miss Influencer's assessment and Fact Checker's fidelity check. ClaudeVision runs on the founder's Claude
 // subscription through the Agent SDK, like AgentSdkRunner (src/ingest/llm.ts): the allow-listed env, no tools, no
 // settings, a fresh empty cwd, a JSON-schema answer, and it fails closed unless the SDK's init message says the call is
 // on the subscription (assertSubscription). The SDK takes Messages-API content blocks in a streamed user message, so

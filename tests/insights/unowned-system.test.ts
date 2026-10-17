@@ -161,8 +161,8 @@ describe("tech.unowned_critical_system", () => {
     }
   });
 
-  it("becomes a Recommendation by Arjun in the tech area, with evidence edges to what relies on the tool", async () => {
-    await upsertNode(g, { type: "Agent", id: "agent:allevia-tech-lead", name: "Arjun", props: { rosterId: "tech-lead" } }, NOW);
+  it("becomes a Recommendation by Techie in the tech area, with evidence edges to what relies on the tool", async () => {
+    await upsertNode(g, { type: "Agent", id: "agent:allevia-tech-lead", name: "Techie", props: { rosterId: "tech-lead" } }, NOW);
     const r = await runInsights("shopfront", { graph: g, now: NOW, only: ["tech.unowned_critical_system"] });
     expect(r.errors).toEqual([]);
     const rec = r.recommendations.find((x) => x.key === "tech.unowned_critical_system:system:payments")!;

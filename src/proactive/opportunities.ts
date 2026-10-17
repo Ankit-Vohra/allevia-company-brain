@@ -1,6 +1,6 @@
 // From what changed to what is worth doing: each signal that could become something the owner would use today is turned
 // into an Opportunity, with a one-line reason built only from the graph's numbers, the person on the team who owns it,
-// the kind of thing they will draft, and the skill they draft it with. Fixed rules, no model: Meera (choose.ts) picks from
+// the kind of thing they will draft, and the skill they draft it with. Fixed rules, no model: The Chief (choose.ts) picks from
 // these, so a reason can never carry a number that is not in the graph.
 //
 // Impact first (the founder, 2026-10-16): every opportunity is scored by its expected effect on the business's goals. One
@@ -8,15 +8,15 @@
 // goal counts little. Festivals and seasons move no goal by themselves: they are fillers, used only for a spare slot.
 //
 // The kinds the team drafts (each waits for the owner's OK; nothing is posted without it):
-//   post         a social post (Tara, content)
-//   poster       a post with a poster made by the creating tools (Tara); a paid picture only within the day's budget
-//   reply        a reply to a customer review (Vikram, operations)
-//   website_fix  a fix for the website with the new words already written (Arjun, tech)
-//   follow_up    a follow-up message to people who stopped part way, or who went quiet (Vikram)
-//   offer        an offer idea with its wording, to test (Rohan, marketing)
-//   sales_reply  a reply to a new enquiry nobody has answered, with three real times to talk (Neel, sales)
-//   sales_nudge  a nudge to someone whose deal has had nothing happen for two weeks (Neel)
-//   sales_reminder  a reminder for a call tomorrow (Neel)
+//   post         a social post (Miss Influencer, content)
+//   poster       a post with a poster made by the creating tools (Miss Influencer); a paid picture only within the day's budget
+//   reply        a reply to a customer review (Taskmaster, operations)
+//   website_fix  a fix for the website with the new words already written (Techie, tech)
+//   follow_up    a follow-up message to people who stopped part way, or who went quiet (Taskmaster)
+//   offer        an offer idea with its wording, to test (Growth Hacker, marketing)
+//   sales_reply  a reply to a new enquiry nobody has answered, with three real times to talk (Deal Closer, sales)
+//   sales_nudge  a nudge to someone whose deal has had nothing happen for two weeks (Deal Closer)
+//   sales_reminder  a reminder for a call tomorrow (Deal Closer)
 import { CONTENT_METRIC, FUNNEL_METRIC, SEO_METRIC } from "./words.js";
 import { whenWords } from "./calendar.js";
 import { festivalEventId } from "./festivals.js";
@@ -47,7 +47,7 @@ export interface Opportunity {
   agent: string;               // roster id of who drafts it
   title: string;               // what will be drafted, in the owner's words: "A Dussehra post"
   reason: string;              // one line, every number from the graph: "Dussehra is in 4 days."
-  brief: string;               // the default purpose-first brief (Meera may sharpen it)
+  brief: string;               // the default purpose-first brief (The Chief may sharpen it)
   facts: string[];             // what the drafter may use, besides the business's own record
   skill: { agent: string; id: string };
   evidence: string[];          // graph ids behind it
@@ -57,7 +57,7 @@ export interface Opportunity {
   channel?: { id: string; name: string };   // where a post goes, when it is not Instagram
   effect?: number;             // 0..1: the expected effect on the goals (set by opportunitiesFrom)
   filler?: boolean;            // a festival or season: only for a slot nothing goal-moving needs
-  moves?: string[];            // the names of the goals it moves, for Meera and the reason
+  moves?: string[];            // the names of the goals it moves, for The Chief and the reason
   issueType?: string | null;   // a website fix: which check
   sales?: SalesTarget;         // a Sales draft: who it is for
 }

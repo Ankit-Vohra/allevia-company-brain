@@ -802,7 +802,7 @@ const knowledgeUnevidencedDecisions: Detector = {
 };
 
 
-// ---------- tech: on call (Zoya) and releases (Imran) ----------
+// ---------- tech: on call (Firefighter) and releases (Bug Hunter) ----------
 //
 // Written for an owner who is not an engineer: titles and reasons say "app errors", "crashed", "froze" and "waiting for
 // Apple's review", never Sentry, ANR or crash-free. The evidence ids (Observations and Events from the ops snapshot)
@@ -1087,7 +1087,7 @@ const techReleaseHealth: Detector = {
   },
 };
 
-// ---------- structure: what many things rely on and nobody looks after (Arjun) ----------
+// ---------- structure: what many things rely on and nobody looks after (Techie) ----------
 
 const UNOWNED_MIN = 3;              // at least this many things rely on it, directly or through up to two others
 const UNOWNED_MAX = 3;              // at most this many cards at once

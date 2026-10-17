@@ -3,11 +3,11 @@
 //
 //   rough  <source image>        make the demo's "rough phone photo" from one of the studio's own website photos:
 //                                tilted, underexposed, cool, soft, noisy and awkwardly framed (an honest stand-in)
-//   plan                         intake + Tara's assessment (one live Claude call, then cached) + the straightened 4:5
+//   plan                         intake + Miss Influencer's assessment (one live Claude call, then cached) + the straightened 4:5
 //                                frame and the graph-built edit prompt, written next to the sample for the Higgsfield run
 //   record <file> <model> <jobId> <credits>
 //                                register a generated edit with the RecordedEngine, keyed by the sample's original
-//   run                          the whole pipeline (Nisha's check and Dev's caption are the remaining live calls),
+//   run                          the whole pipeline (Fact Checker's check and Wordsmith's caption are the remaining live calls),
 //                                leaving the approval card pending for the owner
 //
 // Usage: npx tsx scripts/studio-demo.ts <step> [args] [--tenant avs_atelier]

@@ -61,8 +61,8 @@ describe("the prompt lists skills by name and when, never the body", () => {
 
   it("the planner sees each desk's skill names so it can route to the right desk", () => {
     const p = planSystemPrompt({ now: NOW, tenant: "t", skills: CATALOG });
-    expect(p).toMatch(/content-strategist: Tara.*Skills: Craft of instagram-post\./);
-    expect(p).toMatch(/copy-editor: Dev.*Skills: Craft of voice-check\./);
+    expect(p).toMatch(/content-strategist: Miss Influencer.*Skills: Craft of instagram-post\./);
+    expect(p).toMatch(/copy-editor: Wordsmith.*Skills: Craft of voice-check\./);
     expect(p).not.toContain("Keep captions under 125 characters");
     expect(planSystemPrompt({ now: NOW, tenant: "t" })).not.toContain("Skills:");
   });
@@ -105,7 +105,7 @@ describe("use_skill", () => {
 
   it("an agent can only open its own skills, and is told which it has", async () => {
     const r = await useSkill.run({ id: "voice-check" }, ctx("content-strategist"));
-    expect((r.data as { error: string }).error).toBe('Tara has no skill "voice-check". Yours: instagram-post.');
+    expect((r.data as { error: string }).error).toBe('Miss Influencer has no skill "voice-check". Yours: instagram-post.');
     expect(((await useSkill.run({ id: "x-y" }, ctx("librarian"))).data as { error: string }).error).toMatch(/You have no skills/);
     expect(((await useSkill.run({ id: "x-y" }, ctx("librarian", null as never))).data as { error: string }).error).toMatch(/No skills are set up/);
   });
@@ -137,7 +137,7 @@ describe("a turn that opens a skill", () => {
       { type: "skill_used", agent: "content-strategist", skillId: "instagram-post", name: "Craft of instagram-post", source: "code" },
       { type: "skill_used", agent: "copy-editor", skillId: "voice-check", name: "Craft of voice-check", source: "code" },
     ]);
-    expect(s.events.some((e) => e.type === "agent_status" && e.agent === "content-strategist" && e.text === "Tara is using: Craft of instagram-post")).toBe(true);
+    expect(s.events.some((e) => e.type === "agent_status" && e.agent === "content-strategist" && e.text === "Miss Influencer is using: Craft of instagram-post")).toBe(true);
     expect(out.skills.map((u) => `${u.agent}/${u.skillId}`)).toEqual(["content-strategist/instagram-post", "copy-editor/voice-check"]);
     expect(out.findings[0]!.skills).toEqual(["instagram-post"]);
   });

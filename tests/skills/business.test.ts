@@ -34,7 +34,7 @@ describe("what the owner's words are about", () => {
 });
 
 describe("parseDirective: skill rules and skills", () => {
-  it("'our posts always end with a question' is a rule for Tara's post craft, and Dev's voice check holds it too", () => {
+  it("'our posts always end with a question' is a rule for Miss Influencer's post craft, and Wordsmith's voice check holds it too", () => {
     const r = parseDirective("Our posts always end with a question");
     expect(r.unparsed).toEqual([]);
     expect(r.patches).toEqual([
@@ -44,20 +44,20 @@ describe("parseDirective: skill rules and skills", () => {
   });
 
   it("a rule addressed to someone who does not own that work is not a skill rule", () => {
-    expect(parseDirective("Rohan, our posts always end with a question").patches.some((p) => p.kind === "skill.rule" && p.skill === "instagram-post")).toBe(false);
+    expect(parseDirective("Growth Hacker, our posts always end with a question").patches.some((p) => p.kind === "skill.rule" && p.skill === "instagram-post")).toBe(false);
   });
 
   it("a way of writing with no particular work goes on all of the writers' skills; a rule scoped to a channel stays an instruction", () => {
     expect(parseDirective("Quote prices in AED").patches).toEqual([
       { kind: "skill.rule", agents: ["content-strategist", "copy-editor", "growth-marketer"], skill: "*", text: "Quote prices in AED." },
     ]);
-    expect(parseDirective("Tara, never use emojis").patches).toEqual([{ kind: "skill.rule", agents: ["content-strategist"], skill: "*", text: "Never use emojis." }]);
+    expect(parseDirective("Miss Influencer, never use emojis").patches).toEqual([{ kind: "skill.rule", agents: ["content-strategist"], skill: "*", text: "Never use emojis." }]);
     expect(parseDirective("No emojis on LinkedIn posts").patches.map((p) => p.kind)).toEqual(["memory.instruction"]);
     expect(parseDirective("make the captions punchier").unparsed).toEqual(["make the captions punchier"]);
   });
 
-  it("'Tara, add a skill called Festival post: …' is a skill of this business's own", () => {
-    const r = parseDirective("Tara, add a skill called Festival post: open with the greeting in Hindi, then the offer, then the last date");
+  it("'Miss Influencer, add a skill called Festival post: …' is a skill of this business's own", () => {
+    const r = parseDirective("Miss Influencer, add a skill called Festival post: open with the greeting in Hindi, then the offer, then the last date");
     expect(r.patches).toEqual([{
       kind: "skill.add", agents: ["content-strategist"], id: "festival-post", name: "Festival post",
       when: "When the request is about festival post", text: "Open with the greeting in Hindi, then the offer, then the last date.",
@@ -105,7 +105,7 @@ describe("a business's skills in its own graph (integration)", () => {
   it("applying 'our posts always end with a question' writes rules that load for that business only", async () => {
     const pv = await previewDirective(a, { text: "Our posts always end with a question" }, { llm: null, now: NOW });
     expect(pv.diff.map((l) => [l.op, l.label])).toEqual([
-      ["add", "Rule for Tara's Instagram post craft"], ["add", "Rule for Dev's Brand voice check"],
+      ["add", "Rule for Miss Influencer's Instagram post craft"], ["add", "Rule for Wordsmith's Brand voice check"],
     ]);
     const done = await applyDirective(a, pv.id, { now: NOW + 1 });
     expect(done.errors).toEqual([]);
@@ -138,8 +138,8 @@ describe("a business's skills in its own graph (integration)", () => {
   });
 
   it("a skill of its own is added, and one with a shipped id replaces it for that business only", async () => {
-    const pv = await previewDirective(a, { text: "Tara, add a skill called Festival post: open with the greeting in Hindi, then the offer" }, { llm: null, now: NOW + 5 });
-    expect(pv.diff[0]).toMatchObject({ op: "add", label: "New skill for Tara: Festival post" });
+    const pv = await previewDirective(a, { text: "Miss Influencer, add a skill called Festival post: open with the greeting in Hindi, then the offer" }, { llm: null, now: NOW + 5 });
+    expect(pv.diff[0]).toMatchObject({ op: "add", label: "New skill for Miss Influencer: Festival post" });
     await applyDirective(a, pv.id, { now: NOW + 6 });
     const mine = await loadBusinessSkills(a);
     expect(mine.skills.map((s) => [s.id, s.agents, s.source])).toEqual([["festival-post", ["content-strategist"], "business"]]);
@@ -150,7 +150,7 @@ describe("a business's skills in its own graph (integration)", () => {
     expect(r.guidance).toMatch(/SKILL: Festival post \(set up for this business\)[\s\S]*open with the greeting in Hindi/i);
     expect(r.data).toMatchObject({ source: "business" });
 
-    // replacing a shipped skill: same id, the business's text wins for Tara, and its name and when stay the shipped ones
+    // replacing a shipped skill: same id, the business's text wins for Miss Influencer, and its name and when stay the shipped ones
     const over = catalog.withBusiness({ skills: [{ ...mine.skills[0]!, id: "reel-script", name: "", when: "", body: "Reels here are always 15 seconds." }], rules: [] });
     expect(over.get("content-strategist", "reel-script")).toMatchObject({ source: "business", body: "Reels here are always 15 seconds." });
     expect(over.get("content-strategist", "reel-script")!.name).toBe(codeCatalog().get("content-strategist", "reel-script")!.name);
@@ -163,7 +163,7 @@ describe("a business's skills in its own graph (integration)", () => {
     expect(await retireSkillNote(a, "memory:nope", NOW + 8)).toBe(false);
   });
 
-  it("a rule learned from the owner's edit attaches to the skill the draft came from, and a style rule to Dev's voice check", async () => {
+  it("a rule learned from the owner's edit attaches to the skill the draft came from, and a style rule to Wordsmith's voice check", async () => {
     expect(skillsForLearnedRule({ agentId: "content-strategist", draft: "A new reel script for the launch", op: "replace" })).toEqual(["reel-script", "brand-voice-check"]);
     expect(skillsForLearnedRule({ agentId: "content-strategist", draft: "A caption", op: "max_words" })).toEqual(["instagram-post"]);
     await writeBatch(a, { nodes: [{ type: "Approval", id: "approval:t-001-1", name: "Launch post" }] }, NOW);

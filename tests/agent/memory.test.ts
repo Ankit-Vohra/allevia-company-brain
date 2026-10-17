@@ -68,7 +68,7 @@ describe("memory (integration)", () => {
     expect(await snapshot()).toEqual(first);
     const [kabir] = await g.roQuery<Record<string, unknown>>(
       "MATCH (a:Agent {id:'agent:allevia-data-analyst'})-[:MEMBER_OF]->(t:Team) RETURN a.name AS name, a.title AS title, a.department AS department, t.id AS team");
-    expect(kabir).toEqual({ name: "Kabir", title: "Data Analyst", department: "analytics", team: "team:allevia-analytics" });
+    expect(kabir).toEqual({ name: "Data Detective", title: "Data Analyst", department: "analytics", team: "team:allevia-analytics" });
   });
 
   let firstTurn: SaveTurnInput;

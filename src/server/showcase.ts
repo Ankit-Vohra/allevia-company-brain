@@ -81,7 +81,7 @@ const ID_RE = /(?<![\p{L}\p{N}_-])(person|lead|client|deal|meeting|message|chunk
 const WORD_RE = /[\p{L}\p{N}][\p{L}\p{N}\p{M}'’]*/gu;
 const isWordChar = (ch: string | undefined): boolean => !!ch && /[\p{L}\p{N}\p{M}]/u.test(ch);
 
-// Words never masked as a first or last name: the team's own names (Meera, Arjun ...), the office dogs, and words a name list
+// Words never masked as a first or last name: the team's own names (The Chief, Techie ...), the office dogs, and words a name list
 // picks up from a website ("Team", "Support").
 const NEVER_NAMES = new Set([
   ...AGENTS.map((a) => a.name), ...DEPARTMENTS.map((d) => d.name), "Fluffy", "JJ", "Zoe",

@@ -42,7 +42,7 @@ export function ownerJargon(text: string): string[] {
 /** The plain-words rule, as the prompts state it. */
 export const OWNER_WORDS_RULE = `Plain words. The owner runs a business, is not technical, and reads this on a phone between jobs:
 - Never write these words: baseline, Day 0, first-pass, capability, approval card, finding, detector, agent, desk, orchestrator, synthesis, citation, provenance, graph, node, recommendation, insight, deliverable, on track / at risk / off track.
-- Write instead: "where you started" (not baseline), "monthly check-in", "waiting for your OK", "what we noticed" or "an idea", "your team", people by name and job ("Tara, content"; "Zoya, on call"), "how we know" (sources), "going well / needs a push / behind", "drafts you approved as they were", "things your team learned from your edits", "today's note" (not morning brief).
+- Write instead: "where you started" (not baseline), "monthly check-in", "waiting for your OK", "what we noticed" or "an idea", "your team", people by name and job ("Miss Influencer, content"; "Firefighter, on call"), "how we know" (sources), "going well / needs a push / behind", "drafts you approved as they were", "things your team learned from your edits", "today's note" (not morning brief).
 - Numbers that are samples are called "sample numbers", next to the number, every time.
 - Short words, short sentences. Explain a term once in plain words, or leave it out.`;
 

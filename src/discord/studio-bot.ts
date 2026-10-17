@@ -1,6 +1,6 @@
 // The Studio on Discord: the owner drops photos (or videos) in #studio, or attaches one in #your-team, and the team does
 // the Studio flow (src/studio/*) in a thread:
-//   Tara looks at the photo -> variants -> Nisha checks them -> Dev writes the caption -> the card.
+//   Miss Influencer looks at the photo -> variants -> Fact Checker checks them -> Wordsmith writes the caption -> the card.
 // Each variant is posted back as an image attachment with its caption and Approve / Change buttons. Approve is the same
 // decision as the web's Studio card (approveStudioDraft: the draft post, the approved Asset and its lineage). A text
 // reply in the thread ("make it warmer") makes the next variant (studio/revise.ts). Mid-run progress is one message,
@@ -217,7 +217,7 @@ export class StudioDiscord {
   private async post(thread: ThreadPort, r: StudioResult): Promise<void> {
     const a = r.assessment;
     await thread.send(clip([
-      `Tara looked at your photo: ${VERDICT_WORDS[a.verdict]}. ${a.story}`.trim(),
+      `Miss Influencer looked at your photo: ${VERDICT_WORDS[a.verdict]}. ${a.story}`.trim(),
       ...(a.verdict === "reshoot" && a.coaching ? [a.coaching] : []),
       ...(r.privacy.blurredPeople && !r.privacy.minor ? ["Faces are blurred in the options, because your setting blurs people's faces."] : []),
       ...r.notices,
@@ -239,7 +239,7 @@ export class StudioDiscord {
     await thread.send(`Tap Approve on the one you like. ${what} To change one, reply here. Light and colour changes are free, for example "make it warmer". A bigger change, like "make it festive", "change the background" or "make this into an ad saying ...", uses the AI editor, and I will tell you what it costs.`);
   }
 
-  // One option as a message: the picture, the check, the caption, and the buttons that fit (Approve and Change when Nisha passed
+  // One option as a message: the picture, the check, the caption, and the buttons that fit (Approve and Change when Fact Checker passed
   // it; Try again, with its price, when she held an AI edit back).
   private async postOption(
     thread: ThreadPort, approvalId: string, v: { label: string; buffer: Buffer }, check: { badge: string; note: string },
@@ -340,7 +340,7 @@ export class StudioDiscord {
     });
   }
 
-  // "make this a premium ad": a UGC-style ad picture of the product (Higgsfield's product-photoshoot), priced first and checked by Nisha.
+  // "make this a premium ad": a UGC-style ad picture of the product (Higgsfield's product-photoshoot), priced first and checked by Fact Checker.
   private async premium(thread: ThreadPort, approvalId: string, request: PremiumRequest): Promise<void> {
     const log = await thread.send("Making a premium ad picture from your photo...");
     const lines: string[] = [];
@@ -433,7 +433,7 @@ export class StudioDiscord {
         else await b.reply(m.content, { ephemeral: true });
         return true;
       }
-      if (e instanceof DecisionError && e.status === 409) await b.reply(e.message.includes("Nisha") ? "That option was held back, so it can't be approved." : "This photo was already decided.", { ephemeral: true });
+      if (e instanceof DecisionError && e.status === 409) await b.reply(e.message.includes("Fact Checker") ? "That option was held back, so it can't be approved." : "This photo was already decided.", { ephemeral: true });
       else if (e instanceof DecisionError) await b.reply("That photo's card no longer exists.", { ephemeral: true });
       else {
         this.log(`${this.d.tenant}: approve ${approvalId} failed: ${message(e)}`);
@@ -459,7 +459,7 @@ export class StudioDiscord {
       }
       const a = await assessFirstFrame(this.d.graph, { businessId: this.d.businessId, assetId: stored.asset.id, frame: stored.frame, ...(note ? { note } : {}) },
         { vision: this.d.studio.vision, ...(this.d.studio.models ? { models: this.d.studio.models } : {}), now: this.now() });
-      await thread.send(clip(`${kept} Tara looked at its first frame: ${VERDICT_WORDS[a.verdict]}. ${a.story}\nI can't edit or restyle video yet, so it is kept as you sent it for your team to use.`, 1900));
+      await thread.send(clip(`${kept} Miss Influencer looked at its first frame: ${VERDICT_WORDS[a.verdict]}. ${a.story}\nI can't edit or restyle video yet, so it is kept as you sent it for your team to use.`, 1900));
     });
   }
 }

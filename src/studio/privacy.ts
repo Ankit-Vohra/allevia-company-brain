@@ -1,14 +1,14 @@
-// What Tara's boxes say about the people in a photo (product design §6 step 2; founder's decision, 2026-10-15).
-// Tara marks any person, face, number plate or house number as a `privacy` box. The studio reads those boxes, not the
+// What Miss Influencer's boxes say about the people in a photo (product design §6 step 2; founder's decision, 2026-10-15).
+// Miss Influencer marks any person, face, number plate or house number as a `privacy` box. The studio reads those boxes, not the
 // photo, so the rule is a pure function of her assessment and one business setting:
 // - People are kept as they are. It is the owner's own photo and content, and the owner is responsible for having
 //   permission (the Terms say so). The business setting "Blur people's faces in my content" (off by default) blurs
-//   every person Tara marked, in everything made and in the copy that is kept.
+//   every person Miss Influencer marked, in everything made and in the copy that is kept.
 // - A plate or a house number is always blurred wherever it is kept.
 // - A photo that seems to include a child is not stopped: it gets the free local clean-up only, never an AI edit, and
 //   the people in it are blurred in everything kept and made (so nothing unblurred is stored, as before).
-// - With the setting on, people Tara could not place (a "people" photo with no box) cannot be blurred, so the run stops.
-// Only boxes Tara marked as privacy count: a kids' room with nobody in it is a kids' room, not a child in the photo.
+// - With the setting on, people Miss Influencer could not place (a "people" photo with no box) cannot be blurred, so the run stops.
+// Only boxes Miss Influencer marked as privacy count: a kids' room with nobody in it is a kids' room, not a child in the photo.
 import type { AssessmentOverlay } from "../../shared/contracts.js";
 import type { PhotoAssessment } from "./assess.js";
 

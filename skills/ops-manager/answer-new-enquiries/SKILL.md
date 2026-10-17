@@ -28,7 +28,7 @@ needs_ok: true
 Two numbers first (how many came in, how long the oldest has waited), then the hot ones, then the rest by group, each with the enquiry in one line and the reply ready to paste.
 
 > 6 new enquiries; the oldest has waited 5 hours.
-> Hot: Leila (Instagram, 10:12): needs an abaya altered by Thursday. Call her; Vikram suggests Rana handles alterations.
+> Hot: Leila (Instagram, 10:12): needs an abaya altered by Thursday. Call her; Taskmaster suggests Rana handles alterations.
 > Reply ready: "Hi Leila, yes, we can do Thursday. Can you bring it in tomorrow between 11 and 2 so we can pin it? - Noor, AVS Atelier"
 > Good fit (3), Unclear (1), Not for us (1): replies below.
 

@@ -2,10 +2,10 @@
 // - intake: re-encode without metadata (no EXIF GPS revealing a client's home), auto-orient, sRGB, a size guard, and
 //   the fingerprints an Asset carries (sha256 of the stored bytes, a 64-bit dHash);
 // - the plan: a tilt estimate from the photo's own edges, and a 4:5 window inside the straightened frame that keeps
-//   Tara's "lock" boxes (the building) in and her privacy boxes out;
+//   Miss Influencer's "lock" boxes (the building) in and her privacy boxes out;
 // - variant A ("Safe", $0, never labelled AI): straighten, crop, exposure and white balance toward the brand's paper
 //   tone, a subtle vignette, 1080x1350;
-// - Nisha's numbers: dHash distance and an SSIM-like structure score between a variant and the frame it came from.
+// - Fact Checker's numbers: dHash distance and an SSIM-like structure score between a variant and the frame it came from.
 import { createHash } from "node:crypto";
 import sharp, { type Metadata, type OverlayOptions } from "sharp";
 import type { AssessmentOverlay } from "../../shared/contracts.js";
@@ -451,7 +451,7 @@ export async function renderVariantA(input: Buffer, o: { paper: string; rotate?:
   return { buffer: out, w: POST_SIZE.w, h: POST_SIZE.h, treatment: parts.join(", "), step: "local-grade" };
 }
 
-// ---------- Nisha's numbers ----------
+// ---------- Fact Checker's numbers ----------
 
 // SSIM on a 160 px wide greyscale copy of both (contrast-stretched first, so a relight is not mistaken for a new
 // building), 8 px windows every 4 px. `ssim` is the classic index; `structure` is its structure term alone (the

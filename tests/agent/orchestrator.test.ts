@@ -106,14 +106,14 @@ describe("normalisePlan", () => {
     const p = normalisePlan({ rationale: "", steps: [
       { agent: "growth-marketer", task: "After the data-analyst breakdown, check spend" },
       { agent: "data-analyst", task: "Break down signups" },
-      { agent: "coe-lead", task: "Sanity-check Kabir's numbers and the Growth Marketer's budget" },
+      { agent: "coe-lead", task: "Sanity-check Data Detective's numbers and the Growth Marketer's budget" },
       { agent: "tech-lead", task: "Check the dev deploy" },
     ] }, "weekly review");
     expect(p.steps).toEqual([
       { agent: "data-analyst", task: "Break down signups" },
       { agent: "tech-lead", task: "Check the dev deploy" },
       { agent: "growth-marketer", task: "After the data-analyst breakdown, check spend", after: ["data-analyst"] },
-      { agent: "coe-lead", task: "Sanity-check Kabir's numbers and the Growth Marketer's budget", after: ["growth-marketer", "data-analyst"] },
+      { agent: "coe-lead", task: "Sanity-check Data Detective's numbers and the Growth Marketer's budget", after: ["growth-marketer", "data-analyst"] },
     ]);
   });
 
@@ -275,7 +275,7 @@ describe("runTurn: a 3-desk plan with a dependency", () => {
 
     // the synthesis prompt carries every finding
     const sRun = runtime.runs.find((r) => r.phase === "synthesis")!;
-    for (const a of ["Kabir (Data Analyst)", "Arjun (Tech Lead)", "Rohan (Growth Marketer)"]) expect(sRun.prompt).toContain(a);
+    for (const a of ["Data Detective (Data Analyst)", "Techie (Tech Lead)", "Growth Hacker (Growth Marketer)"]) expect(sRun.prompt).toContain(a);
     expect(sRun.streamText).toBe(true);
 
     expect(out.agents).toEqual(["chief-of-staff", "data-analyst", "tech-lead", "growth-marketer"]);
@@ -324,7 +324,7 @@ describe("runTurn: reviews", () => {
     const dones = [idx(events, is("agent_done", "copy-editor")), idx(events, is("agent_done", "fact-checker"))];
     expect(Math.max(...starts)).toBeLessThan(Math.min(...dones));
     expect(idx(events, is("agent_start", "content-strategist", (e) => e.task === "Revising after review"))).toBeGreaterThan(Math.max(...dones));
-    expect(runtime.runs.find((r) => r.phase === "revise")!.prompt).toContain("Dev (Brand & Copy Editor): fix, Drop 'delve'.");
+    expect(runtime.runs.find((r) => r.phase === "revise")!.prompt).toContain("Wordsmith (Brand & Copy Editor): fix, Drop 'delve'.");
 
     expect(out.findings[0]).toMatchObject({ revised: true, rejected: false, text: "Question hooks win for employers [[content:reel-1]]." });
     expect(out.reviews).toHaveLength(2);
@@ -356,7 +356,7 @@ describe("runTurn: reviews", () => {
     });
     const out = await run();
     expect(runtime.runs.filter((r) => r.agentId === "data-analyst").map((r) => r.phase)).toEqual(["work", "revise"]);
-    expect(runtime.runs.find((r) => r.phase === "revise")!.prompt).toContain("Nisha (Fact Checker): reject, Could not find the source.");
+    expect(runtime.runs.find((r) => r.phase === "revise")!.prompt).toContain("Fact Checker: reject, Could not find the source.");
     expect(runtime.runs.find((r) => r.phase === "revise")!.prompt).not.toContain("Figures match.");
     expect(out.findings[0]).toMatchObject({ rejected: false, revised: true });
   });
@@ -572,8 +572,8 @@ describe("runTurn: failures and proposals", () => {
     expect(events.find(is("agent_done", "data-analyst"))).toMatchObject({ ok: false });
     expect(events.find(is("agent_status", "data-analyst", (e) => /Couldn't finish/.test(e.text)))).toBeDefined();
     expect(events.filter(is("handoff"))).toHaveLength(0);
-    expect(runtime.runs.find((r) => r.agentId === "growth-marketer")!.prompt).toContain("Kabir (Data Analyst) could not finish");
-    expect(runtime.runs.find((r) => r.phase === "synthesis")!.prompt).toContain("Desks that could not finish: Kabir (Data Analyst)");
+    expect(runtime.runs.find((r) => r.agentId === "growth-marketer")!.prompt).toContain("Data Detective (Data Analyst) could not finish");
+    expect(runtime.runs.find((r) => r.phase === "synthesis")!.prompt).toContain("Desks that could not finish: Data Detective (Data Analyst)");
     expect(out.failed).toEqual(["data-analyst"]);
     expect(out.ok).toBe(true);
     expect(out.touched.has("metric:signups")).toBe(true); // what it saw before failing still counts
@@ -627,7 +627,7 @@ describe("runTurn: failures and proposals", () => {
     const out = await run();
     expect(out.ok).toBe(false);
     expect(events.find(is("error", "chief-of-staff"))).toMatchObject({ message: "The Chief of Staff could not write the answer: overloaded." });
-    expect(out.answer).toContain("**Arjun:** The sitemap is broken [[system:sitemap]].");
+    expect(out.answer).toContain("**Techie:** The sitemap is broken [[system:sitemap]].");
     expect(events.filter(is("text")).map((e) => (e as { delta: string }).delta).join("")).toBe(out.answer);
   });
 });
@@ -680,7 +680,7 @@ describe("runTurn: a finding's review runs alongside the desks that build on it"
     const out = await run();
     expect(out.findings[0]).toMatchObject({ revised: true, text: REVISED });
     const s = runtime.runs.filter((r) => r.phase === "synthesis").at(-1)!.prompt;
-    expect(s).toContain("Caveat: it built on an earlier draft of Kabir's finding [finding:t1-data-analyst], which reviewers then revised");
+    expect(s).toContain("Caveat: it built on an earlier draft of Data Detective's finding [finding:t1-data-analyst], which reviewers then revised");
     expect(s).toContain(REVISED);
   });
 
@@ -726,7 +726,7 @@ describe("runTurn: the Chief drafts the answer while the last reviews finish", (
     const { events, runtime } = s;
     const start = idx(events, is("agent_start", "chief-of-staff", (e) => e.task === "Writing the answer"));
     expect(start).toBeLessThan(idx(events, is("review")));
-    expect(events[start + 1]).toMatchObject({ type: "agent_status", agent: "chief-of-staff", text: "Drafting the answer while Isha finishes reviewing" });
+    expect(events[start + 1]).toMatchObject({ type: "agent_status", agent: "chief-of-staff", text: "Drafting the answer while Number Cruncher finishes reviewing" });
     expect(idx(events, is("text", "chief-of-staff"))).toBeGreaterThan(lastReview(events));
     expect(idx(events, is("path"))).toBeGreaterThan(lastReview(events));
     expect(reviewsWhenProposed).toBe(1); // a write waits for the release
@@ -884,7 +884,7 @@ describe("runTurn: content findings hold the whole deliverable", () => {
     const { events, run, runtime } = setup({
       "chief-of-staff:plan": plan([{ agent: "content-strategist", task: "A week of posts and a reel script" }]),
       "content-strategist:work": { calls: [{ name: "content_performance" }], ...finding(big) },
-      "content-strategist:revise": finding(`${big}\n(Dev: fixed one hook.)`),
+      "content-strategist:revise": finding(`${big}\n(Wordsmith: fixed one hook.)`),
       "copy-editor:review": { structured: { verdict: "fix", note: "Hook 3 is vague." } },
       "fact-checker:review": { structured: { verdict: "ok", note: "ok" } },
       "chief-of-staff:synthesis": { text: "Here it is [[content:reel-1]]." },
@@ -893,7 +893,7 @@ describe("runTurn: content findings hold the whole deliverable", () => {
     const fs = events.filter(is("finding", "content-strategist")) as Array<Extract<AgentEvent, { type: "finding" }>>;
     expect(fs[0]!.text.length).toBeGreaterThan(FINDING_MAX_CHARS);
     expect(fs[0]!.text).toContain("Script, 0-3s");
-    expect(fs[1]!.text).toContain("(Dev: fixed one hook.)");
+    expect(fs[1]!.text).toContain("(Wordsmith: fixed one hook.)");
     expect(runtime.runs.find((r) => r.phase === "work" && r.agentId === "content-strategist")!.prompt).toContain(`at most ${CONTENT_FINDING_MAX_CHARS} characters`);
   });
 });
@@ -920,7 +920,7 @@ describe("runTurn: a reviewer that did not run", () => {
     const out = await run();
     expect(runtime.runs.filter((r) => r.agentId === "fact-checker" && r.phase === "review")).toHaveLength(2);
     const p = runtime.runs.find((r) => r.phase === "synthesis")!.prompt;
-    expect(p).toContain("Nisha (Fact Checker) could not check this finding");
+    expect(p).toContain("Fact Checker could not check this finding");
     expect(p).toMatch(/say plainly that .* was not fact-checked/);
     expect(events.some(is("agent_done", "fact-checker", (e) => e.ok === false))).toBe(true);
     expect(out.ok).toBe(true);
@@ -987,7 +987,7 @@ describe("remember is gated in code", () => {
   it("asksToRemember: explicit requests in English, Hindi and Hinglish; not questions about what we remember", () => {
     for (const q of [
       "Remember that I prefer weekly summaries on Mondays", "Please note that our fiscal year starts in April", "Make a note: no ads on Sundays",
-      "Keep in mind that Rohan owns paid search", "Don't forget I'm away next week", "From now on, keep answers short",
+      "Keep in mind that Growth Hacker owns paid search", "Don't forget I'm away next week", "From now on, keep answers short",
       "yaad rakhna ki mujhe weekly summary Monday ko chahiye", "note kar lo: Sunday ko ads band", "dhyan rakhna ki budget fixed hai",
       "याद रखना कि मुझे छोटे जवाब पसंद हैं", "नोट कर लो कि रविवार को विज्ञापन बंद",
     ]) expect(asksToRemember(q), q).toBe(true);
@@ -1061,7 +1061,7 @@ describe("runTurn: usage", () => {
     const review = runtime.runs.find((r) => r.phase === "review")!;
     expect(review.maxTurns).toBe(2);
     expect(review.prompt).toContain("The tool data behind the cited ids");
-    expect(review.prompt).toContain('- metric_trend (Kabir): {"metric":"signups","points":[{"week":"2026-10-05","value":41},{"week":"2026-09-28","value":55}]}');
+    expect(review.prompt).toContain('- metric_trend (Data Detective): {"metric":"signups","points":[{"week":"2026-10-05","value":41},{"week":"2026-09-28","value":55}]}');
     expect(review.prompt).toContain("You have at most 1 round of lookups");
     expect(out.agents).toEqual(["chief-of-staff", "data-analyst", "coe-lead"]);
   });
@@ -1151,7 +1151,7 @@ describe("runTurn: a direct chat with one agent", () => {
     // its own roster tools, plus show_path to draw how the answer was reached
     expect(direct.tools.map((t) => t.name)).toEqual(expect.arrayContaining(["content_performance", "show_path"]));
     expect(direct.tools.map((t) => t.name)).not.toContain("metric_trend");
-    expect(direct.system).toContain("You are Tara");
+    expect(direct.system).toContain("You are Miss Influencer");
     // the streamed answer is attributed to the agent the owner asked, not the Chief
     const text = events.filter((e): e is Extract<AgentEvent, { type: "text" }> => e.type === "text" && !e.reset);
     expect(text.length).toBeGreaterThan(0);
