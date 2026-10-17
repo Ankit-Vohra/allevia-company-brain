@@ -1,5 +1,5 @@
 // A fake Composio: makes connect links, holds connected accounts per user id, runs scripted tools, records every call.
-import type { ComposioAccount, ComposioClient, ComposioToolInfo, ComposioToolkitInfo } from "../../src/connections/composio.js";
+import type { ComposioAccount, ComposioClient, ComposioToolInfo, ComposioToolkitInfo, ProxyRequest, ProxyResponse } from "../../src/connections/composio.js";
 
 export class FakeComposio implements ComposioClient {
   calls: Array<{ op: string; args: unknown }> = [];
@@ -39,6 +39,23 @@ export class FakeComposio implements ComposioClient {
       return { ok: true, data: r ?? null };
     }
     return { ok: true, data: this.results.get(o.tool) ?? null };
+  }
+  /** endpoint (no query) -> the provider's answer: data (status 200), { status, data } for another status, or an Error (Composio failed). */
+  proxies = new Map<string, (req: ProxyRequest) => unknown>();
+  async proxy(o: ProxyRequest & { accountId: string; userId: string }): Promise<ProxyResponse> {
+    this.calls.push({ op: "proxy", args: o });
+    const a = this.accounts.get(o.accountId);
+    if (!a || a.userId !== o.userId) return { status: 401, data: { error: "no such account" } };
+    const h = this.proxies.get(o.endpoint);
+    if (!h) return { status: 404, data: null };
+    const r = h(o);
+    if (r instanceof Error) throw r;
+    if (r && typeof r === "object" && "status" in (r as object) && typeof (r as { status: unknown }).status === "number") return r as ProxyResponse;
+    return { status: 200, data: r ?? null };
+  }
+  /** Every proxy call the fake saw, in order. */
+  proxied(): Array<ProxyRequest & { accountId: string; userId: string }> {
+    return this.calls.filter((c) => c.op === "proxy").map((c) => c.args as ProxyRequest & { accountId: string; userId: string });
   }
   /** Every execute the fake saw (of one tool when named), in order: the tool, the arguments and whose account ran it. */
   executed(tool?: string): Array<{ tool: string; args: Record<string, unknown>; accountId: string; userId: string }> {

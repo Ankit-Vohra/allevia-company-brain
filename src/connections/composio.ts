@@ -40,12 +40,19 @@ export interface ComposioClient {
   account(id: string): Promise<ComposioAccount | null>;
   deleteAccount(id: string): Promise<void>;
   execute(o: { tool: string; accountId: string; userId: string; args: Record<string, unknown> }): Promise<{ ok: boolean; data: unknown; error?: string }>;
+  /** Calls the provider's own API with the connected account's token (Composio's proxy), for what its toolkit has no action for. */
+  proxy(o: ProxyRequest & { accountId: string; userId: string }): Promise<ProxyResponse>;
   /** The actions a toolkit offers. */
   tools(toolkit: string, search?: string): Promise<ComposioToolInfo[]>;
   /** Composio's catalogue, searched by words. */
   searchToolkits(query: string): Promise<ComposioToolkitInfo[]>;
   toolkit(slug: string): Promise<ComposioToolkitInfo | null>;
 }
+
+/** One call to a provider's API through Composio's proxy. `query` becomes query parameters. */
+export interface ProxyRequest { endpoint: string; method: "GET" | "POST"; body?: Record<string, unknown>; query?: Record<string, string> }
+/** `status` is the provider's own HTTP status; `data` its JSON answer. */
+export interface ProxyResponse { status: number; data: unknown }
 
 export class ComposioError extends Error {
   override name = "ComposioError";
@@ -105,6 +112,15 @@ export function realComposioClient(apiKey: string, fetchFn: FetchFn = realFetch)
       const success = r.body.successful === true || r.body.success === true;
       return { ok: success, data: r.body.data ?? null, ...(success ? {} : { error: str(r.body.error) || "The tool did not work." }) };
     },
+    async proxy(o) {
+      const parameters = Object.entries(o.query ?? {}).map(([name, value]) => ({ name, value, type: "query" }));
+      const r = await call("/tools/execute/proxy", {
+        method: "POST",
+        body: { endpoint: o.endpoint, method: o.method, connected_account_id: o.accountId, user_id: o.userId, ...(o.body ? { body: o.body } : {}), ...(parameters.length ? { parameters } : {}) },
+      });
+      if (r.status === 404 && r.body.status === undefined) throw new ComposioError("Composio has no proxy at this address.", 404);
+      return { status: typeof r.body.status === "number" ? r.body.status : r.status, data: r.body.data ?? null };
+    },
     async tools(toolkit, search) {
       const q = new URLSearchParams({ toolkit_slug: toolkit, limit: "100", ...(search ? { search } : {}) });
       return items((await call(`/tools?${q}`)).body).map((t): ComposioToolInfo => {
@@ -134,6 +150,18 @@ const READS = /(GET|LIST|FETCH|FIND|SEARCH|READ|QUERY|RETRIEVE|VIEW|LOOKUP|FREE_
 export function classifyTool(slug: string): "read" | "act" {
   const s = slug.toUpperCase();
   return READS.test(s) && !CHANGES.test(s) ? "read" : "act";
+}
+
+// The proxy reaches a provider's whole API with the owner's token, so it only ever reads: a GET, or a POST to a call that is a
+// query by its nature (a report, a search analytics query). Anything else is refused before it leaves Allevia.
+const PROXY_READ_POSTS = /(:runReport|:batchRunReports|:runPivotReport|:runRealtimeReport|\/searchAnalytics\/query)$/;
+
+export function proxyIsRead(method: string, endpoint: string): boolean {
+  let url: URL;
+  try { url = new URL(endpoint); } catch { return false; }
+  if (url.protocol !== "https:") return false;
+  const m = method.toUpperCase();
+  return m === "GET" || (m === "POST" && PROXY_READ_POSTS.test(url.pathname));
 }
 
 // ---------- the Google calls on Composio, so the agents' Calendar, Gmail tools work on either path ----------
@@ -227,6 +255,8 @@ export const COMPOSIO_OFF_WORDS = (what: string) => `Connecting ${what} isn't sw
 
 export interface ComposioSession {
   execute(tool: string, args: Record<string, unknown>): Promise<unknown>;
+  /** A read-only call to the provider's own API with this business's connected account (proxyIsRead); answers its JSON. */
+  proxy(req: ProxyRequest): Promise<unknown>;
   listTools(search?: string): Promise<ComposioToolInfo[]>;
   toolkit: string;
   // present for the Google toolkits: the same session shape the own-Google path gives
@@ -345,8 +375,27 @@ export class ComposioConnector implements Connector {
       if (!out.ok) throw new ComposioToolError(out.error ?? "The tool did not work.", 502);
       return out.data;
     };
+    const proxy = async (req: ProxyRequest): Promise<unknown> => {
+      const where = (() => { try { const u = new URL(req.endpoint); return `${u.host.split(".")[0]}${u.pathname}`; } catch { return "a bad address"; } })();
+      const op = `proxy ${req.method} ${where}`;
+      if (!proxyIsRead(req.method, req.endpoint)) {
+        await ctx.audit(op, false, "refused: the proxy only reads");
+        throw new ComposioError(`${this.info.name} can only be read this way.`, 403);
+      }
+      let out: ProxyResponse;
+      try {
+        out = await client.proxy({ ...req, accountId: r.accountId, userId: r.userId });
+      } catch (e) {
+        await ctx.audit(op, false, e instanceof Error ? e.message : "failed");
+        throw e;
+      }
+      const ok = out.status >= 200 && out.status < 300;
+      await ctx.audit(op, ok, ok ? undefined : `answered ${out.status}`);
+      if (!ok) throw new ComposioToolError(`${this.info.name} answered ${out.status}.`, out.status);
+      return out.data;
+    };
     return fn({
-      toolkit: this.entry.toolkit, execute, listTools: (q) => client.tools(this.entry.toolkit, q),
+      toolkit: this.entry.toolkit, execute, proxy, listTools: (q) => client.tools(this.entry.toolkit, q),
       apis: composioGoogleApis(execute), accessToken: "composio", meta: {}, allowed: () => true,
       ...(this.entry.toolkit === "google_search_console" ? { query: (q: SearchQuery) => searchConsoleQuery(execute, q) } : {}),
     } as ComposioSession & GoogleSession);
