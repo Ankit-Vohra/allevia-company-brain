@@ -211,7 +211,13 @@ describe("server: studio (integration)", () => {
     expect(s).toEqual({ note: "the front", caption: "Demo photo: made in code.", url: "/api/mini/studio/sample.jpg" });
     const img = await app.request(s.url);
     expect(img.headers.get("content-type")).toBe("image/jpeg");
-    expect((await app.request("/api/other/studio/sample")).status).toBe(404);
+    expect((await app.request("/api/other/studio/sample")).status).toBe(404); // no such business
+    // a business with no sample photo: a plain null, not a 404 that shows as an error on every Studio visit
+    const none = h.make({ studio: async () => ({ ...wiring, sample: () => null }) });
+    const r = await none.request("/api/mini/studio/sample");
+    expect(r.status).toBe(200);
+    expect(await r.json()).toBeNull();
+    expect((await none.request("/api/mini/studio/sample.jpg")).status).toBe(404);
   });
 
   it("the last run is not offered when its photo file is gone (the page shows the upload, not empty frames)", async () => {

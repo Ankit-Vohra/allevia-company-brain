@@ -389,7 +389,8 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
   app.get("/api/:t/studio/sample", async (c) => {
     const { reg } = await h.tenantOf(c);
     const s = (await wiring()).sample?.(reg.slug);
-    if (!s) h.fail(404, "No sample photo has been prepared for this business.");
+    // most businesses have none: a plain "no" (null), not a 404 that shows as an error in every Studio visit's console
+    if (!s) return c.json(null);
     return c.json({ note: s!.note, caption: s!.caption, url: `/api/${encodeURIComponent(reg.slug)}/studio/sample.jpg` });
   });
 
