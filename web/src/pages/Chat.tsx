@@ -71,8 +71,14 @@ export default function ChatPage() {
     if (pending?.sessionId && pending.sessionId !== sessionId) nav(chatPath(who, pending.sessionId), { replace: true });
   }, [pending?.sessionId, sessionId, who, nav]);
   // a link into a thread under the wrong person is sent to the right one
+  // (not while a new thread is still being set up: it has no turns and no person yet, and a question to Kabir jumped to
+  // "Your team" until his answer was saved)
   useEffect(() => {
-    if (thread.detail && whoOfThread(thread.detail) !== who && sessionId) nav(chatPath(whoOfThread(thread.detail), sessionId), { replace: true });
+    const d = thread.detail;
+    if (!d || !sessionId) return;
+    const owner = whoOfThread({ agent: d.agent ?? d.running?.agent });
+    if (!d.turns.length && owner === TEAM) return;
+    if (owner !== who) nav(chatPath(owner, sessionId), { replace: true });
   }, [thread.detail, who, sessionId, nav]);
 
   // who is working this moment: the live runs in this tab and the threads the server says are running
