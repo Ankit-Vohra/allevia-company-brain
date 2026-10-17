@@ -3,7 +3,7 @@ id: carousel-post
 name: Swipe post (carousel) craft
 when: "A post people swipe through, slide by slide: steps, a list, a before and after, or myth versus fact"
 agents: [content-strategist]
-tools: [playbook, content_performance, search, get_entity, neighbors, propose_action]
+tools: [what_worked, playbook, content_performance, search, get_entity, neighbors, propose_action]
 output: creates
 makes: a slide-by-slide swipe post with the text for each slide, a caption and hashtags
 needs_ok: true
@@ -14,7 +14,7 @@ needs_ok: true
 0. Purpose first. Before making anything, fill the one-line brief (open the creative-brief skill): the goal (sell, announce, show a feature, get enquiries or bookings, build trust), the one product, service, feature or offer it promotes (by its name in the records), for whom, the one message, the call to action and where it runs. Infer each from the records and the owner's words; ask at most three quick questions with suggested answers only for what matters and is unknown; if the owner says "just make it", pick the strongest product or offer for their goal and say why. Open the piece with the brief in one line.
 1. Check that the job suits a carousel. It suits four jobs: a process (steps in order), a list (three to seven items that stand alone), a before and after, and myth versus fact. It does not suit a single announcement or a mood: hand those to a one-photo post (Instagram post skill) or a reel (reel script skill) and say so in one line.
 2. Learn the brand's rules. Call `playbook` with topic "hooks" and channel "instagram" for the hook formulas, and `playbook` with topic "voice" and the same channel for how this brand talks. The owner's own rules in that list come first.
-3. Learn what worked here. Call `content_performance` with channel "instagram", days 90, limit 10. Find the items whose format is a carousel: saves and shares are the signal that matters for swipe posts (people save steps and lists), more than views. Take the hook family of the best one. If no carousel is recorded, say "no swipe posts to learn from yet" and use the best hook family from the other formats.
+3. Learn what worked here. Call `what_worked` first (the business's top and weakest posts by real numbers, the edit rules, recent decisions and the main goal's call to action), then `content_performance` with channel "instagram", days 90, limit 10. Find the items whose format is a carousel: saves and shares are the signal that matters for swipe posts (people save steps and lists), more than views. Take the hook family of the best one. If no carousel is recorded, say "no swipe posts to learn from yet" and use the best hook family from the other formats.
 4. Collect the facts. Call `search` for the process, product, project or topic, then `get_entity` on the best hits, and `neighbors` on the main one to find linked steps, materials, products, people or audiences. List the facts you hold before you plan any slide: each slide needs one fact or one clear action from the record.
 5. Count the facts and set the slide count (rule of thumb):
    - Five or more distinct facts: 5 to 8 slides.

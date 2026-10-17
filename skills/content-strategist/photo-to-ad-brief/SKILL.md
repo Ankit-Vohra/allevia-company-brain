@@ -3,7 +3,7 @@ id: photo-to-ad-brief
 name: Photo-to-ad brief
 when: "The owner sends a photo (product, finished project, dish, room) and wants an ad or poster made from it"
 agents: [content-strategist]
-tools: [playbook, content_performance, search, get_entity, propose_action]
+tools: [what_worked, playbook, content_performance, search, get_entity, propose_action]
 output: creates
 makes: a one-page ad brief a designer or the studio can build from, with headline, offer, sizes and what must not change in the photo
 needs_ok: true
@@ -14,7 +14,7 @@ needs_ok: true
 0. Purpose first. Before making anything, fill the one-line brief (open the creative-brief skill): the goal (sell, announce, show a feature, get enquiries or bookings, build trust), the one product, service, feature or offer it promotes (by its name in the records), for whom, the one message, the call to action and where it runs. Infer each from the records and the owner's words; ask at most three quick questions with suggested answers only for what matters and is unknown; if the owner says "just make it", pick the strongest product or offer for their goal and say why. Open the piece with the brief in one line.
 1. Say what the photo is and what it can carry. Open the record of the thing in it (`search`, then `get_entity`): name, price, place, year, material. The photo proves one thing; pick that one claim ("handmade in small batches", "finished in six weeks") from facts the record holds, never from what the picture seems to show.
 2. Pick the one offer or action: visit, book, order, call, ask for a quote. One ad, one action. If the owner gave a price or discount, copy it exactly; if the offer has dates or limits that the record lacks, write "[you tell us: the offer and its last date]".
-3. Check how this business's ads and posts were judged before: `content_performance` for the best two items and their hook family; `playbook` (topic "voice" and "hooks", channel the ad will run on) for voice rules and rules learned from the owner's edits. Reuse the hook family, not the words.
+3. Check how this business's ads and posts were judged before: `what_worked` (top and weakest, edit rules, the main goal), then `content_performance` for the best two items and their hook family; `playbook` (topic "voice" and "hooks", channel the ad will run on) for voice rules and rules learned from the owner's edits. Reuse the hook family, not the words.
 4. Write the text that goes on the image: a headline of about 7 words or fewer, an optional line of at most 12 words, and the action. Fewer words win on a phone. Spell the business name, price and phone or web address exactly as the record has them.
 5. Set the formats: 1:1 (feed), 4:5 (feed, more screen), 9:16 (stories and reels; keep text out of roughly the top 14% and bottom 20%, where the app puts its own buttons). Say which crop of the photo each size uses and whether the subject survives the crop.
 6. List what must never change in the photo: the logo, any printed text, faces, and the shape, proportions and colours of the product or the building. Allowed: crop, brightness, tidying clutter. Anything that would change what the customer gets is not allowed.

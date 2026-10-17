@@ -9,7 +9,7 @@
 // (the cards raised, which become `proposal` events).
 import { z } from "zod";
 import type { DeliverableOption, ToolResult } from "../../../shared/contracts.js";
-import { goalOccasion, placementFormat, resolveBrief, type BriefInput, type NeedsBrief } from "../../creative/brief.js";
+import { goalOccasion, placementFormat, resolveBrief, type Brief, type BriefInput, type NeedsBrief } from "../../creative/brief.js";
 import { makeImages, type Aspect } from "../../creative/image.js";
 import { channelFor, makePoster, PosterRefused } from "../../creative/poster.js";
 import { approvingWords, planPublish, platformOfChannel, upgradeToPublish } from "../../publish/offer.js";
@@ -36,8 +36,8 @@ function summary(kind: "poster" | "image" | "clip", s: SavedDeliverable, notes: 
 
 const optionLines = (options: DeliverableOption[]) => options.map((o) => ({ label: o.label, id: o.assetId, check: o.badge === "ok" ? "checked" : o.badge === "held" ? "held back" : "not double-checked", note: o.note, ...(o.layout ? { layout: o.layout } : {}), madeWithAiPicture: o.aiEdited }));
 
-const SAY = "Tell the owner, in plain words: what you made and how many options, which one you suggest, what the check found, and any note below. Say it is waiting for their OK (the Approve button) and that nothing was posted anywhere. Cite the option ids. Never describe a picture you were not given.";
-const SAY_POSTS = (words: string) => `Tell the owner, in plain words: what you made and how many options, which one you suggest, what the check found, and any note below. Say it is waiting for their OK (the Approve button) and that approving POSTS it, because the card is a post: ${words} Nothing has been posted yet. Cite the option ids. Never describe a picture you were not given.`;
+const SAY = "Tell the owner, in plain words: what you made and how many options, which one you suggest, what the check found, and any note below (the \"For: …\" and \"Built from: …\" lines word for word). Say it is waiting for their OK (the Approve button) and that nothing was posted anywhere. Cite the option ids. Never describe a picture you were not given.";
+const SAY_POSTS = (words: string) => `Tell the owner, in plain words: what you made and how many options, which one you suggest, what the check found, and any note below (the "For: …" and "Built from: …" lines word for word). Say it is waiting for their OK (the Approve button) and that approving POSTS it, because the card is a post: ${words} Nothing has been posted yet. Cite the option ids. Never describe a picture you were not given.`;
 
 // When the made thing is for a channel the business has connected, its card becomes a post: approving posts it (after the OK, on that
 // exact picture and caption). Otherwise it stays a draft, and the owner is told why in one line (and where to connect the channel).
@@ -63,6 +63,11 @@ const BRIEF = z.object({
   offer: z.string().max(60).optional().describe("An offer exactly as the owner gave it, e.g. 20% off"),
 }).describe("The brief: what it is for and what it sells. Fill what the owner said; leave out what they didn't");
 
+// What the card says about the brief: what it is for and what it asks ("For: more app downloads · CTA: Download the app"), what it
+// was built from in the brain, and anything filled or changed. Never a silent "I assumed".
+const briefNotes = (b: Brief): string[] => [b.basis.forLine, b.basis.builtFrom, ...b.basis.notes];
+const briefData = (b: Brief) => ({ goal: b.goal, promoting: b.promoting, audience: b.audience, message: b.message, cta: b.cta, placement: b.placement, ...(b.aim ? { madeFor: b.aim } : {}), builtFrom: b.basis.builtFrom, ...(b.basis.learnings ? { learnings: b.basis.learnings } : {}) });
+
 // A brief with something missing: nothing is made, and the owner is asked at most three short questions with tap-to-answer options.
 function needsBrief(n: NeedsBrief) {
   const why = `To make this well I need: ${n.missing.join(", ")}.`;
@@ -84,7 +89,7 @@ async function runPoster(a: {
   refuseIfStopped(ctx, "make_poster");
   const d = ctx.creative;
   if (!d) return { data: { made: false, why: NOT_SET_UP }, nodes: [], edges: [], sources: [], note: NOT_SET_UP };
-  const r0 = await resolveBrief(ctx.graph, "poster", a.brief);
+  const r0 = await resolveBrief(ctx.graph, "poster", a.brief, { question: ctx.question ?? "" });
   if (!r0.ok) return needsBrief(r0.needs);
   const brief = r0.brief;
   const format = placementFormat(brief.placement, a.square === true);
@@ -98,15 +103,15 @@ async function runPoster(a: {
         cta: brief.cta, ...(a.details?.length ? { details: a.details } : {}),
       },
       format, occasion: goalOccasion(brief.goal), count: a.options ?? 2, ...(scenes.length ? { scenes } : {}), artwork, ...(a.caption ? { caption: a.caption } : {}),
-      promoted: brief.promoting, audience: brief.audience, goal: brief.goal,
+      promoted: brief.promoting, ...(brief.audience ? { audience: brief.audience } : {}), goal: brief.goal, basedOn: brief.basis.ids,
       ...(a.layouts?.length ? { layouts: a.layouts } : {}), ...(a.pictures?.length ? { pictures: a.pictures } : {}), ...(a.quote ? { quote: a.quote } : {}),
     }, d);
     const offer = await offerToPost(ctx, r.saved.approvalId, channelFor(format), "poster");
-    const ids = [...r.saved.options.map((o) => o.assetId), r.saved.approvalId, ...(brief.promoting.id ? [brief.promoting.id] : [])];
+    const ids = [...r.saved.options.map((o) => o.assetId), r.saved.approvalId, ...(brief.promoting.id ? [brief.promoting.id] : []), ...brief.basis.ids];
     const col = await nodesFor(ctx, ids);
-    const notes = [...r.notes, ...(r0.defaulted.length ? [`I assumed ${r0.defaulted.map((f) => `the ${f} (${f === "placement" ? brief.placement : brief[f as "goal"]})`).join(" and ")}.`] : []), ...(offer.note ? [offer.note] : [])];
+    const notes = [...briefNotes(brief), ...r.notes, ...(offer.note ? [offer.note] : [])];
     return col.result(ctx, {
-      made: true, kind: "poster", format, brief: { goal: brief.goal, promoting: brief.promoting, audience: brief.audience, message: brief.message, cta: brief.cta, placement: brief.placement },
+      made: true, kind: "poster", format, brief: briefData(brief),
       approvalId: r.saved.approvalId, recommended: r.saved.recommended, options: optionLines(r.saved.options), notes,
       imageEngineCredits: r.hfCredits, picturesMadeNow: r.generated, posted: false, waitingForOk: true, ...(offer.words ? { approvingPosts: offer.words } : {}), say: offer.words ? SAY_POSTS(offer.words) : SAY, deliverable: summary("poster", r.saved, notes),
       proposed: [{ recommendationId: r.saved.recommendationId, approvalId: r.saved.approvalId, title: r.saved.title }],
@@ -146,7 +151,7 @@ async function runImage(a: { brief: BriefInput; scene?: string; aspect?: string;
   refuseIfStopped(ctx, "generate_image");
   const d = ctx.creative;
   if (!d) return { data: { made: false, why: NOT_SET_UP }, nodes: [], edges: [], sources: [], note: NOT_SET_UP };
-  const r0 = await resolveBrief(ctx.graph, "image", a.brief);
+  const r0 = await resolveBrief(ctx.graph, "image", a.brief, { question: ctx.question ?? "" });
   if (!r0.ok) return needsBrief(r0.needs);
   const brief = r0.brief;
   const aspect: Aspect = (["1:1", "4:5", "9:16", "3:4"] as const).find((x) => x === a.aspect) ?? (brief.placement === "insta_story" || brief.placement === "reel" ? "9:16" : brief.placement === "flyer" ? "3:4" : "4:5");
@@ -154,10 +159,10 @@ async function runImage(a: { brief: BriefInput; scene?: string; aspect?: string;
   const r = await makeImages(ctx.graph, { tenant: ctx.tenant, businessId: businessId(ctx.tenant), agentId: ctx.agentId, turnId: ctx.turnId, now: ctx.now, question: ctx.question ?? "", scene, aspect, count: a.options ?? 2, ...(a.caption ? { caption: a.caption } : {}) }, d);
   if (!r.saved) return { data: { made: false, why: r.notes.join(" ") || "No picture was made.", nothingMadeNothingCharged: true, say: "Tell the owner exactly why, in plain words, and what they can do next. Do not describe a picture." }, nodes: [], edges: [], sources: [], note: r.notes.join(" ") };
   const offer = await offerToPost(ctx, r.saved.approvalId, aspect === "9:16" ? "instagram story" : aspect === "3:4" ? "print" : "instagram", "image");
-  const notes = [...r.notes, ...(offer.note ? [offer.note] : [])];
-  const col = await nodesFor(ctx, [...r.saved.options.map((o) => o.assetId), r.saved.approvalId]);
+  const notes = [...briefNotes(brief), ...r.notes, ...(offer.note ? [offer.note] : [])];
+  const col = await nodesFor(ctx, [...r.saved.options.map((o) => o.assetId), r.saved.approvalId, ...brief.basis.ids]);
   return col.result(ctx, {
-    made: true, kind: "image", approvalId: r.saved.approvalId, recommended: r.saved.recommended, options: optionLines(r.saved.options), notes, imageEngineCredits: r.hfCredits,
+    made: true, kind: "image", brief: briefData(brief), approvalId: r.saved.approvalId, recommended: r.saved.recommended, options: optionLines(r.saved.options), notes, imageEngineCredits: r.hfCredits,
     posted: false, waitingForOk: true, ...(offer.words ? { approvingPosts: offer.words } : {}), say: offer.words ? SAY_POSTS(offer.words) : SAY, deliverable: summary("image", r.saved, notes),
     proposed: [{ recommendationId: r.saved.recommendationId, approvalId: r.saved.approvalId, title: r.saved.title }],
   }, `Made ${r.made} picture${r.made === 1 ? "" : "s"}; waiting for the owner's OK. Nothing was posted.`);
@@ -184,10 +189,12 @@ async function runReel(a: { brief: BriefInput; idea?: string; seconds?: number; 
   refuseIfStopped(ctx, "make_reel_script_and_clip");
   const d = ctx.creative;
   if (!d) return { data: { made: false, why: NOT_SET_UP }, nodes: [], edges: [], sources: [], note: NOT_SET_UP };
-  const r0 = await resolveBrief(ctx.graph, "reel", a.brief);
+  const r0 = await resolveBrief(ctx.graph, "reel", a.brief, { question: ctx.question ?? "" });
   if (!r0.ok) return needsBrief(r0.needs);
   const brief = r0.brief;
-  const idea = a.idea?.trim() || `${brief.message}. It sells ${brief.promoting.name}${brief.promoting.summary ? ` (${brief.promoting.summary})` : ""} to ${brief.audience}; it ends with: ${brief.cta}.`;
+  // the reel is built from what worked here before: the top posts' hooks, what fell flat, the edit rules
+  const base = a.idea?.trim() || `${brief.message}. It sells ${brief.promoting.name}${brief.promoting.summary ? ` (${brief.promoting.summary})` : ""}${brief.audience ? ` to ${brief.audience}` : ""}${brief.aim ? `, for ${brief.aim}` : ""}; it ends with: ${brief.cta}.`;
+  const idea = brief.basis.learnings ? `${base} ${brief.basis.learnings}`.slice(0, 1200) : base;
   const r = await makeReel(ctx.graph, {
     tenant: ctx.tenant, businessId: businessId(ctx.tenant), agentId: ctx.agentId, turnId: ctx.turnId, now: ctx.now, question: `${ctx.question ?? ""}\n${brief.message}\n${brief.cta}\n${brief.promoting.name}`, idea, seconds: a.seconds ?? 5,
     ...(a.image_asset_id ? { imageAssetId: a.image_asset_id } : {}), makeClip: a.make_clip === true, ...(a.plan !== undefined ? { plan: a.plan } : {}),
@@ -203,15 +210,15 @@ async function runReel(a: { brief: BriefInput; idea?: string; seconds?: number; 
   const offers = await Promise.all([r.reel?.saved, r.clip.saved].filter((x): x is NonNullable<typeof x> => !!x).map((s) => offerToPost(ctx, s.approvalId, "instagram", "clip")));
   const offerWords = offers.find((o) => o.words)?.words;
   const offerNotes = [...new Set(offers.flatMap((o) => (o.note ? [o.note] : [])))];
-  const col = await nodesFor(ctx, [...(r.clip.saved?.options.map((o) => o.assetId) ?? []), ...(r.reel?.saved?.options.map((o) => o.assetId) ?? []), ...proposed.map((p) => p.approvalId)]);
+  const col = await nodesFor(ctx, [...(r.clip.saved?.options.map((o) => o.assetId) ?? []), ...(r.reel?.saved?.options.map((o) => o.assetId) ?? []), ...proposed.map((p) => p.approvalId), ...brief.basis.ids]);
   const price = r.clip.priceCredits;
   return col.result(ctx, {
-    made: true, kind: "reel", script: r.script.text, caption: r.script.caption, scriptWarnings: r.script.warnings,
+    made: true, kind: "reel", brief: briefData(brief), script: r.script.text, caption: r.script.caption, scriptWarnings: r.script.warnings,
     scriptCard: r.textCard?.approvalId ?? null,
     clip: { made: r.clip.made, ...(price !== null ? { priceInImageCredits: price } : {}), ...(r.clip.why ? { why: r.clip.why } : {}), ...(r.clip.saved ? { approvalId: r.clip.saved.approvalId, id: r.clip.saved.options[0]?.assetId } : {}) },
     ...(r.reel ? { reel: { status: r.reel.status, seconds: r.reel.seconds, priceInImageCredits: r.reel.priceCredits, spent: r.reel.spentCredits, ...(r.reel.why ? { why: r.reel.why } : {}), repaired: r.reel.repaired, check: r.reel.verdicts.map((v) => `${v.label}: ${v.badge}`), ...(r.reel.saved ? { approvalId: r.reel.saved.approvalId, id: r.reel.saved.options[0]?.assetId } : {}) } } : {}),
-    notes: [...r.notes, ...(r.reel?.notes ?? []), ...offerNotes], posted: false, waitingForOk: true, ...(offerWords ? { approvingPosts: offerWords } : {}),
-    say: `Give the owner the script word for word in order. Say what the reel draft is (made and checked, or priced and waiting for their OK on the price, or why not). Say plainly what the clip is: made (watch it before approving), or not made and why, with its price in credits when there is one.${offerWords ? ` Say that approving the reel or clip POSTS it, because the card is a post: ${offerWords} Nothing has been posted yet.` : " Nothing is posted."}`,
+    notes: [...briefNotes(brief), ...r.notes, ...(r.reel?.notes ?? []), ...offerNotes], posted: false, waitingForOk: true, ...(offerWords ? { approvingPosts: offerWords } : {}),
+    say: `Give the owner the "For: …" and "Built from: …" lines, then the script word for word in order. Say what the reel draft is (made and checked, or priced and waiting for their OK on the price, or why not). Say plainly what the clip is: made (watch it before approving), or not made and why, with its price in credits when there is one.${offerWords ? ` Say that approving the reel or clip POSTS it, because the card is a post: ${offerWords} Nothing has been posted yet.` : " Nothing is posted."}`,
     ...(r.reel?.saved ? { deliverable: summary("clip", r.reel.saved, r.reel.notes) } : r.clip.saved ? { deliverable: summary("clip", r.clip.saved, r.notes) } : {}), proposed,
   }, r.clip.made ? "Wrote the script and made the clip; waiting for the owner's OK." : "Wrote the script; waiting for the owner's OK. No clip was made.");
 }

@@ -3,7 +3,7 @@ id: ad-creative-and-copy
 name: Ad creative and copy
 when: "A paid ad, boosted post or poster: the picture, the headline, the copy and two versions to test"
 agents: [growth-marketer]
-tools: [content_performance, playbook, search, propose_action]
+tools: [what_worked, content_performance, playbook, search, propose_action]
 output: creates
 makes: an ad with picture direction, headline, copy and a second version to test, waiting for the owner's OK
 needs_ok: true
@@ -13,7 +13,7 @@ needs_ok: true
 
 0. Purpose first. Before making anything, fill the one-line brief (open the creative-brief skill): the goal (sell, announce, show a feature, get enquiries or bookings, build trust), the one product, service, feature or offer it promotes (by its name in the records), for whom, the one message, the call to action and where it runs. Infer each from the records and the owner's words; ask at most three quick questions with suggested answers only for what matters and is unknown; if the owner says "just make it", pick the strongest product or offer for their goal and say why. Open the piece with the brief in one line.
 1. Open this business's own ad skill first if it has one; it carries its audiences, proof and words. Then pick one audience, one product, one claim the records hold and one action. Use `search` for the product and the offer; an offer, a price or a date comes only from the records or the owner.
-2. Start from what earned attention here: `content_performance` (channel instagram, days 90) for the posts and reels with the highest multiple; their hook family is the first candidate for the ad's headline. `playbook` (topic "hooks", and kind "voice") gives the formulas and the brand's rules.
+2. Start from what earned attention here: `what_worked` (top and weakest posts and ads, edit rules, rivals' running ads, the main goal's call to action), then `content_performance` (channel instagram, days 90) for the posts and reels with the highest multiple; their hook family is the first candidate for the ad's headline. `playbook` (topic "hooks", and kind "voice") gives the formulas and the brand's rules.
 3. Write the headline as the conflict or the benefit in at most 7 words a stranger understands. A benefit is fine ("Staff near your shop"); a promised outcome or timing is not ("Staff today", "Guaranteed hires").
 4. Write the copy: one line of proof (a fact from the records), one line of what to do. Primary text up to about 125 characters so it shows before "more". Name the thing ("the app", "the studio"), never "it" alone. If the brand posts in two languages, the main line in the first, the same facts in the second.
 5. Direct the picture and the layout with the design-standard skill: the business's own photos or real app screens first (a generated scene only when none fits, specific to the business and its place), one subject, the words put on afterwards and kept clear of faces, a layout from the library that fits the job and is not the one used last; never ask a model to draw the logo, the app or text. The poster tool then measures, reviews and revises each version; pass on what its review still wanted.

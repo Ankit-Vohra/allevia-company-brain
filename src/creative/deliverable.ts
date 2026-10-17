@@ -51,6 +51,7 @@ export interface SaveRequest {
   usesBrand: string[];                 // BrandAsset ids used (logo, fonts)
   promotes?: string;                   // the graph node the brief sells (a product, a feature)
   guidedBy: string[];                  // BrandRule ids
+  basedOn?: string[];                  // what in the brain it was built from (the main goal, past posts, edit rules, decisions)
   notes: string[];
   hfCredits: number;
 }
@@ -158,6 +159,7 @@ export async function saveDeliverable(g: GraphHandle, deps: SaveDeps, request: S
     await upsertNode(g, { type: "Approval", id, name: `content_draft: ${r.title}`, props: { status: "pending", kind: "content_draft", title: r.title, payload: JSON.stringify(payload), recommendation: recId, studio: true, creative: true }, src, asOf }, deps.now);
     await upsertEdge(g, { from: recId, type: "PROPOSES", to: id, src, asOf }, deps.now);
     for (const s of saved) await upsertEdge(g, { from: recId, type: "EVIDENCED_BY", to: s.id, src, asOf }, deps.now);
+    for (const b of (r.basedOn ?? []).slice(0, 8)) await upsertEdge(g, { from: recId, type: "EVIDENCED_BY", to: b, src, asOf, props: { why: "built from" } }, deps.now).catch(() => undefined);
     await upsertEdge(g, { from: agentNodeId(deps.agentId), type: "PRODUCED", to: recId, src, asOf }, deps.now).catch(() => undefined);
     return id;
   });

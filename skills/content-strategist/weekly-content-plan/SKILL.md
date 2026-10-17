@@ -3,7 +3,7 @@ id: weekly-content-plan
 name: A week of posts (content plan)
 when: "What to post this week or this month: themes, one idea per day, the hook for each, and which format, from what has worked here"
 agents: [content-strategist]
-tools: [content_performance, playbook, search, research, propose_action]
+tools: [what_worked, content_performance, playbook, search, research, propose_action]
 output: creates
 makes: a day-by-day posting plan for a week with the theme, format, hook and caption line for each post
 needs_ok: true
@@ -13,7 +13,7 @@ needs_ok: true
 
 0. Purpose first. Fill the one-line brief (open the creative-brief skill): the goal for the week (bookings, enquiries, a launch, trust), the one service or offer it leans on (by its name in the records), for whom, the message and where it runs. Ask at most three quick questions with suggested answers; open the plan with the brief.
 1. Set three or four themes for this business, each with a share of the week. A small business usually needs: the work itself (finished looks, before and after, 30 to 40%), behind the scenes (the team, the making, 20 to 30%), helpful tips its customers ask about (20 to 30%), and the offer (no more than 1 or 2 posts in 7). Take the themes from what the business does (`search` for its services, products, team and recent projects), not from a template.
-2. Learn what worked here. `content_performance` with the channel and days 90: which formats and hook families brought views, saves, shares and enquiries. Lean the week towards them, and keep one slot to try something new. If little is recorded, say "not much to learn from yet" and plan from the themes.
+2. Learn what worked here. `what_worked` first (top and weakest posts, edit rules, decisions, the main goal), then `content_performance` with the channel and days 90: which formats and hook families brought views, saves, shares and enquiries. Lean the week towards them, and keep one slot to try something new. If little is recorded, say "not much to learn from yet" and plan from the themes.
 3. Learn the brand's rules: `playbook` with topic "hooks" and the channel for its hook formulas, and topic "voice" for how it talks. The owner's own rules come first.
 4. Check the calendar: a festival, a season, a school holiday or a local event in the week. Use `research` for a date you are not sure of ("When is Eid al-Adha in 2027?") and cite it.
 5. Plan one post per day the owner can keep up (three a week is better than seven that stop on Wednesday). For each: the day, the theme, the format (reel, swipe post, single photo, story), the first line (the hook, filled with a real fact from the records, never an empty formula), the one action (book, message, save) and what to film or photograph, said as a direction. Hand each one to the matching skill for the full draft (reel script, swipe post, Instagram post).

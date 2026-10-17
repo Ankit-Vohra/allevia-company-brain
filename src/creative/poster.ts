@@ -53,6 +53,7 @@ export interface PosterRequest {
   quote?: { text: string; by?: string; illustrative?: boolean };
   pair?: [string, string];
   reuseScenes?: string[];          // generated artwork already made for this business (Asset ids): used again, nothing new is paid for
+  basedOn?: string[];              // the brain nodes the brief was built from (the main goal, past posts, rules): the card is EVIDENCED_BY them
 }
 
 // The request could not be made as asked; `plain` says why in the owner's words and what to change.
@@ -242,7 +243,7 @@ export async function makePoster(g: GraphHandle, req: PosterRequest, deps: Creat
     kind: "poster", title, caption: req.caption?.trim() || captionOf(req.content), altText: alt(req.content), aspect: FORMATS[req.format].aspect === "9:16" ? "9:16" : FORMATS[req.format].aspect === "1:1" ? "1:1" : "4:5",
     channel: channelFor(req.format), format: req.format, request: req.question, options: opts, ...(parentId ? { parentId } : {}),
     usesBrand: usedBrand, guidedBy: kit.ids.rules, notes, hfCredits,
-    ...(req.promoted?.id ? { promotes: req.promoted.id } : {}),
+    ...(req.promoted?.id ? { promotes: req.promoted.id } : {}), ...(req.basedOn?.length ? { basedOn: req.basedOn } : {}),
   });
   return {
     saved, notes, hfCredits, generated, verdicts,
