@@ -67,6 +67,7 @@ import { testProvider, type BillingProvider } from "../billing/provider.js";
 import type { TenantOpts } from "../graph/tenants.js";
 import { checkupJobs, type CheckupJobs } from "../checkup/jobs.js";
 import * as reads from "./reads.js";
+import { maskResponse, readShowcaseIndex, resolveShowcaseId, showcaseIndex, showcaseRefusesQuery, showcaseView } from "./showcase.js";
 import { sse } from "./sse.js";
 import { LiveTurns, type LiveTurn, type LiveTurnsOpts } from "./turns.js";
 import { mountStudio, STUDIO_UPLOAD_PATH, studioDecisionHook, type StudioWiring } from "./studio.js";
@@ -88,6 +89,7 @@ export interface RegistryTenant {
   locale?: string;
   timeZone?: string;
   demo?: boolean;   // a public demo business (graph/tenants.ts setDemo): opens read-only without an owner link when ALLEVIA_AUTH=1
+  showcase?: boolean; // a real business shown to the public (setShowcase): a visitor's answers are masked (showcase.ts)
 }
 
 export interface OnboardStart {
@@ -287,6 +289,7 @@ export function createApp(deps: ServerDeps): Hono {
     }
     if (t.timeZone && !validTimeZone(t.timeZone)) delete t.timeZone;
     if (readOnly) t.readOnly = true;
+    if (readOnly && reg.showcase === true) t.showcase = true;
     return t;
   }
 
@@ -378,6 +381,18 @@ export function createApp(deps: ServerDeps): Hono {
     const reg = (await registry()).find((t) => t.slug === slug);
     if (reg?.demo === true) return requestView.run({ publicView: true }, next);
     throw new HttpError(401, privateMessage); // the same answer for a business that exists and one that does not
+  });
+  // A showcase (a real business shown to the public, showcase.ts): what a visitor gets from every route of that business goes
+  // through one filter, after the route has run, so no page can forget it. Its owner and members are let in above as
+  // themselves and get everything; a plain demo is not touched.
+  app.use("/api/:t/*", async (c, next) => {
+    const slug = c.req.param("t") ?? "";
+    if (RESERVED_SLUGS.includes(slug) || !isTenantSlug(slug) || !isPublic()) return next();
+    const reg = (await registry()).find((t) => t.slug === slug);
+    if (reg?.showcase !== true) return next();
+    const idx = await showcaseIndex(slug, async () => readShowcaseIndex(await deps.openGraph(slug), { name: reg.name, ...(reg.domain ? { domain: reg.domain } : {}) }), now());
+    await showcaseView.run(idx, next);
+    c.res = await maskResponse(c.res, idx);
   });
   // 64 KB everywhere except the Studio's photo upload (studio.ts) and the spreadsheet upload (routes/numbers.ts), which set their own limits
   const smallBodies = bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: "The request body is too large." }, 413) });
@@ -680,12 +695,14 @@ export function createApp(deps: ServerDeps): Hono {
     const q = (c.req.query("q") ?? "").trim();
     if (!q) return c.json([]);
     if (q.length > 200) throw new HttpError(400, "The search is too long (200 characters at most).");
+    if (showcaseRefusesQuery(q)) return c.json([]); // a showcase visitor searching for a customer's name finds nothing (showcase.ts)
     return c.json(await reads.searchGraph(g, reg.slug, q, await embedQuery(), now()));
   });
 
   app.get("/api/:t/node/:id", async (c) => {
     const { g } = await tenantOf(c);
-    const d = await reads.nodeDetail(g, c.req.param("id"));
+    const id = resolveShowcaseId(c.req.param("id")); // a showcase visitor taps a masked node (showcase.ts)
+    const d = id === null ? null : await reads.nodeDetail(g, id);
     if (!d) throw new HttpError(404, "No such node.");
     return c.json(d);
   });
@@ -701,7 +718,8 @@ export function createApp(deps: ServerDeps): Hono {
     const focus = c.req.query("focus") ?? "";
     if (!focus) throw new HttpError(400, "Say which node to focus on: ?focus=<id>.");
     const depth = Math.max(1, Math.min(2, Number(c.req.query("depth") ?? 1) || 1));
-    const data = await reads.focusGraph(g, focus, depth);
+    const id = resolveShowcaseId(focus);
+    const data = id === null ? null : await reads.focusGraph(g, id, depth);
     if (!data) throw new HttpError(404, "No such node.");
     return c.json(data);
   });

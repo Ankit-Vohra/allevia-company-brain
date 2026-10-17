@@ -22,6 +22,7 @@ import { plainName } from "../../util/plain.js";
 import { graphStory, type StoryAxis, type StoryBucket } from "../../graph/story.js";
 import { LIMITS, mapGraph } from "../reads.js";
 import { HttpError, errorMessage, type RouteCtx } from "../http.js";
+import { resolveShowcaseId, showcaseHides, showcaseRefusesQuery } from "../showcase.js";
 
 export type AtWorkStatus = "impact" | "nothing_depends" | "not_mapped" | "not_in_records";
 export interface Thing { id: string; name: string; type: string }
@@ -106,8 +107,14 @@ export function registerGraphWorkRoutes(app: Hono, rc: RouteCtx): void {
 
   app.get("/api/:t/graph/at-work", async (c) => {
     const { reg, g } = await rc.tenantOf(c);
-    const asked = (c.req.query("focus") ?? "").trim();
-    if (asked.length > 200) throw new HttpError(400, "That name is too long (200 characters at most).");
+    const raw = (c.req.query("focus") ?? "").trim();
+    if (raw.length > 200) throw new HttpError(400, "That name is too long (200 characters at most).");
+    // A showcase visitor (showcase.ts) names a masked node by its masked id. A private one asked for by its real id or name is
+    // "not in your records", in words that do not repeat what was asked (masked, the echo would say what the name is).
+    const byId = /^[a-z]+:/.test(raw);
+    const hidden = !!raw && (byId ? resolveShowcaseId(raw) === null : showcaseRefusesQuery(raw));
+    const asked = hidden ? "" : byId ? resolveShowcaseId(raw) ?? raw : raw;
+    const NOT_THERE = { asked: "", message: "I don't have that in your records.", suggestions: [] };
     const ctx: ToolContext = {
       graph: g, tenant: reg.slug, turnId: "brain-at-work", agentId: "librarian", asker: "person:owner", touched: new TouchedSet(),
       now: rc.now(), readOnly: true,
@@ -123,9 +130,9 @@ export function registerGraphWorkRoutes(app: Hono, rc: RouteCtx): void {
       part("most connected", () => run(important, { limit: 6 }), null),
       part("groups", () => run(topics, { limit: 4 }), null),
     ]);
-    const focusArg = asked || cands[0]?.id;
+    const focusArg = hidden ? undefined : asked || cands[0]?.id;
     let focus: GraphAtWorkDto["focus"] = null;
-    let notFound: GraphAtWorkDto["notFound"];
+    let notFound: GraphAtWorkDto["notFound"] = hidden ? NOT_THERE : undefined;
     if (focusArg) {
       const key = asked ? (/^[a-z]+:/.test(asked) ? { id: asked } : { query: asked }) : { id: focusArg };
       const [shallow, deep] = await Promise.all([run(impactOf, { ...key, depth: 1 }), run(impactOf, { ...key, depth: 4 })]);
@@ -133,8 +140,11 @@ export function registerGraphWorkRoutes(app: Hono, rc: RouteCtx): void {
       if (d.error) {
         if (d.notInRecords) {
           const sug = (d.suggestions as Thing[] | undefined) ?? [];
-          notFound = { asked, message: `I don't have "${asked}" in your records.`, suggestions: sug.slice(0, 4) };
+          notFound = { asked: raw, message: `I don't have "${raw}" in your records.`, suggestions: sug.slice(0, 4) };
         } else errors.push(String(d.error));
+      } else if (asked && showcaseHides(String(d.id), String(d.type))) {
+        // a visitor to a showcase cannot test whether a person or a customer is in the records
+        notFound = NOT_THERE;
       } else {
         const owners = await part("owner", () => run(whoOwns, { id: d.id as string }), null);
         const od = (owners?.data ?? {}) as { owners?: Thing[]; ownedVia?: Array<Thing & { via: Thing }> };
