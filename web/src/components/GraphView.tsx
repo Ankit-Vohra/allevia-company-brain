@@ -244,6 +244,16 @@ export default function GraphView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, pathLinks, size.w > 0, moving]);
 
+  // A drifting map never stops its engine, so onEngineStop never fits it: fit once the layout has settled, or the
+  // first loose frame is replaced by a small knot in the middle of the box (the founder saw it on Home, 17 Oct).
+  useEffect(() => {
+    if (!moving || !data.nodes.length) return;
+    const fitIfFree = () => { if (!focusId && !hl.size && !userMoved.current) fit(reducedMotion ? 0 : 700); };
+    const timers = [setTimeout(fitIfFree, 1500), setTimeout(fitIfFree, 4000)];
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moving, data.nodes.length, size.w, size.h]);
+
   // offscreen (scrolled away, a hidden tab): stop drawing until it is back
   useEffect(() => {
     const el = wrapRef.current;
