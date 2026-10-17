@@ -42,7 +42,9 @@ https://github.com/Ankit-Vohra/allevia-company-brain
 
 ## Demo video
 
-After the founder's green flag (#14).
+The form allows at most 3 minutes. The v2 demo is 2:12, with an ElevenLabs voice written to the finished picture. It is
+ready to upload, with a title, a description with chapters and a thumbnail. The founder uploads it (YouTube, unlisted is
+enough), then the link goes here and in the form.
 
 ## Live demo
 
