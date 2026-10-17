@@ -69,6 +69,27 @@ export interface DeliverableOption {
   aiEdited: boolean;                     // the artwork behind it came from an image model
 }
 
+// How a Studio picture or clip was made, read back from the business's graph (src/studio/lineage.ts; GET /api/:t/assets/:id/lineage).
+export interface LineageAsset {
+  id: string; name: string; kind: string; mediaType: string; label?: string; step?: string; status?: string; aiEdited: boolean;
+  model?: string; credits?: number; badge?: string; note?: string;
+}
+export interface LineageStep { from: string; to: string; step?: string }
+export interface Lineage {
+  root: LineageAsset | null;
+  /** The asset asked about, then its parents up to the owner's photo (nearest first). */
+  ancestors: LineageAsset[];
+  /** What was made from it (a clip from a variant), any depth. */
+  descendants: LineageAsset[];
+  steps: LineageStep[];
+  jobs: Array<{ assetId: string; jobId: string; model: string; credits: number; mode?: string; document: string }>;
+  spent: number;
+  rules: Array<{ assetId: string; ruleId: string; name: string }>;
+  reviews: Array<{ assetId: string; by: string; verdict: string; note: string }>;
+  cards: Array<{ approvalId: string; status: string; title: string }>;
+  posts: Array<{ contentId: string; assetId: string; name: string; status: string }>;
+}
+
 // An Asset node's role: the owner's upload, a generated or edited variant of it, or the approved final.
 export type AssetKind = "original" | "variant" | "final" | "poster" | "image" | "clip" | "artwork";
 // Tara's call on an uploaded photo (product design §6, step 3).

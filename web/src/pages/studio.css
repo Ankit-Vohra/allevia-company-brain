@@ -124,8 +124,9 @@
   .worklog, .studio-error, .studio-stop { order: 2; }
   .variants { order: 3; }
   .approve { order: 4; }
-  .tara { order: 5; }
-  .studio-empty { order: 6; }
+  .lineage { order: 5; }
+  .tara { order: 6; }
+  .studio-empty { order: 7; }
 }
 @media (max-width: 480px) {
   .variants { gap: 6px; }
@@ -158,3 +159,26 @@
 .brand-lib-files img { width: 100%; height: 90px; object-fit: contain; background: #00000008; border-radius: 8px; }
 .brand-lib-icon { height: 90px; display: grid; place-items: center; background: #00000008; border-radius: 8px; }
 .brand-lib-drop { cursor: pointer; }
+
+/* ---------- how this was made: four short steps on a thin rail ---------- */
+.lineage { gap: var(--space-xs); }
+.lineage-steps { list-style: none; margin: 0; padding: 0; display: grid; }
+.lineage-step { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: var(--space-xs); padding-bottom: var(--space-xs); }
+.lineage-step:not(:last-child)::before { content: ""; position: absolute; left: 8px; top: 18px; bottom: 0; width: 1.5px; background: var(--color-rule); }
+.lineage-dot { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--color-rule); background: var(--color-card); color: var(--color-muted); }
+.lineage-step.is-done .lineage-dot { background: var(--color-ok-soft); border-color: var(--color-ok); color: var(--color-ok); }
+.lineage-step.is-waiting .lineage-dot { border-color: var(--color-accent-ink); color: var(--color-accent-ink); }
+.lineage-body { display: grid; gap: 6px; min-width: 0; }
+.lineage-line { margin: 0; font-size: var(--text-sm); color: var(--color-ink-2); line-height: 1.4; text-wrap: pretty; }
+.lineage-line b { color: var(--color-ink); font-weight: 600; margin-right: 4px; }
+.lineage-step.is-none .lineage-line, .lineage-step.is-none .lineage-line b { color: var(--color-muted); }
+.lineage-pics { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lineage-pics li { display: grid; grid-template-columns: 44px auto; grid-template-rows: auto auto; column-gap: 6px; align-items: center; font-size: var(--text-xs); color: var(--color-muted); }
+.lineage-pics img { grid-row: 1 / 3; width: 44px; height: 44px; object-fit: cover; border-radius: var(--radius-sm); background: var(--color-paper-2); box-shadow: 0 0 0 1px var(--color-rule); }
+.lineage-pics li.is-chosen img { box-shadow: 0 0 0 2px var(--color-ok); }
+.lineage-pics li.is-held img { opacity: 0.6; }
+.lineage-pics b { color: var(--color-ink); font-weight: 600; align-self: end; }
+.lineage-pics small { align-self: start; font-size: var(--text-xs); }
+.lineage-more { font-size: var(--text-xs); color: var(--color-ink-2); }
+.lineage-more summary { cursor: pointer; color: var(--color-muted); width: max-content; }
+.lineage-more ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }

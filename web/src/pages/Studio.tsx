@@ -10,6 +10,7 @@ import { useNavigate } from "react-router";
 import type { AgentEvent, AssessmentOverlay } from "@shared/contracts";
 import { api, getMode, getPublicMode, type StudioLatest } from "../api";
 import { AgentAvatar, agentDef } from "../components/bits";
+import { AssetLineage } from "../components/AssetLineage";
 import { BrandLibrary } from "../components/BrandLibrary";
 import { Icon } from "../components/Icon";
 import { useApp } from "../state/app";
@@ -452,6 +453,10 @@ export default function StudioPage() {
               )}
               {failure && <p className="studio-error" role="alert">{failure}</p>}
             </article>
+          )}
+
+          {hasRun && f.done && !running && f.originalId && (
+            <AssetLineage tenant={tenant.id} rootId={f.originalId} refreshKey={`${refresh}|${approvalStatus}|${approved?.contentId ?? ""}|${clipUrl ?? ""}`} />
           )}
 
           {!hasRun && !running && (

@@ -21,7 +21,7 @@ export interface StudioLatest {
     approval: { id: string; status: string; result: string | null; contentId: string | null } | null;
   };
 }
-import type { AgentMode, CapabilityState, DirectivePreview, DiscordHome, LearnedRuleDto, ProgramScorecard } from "@shared/contracts";
+import type { AgentMode, CapabilityState, DirectivePreview, DiscordHome, LearnedRuleDto, Lineage, ProgramScorecard } from "@shared/contracts";
 import type {
   ConnectionRow, ConnectionsPage,
   PostView, AgentDetail, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, GoalSetup, GraphData, LearningFeed, LiveTurn, NodeDetail,
@@ -334,6 +334,11 @@ export const api = {
     return getJson(`/api/${enc(t)}/studio/clip`, {
       method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body),
     });
+  },
+  /** GET /api/:t/assets/:id/lineage: how a Studio picture was made, read from the graph (the photo, the options, the OK, the post). Null when there is none. */
+  async assetLineage(t: string, id: string): Promise<Lineage | null> {
+    if (mode === "mock") return null;
+    return getOrNull<Lineage>(`/api/${enc(t)}/assets/${enc(id)}/lineage`);
   },
   async studioSample(t: string): Promise<{ note: string; caption: string; url: string } | null> {
     if (mode === "mock") return null;

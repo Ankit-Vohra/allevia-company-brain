@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
-import type { AgentEvent } from "../../shared/contracts.js";
+import type { AgentEvent, Lineage } from "../../shared/contracts.js";
 import { upsertNode } from "../../src/graph/upsert.js";
 import type { StudioWiring } from "../../src/server/studio.js";
 import { FakeEngine } from "../../src/studio/engine.js";
@@ -14,6 +14,7 @@ import { AssetStore } from "../../src/studio/store.js";
 import { FakeVision } from "../../src/studio/vision.js";
 import { studioSample } from "../../src/studio/wiring.js";
 import { facadePhoto, TARA_ANSWER } from "../studio/fixtures.js";
+import { lineageStory } from "../../web/src/lib/lineage.js";
 import { harness, post, sseEvents, type Harness } from "./harness.js";
 
 describe("server: studio (integration)", () => {
@@ -75,6 +76,18 @@ describe("server: studio (integration)", () => {
     expect(latest.run.assetId).toBe(assets[0]!.assetId);
     expect(latest.run.approval).toMatchObject({ id: proposal.approvalId, status: "pending", contentId: null });
 
+    // the Studio page's "How this was made", read from the graph's lineage route: before the OK it waits for it
+    const readStory = async () => {
+      const res = await app.request(`/api/mini/assets/${encodeURIComponent(assets[0]!.assetId)}/lineage`);
+      expect(res.status).toBe(200);
+      return lineageStory(await res.json() as Lineage, (id) => (id === "fact-checker" ? "Nisha" : undefined));
+    };
+    const before = await readStory();
+    expect(before.steps.map((x) => [x.key, x.state])).toEqual([["photo", "done"], ["options", "done"], ["approved", "waiting"], ["posted", "none"]]);
+    expect(before.steps[0]!.assets[0]!.id).toBe(assets[0]!.assetId);
+    expect(before.steps[1]!.assets.map((a) => a.label)).toEqual(["A", "B"]);
+    expect(before.steps[1]!.assets.every((a) => !a.chosen)).toBe(true);
+
     // approve variant B (Nisha passed it) with the caption as written
     const ok = await post(app, "/api/mini/studio/approve", { approvalId: proposal.approvalId, variantId: assets[2]!.assetId });
     expect(ok.status).toBe(200);
@@ -87,6 +100,13 @@ describe("server: studio (integration)", () => {
     const after = await (await app.request("/api/mini/studio/latest")).json() as typeof latest;
     expect(after.run.approval).toMatchObject({ status: body.status, contentId: body.contentId });
     expect((await post(app, "/api/mini/studio/approve", { approvalId: proposal.approvalId })).status).toBe(409);
+
+    // and after it: the photo, the two options with B chosen, the OK, the draft post
+    const story = await readStory();
+    expect(story.steps.map((x) => [x.key, x.state])).toEqual([["photo", "done"], ["options", "done"], ["approved", "done"], ["posted", "done"]]);
+    expect(story.steps[1]!.assets.find((a) => a.chosen)?.id).toBe(assets[2]!.assetId);
+    expect(story.steps[2]!.line).toBe("You chose option B.");
+    expect(story.steps[3]!.line).toBe("Saved as a draft post. Nothing was posted.");
   }, 60_000);
 
   it("a Studio card approved from the general Approvals route still becomes a draft post", async () => {

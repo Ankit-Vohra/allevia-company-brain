@@ -7,6 +7,7 @@
 //   Nisha -REVIEWED-> Asset{verdict}                     her check; Approval -> Action -> Content -USES_ASSET-> Asset   the OK and the post
 // `assetLineage` walks it: up through DERIVED_FROM to the photo it all started from, down to what was made from it, and out to
 // the job, the cost, the rules, the review, the card and the post, so "how was this ad made and what did it cost" is a read.
+import type { Lineage, LineageAsset, LineageStep } from "../../shared/contracts.js";
 import type { GraphHandle } from "../graph/client.js";
 import { addObservation, upsertEdge, upsertNode } from "../graph/upsert.js";
 import { isoDate } from "../util/time.js";
@@ -54,25 +55,7 @@ export async function recordGeneration(g: GraphHandle, r: GenerationRecord): Pro
 
 // ---------- reading the chain back ----------
 
-export interface LineageAsset {
-  id: string; name: string; kind: string; mediaType: string; label?: string; step?: string; status?: string; aiEdited: boolean;
-  model?: string; credits?: number; badge?: string; note?: string;
-}
-export interface LineageStep { from: string; to: string; step?: string }
-export interface Lineage {
-  root: LineageAsset | null;
-  /** The asset asked about, then its parents up to the owner's photo (nearest first). */
-  ancestors: LineageAsset[];
-  /** What was made from it (a clip from a variant), any depth. */
-  descendants: LineageAsset[];
-  steps: LineageStep[];
-  jobs: Array<{ assetId: string; jobId: string; model: string; credits: number; mode?: string; document: string }>;
-  spent: number;
-  rules: Array<{ assetId: string; ruleId: string; name: string }>;
-  reviews: Array<{ assetId: string; by: string; verdict: string; note: string }>;
-  cards: Array<{ approvalId: string; status: string; title: string }>;
-  posts: Array<{ contentId: string; assetId: string; name: string; status: string }>;
-}
+export type { LineageAsset, LineageStep, Lineage };
 
 const MAX_HOPS = 6;
 
