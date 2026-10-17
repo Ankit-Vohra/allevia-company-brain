@@ -43,6 +43,7 @@ export const TOOL_META: ToolMeta[] = [
   read("cypher", "knowledge", "Runs a read-only question over the records"),
   { name: "recall", domain: "memory", mode: "read", cost: "free", needsOk: false, summary: "Recalls what the owner already told the team" },
   { name: "remember", domain: "memory", mode: "write", cost: "free", needsOk: false, summary: "Saves something the owner asked the team to remember" },
+  { name: "meetings_read", domain: "memory", mode: "read", cost: "free", needsOk: false, summary: "Reads what was decided in a meeting and who does what by when" },
   // skills: every agent can open its own skill packs (handed out by the orchestrator, not a toolkit)
   { name: "use_skill", domain: "knowledge", mode: "read", cost: "free", needsOk: false, summary: "Opens one of the agent's skills (how this kind of work is done here)" },
   { name: "show_path", domain: "answer", mode: "read", cost: "free", needsOk: false, summary: "Draws how the answer was reached" },
@@ -109,6 +110,7 @@ export const TOOLKITS: Toolkit[] = [
   { id: "library", label: "Library: decisions, who knows, topics", domain: "knowledge", tools: ["trace_decision", "who_knows", "topics", "important"] },
   { id: "history", label: "How things changed", domain: "knowledge", tools: ["history"] },
   { id: "memory", label: "What the owner told the team", domain: "memory", tools: ["recall", "remember"] },
+  { id: "meetings", label: "Meetings: what was decided and who does what", domain: "memory", tools: ["meetings_read"] },
   { id: "answer", label: "Show how we got this", domain: "answer", tools: ["show_path"] },
   { id: "proposals", label: "Ask for an OK", domain: "answer", tools: ["propose_action"] },
   { id: "numbers", label: "Numbers over time", domain: "analytics", tools: ["metric_trend"] },

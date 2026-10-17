@@ -18,6 +18,8 @@ const SPEC_TOOLS = [
   "connections_available", "connection_tools", "connection_read", "connection_act",
   // the Sales desk: enquiries waiting, the pipeline, leads and deals in the records
   "enquiries_read", "crm_read", "crm_write",
+  // the business's meetings: what was decided and who does what
+  "meetings_read",
   // posting to the owner's own channels, after their OK
   "publish_post", "publish_status", "publish_cancel",
 ];

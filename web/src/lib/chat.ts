@@ -5,6 +5,7 @@ import type { AgentEvent, AgentId, AgentMode, SkillView, SourceRef, TurnChecks }
 import { PLAIN_TOOLS } from "../../../shared/plain-tools.js";
 import { AGENTS, agentById } from "../../../shared/roster.js";
 import { LEGACY_NAMES } from "../../../shared/legacy-names.js";
+import { SAMPLE_MEETING_ASK, SAMPLE_MEETING_TENANT } from "../../../shared/sample-meeting.js";
 import { STARTERS } from "./starters.js";
 import { humanDates } from "./words.js";
 
@@ -257,6 +258,13 @@ export function startersFor(agent: AgentId, skills: readonly SkillView[] | undef
   if (on.length) return on.slice(0, max);
   const a = agentById(agent);
   return (a?.handles ?? []).slice(0, max).map((h) => ({ id: h, label: h.replace(/^./, (c) => c.toUpperCase()), prompt: `Help me with ${h}.` }));
+}
+
+// ---------------------------------------------------------------- remember a meeting
+
+/** What "Remember a meeting" puts in the box: the request, then room to paste the notes (the demo coffee shop gets its sample call). */
+export function meetingPrefill(tenantId: string): string {
+  return tenantId === SAMPLE_MEETING_TENANT ? SAMPLE_MEETING_ASK : "Remember this meeting:\n\n";
 }
 
 // ---------------------------------------------------------------- tone

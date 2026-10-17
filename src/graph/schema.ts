@@ -243,6 +243,9 @@ export const MAPPER_PATTERNS: Pattern[] = [
   // posting (src/publish): the account a post went from is a Channel of its own (channel:instagram:cafe), PART_OF the platform's
   // channel (channel:instagram), so two accounts on one platform are two nodes and the platform's numbers stay on one
   ...pat("Channel", "PART_OF", "Channel"),
+  // "remember this meeting" (src/agent/meeting.ts): a decision taken in a meeting is PART_OF it, so "what did we decide in the
+  // meeting on Friday" is one hop (its tasks FOLLOWS_UP the meeting, an edge the sales records already use)
+  ...pat("Decision", "PART_OF", "Meeting"),
 ];
 
 const ALLOWED = new Set([...ALLOWED_PATTERNS, ...MAPPER_PATTERNS].map(([f, r, t]) => `${f}|${r}|${t}`));

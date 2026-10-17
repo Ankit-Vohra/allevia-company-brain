@@ -51,7 +51,7 @@ export const AGENTS: AgentDef[] = ([
     id: "chief-of-staff", name: "The Chief", title: "Chief of Staff", department: "leadership", model: "sonnet",
     persona: "Reads the request, checks what we already know, sends work to the right people, then writes one clear answer with sources.",
     handles: ["every request", "morning brief", "final answers"],
-    toolkits: ["lookup", "explore", "memory", "answer", "proposals", "creative", "brand", "copywriting", "posting", "research", "calendar", "inbox", "connections"],
+    toolkits: ["lookup", "explore", "memory", "meetings", "answer", "proposals", "creative", "brand", "copywriting", "posting", "research", "calendar", "inbox", "connections"],
     sprite: { skin: "#C68B59", hair: "#1B1B2F", shirt: "#1F2A6B", accent: "#C8A23D" },
   },
   {
@@ -123,22 +123,22 @@ export const AGENTS: AgentDef[] = ([
   {
     id: "ops-manager", name: "Taskmaster", title: "Ops Manager", department: "ops", model: "haiku",
     persona: "Tracks what's pending, who owns it, and what is waiting on the owner.",
-    handles: ["what's pending", "who owns", "approvals", "follow-ups"],
-    toolkits: ["ops", "lookup", "sql", "proposals", "calendar", "inbox", "connections"], extras: ["recall"],
+    handles: ["what's pending", "who owns", "approvals", "follow-ups", "what's pending from a meeting"],
+    toolkits: ["ops", "meetings", "lookup", "sql", "proposals", "calendar", "inbox", "connections"], extras: ["recall"],
     sprite: { skin: "#F1C27D", hair: "#3B3B3B", shirt: "#1D5C7A", accent: "#E0E1DD" },
   },
   {
     id: "sales-lead", name: "Deal Closer", title: "Sales Lead", department: "sales", model: "sonnet",
     persona: "Answers every new enquiry fast, offers real times from the calendar, books the call once you say OK, and follows up so no lead goes quiet.",
     handles: ["new enquiries", "leads", "reply to a customer", "book a call", "meetings", "follow up", "stalled deals", "pipeline"],
-    toolkits: ["lookup", "sql", "proposals", "history", "sales", "calendar", "inbox", "connections"], extras: ["recall", "neighbors"],
+    toolkits: ["lookup", "sql", "proposals", "history", "sales", "meetings", "calendar", "inbox", "connections"], extras: ["recall", "neighbors"],
     sprite: { skin: "#B5764A", hair: "#1A1210", shirt: "#2F7D4F", accent: "#F6E27F" },
   },
   {
     id: "librarian", name: "Memory Keeper", title: "Librarian", department: "knowledge", model: "haiku",
     persona: "Traces decisions to their sources, knows who knows what, and keeps facts current.",
-    handles: ["why did we", "who knows", "history", "sources"],
-    toolkits: ["library", "history"], extras: ["find_paths", "search"],
+    handles: ["why did we", "who knows", "history", "sources", "what we decided in a meeting"],
+    toolkits: ["library", "meetings", "history"], extras: ["find_paths", "search"],
     sprite: { skin: "#E0AC69", hair: "#6F4E37", shirt: "#7A6A1F", accent: "#FFF3B0" },
   },
 ] as AgentInput[]).map(staff);

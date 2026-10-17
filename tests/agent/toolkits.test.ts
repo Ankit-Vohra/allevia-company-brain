@@ -31,10 +31,13 @@ const ADDED: Record<string, string[]> = {
   "data-analyst": ["research", ...PUBLIC_DATA, "website_checkup", "ai_visibility", "keyword_ideas", "ga4_report", "gsc_report", "ads_report", ...CONN],
   "growth-marketer": ["research", ...PUBLIC_DATA, "website_checkup", "ai_visibility", "ga4_report", "gsc_report", "ads_report", ...CONN],
   "tech-lead": ["website_checkup", "ai_visibility", "keyword_ideas"],
-  "chief-of-staff": ["make_poster", "generate_image", "make_reel_script_and_clip", "get_brand_asset", "write_copy", ...POSTING, "research", "calendar_free_slots", "calendar_book", "gmail_draft", "gmail_send", "gmail_inbox", ...CONN],
+  "chief-of-staff": ["make_poster", "generate_image", "make_reel_script_and_clip", "get_brand_asset", "write_copy", ...POSTING, "research", "calendar_free_slots", "calendar_book", "gmail_draft", "gmail_send", "gmail_inbox", ...CONN, "meetings_read"],
   "content-strategist": ["write_copy", ...POSTING, "get_brand_asset", "research", ...PUBLIC_DATA, ...CONN],
   "coe-lead": ["ga4_report", "gsc_report", ...CONN],
-  "ops-manager": ["calendar_free_slots", "calendar_book", "gmail_draft", "gmail_send", "gmail_inbox", ...CONN],
+  "ops-manager": ["calendar_free_slots", "calendar_book", "gmail_draft", "gmail_send", "gmail_inbox", ...CONN, "meetings_read"],
+  // what was decided in a meeting and who does what ("remember this meeting")
+  "sales-lead": ["meetings_read"],
+  librarian: ["meetings_read"],
 };
 
 describe("toolkits", () => {

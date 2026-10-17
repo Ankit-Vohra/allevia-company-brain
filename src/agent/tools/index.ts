@@ -27,6 +27,7 @@ import { aiVisibility, keywordIdeas, websiteCheckup } from "./website.js";
 import { CONNECTION_TOOLS } from "./connections.js";
 import { SALES_TOOLS } from "./sales.js";
 import { PUBLISH_TOOLS } from "./publish.js";
+import { meetingsRead } from "./meetings.js";
 
 export const ALL_TOOLS: AlleviaTool[] = [
   search, getEntity, neighbors, findPaths, traceDecision, whoOwns, whoKnows, impactOf, important, topics, metricTrend,
@@ -44,6 +45,8 @@ export const ALL_TOOLS: AlleviaTool[] = [
   ...SALES_TOOLS,
   // posting to the owner's own Instagram, Facebook Page and LinkedIn after their OK, now or at a time (src/publish)
   ...PUBLISH_TOOLS,
+  // the business's meetings: what was decided and who does what (the notes "remember this meeting" saved, src/agent/meeting.ts)
+  meetingsRead,
 ];
 
 const BY_NAME = new Map(ALL_TOOLS.map((t) => [t.name, t]));
