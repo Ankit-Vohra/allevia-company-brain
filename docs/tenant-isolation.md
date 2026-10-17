@@ -291,6 +291,42 @@ It cannot do three things, and prints them as a to-do: remove the Discord channe
 providers (Composio, Google) whose sealed tokens it deleted, and expire the old backups.
 (`src/tenant/lifecycle.ts`, `src/cli/tenant.ts`, `tests/security/tenant-lifecycle.test.ts`.)
 
+### Moving a business to another server
+
+```
+# on the old server (the founder's Mac, on FalkorDB Cloud)
+npm run cli -- tenant:export aamdani ./aamdani.jsonl
+# copy the file, and the connections, to the new server
+scp ./aamdani.jsonl <new-server>:<allevia>/
+rsync -a <data>/connectors/aamdani/ <new-server>:<allevia data>/connectors/aamdani/
+# on the new server, run with the same ALLEVIA_CONNECTOR_KEY and COMPOSIO_API_KEY as the old one
+npm run cli -- tenant:import ./aamdani.jsonl                              # refuses if aamdani is already there
+npm run cli -- tenant:import ./aamdani.jsonl --replace                    # overwrites it with the file
+npm run cli -- tenant:import ./aamdani.jsonl --as aamdani_copy            # under another id
+npm run cli -- auth:issue aamdani                                          # owner links are not carried: issue new ones
+```
+
+**Import** is the mirror of export. It reads the whole file back first (the same check as export) and changes nothing if it is
+not whole, or if any file in it would land outside the business's own folders. It refuses a business that is already on
+the server (a registry entry, a graph or files) unless `--replace`, which clears that business's graph, Tenant row, Discord
+mapping and files first; its owner links, accounts and sealed connection tokens stay. Then it writes the graph through the
+same import as `db:import` (labels in order, Floats and vectors typed, indexes and constraints; read back against the file's
+digest), the Tenant row exactly as exported (its `demo` and `showcase` flags included) and the Discord area, channels and
+post records, and every file (each checked against its size and hash before it is put in place). Last it counts it all
+again: the graph's nodes and edges, the Tenant row field by field, the Discord rows, every file on disk.
+
+What it does not carry, because the export deliberately never holds it:
+- **owner links**: the export has their labels and dates but no hash, so none would open. Issue new ones with `auth:issue`.
+- **Discord invites**: no join code in the export. The area, channels and post records are restored (for the same hub).
+- **connections**: the sealed tokens are not in the export. The operator copies `data/connectors/<id>/` to the new server
+  and runs it with the same `ALLEVIA_CONNECTOR_KEY` (and `ALLEVIA_CONNECTOR_KEY_PREVIOUS`, if set) and `COMPOSIO_API_KEY`;
+  the connection then works there as it did. A token is sealed for its business's id, so after `--as` the owner connects
+  again.
+
+`--as <id>` names the graph and the folders for the new id (a path segment that was the old id becomes the new one); the
+Business node in the graph keeps its id, which the Tenant row's `businessId` names, and the Discord mapping is left out (its
+channels belong to the old id's area). (`importTenant` in `src/tenant/lifecycle.ts`, `tests/security/tenant-import.test.ts`.)
+
 ## A hosted demo
 
 A deployment that shows one business to the public and keeps the rest private:
@@ -306,6 +342,38 @@ A deployment that shows one business to the public and keeps the rest private:
    talks plain http to the app.
 `tests/security/hosted-demo.test.ts` runs the real server over HTTP through exactly this.
 
+### Showing a real business: `auth:demo <id> --showcase`
+
+A plain demo shows everything read-only, which is right for a sample business (Shiftly, Blue Tokai) and wrong for a real
+one, whose graph holds its inbox, its customers and its files. `auth:demo <id> --showcase` marks a real business as a
+showcase: it is a demo (read-only, no link needed) and, for a visitor without membership or an owner link, every answer of
+every `/api/<id>/...` route goes through one filter (`src/server/showcase.ts`), applied in `app.ts` after the route has run,
+so no page can forget it. Its owner and members are let in as themselves and see everything. `--showcase --off` leaves a
+plain demo; `auth:demo <id> --off` makes it private again.
+
+| Hidden or masked for a visitor | Kept |
+|---|---|
+| People's names, emails and phone numbers (the business's own name and website stay) | Numbers and their trends, Today's note, insights and ideas |
+| Customers (Client) and leads: "a customer", "a lead"; deals, meetings and messages likewise | The brain map's shape and links, with masked labels |
+| Messages: subjects and bodies; meetings: titles and guests | Goals, the website check, public posts and their drafts, ads data |
+| Email and meeting cards waiting for an OK: recipients, subject and text | The answer paths (their nodes masked the same way) |
+| Documents from private sources (uploads, the inbox, the owner's notes, typed instructions) and every passage | The team's work: who did what, checks, counts |
+
+How: an index of what is private (every Person, Lead, Client, Deal, Meeting and Message, and every Document from a private
+source), read with `GRAPH.RO_QUERY` at most once a minute. A reference to a private thing gets a masked id
+(`lead:hidden-3f2a9c0d1e4b`, the same within a server run, so the map's links hold and a tap opens its card, which keeps only
+plain facts such as stage, status and value) and a placeholder name; its summary goes. Every string has emails, phone
+numbers and private ids taken out and the names and subjects of private things replaced. Keys holding contact details
+(`email`, `phone`, `cc`, `guests`, ...) are dropped wherever they are. Search and "what breaks if it stops" find nothing for a
+private name (a visitor cannot test who is a customer), and a private node asked for by its real id is a 404. A recorded
+thread's stream is masked event by event with the typing dropped (the final answer arrives whole and is scrubbed as one
+piece); a tool call's raw arguments are dropped. Live chat for a visitor is off, as on every demo: a question replays a
+recorded thread or says so. `tests/security/showcase.test.ts` runs the real server with `ALLEVIA_AUTH=1` and checks a
+visitor, the owner and a plain demo with the same private data.
+
+What it cannot promise: a name the index does not know (one written only in free text, never a Person, Lead or Client) is
+not masked unless it is an email or a phone number. Read the showcase as a visitor once before sharing its address.
+
 ## Running it
 
 ```
@@ -313,6 +381,7 @@ npm run cli -- auth:issue kestrel_oak --label "Priya's laptop" --days 90   # pri
 npm run cli -- auth:list [kestrel_oak]                                     # ids, labels, dates; never the link
 npm run cli -- auth:revoke tok_ab12cd34ef                                  # or: auth:revoke --tenant kestrel_oak
 npm run cli -- auth:demo demo_seed                                         # public read-only demo; --off to undo
+npm run cli -- auth:demo aamdani --showcase                                # a real business shown with people and messages masked
 npm run cli -- auth:issue --operator --label ops                           # the operator's link
 npm run cli -- auth:users [kestrel_oak]                                    # accounts, their businesses and roles; never a hash
 npm run cli -- auth:invite kestrel_oak --role owner                        # an owner account for a business set up before accounts
@@ -327,5 +396,5 @@ ALLEVIA_AUTH=1 npm run cli -- serve
 > server, no tool or message can pick another, and a new business starts from code, never from another's data.
 > With `ALLEVIA_AUTH=1` every business needs a signed-in member (passwords as scrypt hashes, sessions as hashes, owner and
 > member roles) or its private owner link (random, hashed, revocable); only marked demo businesses open without one,
-> read-only.
+> read-only, and a real business shown as a showcase has its people, customers and messages masked for visitors.
 > The proof is in `tests/security/`; the open items, ranked, are in this page.
