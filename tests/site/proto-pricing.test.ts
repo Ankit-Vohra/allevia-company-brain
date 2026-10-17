@@ -12,7 +12,7 @@ const PAGE_FOLDERS = ["a", "product", "integrations", "team", "pricing", "securi
 
 /** A page as the build writes it: every `<!-- @section name -->` swapped for the shared section. */
 function built(folder: string): string {
-  const html = readFileSync(`${PROTO}${folder}/index.html`, "utf8");
+  const html = readFileSync(folder === "index" ? `${PROTO}index.html` : `${PROTO}${folder}/index.html`, "utf8");
   return html.replace(/<!--\s*@section\s+([\w-]+)\s*-->/g, (_m, name: string) => {
     const make = SECTIONS[name];
     if (!make) throw new Error(`no section ${name}`);
@@ -52,7 +52,7 @@ describe("the pricing page is hidden (the default)", () => {
 
   it("has no plans on the home page, and keeps the Brain Snapshot button", () => {
     expect(SECTIONS.plans!("a")).toBe("");
-    const home = built("a");
+    const home = built("index");
     expect(home).not.toMatch(/Simple monthly plans|Start at \$100|id="plans"|pmini/);
     expect(home).toContain("Start with a free Brain Snapshot.");
     expect(home).toContain('href="/contact/#snapshot"');
@@ -77,7 +77,7 @@ describe("with ALLEVIA_SITE_PRICING=1 the pricing page comes back everywhere", (
     expect(protoPages()).toContain("pricing");
     expect(SECTIONS.nav!("pricing")).toContain('<a href="/pricing/" aria-current="page">Pricing</a>');
     expect(SECTIONS.footer!("a")).toContain('<a href="/pricing/">Pricing</a>');
-    const home = built("a");
+    const home = built("index");
     expect(home).toContain("Simple monthly plans.");
     expect(home).toContain('href="/pricing/"');
     expect(home).toContain("Start with a free Brain Snapshot.");

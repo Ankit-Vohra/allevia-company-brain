@@ -46,7 +46,7 @@ export function footer(): string {
   return `<footer class="foot band band--ink on-ink">
   <div class="wrap foot__grid">
     <div class="foot__about">
-      <a class="brand" href="/a/" aria-label="Allevia, home">allevia</a>
+      <a class="brand" href="/" aria-label="Allevia, home">allevia</a>
       <p class="foot__line">Your company’s brain, and the team that runs on it.</p>
       <p class="foot__mail"><a href="mailto:${COMPANY.email.general}">${esc(COMPANY.email.general)}</a></p>
       <p><a class="btn btn-gold btn-sm" href="/contact/#demo">Book a demo</a></p>
@@ -76,6 +76,6 @@ export const SECTIONS: Record<string, (page: string) => string> = {
   ...LEGAL_SECTIONS,
   "hero-a": () => heroA(),
   "product-diagram": () => productDiagram(),
-  nav: (page) => nav(navItems().some((n) => n.id === page) ? page : "", "/a/"),
+  nav: (page) => nav(navItems().some((n) => n.id === page) ? page : "", "/"),
   footer: () => footer(),
 };

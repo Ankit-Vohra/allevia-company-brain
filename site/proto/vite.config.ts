@@ -2,7 +2,7 @@
 //   dev:     npx vite --config proto/vite.config.ts            (port 5191)
 //   build:   npx vite build --config proto/vite.config.ts      (to site/dist-proto)
 //   preview: npx vite preview --config proto/vite.config.ts    (port 4191)
-// Pages: / (goes to /a/), /a/ (home with the 3D brain), /product/, /integrations/, /team/,
+// Pages: / (home with the 3D brain; its script is a/main.ts), /a/ (an old address that forwards to /), /product/, /integrations/, /team/,
 // /security/, /faq/, /contact/, /about/ and the legal pages (/privacy/, /terms/, /cookies/, /data-deletion/). /pricing/ is hidden for now: it is built, linked and served only with ALLEVIA_SITE_PRICING=1 (shared/flags.ts).
 // `<!-- @section name -->` in a page is
 // replaced at build time by the shared section (shared/sections.ts), so every page is complete HTML before any script runs.
