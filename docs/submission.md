@@ -38,7 +38,7 @@ founder's OK.
 
 ## Repository
 
-Public export repo (issue #12): to create.
+https://github.com/Ankit-Vohra/allevia-company-brain
 
 ## Demo video
 
