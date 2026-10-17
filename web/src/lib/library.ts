@@ -43,6 +43,7 @@ export function plainTitle(item: Pick<LibraryItem, "title" | "kind">): string {
     .replace(/^Variant [A-Z]{1,3}:\s*/i, "")
     .replace(/\s*\((?:[^()]*\b(?:Higgsfield|AI-made|AI-edited|local|adjusted locally)\b[^()]*)\)\s*$/i, "")
     .replace(/^(?:Photo|Video):\s*/i, "")
+    .replace(/^[A-Za-z ]*\b(?:poster|picture|image|story|reel):\s*(?=\S)/i, "") // "Instagram portrait poster: Diwali offer" (the kind says poster)
     .trim();
   if (!t || /^(?:Photo|Video) [0-9a-f]{6,}$/i.test(t)) return KIND_WORDS[item.kind];
   return t.charAt(0).toUpperCase() + t.slice(1);

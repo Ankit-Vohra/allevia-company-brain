@@ -49,6 +49,8 @@ describe("the Library grid", () => {
     expect(tileWords(POSTER, NOW)).toMatchObject({ title: "Dussehra greeting: option A", kind: "Poster", state: "Posted", date: "14 Oct" });
     expect(tileWords(CLIP, NOW)).toMatchObject({ title: "Clip from option B", kind: "Clip", credits: "7.5 credits" });
     expect(tileWords(VIDEO, NOW).title).toBe("Your video"); // a file name made of a hash is no title
+    expect(plainTitle({ kind: "poster", title: "Instagram portrait poster: Cook an evening shift this weekend: option A" })).toBe("Cook an evening shift this weekend: option A");
+    expect(plainTitle({ kind: "product-shoot", title: "Variant C: Premium ad (Higgsfield product photoshoot, AI-made)" })).toBe("Premium ad");
     expect(dayWords(Date.UTC(2025, 2, 3, 12), NOW)).toBe("3 Mar 2025");
     expect(creditWords(1)).toBe("1 credit");
     expect(creditWords(0)).toBeNull();
