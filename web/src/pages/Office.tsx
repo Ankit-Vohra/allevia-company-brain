@@ -341,7 +341,8 @@ export function OfficePage() {
                     </ul>
                   </>
                 )}
-                <p className="home-standup-head">{drafted.length ? standup.data.heading : "Nothing new worth your time today."}</p>
+                {/* under "Waiting for your OK", a quiet morning says nothing: "Nothing new worth your time" beside "11 things need you" read as a contradiction */}
+                {drafted.length > 0 && <p className="home-standup-head">{standup.data.heading}</p>}
                 {drafted.length > 0 && (
                   <ul className="home-standup-list">
                     {drafted.map((i) => (
