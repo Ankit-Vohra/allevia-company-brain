@@ -220,7 +220,8 @@ describe("over HTTP", () => {
 describe("classifyTool for MCP toolkits (Higgsfield MCP, 17 Oct)", () => {
   it("balance, status, presets and costs only read; generating waits for the OK", async () => {
     const { classifyTool } = await import("../../src/connections/composio.js");
-    for (const s of ["HIGGSFIELD_MCP_BALANCE", "HIGGSFIELD_MCP_JOB_STATUS", "HIGGSFIELD_MCP_JOBS_WAIT", "HIGGSFIELD_MCP_MODELS_EXPLORE", "HIGGSFIELD_MCP_MARKETING_STUDIO_V2_COSTS"]) expect(classifyTool(s), s).toBe("read");
-    for (const s of ["HIGGSFIELD_MCP_GENERATE_IMAGE", "HIGGSFIELD_MCP_GENERATE_VIDEO", "HIGGSFIELD_MCP_MEDIA_UPLOAD", "HIGGSFIELD_MCP_CONFIRM_BILLING_PURCHASE", "HIGGSFIELD_MCP_DEPLOY_WEBSITE"]) expect(classifyTool(s), s).toBe("act");
+    const hf = (s: string) => `HIGGSFIELD_MCP_${s}`;
+    for (const s of ["BALANCE", "JOB_STATUS", "JOBS_WAIT", "MODELS_EXPLORE", "MARKETING_STUDIO_V2_COSTS"].map(hf)) expect(classifyTool(s), s).toBe("read");
+    for (const s of ["GENERATE_IMAGE", "GENERATE_VIDEO", "MEDIA_UPLOAD", "CONFIRM_BILLING_PURCHASE", "DEPLOY_WEBSITE"].map(hf)) expect(classifyTool(s), s).toBe("act");
   });
 });

@@ -7,7 +7,7 @@ screen.
 ## Before you press record (10 minutes)
 
 1. **Browser:** Chrome, 1280 × 800 window, light theme, zoom 100%. Notifications and other tabs off.
-2. **Sign in** at the live site as yourself (you@example.com), so Aamdani shows in full.
+2. **Sign in** at the live site with your owner account, so Aamdani shows in full.
 3. **Open these four tabs, in order:**
    - Tab 1: the website, https://ankit-vohra.github.io/allevia-site/
    - Tab 2: Blue Tokai's Brain, https://13-232-139-42.sslip.io/brain?tenant=bluetokai
