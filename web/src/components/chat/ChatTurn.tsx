@@ -20,6 +20,7 @@ import type { RunView } from "../../state/derive";
 import type { Approval } from "../../types-ext";
 import type { TurnItem } from "./useThread";
 import { AnswerPath } from "./AnswerPath";
+import "./photo.css";
 
 const nameOf = (id: AgentId) => agentDef(id)?.name ?? id;
 const jobOf = (id: AgentId) => agentDef(id)?.title ?? "";
@@ -57,10 +58,13 @@ export function ChatTurn(p: TurnProps) {
   const how = howWeGotThis(turn.events, view.final);
   const ok = !!view.final && checksPass(view.final.checks);
   const cite = (id: string) => nav(`/brain?node=${encodeURIComponent(id)}`);
+  // a photo the owner sent with this message (a chat photo turn): shown in their own bubble
+  const sent = turn.events.find((e): e is Extract<typeof e, { type: "asset" }> => e.type === "asset" && e.kind === "original");
 
   return (
     <li className={`ct-turn${live ? " is-live" : ""}`}>
       <div className="ct-you">
+        {sent?.thumb && <img className="ct-you-photo" src={sent.thumb} alt="The photo you sent" loading="lazy" onError={(e) => { e.currentTarget.hidden = true; }} />}
         <p className="ct-you-text">{turn.question}</p>
         <p className="ct-you-meta">
           {turn.at && <span>{fmtDate(turn.at, true)}</span>}

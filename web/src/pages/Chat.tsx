@@ -9,12 +9,14 @@ import { AgentDrawer } from "../components/AgentDrawer";
 import { AgentAvatar, agentDef, fmtAgo } from "../components/bits";
 import { ChatTurn } from "../components/chat/ChatTurn";
 import { Customise } from "../components/chat/Customise";
+import { PhotoAttach, PhotoChip } from "../components/chat/PhotoAttach";
 import { useThread } from "../components/chat/useThread";
 import { Icon } from "../components/Icon";
 import { MicButton } from "../components/MicButton";
 import { APPROVALS_CHANGED } from "../components/TopBar";
 import { CHIEF, TEAM, type Who, chatPath, dotOf, dotWords, meetingPrefill, startersFor, threadsFor, whoFrom, whoOfThread, workingNow } from "../lib/chat";
 import { groupThreads } from "../lib/group";
+import { PHOTO_PLACEHOLDER, photoQuestion } from "../lib/library";
 import { useMedia } from "../lib/useMedia";
 import { useApp, useAsync } from "../state/app";
 import { runStore, useRunStore } from "../state/runs";
@@ -101,6 +103,8 @@ export default function ChatPage() {
   const [profile, setProfile] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [text, setText] = useState(() => params.get("q") ?? "");
+  // a photo attached with the paperclip: sent with the words, then made into a post by Miss Influencer (PhotoAttach)
+  const [photo, setPhoto] = useState<File | null>(null);
   useEffect(() => {
     if (!params.has("customise") && !params.has("q")) return;
     const next = new URLSearchParams(params);
@@ -111,14 +115,15 @@ export default function ChatPage() {
   useEffect(() => { setSheet(false); }, [who, sessionId]);
 
   const resting = !!person && (!person.enabled || person.mode === "off");
-  const send = useCallback((q: string) => {
-    const question = q.trim();
+  const send = useCallback((q: string, withPhoto?: File | null) => {
+    const question = withPhoto ? photoQuestion(q) : q.trim();
     if (!question || thread.running || resting) return;
     // an address for a conversation this business does not have starts a new one rather than failing
     const sid = sessionId && (thread.detail || thread.loading) ? sessionId : undefined;
-    const key = runStore.start(tenant.id, question, { sessionId: sid, ...(who !== TEAM ? { target: who } : {}) });
+    const key = runStore.start(tenant.id, question, { sessionId: sid, ...(who !== TEAM ? { target: who } : {}), ...(withPhoto ? { photo: withPhoto } : {}) });
     if (!sid) setPendingKey(key);
     setText("");
+    if (withPhoto) setPhoto(null);
   }, [thread.running, thread.detail, thread.loading, resting, tenant.id, sessionId, who]);
   // Home's ask box lands here as /chat/team?ask=…: the question is sent at once, and the address is cleaned so a reload does not
   // ask twice (the ref also covers React's double run of effects in development)
@@ -133,9 +138,9 @@ export default function ChatPage() {
     send(q);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const onSubmit = (e: FormEvent) => { e.preventDefault(); send(text); };
+  const onSubmit = (e: FormEvent) => { e.preventDefault(); send(text, photo); };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(text); }
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(text, photo); }
   };
 
   const patch = async (id: string, p: AgentPatch) => {
@@ -294,10 +299,12 @@ export default function ChatPage() {
           </div>
         ) : (
           <form className="chat-composer" onSubmit={onSubmit} aria-label={who === TEAM ? "Ask your team" : `Message ${nameOf(who)}`}>
+            {photo && <PhotoChip photo={photo} onRemove={() => setPhoto(null)} />}
+            <PhotoAttach tenantId={tenant.id} onPhoto={setPhoto} disabled={thread.running} />
             <label htmlFor="chat-q" className="visually-hidden">{who === TEAM ? "Your message to the team" : `Your message to ${nameOf(who)}`}</label>
             <textarea
               id="chat-q" ref={inputRef} className="chat-input" rows={1} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
-              placeholder={who === TEAM ? (sessionId ? "Ask a follow-up…" : `Ask ${tenant.name}'s team…`) : `Message ${nameOf(who)}…`}
+              placeholder={photo ? PHOTO_PLACEHOLDER : who === TEAM ? (sessionId ? "Ask a follow-up…" : `Ask ${tenant.name}'s team…`) : `Message ${nameOf(who)}…`}
               disabled={thread.running}
             />
             <MicButton locale={tenant.locale} value={text} onText={setText} disabled={thread.running} />
@@ -306,7 +313,7 @@ export default function ChatPage() {
                 <Icon name="stop" size={14} /> {thread.liveRun.stopping ? "Stopping…" : "Stop"}
               </button>
             ) : (
-              <button type="submit" className="btn btn-gold" disabled={!text.trim() || thread.running}>Send <Icon name="send" size={16} /></button>
+              <button type="submit" className="btn btn-gold" disabled={(!text.trim() && !photo) || thread.running}>Send <Icon name="send" size={16} /></button>
             )}
           </form>
         )}

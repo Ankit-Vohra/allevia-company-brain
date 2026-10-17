@@ -1,0 +1,28 @@
+/* ---------- the chat's photo attach (PhotoAttach, PhotoChip) and the photo in the owner's message ---------- */
+.ph-attach { position: relative; flex: none; align-self: flex-end; }
+.ph-attach-btn { width: 38px; height: 38px; padding: 0; color: var(--color-ink-2); }
+.ph-pop {
+  position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 20; width: min(280px, calc(100vw - 32px));
+  display: grid; gap: 6px; padding: 8px; border: var(--rule); border-radius: var(--radius-md); background: var(--color-card); box-shadow: var(--shadow-lift);
+  animation: fade-in var(--dur-short) var(--ease-out);
+}
+.ph-pop-add {
+  display: flex; gap: 10px; align-items: center; width: 100%; padding: 10px; border: 0; border-radius: 10px; background: transparent; color: var(--color-ink);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.ph-pop-add:hover:not(:disabled) { background: var(--color-paper-2); }
+.ph-pop-add:disabled { cursor: default; opacity: 0.6; }
+.ph-pop-add span { display: grid; gap: 2px; }
+.ph-pop-add b { font-weight: 600; font-size: var(--text-sm); }
+.ph-pop-add small { color: var(--color-muted); font-size: var(--text-xs); }
+.ph-pop-toggle { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-top: 1px solid var(--color-rule-2); font-size: var(--text-sm); color: var(--color-ink-2); cursor: pointer; }
+.ph-pop-problem { margin: 0 10px 4px; font-size: var(--text-xs); color: var(--color-bad); }
+
+/* the attached photo, above the words, inside the box */
+.chat-composer:has(.ph-chip) { flex-wrap: wrap; }
+.ph-chip { flex: 1 0 100%; display: flex; align-items: center; gap: 8px; padding: 6px 0 2px; min-width: 0; }
+.ph-chip img { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; box-shadow: 0 0 0 1px var(--color-rule-2); }
+.ph-chip-name { flex: 1; min-width: 0; font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* the photo in the owner's own message */
+.ct-you-photo { display: block; width: 200px; max-width: 100%; aspect-ratio: 4 / 5; object-fit: cover; margin: 0 0 6px auto; border-radius: var(--radius-md); box-shadow: 0 0 0 1px var(--color-rule-2); }
