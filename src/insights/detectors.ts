@@ -8,6 +8,7 @@
 //
 // Props read that the crawler (M5) is expected to write on a Page: indexed (false), noindex (true), indexStatus or
 // coverageState ("…not indexed", "Excluded…"), statusCode (>= 400).
+import { plainName } from "../util/plain.js";
 import type { ActionKind } from "../../shared/contracts.js";
 import { pageRank } from "../graph/algorithms.js";
 import { GraphHandle } from "../graph/client.js";
@@ -1171,7 +1172,7 @@ const techUnownedCriticalSystem: Detector = {
     const named = await ro<{ id: string; name: string | null; simulated: boolean | null }>(g,
       "MATCH (n:Entity) WHERE n.id IN $ids RETURN n.id AS id, n.name AS name, n.simulated AS simulated ORDER BY id",
       { ids: [...new Set(order.flatMap((o) => [o.id, ...o.path.slice(0, UNOWNED_EVIDENCE).map((r) => r.id)]))] });
-    const info = new Map(named.map((n) => [n.id, n]));
+    const info = new Map(named.map((n) => [n.id, { ...n, name: n.name === null ? null : plainName(n.name) }]));
     const out: Candidate[] = [];
     for (const s of order) {
       const nearest = s.path.slice(0, UNOWNED_EVIDENCE);

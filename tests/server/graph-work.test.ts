@@ -52,6 +52,7 @@ describe("plainNames", () => {
   it("drops the privacy filter's marker from a name the owner reads", () => {
     const dto = { candidates: [{ id: "system:supabase-prod", name: "Supabase prod ([redacted:supabase-ref])", dependents: 3 }], note: "no marker here" };
     expect(plainNames(dto)).toEqual({ candidates: [{ id: "system:supabase-prod", name: "Supabase prod", dependents: 3 }], note: "no marker here" });
-    expect(plainNames({ a: "key [redacted:secret] rest" })).toEqual({ a: "key  rest" });
+    expect(plainNames({ a: "key [redacted:secret] rest" })).toEqual({ a: "key rest" });
+    expect(plainNames({ name: "Supabase prod ([redacted:supabase-ref], Mumbai)" })).toEqual({ name: "Supabase prod (Mumbai)" });
   });
 });

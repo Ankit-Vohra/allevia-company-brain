@@ -14,7 +14,7 @@ import { testGraph } from "../helpers/graph.js";
 import { FakeLlm } from "../helpers/fake-llm.js";
 import { startSite, type SiteServer } from "../fixtures/website/server.js";
 
-const LEAK = "jane.doe@gmail.com";
+const LEAK = "jane.doe@acme-clinic.in";
 const PHONE = "+91 98765 43210";
 
 describe("onboard: a personal detail found by the end-of-run privacy scan is a soft note, an Event and a reading", () => {

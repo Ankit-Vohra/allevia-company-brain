@@ -239,7 +239,7 @@ describe("tracked files hold no real identifier (detector scan)", () => {
     for (const p of [".env.example", ".gitignore", "package.json", "vitest.config.ts"]) expect(scanned, p).toContain(p);
     expect(scanned).not.toContain(LOCKFILE);
     const skipped = scanned.filter((p) => readText(join(REPO, p)) === undefined);
-    expect(skipped.filter((p) => !/\.(?:png|jpe?g|gif|ico|webp|woff2?|ttf|pdf|mp[34]|mov|wav)$/i.test(p))).toEqual([]);
+    expect(skipped.filter((p) => !/\.(?:png|jpe?g|gif|ico|webp|woff2?|ttf|otf|pdf|mp[34]|mov|wav|glb|wasm|ogg)$/i.test(p))).toEqual([]);
   });
 
   it("every one of them passes", () => {

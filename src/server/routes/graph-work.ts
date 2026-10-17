@@ -16,6 +16,7 @@ import { TouchedSet, type AlleviaTool, type ToolContext } from "../../agent/tool
 import { impactOf } from "../../agent/tools/impact.js";
 import { whoOwns } from "../../agent/tools/people.js";
 import { important, topics } from "../../agent/tools/ranking.js";
+import { plainName } from "../../util/plain.js";
 import { graphStory, type StoryAxis, type StoryBucket } from "../../graph/story.js";
 import { HttpError, errorMessage, type RouteCtx } from "../http.js";
 
@@ -148,7 +149,6 @@ export function registerGraphWorkRoutes(app: Hono, rc: RouteCtx): void {
 
 // A project reference the privacy filter replaced reads "Supabase prod ([redacted:supabase-ref])" on the Brain page (found in the
 // audit on the real business): the owner sees the name without the marker.
-const MARKER = /\s*\(\[redacted:[a-z-]+\]\)|\[redacted:[a-z-]+\]/gi;
 export function plainNames<T>(dto: T): T {
-  return JSON.parse(JSON.stringify(dto), (_k, v) => (typeof v === "string" && v.includes("[redacted:") ? v.replace(MARKER, "").trim() : v)) as T;
+  return JSON.parse(JSON.stringify(dto), (_k, v) => (typeof v === "string" && v.includes("[redacted:") ? plainName(v) : v)) as T;
 }
