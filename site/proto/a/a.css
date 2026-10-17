@@ -1,17 +1,22 @@
 /* Prototype A: the home page with the 3D brain. Warm paper, the brain as warm translucent amber glass, orbits in ink and taupe lines,
  * tool logos in full colour as the accents, one gold highlight for signals and the OK. Transform and opacity only. */
 .hero { --chip: 46px; position: relative; min-height: min(calc(100svh - 4.25rem), 54rem); overflow: clip; isolation: isolate; }
-.hero__stage { position: absolute; inset: 0; z-index: 0; --bx: 66%; --by: 50%; --br: 150px; }
+/* The stage holds the brain. Its centre (--bx, --by, in px) and size (--k, the brain's radius over 100) are written by main.ts at first paint and by the
+ * 3D scene afterwards (one rule for both: a/hero-layout.ts). Everything here moves with translate and scale, never with left, top or width, so
+ * nothing shifts the page; the stage fades in once it has been placed, and shows by itself after 2.4 s if the script never runs. */
+.hero__stage { position: absolute; inset: 0; z-index: 0; --bx: 66vw; --by: calc(50svh - 2.1rem); --k: 1.7; opacity: 0; transition: opacity 320ms ease-out; animation: stage-in 320ms ease-out 2.4s forwards; }
+.hero__stage.is-placed { opacity: 1; animation: none; }
+@keyframes stage-in { to { opacity: 1; } }
 .hero__canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; opacity: 0; transition: opacity 500ms ease-out; }
 .is-live .hero__canvas { opacity: 1; }
 .hero__glow {
-  position: absolute; left: var(--bx); top: var(--by); width: calc(var(--br) * 5.6); aspect-ratio: 1; translate: -50% -50%; border-radius: 50%; z-index: 0; pointer-events: none;
+  position: absolute; left: 0; top: 0; width: 100px; height: 100px; translate: calc(var(--bx) - 50px) calc(var(--by) - 50px); scale: calc(var(--k) * 5.6); border-radius: 50%; z-index: 0; pointer-events: none;
   background: radial-gradient(closest-side, rgb(237 186 82 / 0.5), rgb(237 186 82 / 0.17) 46%, transparent 74%);
   animation: breathe 6.5s ease-in-out infinite;
 }
-@keyframes breathe { 0%, 100% { opacity: 0.72; scale: 0.97; } 50% { opacity: 1; scale: 1.03; } }
-.hero__floor { position: absolute; left: var(--bx); top: calc(var(--by) + var(--br) * 2.05); width: calc(var(--br) * 3.2); height: calc(var(--br) * 0.5); translate: -50% -50%; z-index: 0; pointer-events: none; background: radial-gradient(closest-side, rgb(70 52 28 / 0.13), transparent); }
-.hero__still { position: absolute; left: var(--bx); top: var(--by); width: calc(var(--br) * 2.2); height: auto; translate: -50% -50%; z-index: 1; transition: opacity 500ms ease-out; }
+@keyframes breathe { 0%, 100% { opacity: 0.72; transform: scale(0.97); } 50% { opacity: 1; transform: scale(1.03); } }
+.hero__floor { position: absolute; left: 0; top: 0; width: 320px; height: 50px; translate: calc(var(--bx) - 160px) calc(var(--by) + var(--k) * 205px - 25px); scale: var(--k); z-index: 0; pointer-events: none; background: radial-gradient(closest-side, rgb(70 52 28 / 0.13), transparent); }
+.hero__still { position: absolute; left: 0; top: 0; width: 220px; height: 220px; translate: calc(var(--bx) - 110px) calc(var(--by) - 110px); scale: var(--k); z-index: 1; transition: opacity 500ms ease-out; }
 .hero__still.is-gone, .hero--nogl .hero__still { opacity: 1; }
 .hero__still.is-gone { opacity: 0; }
 .hero__chips { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
@@ -62,6 +67,9 @@
 .hero__next { position: absolute; z-index: 25; left: var(--gutter); bottom: 1rem; padding: 0.55rem 1.1rem; border-radius: var(--r-pill); border: 1px solid rgb(31 26 20 / 0.28); background: #fff; font: 500 0.9375rem var(--font-body); cursor: pointer; }
 .hero__next[hidden] { display: none; }
 
+/* a narrower laptop or a tablet on its side: the words take a little less room so the orbits keep theirs */
+@media (min-width: 52.01rem) and (max-width: 71.99rem) { .hero__copy > *, .hero__sub { max-width: 26rem; } }
+
 @media (max-width: 52rem) {
   .hero { --chip: 38px; display: flex; flex-direction: column; min-height: 0; }
   .hero__copy { order: 1; padding-block: 1.6rem 0.4rem; min-height: 0; }
@@ -69,16 +77,17 @@
   .hero__sub { font-size: 1.0625rem; margin-top: 1rem; }
   .hero__cta { margin-top: 1.3rem; gap: 0.6rem; }
   .hero__cta .btn { min-height: 2.7rem; padding-inline: 1.1rem; font-size: 0.9375rem; }
-  .hero__stage { position: relative; order: 2; inset: auto; height: min(118vw, 36rem); --bx: 50%; --by: 46%; --br: 80px; }
+  .hero__stage { position: relative; order: 2; inset: auto; height: min(118vw, 36rem); --bx: 50vw; --by: min(59vw, 18rem); --k: 0.7; }
   .hero__answer { left: 50%; bottom: 0.4rem; width: calc(100% - 1.5rem); }
   .hero__bubble { max-width: 12.5rem; }
   .hero__next { bottom: 0.4rem; left: 50%; translate: -50% 0; }
 }
 /* ?bare=1: the brain alone on a transparent page (used to make the first-paint picture) */
 .is-bare, .is-bare body { background: transparent !important; }
-.is-bare .nav, .is-bare .foot, .is-bare .proto-switch, .is-bare .hero__copy, .is-bare .hero__chips, .is-bare .hero__bubble, .is-bare .hero__answer, .is-bare .hero__glow, .is-bare .hero__floor, .is-bare .hero__still { display: none !important; }
+.is-bare .nav, .is-bare .foot, .is-bare .hero__copy, .is-bare .hero__chips, .is-bare .hero__bubble, .is-bare .hero__answer, .is-bare .hero__glow, .is-bare .hero__floor, .is-bare .hero__still { display: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
+  .hero__stage { transition: none; }
   .hero__glow { animation: none; }
   .hero__answer-text .w { transition: none; }
 }

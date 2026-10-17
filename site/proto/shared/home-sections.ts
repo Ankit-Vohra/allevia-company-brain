@@ -27,7 +27,7 @@ export function problem(): string {
   const r = rng(11);
   type Kind = "people" | "tools" | "memory" | "alerts";
   const pool: { kind: Kind; html: string }[] = [];
-  NOISE.people.forEach((t, i) => pool.push({ kind: "people", html: `<span class="nz__dot" style="--c:${["#9a5232", "#4f5433", "#a1743a", "#6e7447", "#7a5a3a", "#8a6a2a"][i % 6]}">${esc(t[0]!)}</span><span>${esc(t)}</span>` }));
+  NOISE.people.forEach((t, i) => pool.push({ kind: "people", html: `<span class="nz__dot" style="--c:${["#9a5232", "#7a5a3a", "#a1743a", "#6b4a2e", "#8a6a2a", "#8a4a2a"][i % 6]}">${esc(t[0]!)}</span><span>${esc(t)}</span>` }));
   TOOL_TABS.forEach(([id, name], i) => pool.push({ kind: "tools", html: `${logoMarkup(id, 18)}<span>${esc(name)}</span><span class="nz__badge">${BADGES[i]}</span>` }));
   NOISE.memory.forEach((t) => pool.push({ kind: "memory", html: `<span>${esc(t)}</span>` }));
   NOISE.alerts.forEach((t) => pool.push({ kind: "alerts", html: `<span>${esc(t)}</span>` }));
@@ -123,7 +123,7 @@ export function closeCta(): string {
   <div class="wrap cta__in">
     <h2 id="close-h" class="h2">Start with a free Brain Snapshot.</h2>
     <p class="cta__sub">Send us your website. We send back what we learned and five fixes.</p>
-    <p><a class="btn btn-gold btn-lg" href="/contact/">Get a free Brain Snapshot</a></p>
+    <p><a class="btn btn-gold btn-lg" href="/contact/#snapshot">Get a free Brain Snapshot</a></p>
   </div>
 </section>`;
 }
@@ -136,7 +136,7 @@ export function pricingTeaser(): string {
   <div class="wrap">
     <h2 id="pt-h" class="h2 h2--split"><span class="t1">Simple monthly plans.</span> <span class="t2">Start at $100.</span></h2>
     <ul class="pmini-row">${cards}</ul>
-    <p class="ptease__more"><span class="tag tag--draft">Draft pricing</span> <span>To finalise later.</span> <a class="link" href="/pricing/">See what is in each plan</a></p>
+    <p class="ptease__more"><a class="link" href="/pricing/">See what is in each plan</a></p>
   </div>
 </section>`;
 }
@@ -172,9 +172,9 @@ export function grow(): string {
   <div class="grow__copy on-ink">
     <h2 id="grow-h" class="h2 h2--split"><span class="t1">It keeps growing.</span> <span class="t2">The longer you use it, the more it knows.</span></h2>
     <ul class="grow__points">
-      <li><b>Everything is kept.</b> Every decision, conversation and number, with where it came from.</li>
-      <li><b>Everything is connected.</b> Your team follows a few links to the answer, so it stays quick.</li>
-      <li><b>Kept in a graph.</b> The links live in <a href="https://www.falkordb.com" rel="noopener">FalkorDB</a>, a graph database.</li>
+      <li>It keeps every decision, conversation and number, with where it came from.</li>
+      <li>It links them, so your team reaches an answer in a few hops and stays quick as the brain grows.</li>
+      <li>The links live in <a href="https://www.falkordb.com" rel="noopener">FalkorDB</a>, a graph database.</li>
     </ul>
   </div>
   <div class="grow__viz">
@@ -189,7 +189,7 @@ export function grow(): string {
       <button type="button" class="grow__b" data-grow-stage="1" aria-pressed="false">Month 3</button>
       <button type="button" class="grow__b" data-grow-stage="2" aria-pressed="false">Year 1</button>
     </div>
-    <p class="grow__ask"><span>Why did sign-ups drop?</span> <b>4 hops, every time</b></p>
+    <p class="grow__ask"><span>Why did sign-ups drop?</span> <b>The answer is 4 hops away</b></p>
   </div>
   </div>
   <script type="application/json" id="grow-data">${growJson()}</script>
@@ -198,12 +198,26 @@ export function grow(): string {
 
 // ---------- the team at work: the real office, running ----------
 
+/** The zones of the office floor as the app lays them out (web/src/office/layout.ts, landscape: 570 by 244 logical px). `x` and `y` are where each zone's hanging sign
+ *  sits, as fractions of the floor, so the label lands in the same place on the clip at any size. The name is the one the owner knows (the roster's "Center of
+ *  Excellence" is the numbers team). */
+const ZONES: [string, number, number][] = [
+  ["Library", 42, 22], ["Analytics", 118, 22], ["Chief of Staff", 209, 22], ["Numbers", 300, 22], ["Sales", 376, 22], ["Cafeteria", 490, 22],
+  ["Marketing", 41, 154], ["Content Studio", 144, 154], ["Tech", 276, 154], ["Operations", 379, 154], ["Game room", 545, 154],
+];
+
 export function office(): string {
+  const labels = ZONES.map(([name, x, y]) => `<li class="office__zone" style="--x:${(x / 570).toFixed(4)};--y:${(y / 244).toFixed(4)}">${esc(name)}</li>`).join("");
   return `<section class="office sec band band--ink" id="team-works" aria-labelledby="office-h">
   <div class="wrap office__in">
     <h2 id="office-h" class="h2 h2--wide h2--split on-ink"><span class="t1">See what your team is working on,</span> <span class="t2">right now.</span></h2>
     <figure class="office__frame">
-      <video class="office__video" muted loop playsinline preload="none" poster="/shared/img/office-live-poster.webp" src="/shared/img/office-live.mp4" width="2236" height="932" aria-label="The Allevia office: your team at their desks, working, with three office dogs."></video>
+      <div class="office__scroll">
+        <div class="office__stage">
+          <video class="office__video" muted loop playsinline preload="none" poster="/shared/img/office-live-poster.webp" src="/shared/img/office-live.mp4" width="2236" height="932" aria-label="The Allevia office: your team at their desks, working, with three office dogs."></video>
+          <ul class="office__zones" aria-label="The teams on the floor">${labels}</ul>
+        </div>
+      </div>
     </figure>
   </div>
 </section>`;

@@ -4,7 +4,6 @@
 import { TOOLKIT_CATALOG } from "../../../shared/connection-map.ts";
 import { CREDIT_COSTS, PLANS } from "../../../shared/plans.ts";
 import { COMPANY } from "../../src/company.ts";
-import { FAQ } from "../../src/content.ts";
 import { PLAN_SAMPLE } from "../../src/home-content.ts";
 import { AGENTS, BRAIN } from "./assets.generated.ts";
 import { CHIP_ROWS } from "./data.ts";
@@ -54,7 +53,7 @@ export function intGrid(): string {
     const cards = tools.map((t) => `<li class="tool" data-reveal>
       <div class="tool__top"><span class="tool__logo">${logoMarkup(t.id, 28)}</span><div><h3>${esc(t.name)}</h3><span class="tag ${t.acts.length ? "tag--act" : ""}">${t.acts.length ? "Read and act" : "Read only"}</span></div></div>
       <p>${esc(t.blurb)}</p>
-      <details class="tool__more"><summary>What it can do</summary><dl><dt>It reads</dt><dd>${esc(t.reads.join(" "))}</dd>${t.acts.length ? `<dt>It may</dt><dd>${esc(t.acts.join(" "))}</dd>` : ""}</dl></details>
+      <details class="tool__more"><summary>What it can do</summary><dl><dt>Reads</dt><dd>${esc(t.reads.join(" "))}</dd>${t.acts.length ? `<dt>Acts</dt><dd>${esc(t.acts.join(" "))}</dd>` : ""}</dl></details>
     </li>`).join("");
     return `<section class="tools-group" aria-labelledby="g-${gid}"><h2 id="g-${gid}" class="h3">${esc(label)}</h2><ul class="tools">${cards}</ul></section>`;
   }).join("");
@@ -111,13 +110,30 @@ export function productBrain(): string {
     <h2 id="ch2-h" class="h2 h2--split"><span class="t1">One company brain.</span> <span class="t2">Everything your business knows.</span></h2>
     <ul class="clusters">${chips}</ul>
   </div>
-  ${frame("/shared/img/brain-knows.webp", 1000, 582, "What your team knows: recent decisions, what comes up most, and what breaks if something stops.", "chapter__shot")}
+  ${frame("/shared/img/brain-knows-crop.webp", 1000, 372, "What your team knows: the decisions you made and the things that come up most.", "chapter__shot")}
+</div></section>`;
+}
+
+/** What the team gets done: the things a founder asks about, one line each (Sales, Studio and posting, the website check-up, the morning stand-up, the numbers, the memory). */
+export function productWork(): string {
+  const items: [string, string, string][] = [
+    ["sales-lead", "Enquiries answered, calls booked.", "Neel replies to every new lead and finds a time that suits you both."],
+    ["content-strategist", "Posters, ads and reels, posted after your OK.", "Tara turns a rough phone photo into a post in your voice. Say OK and it goes to Instagram or your Facebook Page at the time you choose."],
+    ["tech-lead", "A check-up for your website.", "Arjun finds what is slow, missing or unclear, and files the fix for your developer."],
+    ["chief-of-staff", "A stand-up every morning.", "Your team meets, notices what changed, and puts it in Today’s note before you ask."],
+    ["coe-lead", "Numbers you can trust.", "Ask why sign-ups dropped. Isha checks every figure before it reaches you."],
+    ["librarian", "Nothing lives only in your head.", "Sara keeps every decision, who made it and why, so anyone on your team can find it."],
+  ];
+  const rows = items.map(([id, h, p]) => `<li class="work__item" data-reveal><span class="face face--md" role="img" aria-label="${esc(AGENTS[id]?.name ?? id)}">${AGENTS[id]?.svg ?? ""}</span><div><h3 class="work__h">${esc(h)}</h3><p>${esc(p)}</p></div></li>`).join("");
+  return `<section class="sec work" id="work" aria-labelledby="work-h"><div class="wrap">
+  <h2 id="work-h" class="h2 h2--split"><span class="t1">What your team gets done.</span></h2>
+  <ul class="work__list">${rows}</ul>
 </div></section>`;
 }
 
 export function productNote(): string {
   return `<section class="sec" id="note" aria-labelledby="ch4-h"><div class="wrap chapter chapter--split">
-  ${frame("/shared/img/app-home.webp", 1800, 1391, "The app's home: a short note for the day, what is waiting for your OK with the draft and the reason, and the plan.", "chapter__shot")}
+  ${frame("/shared/img/app-home-note.webp", 1040, 893, "The app's home in the morning: a line on how the business is doing and the first draft waiting for your OK, with Approve, Change and No thanks.", "chapter__shot")}
   <div class="chapter__copy">
     <h2 id="ch4-h" class="h2 h2--split"><span class="t1">Today’s note.</span> <span class="t2">One short note each morning.</span></h2>
     <p class="lede">How the business is doing, what waits for your OK, and one next step.</p>
@@ -171,29 +187,29 @@ export function productPlan(): string {
 const growth = PLANS.find((p) => p.id === "growth")!, pro = PLANS.find((p) => p.id === "pro")!;
 const planLines = (p: typeof growth) => {
   const a = p.allowances;
-  const out = [`Up to ${Math.floor(a.studioCreditsPerMonth / CREDIT_COSTS.static_post)} posts or ${Math.floor(a.studioCreditsPerMonth / CREDIT_COSTS.reel)} reels a month`, `${a.answersPerMonth} questions a month`, a.locations && a.locations > 1 ? `Up to ${a.locations} locations, ${a.seats} seats` : `${a.locations} location, ${a.seats} seats`];
+  const out = [p.id === "growth" ? "Everything in Starter" : "Everything in Growth", `Up to ${Math.floor(a.studioCreditsPerMonth / CREDIT_COSTS.static_post)} posts or ${Math.floor(a.studioCreditsPerMonth / CREDIT_COSTS.reel)} reels a month`, `${a.answersPerMonth} questions a month`, a.locations && a.locations > 1 ? `Up to ${a.locations} locations, ${a.seats} seats` : `${a.locations} location, ${a.seats} seats`];
   out.push(p.id === "growth" ? "A named person reviews your plan each month" : "A strategist two hours a month");
   return out;
 };
-/** The three plans the prototype shows. Starter ($100) is new and marked to finalise; Growth and Pro are the real plans in shared/plans.ts. */
+/** The three plans the site shows. Growth and Pro are the plans in shared/plans.ts; Starter ($100) is defined here only, so shared/plans.ts needs it before the app can sell it. */
 export const PLAN_CARDS: { name: string; note: string; price: number; lines: string[]; lead: boolean }[] = [
-  { name: "Starter", note: "All your tools, working together", price: 100, lines: ["All your tools connected together", "A note every morning and your team’s advice", "Questions answered from your brain", "Approvals in the app or in Discord", "No image or video generation"], lead: true },
+  { name: "Starter", note: "All your tools, working together", price: 100, lines: ["All your tools connected together", "A note every morning and your team’s advice", "Questions answered from your brain", "Approvals in the app or in Discord", "Posters, ads and reels start on Growth"], lead: true },
   { name: "Growth", note: "The whole team", price: growth.price.monthly.USD, lines: planLines(growth), lead: false },
   { name: "Pro", note: "More places, more help", price: pro.price.monthly.USD, lines: planLines(pro), lead: false },
 ];
 
 export function pricing(): string {
   const card = (c: (typeof PLAN_CARDS)[number]) => `<article class="plan ${c.lead ? "plan--lead" : ""}" aria-labelledby="plan-${c.name}">
-    <h3 id="plan-${c.name}" class="plan__name">${esc(c.name)}</h3><p class="plan__note">${esc(c.note)}</p>
+    <h2 id="plan-${c.name}" class="plan__name">${esc(c.name)}</h2><p class="plan__note">${esc(c.note)}</p>
     <p class="plan__price"><span class="money">${usd(c.price)}</span><span class="per"> a month</span></p>
     <ul class="plan__lines">${c.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
-    <a class="btn ${c.lead ? "btn-gold" : "btn-ghost"}" href="/contact/">Get started<span class="visually-hidden"> with ${esc(c.name)}</span></a>
+    <a class="btn ${c.lead ? "btn-gold" : "btn-ghost"}" href="/contact/#snapshot">Get started<span class="visually-hidden"> with ${esc(c.name)}</span></a>
   </article>`;
   return `<section class="sec pricing" aria-labelledby="pr-h"><div class="wrap">
   <h1 id="pr-h" class="page-h1"><span class="t1">Simple monthly plans.</span> <span class="t2">Start with your tools connected.</span></h1>
-  <p class="draft"><span class="tag tag--draft">Draft pricing</span> To finalise later. Prices in US dollars, excluding tax.</p>
+  <p class="draft">Prices in US dollars, excluding tax.</p>
   <div class="plans">${PLAN_CARDS.map(card).join("")}</div>
-  <p class="fine">Essentials (${usd(PLANS.find((p) => p.id === "essentials")!.price.monthly.USD)} a month, after the three-month growth plan) and Pause (${usd(PLANS.find((p) => p.id === "pause")!.price.monthly.USD)} a month) stay as they are. 14-day refund on the three-month plan.</p>
+  <p class="fine">After the three-month growth plan, Essentials is ${usd(PLANS.find((p) => p.id === "essentials")!.price.monthly.USD)} a month, and Pause is ${usd(PLANS.find((p) => p.id === "pause")!.price.monthly.USD)} a month. The three-month plan has a 14-day refund.</p>
 </div></section>`;
 }
 
@@ -210,6 +226,19 @@ export function security(): string {
   <section class="sec promises"><div class="wrap"><ul>${items.map(([h, p]) => `<li data-reveal><h2 class="h3">${esc(h)}</h2><p>${esc(p)}</p></li>`).join("")}</ul></div></section>`;
 }
 
+/** The questions founders ask, in this order. Written for the prototype (the main site's own list stays as it is); plain words, short answers. */
+const FAQ: { q: string; a: string }[] = [
+  { q: "What is Allevia?", a: "Your Founder OS. One company brain remembers everything about your business, and an AI team works inside the tools you already use." },
+  { q: "Do I need to be technical?", a: "No. You paste your website and we do the setup with you, so you never face a settings screen." },
+  { q: "How long does setup take?", a: "About two minutes. You paste your website, we read it and set your team up, then you connect the tools you want." },
+  { q: "Which tools does it work with?", a: "Gmail, Google Calendar, Google Analytics, Google and Meta Ads, Instagram, Shopify, Stripe, HubSpot, Slack and more. Reading is instant. Anything that sends or spends waits for your OK." },
+  { q: "Will it post something that embarrasses me?", a: "Nothing goes out without your OK. Once posting is switched on for your business, a post you approve goes out at the time you chose. Until then it waits as a draft. Replies to reviews of three stars or lower, price claims and anything that spends money never go out on their own." },
+  { q: "Is my data mixed with other businesses?", a: "No. Each business has its own separate database, and nothing learned from one is used for another." },
+  { q: "What if it does not work for me?", a: "You get a 14-day full refund. If we miss what we promised in the first month, you also get the remaining two-thirds of the three months back. You can ask for a free Brain Snapshot first, before you pay anything." },
+  { q: "Will it replace my marketing person, or guarantee growth?", a: "No to both. We promise the setup and the work delivered, never revenue or growth." },
+  { q: "What can it not do yet?", a: "Connecting your own tools is switched on one business at a time, and anything that sends or posts is saved as a draft until we turn it on for you. Each person on your team does not have their own login yet." },
+];
+
 export function faq(): string {
   return `<section class="sec phead" aria-labelledby="faq-h"><div class="wrap"><h1 id="faq-h" class="page-h1"><span class="t1">Questions.</span> <span class="t2">Short answers.</span></h1></div></section>
   <section class="sec"><div class="wrap faq">${FAQ.map((f) => `<details><summary><h2 class="h3">${esc(f.q)}</h2></summary><p>${esc(f.a)}</p></details>`).join("")}</div></section>`;
@@ -217,25 +246,36 @@ export function faq(): string {
 
 // ---------- Contact ----------
 
+/** The Snapshot form is first because every button on the site says "Get a free Brain Snapshot" and lands here. There is no form backend yet:
+ *  the form opens the visitor's email with the message written (a plain mailto, built by page.ts; without the script the form posts to the
+ *  same mailto). The Discord box appears only once COMPANY.discordSupportUrl is set. */
 export function contact(): string {
   const mail = COMPANY.email.general;
   const href = (subject: string) => `mailto:${mail}?subject=${encodeURIComponent(subject)}`;
   const discord = COMPANY.discordSupportUrl
-    ? `<p><a class="link" href="${esc(COMPANY.discordSupportUrl)}" rel="noopener">Join our Discord</a></p>`
-    : `<p><span class="todo">TODO(founder): add the Discord invite link in site/src/company.ts</span></p>`;
+    ? `<li class="cbox"><h2 class="h3">Discord</h2><p><a class="link" href="${esc(COMPANY.discordSupportUrl)}" rel="noopener">Join our Discord</a></p></li>`
+    : "";
   return `<section class="sec phead" aria-labelledby="ct-h"><div class="wrap">
-  <h1 id="ct-h" class="page-h1"><span class="t1">Let’s talk.</span> <span class="t2">Ask anything, or book a demo.</span></h1>
+  <h1 id="ct-h" class="page-h1"><span class="t1">Your free Brain Snapshot.</span> <span class="t2">Send us your website.</span></h1>
 </div></section>
-<section class="sec contact"><div class="wrap"><ul class="cbox-row">
-  <li class="cbox" id="demo"><h2 class="h3">Book a demo</h2><p>See Allevia on a business like yours.</p><p><a class="btn btn-gold" href="${href("Book a demo")}">Book a demo</a></p></li>
-  <li class="cbox" id="snapshot"><h2 class="h3">Free Brain Snapshot</h2><p>Send us your website. We send back what we learned and five fixes.</p><p><a class="btn btn-ghost" href="${href("Free Brain Snapshot")}">Ask for a Snapshot</a></p></li>
-  <li class="cbox"><h2 class="h3">Email</h2><p><a class="link" href="mailto:${esc(mail)}">${esc(mail)}</a></p></li>
-  <li class="cbox"><h2 class="h3">Discord</h2>${discord}</li>
-</ul></div></section>`;
+<section class="sec contact"><div class="wrap contact__grid">
+  <form class="snap" id="snapshot" data-snap action="${href("Free Brain Snapshot")}" method="post" enctype="text/plain" aria-labelledby="snap-h">
+    <h2 id="snap-h" class="h3">We read it and send back what we learned and five fixes.</h2>
+    <div class="field"><label for="snap-site">Your website</label><input id="snap-site" name="website" type="text" inputmode="url" autocomplete="url" placeholder="yourbusiness.com" required></div>
+    <div class="field"><label for="snap-email">Your email</label><input id="snap-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required></div>
+    <button class="btn btn-gold" type="submit">Send my website</button>
+    <p class="snap__note">This opens your email with the message ready to send.</p>
+  </form>
+  <ul class="cbox-row">
+    <li class="cbox" id="demo"><h2 class="h3">Prefer to talk first?</h2><p>See Allevia on a business like yours.</p><p><a class="btn btn-ghost" href="${href("Book a demo")}">Book a demo</a></p></li>
+    <li class="cbox"><h2 class="h3">Email</h2><p><a class="link" href="mailto:${esc(mail)}">${esc(mail)}</a></p></li>
+    ${discord}
+  </ul>
+</div></section>`;
 }
 
 export const PAGE_SECTIONS: Record<string, () => string> = {
   "int-hero": intHero, "int-grid": intGrid, "int-access": intAccess,
-  "product-hero": productHero, "product-steps": productSteps, "product-brain": productBrain, "product-note": productNote, "product-ok": productOk, "product-plan": productPlan,
+  "product-hero": productHero, "product-steps": productSteps, "product-brain": productBrain, "product-work": productWork, "product-note": productNote, "product-ok": productOk, "product-plan": productPlan,
   pricing, security, faq, contact,
 };

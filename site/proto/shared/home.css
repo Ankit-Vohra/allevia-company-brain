@@ -45,7 +45,7 @@
   .is-scrub .problem__stage { height: 100%; min-height: 0; display: block; }
   .is-scrub .problem__links, .is-scrub .nz, .is-scrub .founder { display: flex; }
   .is-scrub .problem__links { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: calc(var(--links, 0) * (1 - var(--pull-all, 0))); }
-  .is-scrub .problem__links line { stroke: #e3b197; stroke-width: 1.2; stroke-dasharray: 3 7; vector-effect: non-scaling-stroke; opacity: 0.55; }
+  .is-scrub .problem__links line { stroke: #d9b48a; stroke-width: 1.2; stroke-dasharray: 3 7; vector-effect: non-scaling-stroke; opacity: 0.55; }
   .is-scrub .problem__halo { position: absolute; left: 50%; top: 50%; translate: calc(-50% - var(--calm, 0) * var(--sw) * 0.2) -50%; opacity: var(--brain, 0); scale: calc(0.85 + 0.15 * var(--brain, 0)); }
   .is-scrub .problem__brain { position: absolute; left: 50%; top: 50%; translate: calc(-50% - var(--calm, 0) * var(--sw) * 0.2) -50%; width: min(24vw, 22rem); opacity: var(--brain, 0); scale: calc(0.8 + 0.2 * var(--brain, 0)); }
   .is-scrub .founder { position: absolute; z-index: 4; left: 50%; top: 50%; flex-direction: column; align-items: center; gap: 0.35rem; translate: calc(-50% + var(--calm, 0) * var(--sw) * 0.3) calc(-50% + var(--calm, 0) * var(--sh) * 0.36); scale: calc(1 + var(--stress, 0) * 0.1 - var(--calm, 0) * 0.3); }
@@ -97,10 +97,19 @@
 .gpanel--dark .gpanel__cap { background: rgb(255 255 255 / 0.1); color: var(--on-ink); box-shadow: 0 0 0 1px rgb(255 255 255 / 0.16); }
 
 /* ---------- the office (dark) ---------- */
-.office__in { display: grid; gap: clamp(1.6rem, 4vw, 3rem); }
+.office__in { display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(1.6rem, 4vw, 3rem); }
 .office__frame { margin: 0; padding: 6px; border-radius: 22px; background: linear-gradient(160deg, rgb(255 255 255 / 0.16), rgb(255 255 255 / 0.04)); box-shadow: 0 0 0 1px rgb(255 255 255 / 0.16), 0 40px 90px -36px rgb(0 0 0 / 0.75); }
-.office__video { width: 100%; aspect-ratio: 2236 / 932; object-fit: cover; border-radius: 17px; background: var(--color-paper-2); image-rendering: auto; }
-@media (max-width: 40rem) { .office__video { aspect-ratio: 1.5 / 1; object-position: 86% 100%; } }
+.office__scroll { border-radius: 17px; overflow: hidden; }
+.office__stage { position: relative; container-type: inline-size; }
+.office__video { display: block; width: 100%; aspect-ratio: 2236 / 932; object-fit: cover; background: var(--color-paper-2); image-rendering: auto; }
+/* the name of each team's zone, set in the page (crisp at any size) over the clip: small deep-brown pills on the floor, parked on the wall side of each zone so they stay off the people */
+.office__zones { position: absolute; inset: 0; pointer-events: none; }
+.office__zone { position: absolute; left: calc(var(--x) * 100%); top: calc(var(--y) * 100%); translate: -50% -50%; padding: 0.22em 0.75em 0.26em; border-radius: var(--r-pill); background: rgb(47 38 33 / 0.92); color: var(--on-ink); font-size: clamp(11px, 1.06cqw, 14px); font-weight: 500; line-height: 1.2; white-space: nowrap; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14), 0 6px 14px -6px rgb(0 0 0 / 0.5); }
+/* on a phone the whole floor is a strip to swipe along, wide enough that every name stays readable */
+@media (max-width: 40rem) {
+  .office__scroll { overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  .office__stage { width: 1000px; }
+}
 
 /* ---------- a rough photo made into an ad (paper) ---------- */
 .makes__in { display: grid; gap: clamp(2rem, 5vw, 3.5rem); align-items: center; }
@@ -138,7 +147,7 @@
 .fcard__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-taupe); flex: none; transition: background-color 200ms ease; }
 .fcard--in.is-on { box-shadow: 0 0 0 2px var(--color-accent), var(--shadow-lift); }
 .fcard--in.is-on .fcard__dot { background: var(--color-accent); }
-.fcard--out { align-items: flex-start; opacity: 0.45; translate: 10px 0; }
+.fcard--out { align-items: flex-start; opacity: 0.6; translate: 10px 0; }
 .fcard--out.is-lit { opacity: 1; translate: 0 0; box-shadow: 0 0 0 1px rgb(60 44 24 / 0.07), var(--shadow-lift); }
 .fcard__logo { display: grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: 8px; background: var(--color-paper-2); flex: none; }
 .fcard__t b { display: block; font-size: 0.9375rem; font-weight: 600; }

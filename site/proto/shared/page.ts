@@ -26,6 +26,16 @@ else {
   reveals.forEach((el) => io.observe(el));
 }
 
+// the Snapshot form: no backend yet, so it opens the visitor's email with the message written (the form's own action is the same mailto)
+const snap = document.querySelector<HTMLFormElement>("[data-snap]");
+if (snap) snap.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const v = (n: string) => snap.querySelector<HTMLInputElement>(`[name="${n}"]`)?.value.trim() ?? "";
+  const body = `Please send me a free Brain Snapshot.\n\nMy website: ${v("website")}\nMy email: ${v("email")}\n`;
+  const to = new URL(snap.action).pathname;
+  window.location.href = `mailto:${to}?subject=${encodeURIComponent("Free Brain Snapshot")}&body=${encodeURIComponent(body)}`;
+});
+
 // the plan's bars
 const plan = document.querySelector<HTMLElement>("[data-plan]");
 if (plan) { if (reduced) plan.classList.add("is-in"); else new IntersectionObserver(([e], o) => { if (e?.isIntersecting) { plan.classList.add("is-in"); o.disconnect(); } }, { threshold: 0.3 }).observe(plan); }

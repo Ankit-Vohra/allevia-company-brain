@@ -1,5 +1,5 @@
 // Shared pieces of the prototype pages, as HTML built at compile time (vite.config.ts swaps `<!-- @section name -->` for them).
-// `page` says which prototype the page belongs to: "a" (the 3D brain), "b" (the calm diagram) or "team"/"shared" (pages both link to).
+// `page` says which page the section is built for (the id of its folder).
 import { logoMarkup, hasLogo, usingLogoDev } from "./logos.ts";
 import { AGENTS } from "./assets.generated.ts";
 import { CHIP_ROWS } from "./data.ts";
@@ -7,7 +7,7 @@ import { TEAM_SECTIONS } from "./team-sections.ts";
 
 import { esc } from "./util.ts";
 import { COMPANY } from "../../src/company.ts";
-import { heroA, heroB, productDiagram } from "./hero-sections.ts";
+import { heroA, productDiagram } from "./hero-sections.ts";
 import { HOME_SECTIONS } from "./home-sections.ts";
 import { PAGE_SECTIONS } from "./page-sections.ts";
 export { esc };
@@ -24,11 +24,12 @@ export const NAV: { label: string; href: string; id: string }[] = [
 /** The top bar. `current` is the page id that gets aria-current; `home` is where the wordmark goes (the prototype's own home). */
 export function nav(current: string, home: string): string {
   const links = NAV.map((n) => `<a href="${n.href}"${n.id === current ? ' aria-current="page"' : ""}>${esc(n.label)}</a>`).join("");
-  return `<header class="nav" data-nav>
+  return `<a class="skip" href="#main">Skip to content</a>
+<header class="nav" data-nav>
   <div class="wrap nav__in">
     <a class="brand" href="${home}" aria-label="Allevia, home">allevia</a>
     <nav class="nav__links" id="site-nav" aria-label="Main">${links}</nav>
-    <a class="btn btn-gold btn-sm nav__cta" href="/contact/">Get a free Brain Snapshot</a>
+    <a class="btn btn-gold btn-sm nav__cta" href="/contact/#snapshot">Get a free Brain Snapshot</a>
     <button class="nav__menu" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="Menu" data-nav-menu><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3 5.5h12M3 9h12M3 12.5h12"/></svg></button>
   </div>
 </header>`;
@@ -41,7 +42,7 @@ export function footer(): string {
   return `<footer class="foot band band--ink on-ink">
   <div class="wrap foot__grid">
     <div class="foot__about">
-      <a class="brand" href="/" aria-label="Allevia, home">allevia</a>
+      <a class="brand" href="/a/" aria-label="Allevia, home">allevia</a>
       <p class="foot__line">Your company’s brain, and the team that runs on it.</p>
       <p class="foot__mail"><a href="mailto:${COMPANY.email.general}">${esc(COMPANY.email.general)}</a></p>
       <p><a class="btn btn-gold btn-sm" href="/contact/#demo">Book a demo</a></p>
@@ -52,12 +53,6 @@ export function footer(): string {
   </div>
   <div class="wrap foot__base"><p>© 2026 Allevia AI</p>${usingLogoDev() ? '<p><a href="https://logo.dev" rel="noopener">Logos provided by Logo.dev</a></p>' : ""}</div>
 </footer>`;
-}
-
-/** The pill that lets the founder move between the two prototypes (prototype chrome, not part of the site). */
-export function switcher(page: string): string {
-  const item = (id: string, label: string, href: string) => `<a href="${href}"${page === id ? ' aria-current="true"' : ""}>${label}</a>`;
-  return `<aside class="proto-switch" aria-label="Prototype"><span>Prototype</span>${item("a", "A: 3D brain", "/a/")}${item("b", "B: calm diagram", "/b/")}</aside>`;
 }
 
 /** Avatar chip for a roster agent. */
@@ -75,9 +70,7 @@ export const SECTIONS: Record<string, (page: string) => string> = {
   ...HOME_SECTIONS,
   ...PAGE_SECTIONS,
   "hero-a": () => heroA(),
-  "hero-b": () => heroB(),
   "product-diagram": () => productDiagram(),
-  nav: (page) => nav(NAV.some((n) => n.id === page) ? page : "", page === "b" ? "/b/" : "/a/"),
+  nav: (page) => nav(NAV.some((n) => n.id === page) ? page : "", "/a/"),
   footer: () => footer(),
-  switcher: (page) => switcher(page),
 };
