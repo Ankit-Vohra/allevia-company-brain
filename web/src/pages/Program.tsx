@@ -1,16 +1,17 @@
 // Your growth plan (docs/owner-words.md): for a founder who is not a marketer. The top says where you are ("Month 1 ·
-// week 2"), shows your three goals as plain sentences with where you started, where you are now and a simple bar, what
-// your team has learned from your edits and when the next monthly check-in is. When the team has only just suggested
+// week 2"), then your three goals, each a plain sentence with where you started, where you are now and a simple bar, then two
+// figures: what your team has learned from your edits and when the next monthly check-in is. When the team has only just suggested
 // the goals, each has an OK button and a way to change the number: one tap, nothing to configure. Everything technical
 // (the check-in notes, the drafts-approved curve, the numbers behind each goal, what the team can see, how it is
 // measured) is behind one "Show how". Every number is GET /api/:t/program's; the words are the web app's own.
 import { Link } from "react-router";
-import type { CapabilityState, ProgramScorecard } from "@shared/contracts";
+import type { AgentId, CapabilityState, ProgramScorecard } from "@shared/contracts";
 import { api } from "../api";
 import { AgentAvatar } from "../components/bits";
 import { CapabilityLadder } from "../components/Capabilities";
 import { CheckWebsite } from "../components/CheckWebsite";
 import { FirstPassCurve } from "../components/FirstPassCurve";
+import { Reveal } from "../components/Reveal";
 import { SuggestedRow } from "../components/SuggestedGoal";
 import { Timeline } from "../components/ProgramCard";
 import { ShowDetails } from "../components/ShowDetails";
@@ -61,11 +62,7 @@ function Started({ p, caps, suggested, onSet }: { p: ProgramScorecard; caps?: Ca
       <header className="owner-head">
         <p className="owner-eyebrow">Your growth plan</p>
         <h1 className="owner-title">{monthWeek(p.day)}</h1>
-        <p className="owner-lede">
-          {done
-            ? `Three months of work on ${tenant.name}, from ${fmtDate(p.startDate)} to ${fmtDate(p.endDate)}.`
-            : `Three months to take ${tenant.name} to the next level. Started ${fmtDate(p.startDate)}, ends ${fmtDate(p.endDate)}.`}
-        </p>
+        <p className="owner-quiet">{done ? "Done" : "3 months"} · {fmtDate(p.startDate)} to {fmtDate(p.endDate)}</p>
         <span className="owner-track" aria-hidden="true"><span style={{ width: `${(Math.min(90, Math.max(0, p.day)) / 90) * 100}%` }} /></span>
       </header>
 
@@ -75,9 +72,9 @@ function Started({ p, caps, suggested, onSet }: { p: ProgramScorecard; caps?: Ca
         <section className="owner-block" aria-labelledby="goals-h">
           <h2 id="goals-h" className="owner-h">Your goals</h2>
           {top.length ? (
-            <ul className="owner-cards">{top.map(({ g, v }) => <GoalCard key={g.id} v={v} aimed={g.aimed?.sentence ?? null} />)}</ul>
+            <ul className="owner-cards">{top.map(({ g, v }) => <GoalCard key={g.id} v={v} aimed={g.aimed?.sentence ?? null} ownerId={g.owner?.id} />)}</ul>
           ) : (
-            <p className="owner-quiet">Your team will suggest two or three goals once it has had a first look at your business.</p>
+            <p className="owner-quiet">Your team suggests 3 goals after a first look.</p>
           )}
         </section>
       )}
@@ -88,15 +85,13 @@ function Started({ p, caps, suggested, onSet }: { p: ProgramScorecard; caps?: Ca
       </section>
 
       <section className="owner-facts" aria-label="What your team learned, and what comes next">
-        <Link to="/team" className="owner-fact">
-          <span className="owner-fact-label">Things your team learned from your edits</span>
+        <Link to="/team" className="owner-fact" title={lastRule ? `Latest: “${lastRule.text}”` : undefined}>
+          <span className="owner-fact-label">Learned from your edits</span>
           <span className="owner-fact-value num">{p.learnedRules.active}</span>
-          <span className="owner-fact-note">{lastRule ? <>Latest: “{lastRule.text}”</> : "Each time you change a draft before approving it, the team learns."}</span>
         </Link>
         <div className="owner-fact">
-          <span className="owner-fact-label">Next monthly check-in</span>
+          <span className="owner-fact-label">Next check-in</span>
           <span className="owner-fact-value is-text">{next ? fmtDate(next.dueDate) : "All done"}</span>
-          <span className="owner-fact-note">{next ? "We tell you what changed and what we'll do next." : "Your three months are complete."}</span>
         </div>
       </section>
 
@@ -107,22 +102,24 @@ function Started({ p, caps, suggested, onSet }: { p: ProgramScorecard; caps?: Ca
   );
 }
 
-// `aimed`: what the team has pointed at this goal, in one plain line ("2 approved drafts and 1 fix are aimed at ..."); null when nothing is.
-function GoalCard({ v, aimed }: { v: GoalView; aimed: string | null }) {
+// `aimed`: what the team has pointed at this goal, in one plain line ("2 approved drafts and 1 fix are aimed at ..."); null when
+// nothing is. A goal that needs a push says why on the card; one going well keeps its why behind "More".
+function GoalCard({ v, aimed, ownerId }: { v: GoalView; aimed: string | null; ownerId?: AgentId }) {
+  const whyOnCard = !v.known || (!!v.status && v.status.tone !== "ok");
   return (
     <li className={`owner-card${v.status ? ` tone-${v.status.tone}` : ""}`}>
       <div className="owner-card-top">
-        <span className="owner-card-name">{v.name}</span>
+        <h3 className="owner-card-title">{v.title}</h3>
         {v.status && <span className="owner-state"><span className="owner-dot" aria-hidden="true" />{v.status.word}</span>}
       </div>
-      <h3 className="owner-card-title">{v.title}</h3>
-      <p className="owner-card-why">{v.why}</p>
       {v.known && (
         <dl className="owner-pair">
-          <div><dt>Where you started</dt><dd className="num">{v.start ?? "Not measured"}</dd></div>
-          <div><dt>Where you are now</dt><dd className="num">{v.now}</dd></div>
+          <div><dt>Started</dt><dd className="num">{v.start ?? "–"}</dd></div>
+          <div><dt>Now</dt><dd className="num">{v.now}</dd></div>
+          {v.owner && <div className="owner-pair-who">{ownerId && <AgentAvatar id={ownerId} size={18} />}<span>{v.owner}</span></div>}
         </dl>
       )}
+      {whyOnCard && v.why && <p className="owner-card-why">{v.why}</p>}
       <span
         className={`owner-bar${v.progress === null ? " is-empty" : ""}`}
         role="img"
@@ -130,8 +127,12 @@ function GoalCard({ v, aimed }: { v: GoalView; aimed: string | null }) {
       >
         {v.progress !== null && <span style={{ width: `${Math.max(2, v.progress * 100)}%` }} />}
       </span>
-      {aimed && <p className="owner-card-owner">{aimed}</p>}
-      {v.owner && <p className="owner-card-owner">Looked after by {v.owner}</p>}
+      {((!whyOnCard && v.why) || aimed) && (
+        <Reveal label="More">
+          {!whyOnCard && <p className="owner-card-why">{v.why}</p>}
+          {aimed && <p className="owner-card-owner">{aimed}</p>}
+        </Reveal>
+      )}
     </li>
   );
 }
@@ -141,8 +142,7 @@ function Suggested({ items, onSet }: { items: GoalSetup[]; onSet: () => void }) 
   const { tenant } = useApp();
   return (
     <section className="owner-block owner-suggest" aria-labelledby="suggest-h">
-      <h2 id="suggest-h" className="owner-h">Your team suggests these goals</h2>
-      <p className="owner-quiet">We looked at {tenant.name} and picked three things worth growing. Tap OK, or change a number if you want it higher or lower.</p>
+      <h2 id="suggest-h" className="owner-h">Say OK to your goals</h2>
       <ul className="owner-suggest-list">
         {items.map((s) => <SuggestedRow key={s.id} s={s} tenantId={tenant.id} onSet={onSet} />)}
       </ul>
@@ -248,16 +248,11 @@ function NotStarted({ name }: { name: string }) {
     <>
       <header className="owner-head">
         <p className="owner-eyebrow">Your growth plan</p>
-        <h1 className="owner-title">{name} hasn’t started its growth plan yet</h1>
-        <p className="owner-lede">Your team picks three goals worth growing, writes down where you are today, and checks in every month with what changed and what it will do next.</p>
+        <h1 className="owner-title">Not started yet</h1>
+        <p className="owner-quiet">{name} · 3 goals · a check-in each month</p>
       </header>
       <section className="owner-block">
-        <ul className="detail-bullets">
-          <li>Three goals in plain words, and a simple bar for each.</li>
-          <li>You say OK to the goals, or change a number. That’s the whole setup.</li>
-          <li>The team learns from every draft you change, and tells you what it learned.</li>
-        </ul>
-        <p><Link to="/plan" className="btn btn-ghost">See what your plan includes</Link></p>
+        <p><Link to="/plan" className="btn btn-ghost">See your plan</Link></p>
       </section>
     </>
   );

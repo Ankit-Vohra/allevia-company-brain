@@ -34,9 +34,8 @@ export function SuggestedRow({ s, tenantId, onSet }: { s: GoalSetup; tenantId: s
   return (
     <li className="owner-suggest-row">
       <div className="owner-suggest-text">
-        <span className="owner-card-name">{s.name}</span>
         <p className="owner-suggest-title">{s.target === null ? s.name : `Get to ${fmtNum(s.target)}${unit} ${per}`}</p>
-        <p className="owner-card-why">{s.baseline === null ? "We'll know where you started after your first full week." : `You're at ${fmtNum(s.baseline)} now.`}</p>
+        <p className="owner-card-why">{s.baseline === null ? "We'll know after your first full week." : `Now ${fmtNum(s.baseline)}`}</p>
       </div>
       {editing ? (
         <form className="owner-edit" onSubmit={save}>
@@ -49,7 +48,7 @@ export function SuggestedRow({ s, tenantId, onSet }: { s: GoalSetup; tenantId: s
       ) : (
         <div className="owner-suggest-actions">
           <button type="button" className="btn btn-gold btn-sm" onClick={() => void send()} disabled={busy}><Icon name="check" size={14} /> OK</button>
-          <button type="button" className="btn btn-quiet btn-sm" onClick={() => setEditing(true)} disabled={busy}>Change the number</button>
+          <button type="button" className="btn btn-quiet btn-sm" onClick={() => setEditing(true)} disabled={busy}>Change</button>
         </div>
       )}
       {error && <p className="owner-error" role="alert">{error}</p>}
