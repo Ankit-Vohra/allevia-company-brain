@@ -15,7 +15,7 @@
   .credits-chip { height: 26px; padding: 0 8px; }
   .credits-chip-left { display: none; }
 }
-@media (max-width: 380px) {
+@media (max-width: 340px) {
   .credits-chip-word { display: none; }
 }
 

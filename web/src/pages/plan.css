@@ -55,6 +55,5 @@
   .plan-cards { grid-template-columns: 1fr; }
   .plan-more-row { grid-template-columns: 1fr; }
   .plan-more-row > .btn { justify-self: start; }
-  .plan-uses li { flex-direction: column; gap: 2px; }
   .plan-prices li { grid-template-columns: 3.5em minmax(0, 1fr); }
 }

@@ -74,7 +74,7 @@ export default function PlanPage() {
     cycle, currency: cur, current, currentCycle: sub.data?.cycle ?? "monthly", status: b.status, ...(sub.data ? { pending: sub.data.pending } : {}),
   }, (n, c) => fmtMoney(n, c));
   const waiting = sub.data ? pendingWords(sub.data.pending) : [];
-  const uses = useLines(credits.data.byService);
+  const uses = useLines(credits.data.byService, 3); // at most three on the page; every line is behind "Show how"
   const people = credits.data.byPerson;
   const pause = PLAN_BY_ID.pause;
   const offPct = Math.round(ANNUAL_DISCOUNT * 100);
