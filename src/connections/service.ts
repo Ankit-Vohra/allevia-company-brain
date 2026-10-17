@@ -17,7 +17,7 @@ import type { GraphHandle } from "../graph/client.js";
 import type { AuditLog } from "./audit.js";
 import {
   ConnectProblem, GROUP_ORDER, NeedsAttentionError, NotAllowedError, NotConfiguredError, NotConnectedError,
-  type CompleteOutcome, type ConnectionHealth, type ConnectionStatus, type ConnectionView, type Connector, type ConnectorCtx,
+  type CompleteOutcome, type ConnectStart, type ConnectionHealth, type ConnectionStatus, type ConnectionView, type Connector, type ConnectorCtx,
 } from "./types.js";
 
 const STATE_TTL_MS = 10 * 60_000;
@@ -168,7 +168,7 @@ export class ConnectionsService {
 
   // ---------- connecting ----------
 
-  async connect(tenant: string, id: string, options: Record<string, string> = {}): Promise<{ url: string }> {
+  async connect(tenant: string, id: string, options: Record<string, string> = {}): Promise<ConnectStart> {
     const { c, ctx } = await this.ctxFor(tenant, id, options.returnTo ? { returnTo: options.returnTo } : {});
     const a = c.availability();
     if (!a.ok) throw new NotConfiguredError(id, a);

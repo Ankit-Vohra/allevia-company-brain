@@ -26,7 +26,7 @@ export interface StudioLatest {
 }
 import type { AgentMode, CapabilityState, DirectivePreview, DiscordHome, LearnedRuleDto, Lineage, ProgramScorecard } from "@shared/contracts";
 import type {
-  ConnectionRow, ConnectionsPage,
+  ConnectionRow, ConnectionsPage, ConnectStart,
   PostView, AgentDetail, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, GoalSetup, GraphData, LearningFeed, LiveTurn, NodeDetail,
   CheckupStatus, ConnectorStatus, NumbersImportResult, NumbersPlan, NumbersPreview, OnboardRequest, Overview, Recommendation, SearchHit, SessionDetail, SessionSummary, Standup, Tenant, TurnEventsPage, Usage,
 } from "./types-ext";
@@ -432,9 +432,14 @@ export const api = {
     return (await getJson<{ results: Array<{ id: string; name: string; description: string }> }>(`/api/${enc(t)}/connections/search?q=${encodeURIComponent(q)}`)).results;
   },
   /** POST .../connect: where the owner says yes. `returnTo: "popup"` lands on a "you can close this tab" page. */
-  async connectConnection(t: string, id: string, o: { inbox?: boolean; returnTo?: "connections" | "onboard" | "popup" | "home" } = {}): Promise<{ url: string }> {
+  async connectConnection(t: string, id: string, o: { inbox?: boolean; returnTo?: "connections" | "onboard" | "popup" | "home" } = {}): Promise<ConnectStart> {
     if (mode === "mock") throw new ApiError("Connecting your tools needs the live server.", 501);
     return sendJson(`/api/${enc(t)}/connections/${encodeURIComponent(id)}/connect`, "POST", o);
+  },
+  /** POST .../key: the key the owner pasted on the sheet, sent once; the answer never carries it back. */
+  async connectWithKey(t: string, id: string, values: Record<string, string>): Promise<{ message: string; view: ConnectionRow }> {
+    if (mode === "mock") throw new ApiError("Connecting your tools needs the live server.", 501);
+    return sendJson(`/api/${enc(t)}/connections/${encodeURIComponent(id)}/key`, "POST", { values });
   },
   async selectConnection(t: string, id: string, value: string): Promise<ConnectionRow> {
     if (mode === "mock") throw new ApiError("Connecting your tools needs the live server.", 501);

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { api, getMode } from "../api";
-import type { ConnectionRow, ConnectionsPage } from "../types-ext";
+import type { ConnectionRow, ConnectionsPage, KeyForm } from "../types-ext";
 import { Icon } from "./Icon";
+import { KeySheet } from "./KeySheet";
 import "./connections.css";
 
 // The Connections list, on its own page and as the "Connect your tools" step of setting up a business. Calm and plain: a tool,
@@ -58,13 +59,15 @@ interface RowProps {
   busy: boolean;
   live: boolean;
   focus: boolean;
+  /** Why connecting it just failed, in one sentence ("Higgsfield needs your API key"). */
+  failed?: string;
   onConnect: (row: ConnectionRow, opts?: { inbox?: boolean }) => void;
   onDisconnect: (row: ConnectionRow) => void;
   onSelect: (row: ConnectionRow, value: string) => void;
   onRead: (row: ConnectionRow) => void;
 }
 
-function Row({ row, busy, live, focus, onConnect, onDisconnect, onSelect, onRead }: RowProps) {
+function Row({ row, busy, live, focus, failed, onConnect, onDisconnect, onSelect, onRead }: RowProps) {
   const ref = useRef<HTMLLIElement>(null);
   const [pick, setPick] = useState("");
   const [open, setOpen] = useState(false);
@@ -86,6 +89,7 @@ function Row({ row, busy, live, focus, onConnect, onDisconnect, onSelect, onRead
         {open && row.acts[0] && <p className="cx-meta"><span>It may</span> {row.acts[0]}</p>}
         {(connected || attention) && <p className={`cx-status ${attention ? "is-bad" : "is-ok"}`} role="status">{row.message}</p>}
         {!row.available && <p className="cx-status">{row.soon ? "Coming soon." : row.unavailableWords}</p>}
+        {failed && <p className="cx-status is-bad" role="alert">{failed}</p>}
         {row.choose && (
           <form className="cx-pick" onSubmit={(e: FormEvent) => { e.preventDefault(); if (pick) onSelect(row, pick); }}>
             <label className="visually-hidden" htmlFor={`pick-${row.id}`}>{row.choose.label}</label>
@@ -123,6 +127,9 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
   const [q, setQ] = useState("");
   const [found, setFound] = useState<Array<{ id: string; name: string; description: string }> | null>(null);
   const [showMore, setShowMore] = useState(false);
+  const [failed, setFailed] = useState<{ id: string; text: string } | undefined>();
+  const [sheet, setSheet] = useState<{ id: string; form: KeyForm } | undefined>();
+  const [done, setDone] = useState<string | undefined>();
   const seen = useRef(-1); // -1: tell the page the first count too, even when it is 0
 
   const load = useCallback(async () => {
@@ -155,18 +162,28 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
   const run = async (id: string, fn: () => Promise<unknown>) => {
     setBusy(id);
     setError(undefined);
-    try { await fn(); await load(); } catch (e) { setError((e as Error)?.message ?? "That didn't work. Try again."); } finally { setBusy(undefined); }
+    setFailed(undefined);
+    try { await fn(); await load(); } catch (e) { setFailed({ id, text: (e as Error)?.message || "That didn't work. Try again." }); } finally { setBusy(undefined); }
   };
   const onConnect = (row: ConnectionRow, opts: { inbox?: boolean } = {}) => run(row.id, async () => {
+    setDone(undefined);
+    const start = await api.connectConnection(tenantId, row.id, { ...opts, returnTo: variant === "onboard" ? "popup" : "connections" });
+    if (start.key) { setSheet({ id: row.id, form: start.key }); return; } // no sign-in page: ask for its key here
     if (variant === "onboard") {
-      const { url } = await api.connectConnection(tenantId, row.id, { ...opts, returnTo: "popup" });
-      window.open(url, "_blank", "noopener");
+      window.open(start.url, "_blank", "noopener");
       setWaiting((w) => new Set(w).add(row.id));
     } else {
-      const { url } = await api.connectConnection(tenantId, row.id, { ...opts, returnTo: "connections" });
-      window.location.assign(url);
+      window.location.assign(start.url);
     }
   });
+  const onSaveKey = async (values: Record<string, string>) => {
+    if (!sheet) return;
+    const r = await api.connectWithKey(tenantId, sheet.id, values); // a refusal throws its sentence, shown in the sheet
+    setSheet(undefined);
+    setDone(r.message);
+    setFound((f) => (f ? f.filter((x) => x.id !== sheet.id) : f));
+    await load();
+  };
   const onDisconnect = (row: ConnectionRow) => run(row.id, () => api.disconnectConnection(tenantId, row.id));
   const onSelect = (row: ConnectionRow, v: string) => run(row.id, () => api.selectConnection(tenantId, row.id, v));
   const onRead = (row: ConnectionRow) => run(row.id, () => api.pullConnection(tenantId, row.id));
@@ -192,7 +209,7 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
 
   const connectedRows = data ? [...data.recommended, ...data.more].filter((r) => r.state === "connected") : [];
   const never = data?.never ?? "We never post, send, spend or book without your OK, and your data stays in your own space.";
-  const rowProps = (row: ConnectionRow): RowProps => ({ row, busy: busy === row.id, live, focus: focusId === row.id, onConnect, onDisconnect, onSelect, onRead });
+  const rowProps = (row: ConnectionRow): RowProps => ({ row, busy: busy === row.id, live, focus: focusId === row.id, ...(failed?.id === row.id ? { failed: failed.text } : {}), onConnect, onDisconnect, onSelect, onRead });
 
   if (!data && !error) return <div className="cx-skel" aria-busy="true"><span className="skeleton" /><span className="skeleton" /></div>;
   if (data && !data.ready) return <p className="cx-quiet">{data.message ?? "Connecting your tools isn't switched on yet. Your team is setting it up and will let you know when it's ready."}</p>;
@@ -203,7 +220,9 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
       {/* on the Your tools page the promise sits at the foot, not as a sentence under the heading */}
       {variant === "onboard" && <p className="cx-never"><Icon name="check" size={15} /><span>{never} <span className="cx-never-tail">Disconnect any time.</span></span></p>}
       {!live && <p className="cx-quiet">Connecting works in the live app.</p>}
+      {done && <p className="notice notice-ok" role="status">{done}</p>}
       {error && <p className="notice notice-bad" role="alert">{error}</p>}
+      {sheet && <KeySheet form={sheet.form} onSave={onSaveKey} onClose={() => setSheet(undefined)} />}
       {waiting.size > 0 && <p className="cx-quiet" role="status">Waiting for you to finish in the other tab. This updates by itself.</p>}
 
       {variant === "onboard" && connectedRows.length > 0 && (
@@ -238,7 +257,7 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
               {found.map((f) => (
                 <li key={f.id} className="cx-row">
                   <Logo row={{ name: f.name, logo: `https://logos.composio.dev/api/${f.id.slice(4)}` }} />
-                  <div className="cx-main"><h3 className="cx-name">{f.name}</h3><p className="cx-line">{f.description || `Your team can use ${f.name}.`}</p><p className="cx-meta">Anything it changes in {f.name} waits for your OK.</p></div>
+                  <div className="cx-main"><h3 className="cx-name">{f.name}</h3><p className="cx-line">{f.description || `Your team can use ${f.name}.`}</p><p className="cx-meta">Anything it changes in {f.name} waits for your OK.</p>{failed?.id === f.id && <p className="cx-status is-bad" role="alert">{failed.text}</p>}</div>
                   <div className="cx-act"><button type="button" className="btn btn-gold btn-sm" disabled={busy === f.id} onClick={() => onConnect({ id: f.id, name: f.name } as ConnectionRow)}>Connect</button></div>
                 </li>
               ))}

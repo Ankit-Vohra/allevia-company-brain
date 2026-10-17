@@ -333,6 +333,15 @@ export interface ConnectionRow {
   extras?: string[];
 }
 
+/** A tool with no sign-in page: POST .../connect answers this and the page asks for its key (src/connections/types.ts KeyForm). */
+export interface KeyForm {
+  tool: string;
+  fields: Array<{ name: string; label: string; help?: string; secret: boolean }>;
+  hint?: string;
+}
+/** POST .../connect (src/server/routes/connections.ts). */
+export interface ConnectStart { url: string; key?: KeyForm }
+
 /** GET /api/:t/connections (src/server/routes/connections.ts). */
 export interface ConnectionsPage {
   ready: boolean;
