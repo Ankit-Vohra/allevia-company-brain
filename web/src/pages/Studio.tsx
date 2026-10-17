@@ -231,7 +231,7 @@ export default function StudioPage() {
         <p className="studio-eyebrow"><Icon name="sparkle" size={14} /> Content Studio</p>
         <h1 className="page-title">A phone photo, made into a post</h1>
         <Reveal label="How it works">
-          <p className="studio-lede">A free clean-up and an AI edit; nothing is posted without your OK. Tara reads the photo and marks what must not change. The AI edit says its price first. Nisha checks both against the original before you see them.</p>
+          <p className="studio-lede">A free clean-up and an AI edit; nothing is posted without your OK. {agentDef("content-strategist")?.name} reads the photo and marks what must not change. The AI edit says its price first. {agentDef("fact-checker")?.name} checks both against the original before you see them.</p>
         </Reveal>
         <label className="studio-setting">
           <input type="checkbox" checked={!!settings?.blurFaces} disabled={!settings || !live || getPublicMode()} onChange={(e) => void toggleBlur(e.target.checked)} />
@@ -255,7 +255,7 @@ export default function StudioPage() {
       </header>
 
       <BrandLibrary tenant={tenant.id} />
-      <div className="studio-grid">
+      <div className={`studio-grid${!hasRun && !running ? " is-solo" : ""}`}>
         <section className="studio-col" aria-label="The photo">
           {(!hasRun || file) && !running && (
             <div className={`drop${preview ? " has-photo" : ""}`} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
@@ -464,14 +464,6 @@ export default function StudioPage() {
             <AssetLineage tenant={tenant.id} rootId={f.originalId} refreshKey={`${refresh}|${approvalStatus}|${approved?.contentId ?? ""}|${clipUrl ?? ""}`} />
           )}
 
-          {!hasRun && !running && (
-            <div className="studio-empty">
-              <span className="studio-avatars" aria-hidden="true">
-                {["content-strategist", "fact-checker", "copy-editor"].map((a) => <AgentAvatar key={a} id={a} size={34} />)}
-              </span>
-              <p>Tara, Nisha and Dev are ready.</p>
-            </div>
-          )}
         </section>
       </div>
     </div>

@@ -186,3 +186,7 @@
 .lineage-more { font-size: var(--text-xs); color: var(--color-ink-2); }
 .lineage-more summary { cursor: pointer; color: var(--color-muted); width: max-content; }
 .lineage-more ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+
+/* before a photo is sent there is nothing for the right column to show: the form takes the page */
+.studio-grid.is-solo { grid-template-columns: minmax(0, 640px); }
+.studio-grid.is-solo > .studio-col:empty { display: none; }
