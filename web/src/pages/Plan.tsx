@@ -28,7 +28,8 @@ export default function PlanPage() {
   const money = (n: number) => fmtMoney(n, cur);
   const [tick, setTick] = useState(0);
   const credits = useAsync(() => api.credits(tenant.id), [tenant.id, tick]);
-  const sub = useAsync(() => api.subscription(tenant.id).catch(() => null), [tenant.id, tick]);
+  // a demo you only look at has no subscription of yours: not asked for (it was a 403 in the console)
+  const sub = useAsync(() => (tenant.readOnly ? Promise.resolve(null) : api.subscription(tenant.id).catch(() => null)), [tenant.id, tenant.readOnly, tick]);
   const intent = useMemo(() => planIntent(loc.search), [loc.search]);
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const [busy, setBusy] = useState<string | null>(null);
@@ -41,7 +42,7 @@ export default function PlanPage() {
     if (intent.plan || intent.buy) plansRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
   }, [intent.plan, intent.buy, credits.data]);
 
-  const demo = getPublicMode();
+  const demo = getPublicMode() || tenant.readOnly === true;
   const owner = !demo && !!sub.data;
   const b = credits.data?.balance;
 
@@ -191,7 +192,7 @@ export default function PlanPage() {
         )}
       </section>
 
-      <p className="owner-callout" role="note">{TEST_MODE_NOTE}</p>
+      {owner && <p className="owner-callout" role="note">{TEST_MODE_NOTE}</p>}
 
       <ShowDetails label="Show how" openLabel="Hide how">
         <section className="detail-block" aria-labelledby="d-prices">
