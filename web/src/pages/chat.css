@@ -145,6 +145,11 @@
 .ct-how-body { display: grid; gap: 14px; padding: 4px 0 6px 6px; font-size: var(--text-sm); }
 .ct-how-body h4 { font-size: var(--text-xs); font-weight: 600; color: var(--color-muted); margin-bottom: 4px; }
 .ct-how-body ul { list-style: none; display: grid; gap: 4px; }
+.ct-path-map {
+  position: relative; height: 210px; border: var(--rule); border-radius: var(--radius-md); overflow: hidden;
+  background: radial-gradient(circle at 1px 1px, oklch(from var(--color-ink) l c h / 0.07) 1px, transparent 1.4px) 0 0 / 20px 20px, var(--color-card);
+}
+.ct-path-map .graph-view { position: absolute; inset: 0; }
 .ct-people li { display: flex; align-items: center; gap: 8px; }
 .ct-people li span { color: var(--color-muted); font-size: var(--text-xs); }
 .ct-checks li { display: flex; align-items: center; gap: 6px; color: var(--color-ink-2); }

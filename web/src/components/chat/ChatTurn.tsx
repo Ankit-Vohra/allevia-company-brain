@@ -19,6 +19,7 @@ import { humanDates, plain } from "../../lib/words";
 import type { RunView } from "../../state/derive";
 import type { Approval } from "../../types-ext";
 import type { TurnItem } from "./useThread";
+import { AnswerPath } from "./AnswerPath";
 
 const nameOf = (id: AgentId) => agentDef(id)?.name ?? id;
 const jobOf = (id: AgentId) => agentDef(id)?.title ?? "";
@@ -121,6 +122,7 @@ export function ChatTurn(p: TurnProps) {
           {(view.final || how.people.length > 0) && (
             <Reveal label="How we got this" summary={view.final ? `${how.people.length} ${how.people.length === 1 ? "person" : "people"} · ${how.sources.length} ${how.sources.length === 1 ? "source" : "sources"}` : undefined} className="ct-how">
               <div className="ct-how-body">
+                {view.final && view.path && <AnswerPath path={view.path} />}
                 <section>
                   <h4>Who worked on it</h4>
                   <ul className="ct-people">{how.people.map((a) => <li key={a}><AgentAvatar id={a} size={22} /> <b>{nameOf(a)}</b> <span>{jobOf(a)}</span></li>)}</ul>
