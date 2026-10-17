@@ -208,7 +208,10 @@ function AccountMenu() {
       </button>
       {open && (
         <div className="switcher-menu account-menu" role="menu" aria-label="Your account">
-          <div className="account-who"><b>{account.user.name}</b><span>{account.user.email}</span></div>
+          <div className="account-who">
+            <b>{account.user.name}{account.operator && <span className="account-operator" title="You run Allevia, so every business is open to you">Operator</span>}</b>
+            <span>{account.user.email}</span>
+          </div>
           {account.businesses.length > 0 && <p className="account-menu-label">Your businesses</p>}
           {account.businesses.map((b) => (
             <button key={b.id} type="button" role="menuitemradio" aria-checked={b.id === tenant.id} className="switcher-item"

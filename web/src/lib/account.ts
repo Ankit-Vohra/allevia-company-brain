@@ -5,7 +5,8 @@ import { ApiError, errorFrom } from "./sse";
 
 export interface AccountUser { id: string; email: string; name: string }
 export interface AccountBusiness { id: string; name: string; role: "owner" | "member" }
-export interface Account { user: AccountUser; businesses: AccountBusiness[] }
+/** operator: the person who runs Allevia (set on the server only); every business opens to them, so the switcher lists them all. */
+export interface Account { user: AccountUser; businesses: AccountBusiness[]; operator?: true }
 export interface Member { id: string; name: string; email: string; role: "owner" | "member"; since: number; you?: boolean }
 export interface MembersPage { members: Member[]; seats: number; invited: number; canInvite: boolean }
 export interface InvitePreview { business: { id: string; name: string }; role: "owner" | "member"; expiresAt: number }

@@ -15,6 +15,7 @@ export interface Tenant {
   readOnly?: boolean;    // owner links are on and this browser holds none for this business: it is a public demo, to look at only
   showcase?: boolean;    // with readOnly: a real business shown to the public; people, customers, messages and private documents are masked
   role?: "owner" | "member"; // with sign-in on: your role in this business (an owner link makes you the owner)
+  operator?: true; // with role: you run Allevia (an operator account) and open this business without being in it
 }
 
 export interface Freshness { source: string; asOf: string; status: "ok" | "stale" | "error"; note?: string }
