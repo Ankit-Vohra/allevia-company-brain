@@ -162,9 +162,17 @@ describe("Google through Composio: read, then act behind an approval", () => {
     expect(r.sources[0]).toMatchObject({ id: "live:search-console" });
   });
 
-  it("GA4 and Ads numbers are not on Composio: the tool points the agent at the toolkit's real actions instead of guessing", async () => {
+  it("GA4 is read through Composio's proxy (tests/connections/composio-ga4.test.ts); when Google does not answer and nothing is recorded, it says so and guesses nothing", async () => {
     await connect(TENANT, "google-analytics").catch(() => undefined);
     const r = await run(ga4Report, {});
+    expect(r.data).not.toHaveProperty("use", "connection_tools");
+    expect(r.data).toMatchObject({ retryable: true, nothingChanged: true });
+    expect(r.note).toMatch(/don't guess/);
+  });
+
+  it("Ads numbers are not on Composio: the tool points the agent at the toolkit's real actions instead of guessing", async () => {
+    await connect(TENANT, "google-ads").catch(() => undefined);
+    const r = await run(adsReport, {});
     expect(JSON.stringify(r.data)).toMatch(/connection_tools|connected/);
   });
 });

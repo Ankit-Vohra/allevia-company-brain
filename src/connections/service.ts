@@ -20,6 +20,18 @@ import {
 } from "./types.js";
 
 const STATE_TTL_MS = 10 * 60_000;
+
+/**
+ * The agents' own tool for reading each connection that has one (the same on our own Google app and on Composio), and where its
+ * daily read sits in the records. Connections not listed are read with connection_tools and connection_read.
+ */
+export const READ_WITH: Readonly<Record<string, { tool: string; recorded?: string }>> = {
+  "google-analytics": { tool: "ga4_report", recorded: "metric_trend on channel:website, metrics ga4_sessions, ga4_users, ga4_new_users, ga4_conversions and ga4_sessions_from_<source>" },
+  "search-console": { tool: "gsc_report", recorded: "metric_trend on channel:google-search, metrics gsc_clicks and gsc_impressions" },
+  "google-ads": { tool: "ads_report" },
+  "google-calendar": { tool: "calendar_free_slots" },
+  gmail: { tool: "gmail_inbox" },
+};
 const MIN_KEY = 32;
 
 export interface ServiceDeps {
@@ -318,8 +330,11 @@ export class ConnectionsService {
     const on = usable.filter((v) => v.state === "connected");
     const attention = usable.filter((v) => v.state === "needs_attention");
     const off = usable.filter((v) => v.state === "not_connected" && v.id.indexOf("app-") !== 0).slice(0, 8);
+    const readable = on.filter((v) => READ_WITH[v.id]);
     return [
       `Connected tools of this business: ${on.length ? on.map((v) => `${v.name} (${v.id})`).join(", ") : "none yet"}.`,
+      // a connected tool is readable whichever way it is connected (our own Google app or Composio): name the tool that reads it
+      readable.length ? `Read them with their own tools: ${readable.map((v) => `${v.name} with ${READ_WITH[v.id]!.tool}${READ_WITH[v.id]!.recorded ? ` (its daily read is also in the records: ${READ_WITH[v.id]!.recorded})` : ""}`).join("; ")}. Use these before saying a number is not available.` : "",
       attention.length ? `These stopped working and need the owner to connect them again: ${attention.map((v) => v.name).join(", ")}.` : "",
       off.length ? `Not connected yet: ${off.map((v) => `${v.name} (${v.id})`).join(", ")}.` : "",
       "Use connections_available to see which ones you may use, connection_read to look something up and connection_act to propose a change. If a job needs a tool that is not connected, say so plainly and give the owner this link: [Connect <name>](/connections?connect=<id>). Never invent data from a tool that is not connected.",

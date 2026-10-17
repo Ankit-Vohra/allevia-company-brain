@@ -17,7 +17,7 @@ import { addressesOf, validAddresses } from "../../actions/executors.js";
 import { classifyTool, ComposioError, type ComposioSession } from "../../connections/composio.js";
 import type { GoogleSession } from "../../connections/google/product.js";
 import type { SearchConsoleSession } from "../../connections/google/search-console.js";
-import { RateLimitedError } from "../../connections/service.js";
+import { RateLimitedError, READ_WITH } from "../../connections/service.js";
 import { NeedsAttentionError, NotAllowedError, NotConfiguredError, NotConnectedError } from "../../connections/types.js";
 import { GoogleApiError } from "../../connectors/google/client.js";
 import { upsertEdge, upsertNode } from "../../graph/upsert.js";
@@ -25,7 +25,8 @@ import { isoDate } from "../../util/time.js";
 import { isoIn, zonedToUtc } from "../../util/zones.js";
 import type { ToolContext } from "../tool.js";
 import { runPropose } from "./actions.js";
-import { InputError, clamp, defineTool, ro, refuseIfReadOnly, refuseIfStopped } from "./common.js";
+import { Collector, InputError, clamp, defineTool, ro, refuseIfReadOnly, refuseIfStopped } from "./common.js";
+import { totalOf, totalsFor } from "./observations.js";
 
 const EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const READ_INBOX_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
@@ -284,24 +285,62 @@ export const gmailInbox = defineTool({
 const days = (n: number | undefined, d: number) => clamp(n, d, 1, 90);
 const rangeOf = (ctx: ToolContext, n: number, lag = 1) => ({ endDate: isoDate(ctx.now - lag * 86_400_000), startDate: isoDate(ctx.now - (lag + n - 1) * 86_400_000) });
 
+// What the daily Analytics read keeps in the records (src/connections/firstread.ts): visits, visitors, new visitors and key events
+// by day on the website channel, and visits by source over the read's 28 days.
+export const GA4_RECORDED = "channel:website";
+
+/** The GA4 numbers already in the records for the period: each ga4_* metric on the website, totalled the right way. */
+async function recordedGa4(ctx: ToolContext, from: string, to: string): Promise<{ totals: Array<{ metric: string; total: number; from: string; through: string }>; col: Collector } | null> {
+  const metrics = (await ro<{ m: string }>(ctx, "MATCH (o:Observation {subject:$s}) WHERE o.metricKey STARTS WITH 'ga4_' RETURN DISTINCT o.metricKey AS m LIMIT 60", { s: GA4_RECORDED }).catch(() => [])).map((x) => x.m);
+  if (!metrics.length) return null;
+  const range = { s: GA4_RECORDED, metrics, from, to: `${to}~` };
+  const [totals, spans] = await Promise.all([
+    totalsFor(ctx, [GA4_RECORDED], { metrics, from, to: range.to }).catch(() => []),
+    ro<{ m: string; from: string; through: string }>(ctx,
+      `MATCH (o:Observation {subject:$s}) WHERE o.metricKey IN $metrics WITH o.metricKey AS m, coalesce(o.windowStart, o.windowEnd, o.asOf) AS since, coalesce(o.windowEnd, o.asOf) AS at
+       WHERE at >= $from AND at <= $to RETURN m, min(since) AS from, max(at) AS through`, range).catch(() => []),
+  ]);
+  if (!totals.length) return null;
+  const span = new Map(spans.map((x) => [x.m, x]));
+  const col = new Collector();
+  const out = totals.map((t) => {
+    for (const x of t.newest) { col.node(x.o); col.edge(x.e); }
+    const s = span.get(t.metric);
+    return { metric: t.metric, total: Math.round(totalOf(t) * 100) / 100, from: String(s?.from ?? from).slice(0, 10), through: String(s?.through ?? to).slice(0, 10) };
+  }).sort((a, b) => a.metric.localeCompare(b.metric));
+  return { totals: out, col };
+}
+
 export const ga4Report = defineTool({
   name: "ga4_report",
   external: true,
   description:
-    "Reads the website's Google Analytics live: visits, visitors and key events by day, source or page. Example: {\"by\":\"source\",\"days\":28}.",
+    "Reads the website's Google Analytics live (through our own Google app or Composio): visits, visitors and key events by day, source or page. If the live read fails it returns the GA4 numbers the daily read already recorded. Example: {\"by\":\"source\",\"days\":28}.",
   input: { by: z.enum(["day", "source", "page"]).optional(), days: z.number().int().min(1).max(90).optional() },
   async run(a, ctx) {
     const n = days(a.days, 28), by = a.by ?? "day";
     const { startDate, endDate } = rangeOf(ctx, n);
     const dim = by === "day" ? "date" : by === "source" ? "sessionDefaultChannelGroup" : "pagePath";
-    const r = await onConnection(ctx, "ga4_report", "google-analytics", "analytics report", (s) => {
-      const property = s.meta?.selected;
-      if (!property) return Promise.reject(new ComposioError("Needs the toolkit's own actions.", 501));
+    const r = await onConnection(ctx, "ga4_report", "google-analytics", "analytics report", async (s) => {
+      const property = s.meta?.selected || (s.ga4Property ? await s.ga4Property() : null);
+      if (!property) {
+        if (s.ga4Property) return null; // connected through Composio, but the account has no Analytics property
+        throw new ComposioError("Needs the toolkit's own actions.", 501);
+      }
       return s.apis.ga4Report(s.accessToken, property, { startDate, endDate, dimensions: [dim], metrics: ["sessions", "activeUsers", "keyEvents"], limit: by === "day" ? 100 : 15 });
     });
-    if (!r.ok) return r.result;
-    const rows = r.value.map((x) => ({ [by]: x.dimensions[0], sessions: x.metrics[0], visitors: x.metrics[1], keyEvents: x.metrics[2] }));
-    return { data: { by, startDate, endDate, rows }, nodes: await liveRead(ctx, "google-analytics"), edges: [], sources: [live(ctx, "ga4", "Google Analytics")], note: `Google Analytics, ${startDate} to ${endDate}. Say these are live from Google Analytics for that period.` };
+    if (r.ok && r.value) {
+      const rows = r.value.map((x) => ({ [by]: x.dimensions[0], sessions: x.metrics[0], visitors: x.metrics[1], keyEvents: x.metrics[2] }));
+      return { data: { by, startDate, endDate, rows }, nodes: await liveRead(ctx, "google-analytics"), edges: [], sources: [live(ctx, "ga4", "Google Analytics")], note: `Google Analytics, ${startDate} to ${endDate}. Say these are live from Google Analytics for that period.` };
+    }
+    // No live numbers: what the daily read recorded is still real Google Analytics data, with its dates.
+    const kept = await recordedGa4(ctx, startDate, endDate);
+    const why = r.ok ? "Google Analytics is connected, but the account has no Analytics property to read." : r.result.note ?? "The live read did not work.";
+    if (!kept) return r.ok ? { data: { by, startDate, endDate, rows: [], noProperty: true }, nodes: [], edges: [], sources: [], note: `${why} Tell the owner plainly; do not make numbers up.` } : r.result;
+    return kept.col.result(ctx, {
+      by, startDate, endDate, live: false, ...(r.ok ? {} : { liveRead: r.result.data }), recorded: kept.totals,
+      readMore: `metric_trend with subject "${GA4_RECORDED}" and one of these metrics gives the series by day.`,
+    }, `${why} These Google Analytics numbers were recorded by the daily read (ga4_sessions = visits, ga4_users = visitors, ga4_sessions_from_<source> = visits from that source over the read's window). Use them, with their dates; say they come from Google Analytics as of the "through" date, not live.`);
   },
 });
 
@@ -373,12 +412,15 @@ export const connectionsAvailable = defineTool({
     const connected = mine.filter((v) => v.state === "connected");
     return {
       data: {
-        connected: connected.map((v) => ({ id: v.id, name: v.name, whatItDoes: v.blurb, mayChange: v.acts.length > 0 })),
+        connected: connected.map((v) => ({
+          id: v.id, name: v.name, whatItDoes: v.blurb, mayChange: v.acts.length > 0, readWith: READ_WITH[v.id]?.tool ?? "connection_read",
+          ...(READ_WITH[v.id]?.recorded ? { alsoRecorded: READ_WITH[v.id]!.recorded } : {}),
+        })),
         needsReconnecting: mine.filter((v) => v.state === "needs_attention").map((v) => ({ id: v.id, name: v.name, link: connectLink(v.id) })),
         notConnected: mine.filter((v) => v.state === "not_connected").slice(0, 12).map((v) => ({ id: v.id, name: v.name, whatItWouldDo: v.blurb, link: connectLink(v.id) })),
         starterJobs: startersFor(connected.map((v) => v.id), ctx.agentId).map((t) => ({ job: t.label, needsOk: t.needsOk })),
       },
-      nodes: [], edges: [], sources: [], note: connected.length ? `${connected.length} connected tools you may use. Read with connection_read; changes go through connection_act and wait for the owner's OK.` : "None of the tools you may use are connected yet. If a job needs one, tell the owner and give them its link.",
+      nodes: [], edges: [], sources: [], note: connected.length ? `${connected.length} connected tools you may use. Read each with its readWith tool (connection_read for the rest); a connected tool is readable however it was connected. Changes go through connection_act and wait for the owner's OK.` : "None of the tools you may use are connected yet. If a job needs one, tell the owner and give them its link.",
     };
   },
 });

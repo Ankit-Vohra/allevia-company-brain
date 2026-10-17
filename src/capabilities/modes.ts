@@ -35,6 +35,8 @@ const AD_CHANNELS = ["channel:meta-ads", "channel:google-ads", "channel:paid-ads
 
 export const CAPABILITIES: readonly CapabilitySpec[] = [
   {
+    // system:ga4 is the System both connection paths write (our own Google app and Composio's proxy read), and the daily read's
+    // ga4_* Observations on channel:website are its data: connected either way, it is live (api) while they are fresh.
     key: "ga4", name: "Website analytics (GA4)",
     systems: ["system:ga4", "system:analytics-ga4", "system:google-analytics"], channels: [],
     observes: (m) => m.startsWith("ga4_"),
