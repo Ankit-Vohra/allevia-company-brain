@@ -39,6 +39,7 @@ import type { LlmRunner } from "../ingest/llm.js";
 import { DecisionError, decide, type ActionOpts, type OnDecision } from "./approvals.js";
 import { PRIVATE_MESSAGE, authorize, clearSession, presentedTokens, requestView, scopesOf, setSession, type AuthDeps } from "./auth.js";
 import { HttpError, readBody, type RouteCtx } from "./http.js";
+import { AUTH_OPEN_WORDS, ONBOARD_WORDS, clientKey, enforce, makeLimits, type RateLimitConfig } from "./ratelimit.js";
 import { registerActionRoutes } from "./routes/actions.js";
 import { registerConnectorRoutes, type GoogleWiring } from "./routes/connectors.js";
 import { registerConnectionRoutes, type ConnectionsWiring } from "./routes/connections.js";
@@ -99,6 +100,9 @@ export interface ServerDeps {
   // ALLEVIA_AUTH=1 (src/auth, docs/tenant-isolation.md): every /api/:t/... route needs that business's owner token, and
   // /api/onboard the operator's. Absent (or enabled: false) is local development: no checks.
   auth?: AuthDeps;
+  // How often a stranger may knock on the two doors that cost something: opening a business with a link, and setting one up
+  // (ratelimit.ts; the defaults are on, `false` for one switches it off, trustProxy reads the client's address from a reverse proxy).
+  rateLimit?: RateLimitConfig;
   listTenants: () => Promise<RegistryTenant[]>;
   openGraph: (slug: string) => Promise<GraphHandle>;
   // ask()'s deps for one live turn (createAskDeps in production; a FakeRuntime in tests).
@@ -226,6 +230,7 @@ export function createApp(deps: ServerDeps): Hono {
   let live = 0;
   let onboarding = false;
   const turns = new LiveTurns({ now, ...deps.liveTurns });
+  const limits = makeLimits(deps.rateLimit, now);
 
   let cache: { at: number; list: Promise<RegistryTenant[]> } | undefined;
   const registry = (): Promise<RegistryTenant[]> => {
@@ -361,6 +366,9 @@ export function createApp(deps: ServerDeps): Hono {
   // Every failure is the same sentence, so it says nothing about which tokens or businesses exist.
   app.post("/api/auth/open", async (c) => {
     if (!authOn) throw new HttpError(404, "No such endpoint.");
+    // each try costs a registry read, so a client and everybody together are limited before the body is read or anything is looked up
+    enforce(c, limits.authOpen, clientKey(c, limits.trustProxy), AUTH_OPEN_WORDS);
+    enforce(c, limits.authOpenAll, "all", AUTH_OPEN_WORDS);
     const body = await readBody(c, z.object({ token: z.unknown().optional() }));
     const bad = new HttpError(401, "That link is not valid any more. Ask for a new one.");
     if (typeof body.token !== "string") throw bad;
@@ -391,12 +399,14 @@ export function createApp(deps: ServerDeps): Hono {
   });
 
   app.post("/api/onboard", async (c) => {
+    enforce(c, limits.onboard, clientKey(c, limits.trustProxy), ONBOARD_WORDS); // every request counts, a stranger's too
     if (authOn) {
       // creating a business spends the operator's model access and makes a graph: only the operator does it
       const tokens = presentedTokens(c);
       if (!tokens.length) throw new HttpError(401, PRIVATE_MESSAGE);
       if (!(await scopesOf(deps.auth!, c)).has(OPERATOR_SCOPE)) throw new HttpError(403, "Setting up a business is done by the Allevia team.");
     } else refuseInPublicMode();
+    enforce(c, limits.onboardRuns, "all", ONBOARD_WORDS); // only requests that were let in count against everybody's set-ups
     const body = await readBody(c, OnboardBody);
     const run = await (deps.loadOnboard ?? loadOnboardModule)();
     if (!run) throw new HttpError(501, "Website onboarding is not installed on this server yet.");

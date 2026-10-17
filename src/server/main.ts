@@ -45,11 +45,12 @@ export function productionGoogle(): GoogleWiring {
   };
 }
 
-export function productionDeps(o: { model?: string; publicMode: boolean; authRequired?: boolean; staticDir?: string }): ServerDeps {
+export function productionDeps(o: { model?: string; publicMode: boolean; authRequired?: boolean; staticDir?: string; trustProxy?: boolean }): ServerDeps {
   let hub: Promise<import("../discord/hub-service.js").HubService | null> | undefined;
   return {
     publicMode: o.publicMode,
     ...(o.authRequired ? { auth: { enabled: true, verify: (token: string) => verifyToken(token) } } : {}),
+    rateLimit: { trustProxy: o.trustProxy ?? loadConfig().trustProxy }, // the limits' defaults are on; ALLEVIA_TRUST_PROXY=1 behind a reverse proxy
     // The Discord hub, when DISCORD_HUB_GUILD_ID (and the rest) is set; built once and shared with the retry loop below.
     discordHub: () => (hub ??= o.publicMode ? Promise.resolve(null) : import("../discord/hub-service.js").then((m) => m.productionHub())),
     listTenants: () => listTenants(),

@@ -17,6 +17,7 @@ import { seededGraph } from "../helpers/tools.js";
 import { SCRIPTS, post, sseEvents } from "../server/harness.js";
 
 const NOW = SEED_NOW + 3_600_000;
+const NO_LIMITS = { authOpen: false, authOpenAll: false, onboard: false, onboardRuns: false } as const;
 const metaGraph = testGraphName();
 const opts = { metaGraph };
 let a: GraphHandle;
@@ -58,6 +59,7 @@ beforeAll(async () => {
     auth: { enabled: true, verify: (t) => verifyToken(t, opts) },
     actions: { config: { dataDir: "/nonexistent-allevia-auth-test" } },
     directiveLlm: null, heartbeatMs: 0, replaySpeed: 0, now: () => NOW, tenantCacheMs: 0, log: () => {},
+    rateLimit: NO_LIMITS, // the clock here never moves, and these tests open and set up businesses over and over: the limits have their own file (rate-limit.test.ts)
     ...over,
   });
   app = make();

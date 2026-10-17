@@ -101,6 +101,14 @@ the same deployment would have been readable by the world.
 - **Cross-site requests are refused** (with the flag on): a change that carries a foreign `Origin`, or is a cross-site
   fetch, is a 403. This also stops a form on another site from posting an attacker's own link to `/api/auth/open`.
 - **MCP over HTTP** needs the same bearer token. stdio MCP is the operator's own process.
+- **Rate limits on the two doors a stranger can knock on.** `POST /api/auth/open` (each try costs a registry read): 10 tries a
+  minute per client and 120 a minute for everybody together. `POST /api/onboard` (spends the operator's model time and makes a
+  graph): 10 requests in 10 minutes per client, whoever they are, and 20 set-ups an hour for everybody, counted only once the
+  request was let in, so a stranger hammering the door cannot use up the operator's. Over the limit is a 429 with
+  `Retry-After`, answered before the body is read or anything is looked up. In memory, per process
+  (`src/server/ratelimit.ts`, `tests/security/rate-limit.test.ts`). A "client" is the address the connection came from; behind a
+  reverse proxy that is the proxy for everyone, so set `ALLEVIA_TRUST_PROXY=1` and the server reads the last address in
+  `X-Forwarded-For` (the one the nearest proxy added; a header a visitor sends is never believed without the flag).
 - **Off for local development.** Without the flag nothing is checked, as before. The server warns at start-up when it
   is open and either in public mode (every registered business is shown read-only) or listening beyond localhost.
 
@@ -155,10 +163,10 @@ defaults come from code.
    a bug in our code could reach another graph, because the app's connection can read all of them. The next step is a
    database user per business (Redis ACL on the key pattern `allevia_<slug>*`) with the app opening one connection each.
 3. **An owner link is a shared secret, not a login.** Whoever holds it has the whole business until it is revoked: there
-   are no individual users, no roles, no audit trail of who did what (changes are attributed to `person:owner`), no
-   rate limit on `/api/auth/open` (guessing a 256-bit token is not feasible, but each try costs a registry read), and
-   links do not expire unless issued with `--days`. Put a rate limit at the reverse proxy, issue short-lived links, and
-   plan real sign-in before a business has more than one person.
+   are no individual users, no roles, no audit trail of who did what (changes are attributed to `person:owner`), and
+   links do not expire unless issued with `--days`. (Guessing a 256-bit token is not feasible, and since 17 October each
+   try is also rate limited: see "Rate limits" below.) Issue short-lived links, and plan real sign-in before a business
+   has more than one person.
 4. **The operator link is all-powerful** and stored the same way as an owner link. Keep it to one or two people; revoke
    and reissue when someone leaves.
 5. **There is no per-business store for secrets yet.** Every token Allevia uses today (the Discord bot, the founder's Instagram

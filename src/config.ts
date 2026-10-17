@@ -20,6 +20,7 @@ export interface AlleviaConfig {
   githubActionRepo: string;
   publicMode: boolean;
   authRequired: boolean; // ALLEVIA_AUTH=1: every /api/:t/... route needs that business's owner token (src/auth); only demo businesses open without one
+  trustProxy: boolean; // ALLEVIA_TRUST_PROXY=1: a reverse proxy is in front, so the rate limits read the client's address from its X-Forwarded-For (src/server/ratelimit.ts)
   actionsLive: boolean; // approved github_issue / discord_post cards really create the issue / post (default: dry run)
   actionTenants: string[]; // businesses besides the founder's own (tenant-config.ts) that may use the env file's GitHub repo and Discord channel
   port: number;
@@ -108,6 +109,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AlleviaConfig 
     githubActionRepo: get("ALLEVIA_ACTION_REPO") ?? "Ankit-Vohra/allevia",
     publicMode: /^(1|true|yes|on)$/i.test(get("ALLEVIA_PUBLIC_MODE") ?? ""),
     authRequired: /^(1|true|yes|on)$/i.test(get("ALLEVIA_AUTH") ?? ""),
+    trustProxy: /^(1|true|yes|on)$/i.test(get("ALLEVIA_TRUST_PROXY") ?? ""),
     actionsLive: (get("ALLEVIA_ACTIONS_LIVE") ?? "") === "1",
     actionTenants: (get("ALLEVIA_ACTION_TENANTS") ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     port,
