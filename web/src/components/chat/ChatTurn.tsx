@@ -11,6 +11,8 @@ import { Markdown } from "../Markdown";
 import { MadeCard, QuickReplies } from "../MadeCard";
 import { Reveal } from "../Reveal";
 import { APPROVALS_CHANGED } from "../TopBar";
+import { OutOfCreditsMessage } from "../Credits";
+import { isOutOfCreditsSentence } from "../../lib/credits";
 import { CHIEF, TEAM, type Who, checksPass, contributions, doorWords, howWeGotThis, teamTalk, workingNow } from "../../lib/chat";
 import { kindWords } from "../../lib/approval-words";
 import { humanDates, plain } from "../../lib/words";
@@ -155,7 +157,10 @@ export function ChatTurn(p: TurnProps) {
             </Reveal>
           )}
 
-          {(turn.status === "error" || turn.status === "stopped") && (
+          {turn.status === "error" && isOutOfCreditsSentence(turn.error ?? view.error) && (
+            <OutOfCreditsMessage compact message={(turn.error ?? view.error)!} />
+          )}
+          {(turn.status === "error" || turn.status === "stopped") && !(turn.status === "error" && isOutOfCreditsSentence(turn.error ?? view.error)) && (
             <div className="ct-error" role="alert">
               <Icon name="warn" size={16} />
               <span>{turn.status === "stopped" ? "Stopped before the answer was written." : plain(turn.error ?? view.error ?? "Something went wrong.")}</span>

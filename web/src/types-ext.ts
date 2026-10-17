@@ -153,6 +153,8 @@ export interface Approval {
   decidedAt?: string;
   result?: string;          // e.g. the GitHub issue URL once executed
   simulated?: boolean;
+  /** What saying OK spends, in credits (a waiting card only). */
+  credits?: number;
 }
 
 export interface ApprovalDecision { decision: "approve" | "reject"; editedPayload?: { title: string; body: string; target?: string } }

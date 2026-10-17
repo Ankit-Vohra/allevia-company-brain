@@ -1,0 +1,60 @@
+/* ---------- Plan and credits: the month first, then the plans, then more, pause and cancel ---------- */
+.plan-bar { height: 10px; margin-top: var(--space-xs); }
+
+.plan-uses { list-style: none; display: grid; gap: 0; }
+.plan-uses li {
+  display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-md);
+  padding: 10px 0; border-bottom: 1px solid var(--color-rule-2); font-size: var(--text-sm);
+}
+.plan-uses li:last-child { border-bottom: 0; }
+.plan-uses-detail { color: var(--color-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.plan-plans-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-sm); }
+.plan-cycle { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--color-paper-2); }
+.plan-cycle-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 14px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--color-ink-2); font: inherit; font-size: var(--text-sm); cursor: pointer;
+  transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+}
+.plan-cycle-btn.is-on { background: var(--color-card); color: var(--color-ink); font-weight: 600; box-shadow: var(--shadow-whisper); }
+.plan-cycle-btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+.plan-cycle-off { font-size: var(--text-2xs); font-weight: 600; color: var(--color-accent-ink); }
+
+.plan-cards { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm); }
+.plan-card {
+  display: grid; align-content: start; gap: 6px; padding: var(--space-md); border-radius: var(--radius-md);
+  background: var(--color-card); box-shadow: 0 1px 0 var(--color-rule-2), var(--shadow-whisper);
+}
+.plan-card > .btn { justify-self: start; margin-top: var(--space-xs); }
+.plan-card.is-current { box-shadow: inset 0 0 0 1.5px var(--color-accent), var(--shadow-whisper); }
+.plan-card.is-asked { box-shadow: inset 0 0 0 2px var(--color-accent), var(--shadow-whisper); background: var(--color-accent-soft); }
+.plan-card-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); }
+.plan-card-name { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 500; line-height: 1.15; }
+.plan-card-tag { font-size: var(--text-2xs); font-weight: 600; color: var(--color-accent-ink); white-space: nowrap; }
+.plan-card-price { font-size: var(--text-sm); color: var(--color-ink-2); }
+.plan-card-price b { font-family: var(--font-display); font-size: var(--text-xl); font-weight: 400; letter-spacing: -0.01em; color: var(--color-ink); }
+.plan-card-note { font-size: var(--text-xs); color: var(--color-muted); }
+.plan-card-credits { font-size: var(--text-sm); font-weight: 600; }
+.plan-card-who { font-size: var(--text-sm); line-height: 1.45; color: var(--color-ink-2); text-wrap: pretty; }
+
+.plan-more { gap: 0; }
+.plan-more-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-xs) var(--space-md);
+  padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-rule-2);
+}
+.plan-more-row.is-asked { margin: 0 calc(var(--space-sm) * -1); padding-inline: var(--space-sm); border-radius: var(--radius-sm); background: var(--color-accent-soft); }
+.plan-more-title { font-size: var(--text-sm); font-weight: 600; }
+.plan-cancel { display: grid; gap: var(--space-xs); margin-top: var(--space-sm); padding: var(--space-md); border-radius: var(--radius-md); background: var(--color-paper-2); }
+.plan-cancel-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.plan-cancel-go { color: var(--color-bad); }
+.plan-cancel-link { justify-self: start; margin-top: var(--space-xs); color: var(--color-muted); }
+
+.plan-prices li { grid-template-columns: 3.5em minmax(0, 1fr); }
+
+@media (max-width: 640px) {
+  .plan-cards { grid-template-columns: 1fr; }
+  .plan-more-row { grid-template-columns: 1fr; }
+  .plan-more-row > .btn { justify-self: start; }
+  .plan-uses li { flex-direction: column; gap: 2px; }
+  .plan-prices li { grid-template-columns: 3.5em minmax(0, 1fr); }
+}

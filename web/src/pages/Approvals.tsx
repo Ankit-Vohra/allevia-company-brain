@@ -3,6 +3,8 @@
 // you say OK; the draft itself, where it goes and why sit behind "Details". An edit becomes a rule the team follows next
 // time (the decision's answer carries the `learned` events, shown right after). Decided drafts and the rules your edits
 // taught are one quiet tap away below the stack.
+import { usesWords } from "@shared/credits";
+import "../components/credits.css";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import type { ActionKind, LearnedRuleDto } from "@shared/contracts";
@@ -259,7 +261,7 @@ function ApprovalCard({ a, advanced, recTitle, onDecide, tz, locale }: { a: Appr
         <>
           <p className="appr-effect">{a.kind === "publish_post" && a.preview?.post
             ? `If you say OK, this is posted to ${a.preview.post.where}${a.preview.post.when ? `, set for ${a.preview.post.when.words}${a.preview.post.when.timeZone ? ` (${a.preview.post.when.timeZone.replace(/_/g, " ")})` : ""}` : " straight away"}. Nothing is posted before.${a.preview.post.textOnly ? " LinkedIn posts from here are text only, so the picture stays out." : ""}`
-            : k.effect(a.payload.target)}</p>
+            : k.effect(a.payload.target)}{usesWords(a.credits ?? 0) ? <span className="uses-credits"> {usesWords(a.credits ?? 0)}.</span> : null}</p>
           <Reveal className="appr-details" label="Details" summary="the full draft and where it goes">
             <div className="appr-detail">
               {a.payload.target && (

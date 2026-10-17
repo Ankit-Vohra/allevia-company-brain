@@ -1,0 +1,46 @@
+/* ---------- the credits chip in the top bar ---------- */
+.credits-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px;
+  border: 1px solid var(--color-band-rule); border-radius: 14px;
+  color: var(--color-band-muted); text-decoration: none; font-size: var(--text-xs); white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  transition: color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+}
+.credits-chip b { font-weight: 600; color: var(--color-band-ink); }
+.credits-chip:hover, .credits-chip.active { color: var(--color-band-ink); border-color: var(--color-band-muted); }
+.credits-chip.is-low { border-color: var(--color-warn); }
+.credits-chip.is-low svg { color: var(--color-warn); }
+.credits-chip.is-out { border-color: var(--color-bad); color: var(--color-bad); }
+@media (max-width: 760px) {
+  .credits-chip { height: 26px; padding: 0 8px; }
+  .credits-chip-left { display: none; }
+}
+@media (max-width: 380px) {
+  .credits-chip-word { display: none; }
+}
+
+/* ---------- out of credits: the sentence and its two buttons ---------- */
+.out-of-credits {
+  position: relative; display: grid; gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md); padding-right: 40px;
+  border-radius: var(--radius-md); background: var(--color-accent-soft); color: var(--color-ink);
+}
+.out-of-credits-text { font-size: var(--text-sm); line-height: 1.5; text-wrap: pretty; }
+.out-of-credits-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.out-of-credits-done { font-size: var(--text-sm); line-height: 1.5; color: var(--color-ink-2); }
+.out-of-credits-done.is-bad { color: var(--color-bad); }
+.out-of-credits-close { position: absolute; top: 6px; right: 6px; }
+.out-of-credits.is-compact { padding-right: var(--space-md); }
+
+/* the app's notice for an OK, the Studio or the check-up that came back out of credits */
+.out-of-credits-notice {
+  position: fixed; z-index: 30; right: clamp(16px, 3vw, 32px); bottom: clamp(16px, 3vw, 32px);
+  width: min(420px, calc(100vw - 32px));
+  border-radius: var(--radius-md); box-shadow: var(--shadow-whisper), 0 8px 28px oklch(0% 0 0 / 0.12);
+}
+@media (max-width: 760px) {
+  .out-of-credits-notice { left: 16px; right: 16px; width: auto; bottom: calc(72px + env(safe-area-inset-bottom)); }
+}
+
+/* "Uses 5 credits when you say OK" on a card */
+.uses-credits { font-size: var(--text-xs); color: var(--color-muted); }

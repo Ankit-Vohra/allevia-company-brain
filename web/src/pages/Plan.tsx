@@ -1,148 +1,254 @@
-// Your plan and credits (product design §4.1, §4.2), owner-first: which plan you are on and what it costs, this month's
-// Studio credits used and left, and one honest line on billing. The comparison of every plan, the list of what the
-// credits were spent on and the fine print are behind one "Show how". Prices come from shared/plans.ts in the
-// business's currency (US dollars, labelled, when we do not price in it yet); credits and answers are GET /api/:t/usage.
-// Billing is not connected, so nothing here is an invoice: it is what the plan would include.
-import { Link } from "react-router";
-import { ALLEVIA_90, ANNUAL_DISCOUNT, CREDIT_PACKS, CREDIT_RULES, PLANS, PLAN_BY_ID, isCurrency, yearlyMonthly, type Currency, type Plan } from "@shared/plans";
-import { api } from "../api";
+// Plan and credits (docs/superpowers/specs/2026-10-17-credits-login-subscription-design.md §1), owner-first: credits left this
+// month and when they reset, what used them (by service and by person), the plans with a Monthly / Yearly switch, "Switch to
+// Growth", "Buy 100 credits", "Pause" and "Cancel" (which offers Pause first). Billing is in test mode, so the page says the
+// change is made by hand within a day. The price list, the fine print and this month's entries are behind "Show how".
+// GET /api/:t/credits for everyone who can open the business; GET /api/:t/subscription and the changes for the owner only
+// (a teammate and the public demo see the page without the buttons).
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation } from "react-router";
+import { TEST_MODE_NOTE, type BillingCycle, type BillingResultDto } from "@shared/credits";
+import { ALLEVIA_90, ANNUAL_DISCOUNT, CREDIT_PACKS, CREDIT_RULES, PLANS, PLAN_BY_ID, TRIAL, type PlanId } from "@shared/plans";
+import { api, getPublicMode } from "../api";
+import { creditsChanged, useCurrency } from "../components/Credits";
 import { ShowDetails } from "../components/ShowDetails";
-import { currentLocale, fmtDate, fmtMoney, fmtNum } from "../lib/format";
-import { monthWeek, usdOnlyNote } from "../lib/plainwords";
+import { balanceWords, madeOfWords, packWords, pendingWords, planCards, planIntent, useLines, usedShare } from "../lib/credits";
+import { fmtDate, fmtMoney, fmtNum } from "../lib/format";
+import { ApiError } from "../lib/sse";
 import { useApp, useAsync } from "../state/app";
-import type { Usage } from "../types-ext";
 import "./owner-page.css";
+import "./plan.css";
 
-const monthName = (month: string) => {
-  try {
-    return new Intl.DateTimeFormat(currentLocale(), { month: "long", timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`));
-  } catch {
-    return month;
-  }
-};
-
-function sourcesText(p: Plan): string {
-  const s = p.allowances.sources;
-  return s.kind === "all" ? "Every source you connect" : s.kind === "read_only" ? "Kept, read only" : `${s.max} sources (${s.names.join(", ")})`;
-}
+const dayWords = (iso: string) => fmtDate(iso);
 
 export default function PlanPage() {
   const { tenant } = useApp();
-  const program = useAsync(() => api.program(tenant.id).catch(() => null), [tenant.id]);
-  const usage = useAsync(() => api.usage(tenant.id), [tenant.id]);
+  const loc = useLocation();
+  const cur = useCurrency();
+  const money = (n: number) => fmtMoney(n, cur);
+  const [tick, setTick] = useState(0);
+  const credits = useAsync(() => api.credits(tenant.id), [tenant.id, tick]);
+  const sub = useAsync(() => api.subscription(tenant.id).catch(() => null), [tenant.id, tick]);
+  const intent = useMemo(() => planIntent(loc.search), [loc.search]);
+  const [cycle, setCycle] = useState<BillingCycle>("monthly");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const plansRef = useRef<HTMLElement>(null);
 
-  const cur: Currency = tenant.currency && isCurrency(tenant.currency.toUpperCase()) ? (tenant.currency.toUpperCase() as Currency) : "USD";
-  const money = (m: Record<Currency, number>) => fmtMoney(m[cur], cur);
-  const note = usdOnlyNote(tenant.currency);
-  const plan = PLAN_BY_ID[ALLEVIA_90.includesPlan];
+  useEffect(() => { if (sub.data?.cycle) setCycle(sub.data.cycle); }, [sub.data?.cycle]);
+  useEffect(() => {
+    if (intent.plan || intent.buy) plansRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [intent.plan, intent.buy, credits.data]);
+
+  const demo = getPublicMode();
+  const owner = !demo && !!sub.data;
+  const b = credits.data?.balance;
+
+  const act = async (key: string, fn: () => Promise<BillingResultDto>) => {
+    setBusy(key);
+    setResult(null);
+    try {
+      const r = await fn();
+      setResult({ ok: true, text: r.message });
+      setConfirmCancel(false);
+      setTick((t) => t + 1);
+      creditsChanged();
+    } catch (e) {
+      setResult({ ok: false, text: e instanceof ApiError && e.status === 403 ? "Only the business owner can change the plan." : (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (credits.error && !credits.data) {
+    return <div className="owner-page"><p className="notice notice-bad" role="alert">Your credits did not load: {credits.error}</p></div>;
+  }
+  if (!b || !credits.data) {
+    return <div className="owner-page" aria-busy="true"><span className="skeleton owner-skel-line" /><span className="skeleton owner-skel-line" /></div>;
+  }
+
+  const head = balanceWords(b, dayWords);
+  const share = usedShare(b);
+  const current = sub.data ? (sub.data.status === "paused" ? "pause" : sub.data.plan) : b.plan;
+  const cards = planCards({
+    cycle, currency: cur, current, currentCycle: sub.data?.cycle ?? "monthly", status: b.status, ...(sub.data ? { pending: sub.data.pending } : {}),
+  }, (n, c) => fmtMoney(n, c));
+  const waiting = sub.data ? pendingWords(sub.data.pending) : [];
+  const uses = useLines(credits.data.byService);
+  const people = credits.data.byPerson;
+  const pause = PLAN_BY_ID.pause;
+  const offPct = Math.round(ANNUAL_DISCOUNT * 100);
 
   return (
-    <div className="owner-page">
+    <div className="owner-page plan-page">
       <header className="owner-head">
-        <p className="owner-eyebrow">Your plan</p>
-        <h1 className="owner-title">{plan.name}</h1>
-        <p className="owner-lede">
-          {money(plan.price.monthly)} a month. {program.data ? `Included while you’re in your growth plan (${monthWeek(program.data.day)}).` : "The plan most owners start on."}
-        </p>
-        {note && <p className="owner-quiet">{note}</p>}
+        <p className="owner-eyebrow">Plan and credits</p>
+        <h1 className="owner-title">{head.title}</h1>
+        <p className="owner-lede">{head.lede}</p>
+        <span className="owner-bar plan-bar" role="img" aria-label={`${fmtNum(b.used)} credits used this month.`}>
+          <span style={{ width: `${b.used > 0 ? Math.max(2, share * 100) : 0}%` }} />
+        </span>
+        <p className="owner-quiet">{fmtNum(b.used)} used this month{madeOfWords(b) ? ` · ${madeOfWords(b)}` : ""}</p>
       </header>
 
-      <section className="owner-block" aria-labelledby="credits-h">
-        <h2 id="credits-h" className="owner-h">Studio credits{usage.data ? ` for ${monthName(usage.data.month)}` : ""}</h2>
-        {usage.data === undefined ? (
-          usage.error ? <p className="notice notice-bad" role="alert">This month’s use did not load: {usage.error}</p> : <span className="skeleton owner-skel-line" aria-busy="true" />
+      {waiting.length > 0 && (
+        <p className="owner-callout" role="status">
+          You asked for: {waiting.join("; ")}. {TEST_MODE_NOTE}
+        </p>
+      )}
+      {result && <p className={`notice ${result.ok ? "notice-ok" : "notice-bad"}`} role={result.ok ? "status" : "alert"}>{result.text}</p>}
+
+      <section className="owner-block" aria-labelledby="used-h">
+        <h2 id="used-h" className="owner-h">What used them</h2>
+        {uses.length ? (
+          <ul className="plan-uses">
+            {uses.map((u) => <li key={u.key}><span>{u.label}</span><span className="plan-uses-detail">{u.detail}</span></li>)}
+          </ul>
         ) : (
-          <Credits usage={usage.data} allowance={plan.allowances.creditsPerMonth} />
+          <p className="owner-quiet">Nothing yet this month. You only spend credits on what you ask for or say OK to.</p>
+        )}
+        {people.length > 1 && (
+          <p className="owner-quiet">By person: {people.map((p) => `${p.label} ${fmtNum(p.credits)}`).join(" · ")}</p>
         )}
       </section>
 
-      <p className="owner-callout" role="note">Billing isn’t connected yet. This is what your plan would include.</p>
+      <section className="owner-block" aria-labelledby="plans-h" ref={plansRef}>
+        <div className="plan-plans-head">
+          <h2 id="plans-h" className="owner-h">Plans</h2>
+          <div className="plan-cycle" role="radiogroup" aria-label="How you pay">
+            {(["monthly", "yearly"] as const).map((c) => (
+              <button key={c} type="button" role="radio" aria-checked={cycle === c} className={`plan-cycle-btn${cycle === c ? " is-on" : ""}`} onClick={() => setCycle(c)}>
+                {c === "monthly" ? "Monthly" : <>Yearly <span className="plan-cycle-off">{offPct}% off</span></>}
+              </button>
+            ))}
+          </div>
+        </div>
+        <ul className="plan-cards">
+          {cards.map((c) => (
+            <li key={c.id} className={`plan-card${c.current ? " is-current" : ""}${intent.plan === c.id ? " is-asked" : ""}`}>
+              <div className="plan-card-top">
+                <h3 className="plan-card-name">{c.name}</h3>
+                {c.current && <span className="plan-card-tag">Your plan</span>}
+              </div>
+              <p className="plan-card-price"><b>{c.price}</b> {c.per}</p>
+              {c.note && <p className="plan-card-note">{c.note}</p>}
+              <p className="plan-card-credits">{c.credits}</p>
+              <p className="plan-card-who">{c.who}</p>
+              {c.action && owner && (
+                c.waiting
+                  ? <p className="plan-card-note">Asked for. We'll switch you within a day.</p>
+                  : <button type="button" className={`btn btn-sm ${intent.plan === c.id || (!intent.plan && c.id === "growth") ? "btn-gold" : "btn-ghost"}`} disabled={!!busy}
+                    onClick={() => void act(`plan-${c.id}`, () => api.changePlan(tenant.id, c.id as PlanId, cycle))}>
+                    {busy === `plan-${c.id}` ? "One moment" : c.action}
+                  </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="owner-block plan-more" aria-label="More credits, pause or cancel">
+        {owner ? (
+          <>
+            <div className={`plan-more-row${intent.buy ? " is-asked" : ""}`}>
+              <div>
+                <p className="plan-more-title">Need more this month?</p>
+                <p className="owner-quiet">{CREDIT_PACKS[0]!.credits} extra credits. They don't run out while you have a plan.</p>
+              </div>
+              <button type="button" className={`btn btn-sm ${intent.buy ? "btn-gold" : "btn-ghost"}`} disabled={!!busy} onClick={() => void act("pack", () => api.buyPack(tenant.id, intent.buy ?? CREDIT_PACKS[0]!.id))}>
+                {busy === "pack" ? "One moment" : packWords(cur, (n, c) => fmtMoney(n, c))}
+              </button>
+            </div>
+            {current !== "pause" && b.status !== "cancelled" && (
+              <div className="plan-more-row">
+                <div>
+                  <p className="plan-more-title">Taking a break?</p>
+                  <p className="owner-quiet">Pause for {money(pause.price.monthly[cur])} a month. Your team keeps your company brain and you get {pause.allowances.creditsPerMonth} credits a month.</p>
+                </div>
+                <button type="button" className="btn btn-ghost btn-sm" disabled={!!busy} onClick={() => void act("pause", () => api.pausePlan(tenant.id))}>{busy === "pause" ? "One moment" : "Pause"}</button>
+              </div>
+            )}
+            {b.status !== "cancelled" && (confirmCancel ? (
+              <div className="plan-cancel" role="group" aria-label="Cancel your plan">
+                <p className="plan-more-title">Before you cancel: you can pause instead.</p>
+                <p className="owner-quiet">Pausing keeps your company brain, your drafts and what your team learned, for {money(pause.price.monthly[cur])} a month. Cancelling stops your plan; you keep this month's credits.</p>
+                <div className="plan-cancel-actions">
+                  {current !== "pause" && <button type="button" className="btn btn-gold btn-sm" disabled={!!busy} onClick={() => void act("pause", () => api.pausePlan(tenant.id))}>Pause instead</button>}
+                  <button type="button" className="btn btn-ghost btn-sm plan-cancel-go" disabled={!!busy} onClick={() => void act("cancel", () => api.cancelPlan(tenant.id))}>{busy === "cancel" ? "One moment" : "Cancel my plan"}</button>
+                  <button type="button" className="btn btn-quiet btn-sm" onClick={() => setConfirmCancel(false)}>Keep my plan</button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="btn btn-quiet btn-sm plan-cancel-link" onClick={() => setConfirmCancel(true)}>Cancel my plan</button>
+            ))}
+          </>
+        ) : (
+          <p className="owner-quiet">{demo ? "This is the demo: nothing can be bought or changed here." : "Only the business owner can change the plan or buy credits."}</p>
+        )}
+      </section>
+
+      <p className="owner-callout" role="note">{TEST_MODE_NOTE}</p>
 
       <ShowDetails label="Show how" openLabel="Hide how">
+        <section className="detail-block" aria-labelledby="d-prices">
+          <h3 id="d-prices" className="detail-h">What each thing costs</h3>
+          <ul className="detail-list plan-prices">
+            {credits.data.prices.map((p) => (
+              <li key={p.service}><span className="detail-key">{p.credits ? `${fmtNum(p.credits)}` : "Free"}</span><span>{p.label}<span className="detail-sub">{p.charged === "answered" ? "When the answer arrives" : p.charged === "approved" ? "When you say OK" : p.charged === "run" ? "When you run it" : "Always free"}</span></span></li>
+            ))}
+          </ul>
+          <p className="detail-note">What your team does on its own is free: Today's note, the stand-up and the monthly website check-up. An answer that fails, or a draft you say No to, costs nothing.</p>
+        </section>
+
+        <section className="detail-block" aria-labelledby="d-rules">
+          <h3 id="d-rules" className="detail-h">The fine print</h3>
+          <ul className="detail-bullets">
+            <li>Credits from your plan that you don't use roll over for {CREDIT_RULES.rolloverMonths} month, up to one month's worth.</li>
+            <li>Credits you buy don't run out while you have a plan.</li>
+            <li>A new business starts with a free trial: {TRIAL.credits} credits for {TRIAL.days} days.</li>
+            <li>If your credits run out halfway through something, it still finishes. That one goes on next month.</li>
+            <li>Paying yearly takes {offPct}% off every month. Prices are before tax.</li>
+          </ul>
+        </section>
+
+        {credits.data.entries.length > 0 && (
+          <section className="detail-block" aria-labelledby="d-entries">
+            <h3 id="d-entries" className="detail-h">This month, line by line</h3>
+            <ul className="detail-list">
+              {credits.data.entries.slice(0, 50).map((e) => (
+                <li key={e.id}>
+                  <span className="detail-key">{e.credits > 0 ? `+${fmtNum(e.credits)}` : fmtNum(e.credits)}</span>
+                  <span>{e.label}{e.for ? `: ${e.for.name}` : ""}<span className="detail-sub">{fmtDate(e.at)} · {e.by}</span></span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         <section className="detail-block" aria-labelledby="d-plans">
-          <h3 id="d-plans" className="detail-h">All the plans</h3>
+          <h3 id="d-plans" className="detail-h">The plans side by side</h3>
           <div className="detail-table-wrap">
             <table className="detail-table plans-table">
               <thead>
-                <tr><th scope="col"><span className="visually-hidden">Plan</span></th>{PLANS.map((p) => <th scope="col" key={p.id} className={p.id === plan.id ? "is-current" : ""}>{p.name}</th>)}</tr>
+                <tr><th scope="col"><span className="visually-hidden">Plan</span></th>{PLANS.map((p) => <th scope="col" key={p.id} className={p.id === current ? "is-current" : ""}>{p.name}</th>)}</tr>
               </thead>
               <tbody>
-                <tr><th scope="row">Who it’s for</th>{PLANS.map((p) => <td key={p.id}>{p.who}</td>)}</tr>
-                <tr><th scope="row">Each month</th>{PLANS.map((p) => <td key={p.id} className="num">{p.fromPrice ? "from " : ""}{money(p.price.monthly)}{p.price.yearly ? <span className="detail-sub">or {money(yearlyMonthly(p.price.monthly))} a month paid yearly ({money(p.price.yearly)} a year, {Math.round(ANNUAL_DISCOUNT * 100)}% off)</span> : null}</td>)}</tr>
+                <tr><th scope="row">Each month</th>{PLANS.map((p) => <td key={p.id} className="num">{p.fromPrice ? "from " : ""}{money(p.price.monthly[cur])}</td>)}</tr>
                 <tr><th scope="row">Credits a month</th>{PLANS.map((p) => <td key={p.id} className="num">{fmtNum(p.allowances.creditsPerMonth)}</td>)}</tr>
-                <tr><th scope="row">What it reads</th>{PLANS.map((p) => <td key={p.id}>{sourcesText(p)}</td>)}</tr>
                 <tr><th scope="row">People</th>{PLANS.map((p) => <td key={p.id} className="num">{p.allowances.seats === null ? "–" : fmtNum(p.allowances.seats)}</td>)}</tr>
                 <tr><th scope="row">Time with us</th>{PLANS.map((p) => <td key={p.id}>{p.human ?? "None"}</td>)}</tr>
               </tbody>
             </table>
           </div>
-          <p className="detail-note">Every plan has your whole team. Prices are before tax.</p>
+          <p className="detail-note">Every plan has your whole team.</p>
         </section>
 
         <section className="detail-block" aria-labelledby="d-90">
           <h3 id="d-90" className="detail-h">The three-month growth plan</h3>
-          <ul className="detail-bullets">
-            <li>{money(ALLEVIA_90.upfront)} up front, or {ALLEVIA_90.instalments.count} payments of {money(ALLEVIA_90.instalments.each)}. It includes the {plan.name} plan.</li>
-            <li>Your goals, a note from your team every month, and a review with a person from our team at the end of months 1 and 3.</li>
-            <li>A full refund in the first {ALLEVIA_90.guarantees.refundDays} days. We’ll tell you at least {ALLEVIA_90.guarantees.renewalNoticeDays} days before it renews.</li>
-            <li>After month 3 you move to {PLAN_BY_ID[ALLEVIA_90.afterProgram.defaultPlan].name}, or choose {ALLEVIA_90.afterProgram.alternatives.map((id) => PLAN_BY_ID[id].name).join(" or ")}.</li>
-          </ul>
-        </section>
-
-        {usage.data && (
-          <section className="detail-block" aria-labelledby="d-spent">
-            <h3 id="d-spent" className="detail-h">What the credits were spent on</h3>
-            {usage.data.credits.items.length ? (
-              <ul className="detail-list">
-                {usage.data.credits.items.map((i) => (
-                  <li key={`${i.subject}-${i.date}`}><span className="detail-key">{fmtDate(i.date)}</span><span>{i.name}<span className="detail-sub"> · {fmtNum(i.credits)} {i.credits === 1 ? "credit" : "credits"}</span></span></li>
-                ))}
-              </ul>
-            ) : (
-              <p className="detail-note">Nothing yet this month. A credit is spent when you approve a photo post, never for a draft you turn down.</p>
-            )}
-            <p className="detail-note">A photo post is 1 credit, a carousel 2, a photo shoot 3 and a reel 4. Questions, notes and drafts of words are free.</p>
-          </section>
-        )}
-
-        <section className="detail-block" aria-labelledby="d-rules">
-          <h3 id="d-rules" className="detail-h">The fine print on credits</h3>
-          <ul className="detail-bullets">
-            <li>Credits you don’t use roll over for {CREDIT_RULES.rolloverMonths} month, up to one month’s worth.</li>
-            <li>Need more? {fmtNum(CREDIT_PACKS[0]!.credits)} extra credits cost {money(CREDIT_PACKS[0]!.price)}.</li>
-            {usage.data && <li>Your team answered {fmtNum(usage.data.answers)} {usage.data.answers === 1 ? "question" : "questions"} this month.</li>}
-          </ul>
-        </section>
-
-        <section className="detail-block" aria-labelledby="d-live">
-          <h3 id="d-live" className="detail-h">Practice runs</h3>
-          <p className="detail-note">
-            {usage.data?.actionsLive
-              ? "Approved actions are live: when you say OK, an issue is filed or a message is posted for real."
-              : "Right now, when you say OK to something like a GitHub fix or a Discord post, your team does a practice run: it shows what it would have done and sends nothing. Your team switches this on when you’re ready."}
-          </p>
-          <p className="detail-note">Not sure what to do next? <Link to="/approvals">See what’s waiting for your OK</Link>.</p>
+          <p className="detail-note">{money(ALLEVIA_90.upfront[cur])} up front, or {ALLEVIA_90.instalments.count} payments of {money(ALLEVIA_90.instalments.each[cur])}. It includes the {PLAN_BY_ID[ALLEVIA_90.includesPlan].name} plan, a note from your team every month and a review with a person from our team. A full refund in the first {ALLEVIA_90.guarantees.refundDays} days.</p>
+          <p className="detail-note">Not sure what to do next? <Link to="/approvals">See what's waiting for your OK</Link>.</p>
         </section>
       </ShowDetails>
-    </div>
-  );
-}
-
-function Credits({ usage, allowance }: { usage: Usage; allowance: number }) {
-  const used = usage.credits.used;
-  const left = Math.max(0, allowance - used);
-  const share = allowance > 0 ? Math.min(1, used / allowance) : 0;
-  return (
-    <div className="owner-credits">
-      <p className="owner-credits-line"><b className="num">{fmtNum(used)}</b> of <span className="num">{fmtNum(allowance)}</span> used</p>
-      <span className="owner-bar" role="img" aria-label={`${fmtNum(used)} of ${fmtNum(allowance)} credits used.`}>
-        <span style={{ width: `${used > 0 ? Math.max(2, share * 100) : 0}%` }} />
-      </span>
-      <p className="owner-card-why">
-        {used > allowance
-          ? "You’ve gone past this month’s credits. The extra comes out of next month’s."
-          : `${fmtNum(left)} left. Credits you don’t use roll over to next month.`}
-      </p>
     </div>
   );
 }

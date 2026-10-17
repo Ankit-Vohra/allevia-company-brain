@@ -3,6 +3,8 @@
 // demo still runs offline.
 import type { AgentEvent, AgentId, OnboardEvent } from "@shared/contracts";
 import { ApiError, errorFrom, postSse, postSseForm } from "./lib/sse";
+import type { BillingCycle, BillingResultDto, CreditsDto, SubscriptionDto } from "@shared/credits";
+import type { PlanId } from "@shared/plans";
 import { consumeLinkInAddressBar } from "./lib/link";
 
 import { mockConnections } from "./mock/connections";
@@ -259,6 +261,40 @@ export const api = {
     if (mode === "mock") return (await mock()).usage(t, month);
     return getJson(`/api/${enc(t)}/usage${month ? `?month=${enc(month)}` : ""}`);
   },
+  // ---- credits and the plan (src/server/routes/credits.ts) ----
+
+  /** GET /api/:t/credits: this month's credits, what used them, and the price list. */
+  async credits(t: string): Promise<CreditsDto> {
+    if (mode === "mock") return (await import("./mock/credits")).mockCredits();
+    return getJson(`/api/${enc(t)}/credits`);
+  },
+  /** GET /api/:t/subscription: the plan and how it is paid; null for anyone but the owner (a teammate, the demo). */
+  async subscription(t: string): Promise<SubscriptionDto | null> {
+    if (mode === "mock") return (await import("./mock/credits")).mockSubscription();
+    try {
+      return await getJson<SubscriptionDto>(`/api/${enc(t)}/subscription`);
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 403 || e.status === 401)) return null;
+      throw e;
+    }
+  },
+  async changePlan(t: string, plan: PlanId, cycle: BillingCycle): Promise<BillingResultDto> {
+    if (mode === "mock") return (await import("./mock/credits")).mockBilling("change", plan, cycle);
+    return sendJson(`/api/${enc(t)}/subscription/change`, "POST", { plan, cycle });
+  },
+  async buyPack(t: string, packId = "pack100"): Promise<BillingResultDto> {
+    if (mode === "mock") return (await import("./mock/credits")).mockBilling("pack");
+    return sendJson(`/api/${enc(t)}/credits/packs`, "POST", { packId });
+  },
+  async pausePlan(t: string): Promise<BillingResultDto> {
+    if (mode === "mock") return (await import("./mock/credits")).mockBilling("pause");
+    return sendJson(`/api/${enc(t)}/subscription/pause`, "POST", {});
+  },
+  async cancelPlan(t: string): Promise<BillingResultDto> {
+    if (mode === "mock") return (await import("./mock/credits")).mockBilling("cancel");
+    return sendJson(`/api/${enc(t)}/subscription/cancel`, "POST", {});
+  },
+
   /** GET /api/:t/brief: today's morning brief; null when none has been written. */
   async brief(t: string): Promise<Brief | null> {
     return mode === "mock" ? (await mock()).brief(t) : getOrNull(`/api/${enc(t)}/brief`);

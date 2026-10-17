@@ -4,21 +4,32 @@
 
 export interface SseMessage { event: string; data: string; id?: string }
 
-/** An API error: the server's JSON `{error}` sentence when it sent one, and the HTTP status. */
+/** An API error: the server's JSON `{error}` sentence when it sent one, the HTTP status, and the rest of the body. */
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly data?: unknown) {
     super(message);
     this.name = "ApiError";
   }
 }
 
+/** Out of credits (a 402): the app shell shows the owner's sentence with its two buttons (OutOfCreditsNotice). */
+export const OUT_OF_CREDITS = "allevia:out-of-credits";
+/** Credits changed (an answer, an OK, a pack): the top bar's chip reads them again. */
+export const CREDITS_CHANGED = "allevia:credits-changed";
+
 export async function errorFrom(res: Response, path: string): Promise<ApiError> {
   let message = `${path} answered ${res.status}`;
+  let data: unknown;
   try {
     const body = (await res.json()) as { error?: unknown };
+    data = body;
     if (typeof body?.error === "string" && body.error) message = body.error;
   } catch { /* not JSON: keep the status line */ }
-  return new ApiError(message, res.status);
+  // a question shows it in the chat itself; anything else (an OK, the Studio, the check-up) in the app's notice
+  if (res.status === 402 && typeof window !== "undefined" && !/\/ask$/.test(path)) {
+    window.dispatchEvent(new CustomEvent(OUT_OF_CREDITS, { detail: { message } }));
+  }
+  return new ApiError(message, res.status, data);
 }
 
 export async function* readSse(body: ReadableStream<Uint8Array>, signal?: AbortSignal): AsyncGenerator<SseMessage> {

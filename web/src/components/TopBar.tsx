@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router";
 import { api } from "../api";
 import { type ThemeChoice, useApp, useAsync } from "../state/app";
 import { Icon, type IconName } from "./Icon";
+import { CreditsChip } from "./Credits";
 
 // At most five primary places; everything else lives under More.
 const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
@@ -17,7 +18,7 @@ const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
 const MORE_SCREENS: { to: string; label: string; blurb: string; icon: IconName }[] = [
   { to: "/program", label: "Your growth plan", blurb: "Your goals, and how the team is helping", icon: "insights" },
   { to: "/connections", label: "Your tools", blurb: "Gmail, Calendar, Analytics, Instagram, your shop and more", icon: "link" },
-  { to: "/plan", label: "Plan and credits", blurb: "What your plan includes, and this month's use", icon: "layers" },
+  { to: "/plan", label: "Plan and credits", blurb: "Credits left this month, what used them, and your plan", icon: "layers" },
 ];
 
 export const APPROVALS_CHANGED = "allevia:approvals-changed";
@@ -213,6 +214,7 @@ export function TopBar() {
             <span className="mode-dot" aria-hidden="true" /> Demo data
           </span>
         )}
+        <CreditsChip />
         <ThemeMenu />
         <MoreMenu variant="mobile" />
       </div>

@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect } from "react";
 import { Route, Routes, useLocation } from "react-router";
 import { TopBar, TabBar } from "./components/TopBar";
+import { OutOfCreditsNotice } from "./components/Credits";
 import HomePage from "./pages/Home";
 
 const OfficePage = lazy(() => import("./pages/Office").then((m) => ({ default: m.OfficePage })));
@@ -57,6 +58,7 @@ export function App() {
           </Routes>
         </Suspense>
       </main>
+      <OutOfCreditsNotice />
       <TabBar />
     </div>
   );

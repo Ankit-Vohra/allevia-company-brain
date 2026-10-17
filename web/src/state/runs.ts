@@ -10,7 +10,7 @@
 import { useMemo, useSyncExternalStore } from "react";
 import type { AgentEvent } from "@shared/contracts";
 import { api, getMode, getPublicMode } from "../api";
-import { ApiError } from "../lib/sse";
+import { ApiError, CREDITS_CHANGED } from "../lib/sse";
 import type { LiveStatus, LiveTurn } from "../types-ext";
 import { type RunView, deriveRun } from "./derive";
 
@@ -93,6 +93,10 @@ class RunStore {
       return next;
     });
     if (askStop) this.stopOnServer(key);
+    // an answer is charged on the server a moment after its `final`: the top bar's credits read again shortly
+    if (list.some((e) => e.type === "final") && this.runs.get(key)?.kind === "live" && typeof window !== "undefined") {
+      window.setTimeout(() => window.dispatchEvent(new Event(CREDITS_CHANGED)), 1500);
+    }
   }
 
   /** A live turn the server can be asked about (not the demo, not the public replay). */

@@ -5,6 +5,7 @@
 // "make it festive", "a different background", "make this into an ad saying ..." use the AI editor), or try again when
 // Nisha held an AI edit back. One setting: "Blur people's faces in my content" (off by default).
 // The run streams as AgentEvents through the shared run store, so the office shows the content desks at work too.
+import { chargesTotal, studioCharges, usesWords } from "@shared/credits";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useNavigate } from "react-router";
 import type { AgentEvent, AssessmentOverlay } from "@shared/contracts";
@@ -48,9 +49,9 @@ interface Assessment {
   subject: string; angle: string; lighting: string; clutter: string; resolution: string; verdict: string; coaching?: string;
   salvageable: string[]; locks: string[]; story: string; quality: { tiltDeg: number; exposure: string; cast: string; sharpness: string };
 }
-interface PayloadVariant { id: string; label: string; badge: string; note: string; aiEdited: boolean; credits?: number; request?: string; canRetry?: boolean }
+interface PayloadVariant { id: string; label: string; badge: string; note: string; aiEdited: boolean; credits?: number; request?: string; canRetry?: boolean; premium?: boolean }
 // `publish`: set when approving POSTS the picture (a card for an account the business connected): where it goes, in the business's own words
-interface Payload { title: string; body: string; target?: string; publish?: { platform: string; account: { name: string; handle?: string }; at?: number; tz?: string }; studio: { recommended: string; altText: string; credits: number; notices?: string[]; privacy?: { people: boolean; note: string }; variants: PayloadVariant[] } }
+interface Payload { title: string; body: string; target?: string; publish?: { platform: string; account: { name: string; handle?: string }; at?: number; tz?: string }; studio: { recommended: string; altText: string; credits: number; notices?: string[]; privacy?: { people: boolean; note: string }; variants: PayloadVariant[]; creative?: { kind: string; format?: string }; extras?: Array<{ kind: string; from: string }> } }
 
 const creditWords = (n: number): string => `about ${Number.isInteger(n) ? n : n.toFixed(1)} Studio credit${n === 1 ? "" : "s"}`;
 const CHANGE_IDEAS = ["Make it warmer", "Make it festive", "A different background", "Make it an ad"];
@@ -448,7 +449,7 @@ export default function StudioPage() {
                   <button type="button" className="btn btn-gold" disabled={!chosen || approving || getPublicMode()} onClick={approve}>
                     {approving ? "Saving…" : `Approve variant ${payload.studio.variants.find((v) => v.id === chosen)?.label ?? ""}`}
                   </button>
-                  <span className="credit">{payload.publish ? `Approving posts it to ${payload.target ?? "your account"}${payload.publish.at ? ", at the time set" : ""}. Nothing is posted until you do.` : "Saved as a draft: nothing is posted until you do it"}</span>
+                  <span className="credit">{payload.publish ? `Approving posts it to ${payload.target ?? "your account"}${payload.publish.at ? ", at the time set" : ""}. Nothing is posted until you do.` : "Saved as a draft: nothing is posted until you do it"}{chosen && usesWords(chargesTotal(studioCharges(payload.studio, chosen))) ? `. ${usesWords(chargesTotal(studioCharges(payload.studio, chosen)))}.` : ""}</span>
                 </div>
               )}
               {failure && <p className="studio-error" role="alert">{failure}</p>}

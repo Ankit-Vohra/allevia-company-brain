@@ -5,7 +5,7 @@ import type { CheckupStatus } from "../types-ext";
 import { ShowDetails } from "./ShowDetails";
 import "./numbers.css";
 
-// "Check my website": the free check-up (speed on phones, Google basics, a call button on the first screen...) runs in
+// "Check my website": the check-up (10 credits when the owner runs it; the weekly one is free) (speed on phones, Google basics, a call button on the first screen...) runs in
 // the background for a few minutes; this card says where it stands, then shows the verdict and the first fix, with the
 // rest of the top five behind "Show how". The weekly check-up is one switch. Live server only.
 const POLL_MS = 10_000;
@@ -61,7 +61,7 @@ export function CheckWebsite({ tenantId }: { tenantId: string }) {
       {!readOnly && s.website && (
         <div className="numbers-actions">
           <button type="button" className="btn btn-gold btn-sm" disabled={busy || working} onClick={() => void act(() => api.startCheckup(tenantId))}>
-            {working ? "Checking…" : "Check my website"}
+            {working ? "Checking…" : "Check my website (10 credits)"}
           </button>
           <label className="numbers-ask">
             <input type="checkbox" checked={s.weekly} disabled={busy} onChange={(e) => void act(() => api.setCheckupWeekly(tenantId, e.target.checked))} />
