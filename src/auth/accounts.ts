@@ -304,18 +304,19 @@ export async function ownedCount(userId: string, opts?: AccountOpts): Promise<nu
 }
 
 /**
- * Makes the account the owner of a business it has just set up: only when the business has no owner yet and the account owns
- * fewer than `maxOwned` businesses (one, during the trial). True when it is now the owner.
+ * Makes the account the owner of a business it has just set up: only when the business has no owner yet, was registered at or
+ * after `createdSince` (when given: the set-up's own start, so a business that was already there is never claimed), and the
+ * account owns fewer than `maxOwned` businesses (one, during the trial). True when it is now the owner.
  */
-export async function claimBusiness(userId: string, slug: string, o: AccountOpts & { maxOwned: number }): Promise<boolean> {
+export async function claimBusiness(userId: string, slug: string, o: AccountOpts & { maxOwned: number; createdSince?: number }): Promise<boolean> {
   const meta = await writable(o);
   const rows = await meta.query<{ role: string }>(
-    `MATCH (u:User {id:$uid}), (t:Tenant {slug:$slug}) WHERE u.disabledAt IS NULL
+    `MATCH (u:User {id:$uid}), (t:Tenant {slug:$slug}) WHERE u.disabledAt IS NULL AND ($since IS NULL OR t.createdAt >= $since)
      WITH u, t, size([(u)-[o:MEMBER_OF]->(:Tenant) WHERE o.role = 'owner' | o]) AS owned
      WITH u, t, owned, size([(:User)-[x:MEMBER_OF]->(t) WHERE x.role = 'owner' | x]) AS owners
      WHERE owned < $maxOwned AND owners = 0
      CREATE (u)-[m:MEMBER_OF {role:'owner', since:$now}]->(t) RETURN m.role AS role`,
-    { uid: userId, slug, maxOwned: o.maxOwned, now: nowOf(o) });
+    { uid: userId, slug, maxOwned: o.maxOwned, now: nowOf(o), since: o.createdSince ?? null });
   return rows[0]?.role === "owner";
 }
 

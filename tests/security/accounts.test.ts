@@ -154,7 +154,9 @@ describe("businesses", () => {
     const C = `acct_${sfx}_c`;
     await ensureTenant({ slug: C, name: "Charlie" }, opts);
     try {
-      expect(await claimBusiness(u.id, A, { ...opts, maxOwned: 1 })).toBe(true);
+      // a business registered before the set-up started is never claimed (it was already there)
+      expect(await claimBusiness(u.id, A, { ...opts, maxOwned: 1, createdSince: Date.now() + 60_000 })).toBe(false);
+      expect(await claimBusiness(u.id, A, { ...opts, maxOwned: 1, createdSince: Date.now() - 600_000 })).toBe(true);
       expect(await claimBusiness(u.id, C, { ...opts, maxOwned: 1 })).toBe(false); // one business during the trial
       expect(await claimBusiness(v.id, A, { ...opts, maxOwned: 1 })).toBe(false); // A has an owner
       expect(await ownedCount(u.id, opts)).toBe(1);

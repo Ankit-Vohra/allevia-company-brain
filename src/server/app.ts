@@ -503,7 +503,10 @@ export function createApp(deps: ServerDeps): Hono {
       // operator says so by naming it: another business's name, web address or id cannot steer it into that business's graph,
       // and neither can an account (it only ever sets up a new one).
       // (A re-run from the open web is not offered: `npm run cli -- enroll` and scripts/onboard.ts do it.)
+      // The registry is read fresh here, not from the short cache: a business added a moment ago must count as existing.
+      cache = undefined;
       const known = new Set((await registry()).map((t) => t.slug));
+      const startedAt = Date.now(); // the registry's own clock (ensureTenant): only a business created after this can be claimed
       let slug = body.slug ?? slugFor(body.name, body.url);
       if (known.has(slug)) {
         if (body.slug && authOn && operator) {
@@ -532,7 +535,7 @@ export function createApp(deps: ServerDeps): Hono {
           cache = undefined; // a new tenant may be in the registry now
           if (!held) return;
           if (owner) {
-            if (!(await claimBusiness(owner, slug, { ...accountOpts(), maxOwned }))) {
+            if (!(await claimBusiness(owner, slug, { ...accountOpts(), maxOwned, createdSince: startedAt - 1000 }))) {
               log(`[api] ${slug} was set up, but account ${owner} could not be made its owner (it owns another business now, or this one has an owner)`);
               send({ type: "error", message: "Your business is set up, but it could not be added to your account. Write to us and we will sort it out." });
               return;
