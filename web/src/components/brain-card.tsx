@@ -1,13 +1,17 @@
-// A thing your team knows, as a readable card (what it is, what it says, where it comes from, what it is connected to),
-// and the search box that finds one. The technical detail (properties, history, the id) sits behind "Show how we know this".
+// A thing your team knows, in the slim panel beside the map (a bottom sheet on a phone): what it is in one line, two
+// buttons (ask about it, what breaks if it stops), how we know (its facts and where they came from, with dates) and what
+// it is linked to. Plus the search box that finds anything and the coloured dot every list uses.
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Link } from "react-router";
-import { api } from "../api";
+import { api, getMode } from "../api";
 import { fmtNum } from "../lib/format";
-import { fmtDate } from "./bits";
+import { askAbout, factsOf, impactLine, impactLinks, oneLine } from "../lib/brain-map";
+import { TEAM, chatPath } from "../lib/chat";
 import { hueFor, labelOfId } from "../lib/labels";
+import type { EdgeRef, NodeRef } from "@shared/contracts";
 import type { NodeDetail, SearchHit } from "../types-ext";
 import { fmtValue, humanKey, kindName, relPhrase, tidyName, whenWords } from "./brain-words";
+import type { GraphAtWork } from "./GraphAtWork";
 import { Icon } from "./Icon";
 import { Reveal } from "./Reveal";
 
@@ -98,139 +102,162 @@ export function SearchBox({ tenantId, onPick, placeholder = "Search what your te
   );
 }
 
-// ---------------------------------------------------------------- the card
+// ---------------------------------------------------------------- the panel
 
 const SHOWN_LINKS = 6;
+const SHOWN_BREAKS = 5;
 
-export function NodeCard({ id, detail, loading, error, onSelect, onClose, onExplore, variant }: {
-  id: string; detail?: NodeDetail; loading: boolean; error?: string;
-  onSelect: (id: string) => void; onClose?: () => void; onExplore?: () => void; variant: "page" | "panel";
+/** What the map lights up for "What breaks if this stops". */
+export interface ImpactShown { id: string; ids: string[]; nodes: NodeRef[]; edges: EdgeRef[] }
+
+export function ThingPanel({ tenantId, id, detail, loading, error, onSelect, onClose, onImpact }: {
+  tenantId: string; id: string; detail?: NodeDetail; loading: boolean; error?: string;
+  onSelect: (id: string) => void; onClose: () => void; onImpact: (shown: ImpactShown | null) => void;
 }) {
-  const groups = useMemo(() => {
-    const m = new Map<string, NodeDetail["neighbors"]>();
-    const cited = new Set((detail?.sources ?? []).map((s) => s.id)); // already listed under "Where this comes from"
-    for (const n of detail?.neighbors ?? []) {
-      if (n.edge.type === "SOURCED_FROM" && cited.has(n.node.id)) continue;
-      const k = `${n.direction}|${n.edge.type}`;
-      m.set(k, [...(m.get(k) ?? []), n]);
-    }
-    return [...m.entries()];
+  const [impact, setImpact] = useState<{ loading: boolean; data?: GraphAtWork | null; error?: string } | null>(null);
+  useEffect(() => { setImpact(null); }, [id, tenantId]);
+  const canImpact = getMode() === "live";
+
+  const checkImpact = () => {
+    if (impact) { setImpact(null); onImpact(null); return; }
+    setImpact({ loading: true });
+    api.graphAtWork(tenantId, id).then((data) => {
+      setImpact({ loading: false, data });
+      const f = data?.focus;
+      if (f && f.status === "impact") onImpact({ id, ...impactLinks(f, f.deep.items) });
+    }, (e: unknown) => setImpact({ loading: false, error: (e as Error)?.message ?? String(e) }));
+  };
+
+  const links = useMemo(() => {
+    const cited = new Set((detail?.sources ?? []).map((s) => s.id)); // already listed under "How we know"
+    const seen = new Set<string>();
+    return (detail?.neighbors ?? []).filter((n) => {
+      if (n.edge.type === "SOURCED_FROM" && cited.has(n.node.id)) return false;
+      const k = `${n.node.id}|${n.edge.type}|${n.direction}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
   }, [detail]);
 
-  const close = onClose && (
-    <button type="button" className="btn btn-quiet btn-icon btn-sm" onClick={onClose} aria-label="Close"><Icon name="close" size={16} /></button>
+  const head = (label: string, when?: string) => (
+    <div className="tp-head">
+      <p className="tp-kind"><Dot label={label} />{kindName(label)}{when ? ` · ${whenWords(when)}` : ""}</p>
+      <button type="button" className="btn btn-quiet btn-icon btn-sm" onClick={onClose} aria-label="Close"><Icon name="close" size={16} /></button>
+    </div>
   );
 
   if (!detail) {
     return (
-      <div className={`bn-card is-${variant}`}>
-        <div className="bn-head"><p className="bn-kind">{kindName(labelOfId(id))}</p>{close}</div>
+      <div className="tp">
+        {head(labelOfId(id))}
         {loading ? (
-          <><span className="skeleton" style={{ display: "block", height: 32, width: "70%" }} /><span className="skeleton" style={{ display: "block", height: 72 }} /></>
+          <><span className="skeleton" style={{ display: "block", height: 28, width: "70%" }} /><span className="skeleton" style={{ display: "block", height: 44 }} /></>
         ) : (
-          <p className="empty">{error ? `We couldn't open this: ${error}` : "Your team doesn't have this one in its notes."}</p>
+          <p className="tp-line">{error ? `We couldn't open this: ${error}` : "Your team doesn't have this one in its notes."}</p>
         )}
       </div>
     );
   }
 
   const n = detail.node;
-  const props = Object.entries(detail.props).filter(([k]) => k !== "asOf" && k !== "simulated");
-  const flat = groups.flatMap(([k, list]) => list!.map((nb) => ({ k, nb })));
-  const renderGroups = (subset: typeof flat) => {
-    const by = new Map<string, typeof flat>();
-    for (const x of subset) by.set(x.k, [...(by.get(x.k) ?? []), x]);
-    return (
-      <div className="bn-links">
-        {[...by.entries()].map(([k, list]) => {
-          const [dir, type] = k.split("|") as ["out" | "in", string];
-          return (
-            <div key={k} className="bn-link-group">
-              <p className="bn-rel">{relPhrase(type, dir)}</p>
-              <ul>
-                {list.map(({ nb }) => (
-                  <li key={nb.node.id + k}>
-                    <button type="button" className="bn-row" onClick={() => onSelect(nb.node.id)}>
-                      <Dot label={nb.node.label} />
-                      <span className="bn-row-name">{tidyName(nb.node.label, nb.node.name)}</span>
-                      <span className="bn-row-kind">{kindName(nb.node.label)}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
+  const name = tidyName(n.label, n.name);
+  const line = oneLine(n.summary) ?? `${kindName(n.label)}, linked to ${fmtNum(links.length)} ${links.length === 1 ? "thing" : "things"}.`;
+  const facts = factsOf(detail.props);
+  const f = impact?.data?.focus;
 
   return (
-    <div className={`bn-card is-${variant}`}>
-      <div className="bn-head">
-        <p className="bn-kind"><Dot label={n.label} />{kindName(n.label)}{n.asOf ? ` · ${whenWords(n.asOf)}` : ""}</p>
-        {close}
-      </div>
-      <h2 className="bn-name">{tidyName(n.label, n.name)}</h2>
-      {n.simulated && <span className="badge badge-warn bn-sample">Sample numbers</span>}
-      {n.summary && <p className="bn-summary">{n.summary}</p>}
-      <div className="bn-actions">
-        <Link className="btn btn-gold" to={`/ask?q=${encodeURIComponent(`What should I know about ${n.name}?`)}`}><Icon name="ask" size={15} /> Ask about this</Link>
-        {onExplore && <button type="button" className="btn btn-ghost" onClick={onExplore}>Explore around it</button>}
+    <div className="tp">
+      {head(n.label, n.asOf)}
+      <h2 className="tp-name">{name}</h2>
+      {n.simulated && <span className="badge badge-warn tp-sample">Sample numbers</span>}
+      <p className="tp-line">{line}</p>
+      <div className="tp-actions">
+        <Link className="btn btn-gold btn-sm" to={`${chatPath(TEAM)}?q=${encodeURIComponent(askAbout(name))}`}><Icon name="ask" size={14} /> Ask about this</Link>
+        {canImpact && (
+          <button type="button" className={`btn btn-ghost btn-sm${impact ? " is-on" : ""}`} aria-pressed={!!impact} onClick={checkImpact}>
+            <Icon name="warn" size={14} /> What breaks if this stops
+          </button>
+        )}
       </div>
 
-      {detail.sources.length > 0 && (
-        <section className="bn-section" aria-labelledby={`bn-src-${variant}`}>
-          <h3 id={`bn-src-${variant}`} className="bn-section-title">Where this comes from</h3>
-          <ul className="bn-sources">
-            {detail.sources.map((s) => (
-              <li key={s.id}>
-                <button type="button" onClick={() => onSelect(s.id)} className="bn-row">
-                  <Icon name="file" size={14} />
-                  <span className="bn-row-name">{s.title}</span>
-                  {s.asOf && <span className="bn-row-kind">{whenWords(s.asOf)}</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
+      {impact && (
+        <section className="tp-breaks" aria-live="polite" aria-label="What breaks if this stops">
+          {impact.loading ? <span className="skeleton" style={{ display: "block", height: 40 }} />
+            : impact.error ? <p className="tp-muted">We couldn't check this just now. {impact.error}</p>
+            : !f ? <p className="tp-muted">{impact.data?.notFound?.message ?? "We couldn't check this one."}</p>
+            : (
+              <>
+                <p className="tp-breaks-line">{impactLine(name, f.status, f.shallow.total, f.deep.total)}</p>
+                {f.status === "impact" && (
+                  <ul className="tp-rows">
+                    {f.deep.items.slice(0, SHOWN_BREAKS).map((i) => (
+                      <li key={i.id}>
+                        <button type="button" className="tp-row" onClick={() => onSelect(i.id)}>
+                          <Dot label={i.type} /><span className="tp-row-name">{i.name}</span>
+                          <span className="tp-row-note">{i.hop === 1 ? "straight away" : `${i.hop} steps away`}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {f.status === "impact" && f.deep.total > SHOWN_BREAKS && <p className="tp-muted">and {f.deep.total - SHOWN_BREAKS} more, lit up on the map</p>}
+                {f.owners.length > 0 && <p className="tp-muted">Looked after by {f.owners.map((o) => o.name).join(", ")}</p>}
+              </>
+            )}
         </section>
       )}
 
-      {flat.length > 0 && (
-        <section className="bn-section" aria-labelledby={`bn-nb-${variant}`}>
-          <h3 id={`bn-nb-${variant}`} className="bn-section-title">Connected to <span className="bn-count">{fmtNum(flat.length)}</span></h3>
-          {renderGroups(flat.slice(0, SHOWN_LINKS))}
-          {flat.length > SHOWN_LINKS && (
-            <Reveal label={`Show ${flat.length - SHOWN_LINKS} more`} openLabel="Show fewer">{renderGroups(flat.slice(SHOWN_LINKS))}</Reveal>
-          )}
-        </section>
-      )}
-
-      <Reveal label="Show how we know this" className="bn-how">
-        <div className="bn-how-body">
-          {props.length > 0 && (
-            <dl className="bn-props">
-              {props.map(([k, v]) => <div key={k}><dt>{humanKey(k)}</dt><dd>{fmtValue(v)}</dd></div>)}
-              <div><dt>Importance</dt><dd>{fmtNum(Math.round((n.rank ?? 0) * 100))} out of 100</dd></div>
+      {(facts.length > 0 || detail.sources.length > 0) && (
+        <section className="tp-section" aria-label="How we know">
+          <h3 className="tp-title">How we know</h3>
+          {facts.length > 0 && (
+            <dl className="tp-facts">
+              {facts.map(([k, v]) => <div key={k}><dt>{humanKey(k)}</dt><dd>{fmtValue(v)}</dd></div>)}
             </dl>
           )}
-          {detail.versions.length > 0 && (
-            <>
-              <p className="bn-section-title">How it changed</p>
-              <ol className="bn-history">
-                {[...detail.versions].reverse().map((v, i) => (
-                  <li key={i} className={v.until ? "" : "is-current"}>
-                    <p className="bn-history-when">{fmtDate(v.since)} to {v.until ? fmtDate(v.until) : "now"}</p>
-                    <p className="bn-history-what">{Object.entries(v.props).map(([k, val]) => `${humanKey(k)}: ${fmtValue(val)}`).join(" · ")}</p>
-                    {v.src && <button type="button" className="bn-history-src" onClick={() => onSelect(v.src!)}>{v.src.split(":").slice(1).join(":")}</button>}
-                  </li>
-                ))}
-              </ol>
-            </>
+          {detail.sources.length > 0 && (
+            <ul className="tp-rows">
+              {detail.sources.slice(0, 4).map((s) => (
+                <li key={s.id}>
+                  <button type="button" className="tp-row" onClick={() => onSelect(s.id)}>
+                    <Icon name="file" size={13} /><span className="tp-row-name">{s.title}</span>
+                    {s.asOf && <span className="tp-row-note">{whenWords(s.asOf)}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
-          <p className="bn-id"><code>{n.id}</code></p>
-        </div>
-      </Reveal>
+        </section>
+      )}
+
+      {links.length > 0 && (
+        <section className="tp-section" aria-label="Linked to">
+          <h3 className="tp-title">Linked to <span className="tp-count">{fmtNum(links.length)}</span></h3>
+          <LinkRows list={links.slice(0, SHOWN_LINKS)} onSelect={onSelect} />
+          {links.length > SHOWN_LINKS && (
+            <Reveal label={`Show ${links.length - SHOWN_LINKS} more`} openLabel="Show fewer">
+              <LinkRows list={links.slice(SHOWN_LINKS)} onSelect={onSelect} />
+            </Reveal>
+          )}
+        </section>
+      )}
     </div>
+  );
+}
+
+function LinkRows({ list, onSelect }: { list: NodeDetail["neighbors"]; onSelect: (id: string) => void }) {
+  return (
+    <ul className="tp-rows">
+      {list.map((nb) => (
+        <li key={`${nb.node.id}|${nb.edge.type}|${nb.direction}`}>
+          <button type="button" className="tp-row" onClick={() => onSelect(nb.node.id)}>
+            <Dot label={nb.node.label} />
+            <span className="tp-row-name">{tidyName(nb.node.label, nb.node.name)}</span>
+            <span className="tp-row-note">{relPhrase(nb.edge.type, nb.direction).toLowerCase()}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }

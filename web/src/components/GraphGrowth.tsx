@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../state/app";
 import { fmtNum } from "../lib/format";
-import { Reveal } from "./Reveal";
 import "./graph-growth.css";
 
 export interface GraphStoryDto {
@@ -43,18 +42,14 @@ export function GraphGrowthPanel({ tenantId }: { tenantId: string }) {
 
   const max = Math.max(1, ...(s?.points ?? []).map((p) => p.nodes));
   const a = s?.afterLoad;
-  const summary = s ? (a && (a.nodes || a.edges) ? `+${fmtNum(a.nodes)} since the first load` : `${fmtNum(s.totals.nodes)} things`) : undefined;
   return (
-    <section className="gg" aria-labelledby="gg-title">
-      <h2 id="gg-title" className="bs-section-title">It keeps growing</h2>
-      <Reveal tone="row" label="How your team's knowledge grew" summary={summary}>
-        {!s ? <div className="bs-skel" aria-hidden="true"><span className="skeleton" /><span className="skeleton" /></div> : (
+    <section className="gg" aria-label="How it grew">
+      {!s ? <div className="bs-skel" aria-hidden="true"><span className="skeleton" /><span className="skeleton" /></div> : (
           <div className="gg-body">
             <p className="gg-lede">
-              Your team now holds <b>{fmtNum(s.totals.nodes)}</b> things and <b>{fmtNum(s.totals.edges)}</b> links between them
-              {s.first && <>, from {day(s.first)} to {day(s.last ?? s.first)}</>}.
-              {by === "recorded" && a && (a.nodes || a.edges) ? <> After the first big load ({day(a.loadDay)}), using it added <b>{fmtNum(a.nodes)}</b> more things{a.nodesPct !== null ? ` (+${a.nodesPct}%)` : ""} and <b>{fmtNum(a.edges)}</b> more links{a.edgesPct !== null ? ` (+${a.edgesPct}%)` : ""}: conversations, decisions, what you approved and what the team learned from your edits.</> : null}
-              {" "}{fmtNum(s.totals.versions)} things that changed keep their earlier version.
+              {by === "recorded" && a && (a.nodes || a.edges)
+                ? <>Since the first load on {day(a.loadDay)}, using it added <b>{fmtNum(a.nodes)}</b> things{a.nodesPct !== null ? ` (+${a.nodesPct}%)` : ""} and <b>{fmtNum(a.edges)}</b> links: conversations, decisions, your OKs and your edits.</>
+                : <><b>{fmtNum(s.totals.nodes)}</b> things and <b>{fmtNum(s.totals.edges)}</b> links{s.first && <>, from {day(s.first)} to {day(s.last ?? s.first)}</>}.</>}
             </p>
             <div className="gg-switch" role="group" aria-label="Which date to count by">
               <button type="button" className={`gg-chip${by === "recorded" ? " is-on" : ""}`} aria-pressed={by === "recorded"} onClick={() => setBy("recorded")}>When your team learned it</button>
@@ -80,11 +75,10 @@ export function GraphGrowthPanel({ tenantId }: { tenantId: string }) {
               ))}
             </ul>
             {(s.totals.undatedNodes > 0 || s.totals.undatedEdges > 0) && (
-              <p className="gg-note">{fmtNum(s.totals.undatedNodes)} things and {fmtNum(s.totals.undatedEdges)} links have no date on this clock, so they are not in these rows.</p>
+              <p className="gg-note">{fmtNum(s.totals.undatedNodes)} things and {fmtNum(s.totals.undatedEdges)} links have no date on this clock.</p>
             )}
           </div>
         )}
-      </Reveal>
     </section>
   );
 }

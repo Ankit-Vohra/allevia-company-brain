@@ -1,5 +1,5 @@
 /* ---------- It keeps growing (Brain page): one quiet row that opens to a bar per day or week ---------- */
-.gg { display: grid; gap: var(--space-xs); padding-top: var(--space-sm); border-top: 1px solid var(--color-rule-2); }
+.gg { display: grid; gap: var(--space-xs); }
 .gg-body { display: grid; gap: var(--space-sm); }
 .gg-lede { font-size: var(--text-sm); color: var(--color-ink-2); max-width: 64ch; line-height: 1.55; text-wrap: pretty; }
 .gg-lede b { font-weight: 600; color: var(--color-ink); }

@@ -19,7 +19,13 @@ const KIND: Record<string, string> = {
 export const kindName = (label: string) => KIND[label] ?? label.replace(/([a-z])([A-Z])/g, "$1 $2");
 
 /** "007 · Pause daily posts" → "Pause daily posts": decisions carry a filing number the owner never needs. */
-export const tidyName = (label: string, name: string) => (label === "Decision" ? name.replace(/^\d{2,4}\s*[·:-]\s*/, "") : name);
+/** "Supabase prod ([redacted:supabase-ref], Mumbai)" → "Supabase prod (Mumbai)": the privacy filter's marker is not for the owner
+ *  (the same rule as src/util/plain.ts on the server). */
+const unmarked = (s: string) =>
+  s.includes("[redacted:")
+    ? s.replace(/\(\s*\[redacted:[a-z-]+\]\s*\)/gi, "").replace(/\[redacted:[a-z-]+\]\s*,?\s*/gi, "").replace(/\s{2,}/g, " ").trim()
+    : s;
+export const tidyName = (label: string, name: string) => unmarked(label === "Decision" ? name.replace(/^\d{2,4}\s*[·:-]\s*/, "") : name);
 
 export interface BrainGroup { id: string; name: string; blurb: string; labels: string[] }
 
