@@ -60,8 +60,8 @@ export async function graphHygiene(g: GraphHandle, now: number = Date.now()): Pr
   const [cTotal, cSuperseded, cUnheld] = await Promise.all([
     one(g, "MATCH (c:Chunk) RETURN count(c) AS c"),
     one(g,
-      `MATCH (d:Document)-[:HAS_CHUNK]->(c:Chunk) OPTIONAL MATCH (s:Document)-[:SUPERSEDES]->(d)
-       WITH d, c, count(s) AS successors WHERE successors > 0 OR toLower(coalesce(d.status, '')) IN ['superseded', 'archived', 'retired']
+      `MATCH (d:Document)-[h:HAS_CHUNK]->(c:Chunk) OPTIONAL MATCH (:Document)-[sp:SUPERSEDES]->(d)
+       WITH d, c, count(h) AS held, count(sp) AS successors WHERE successors > 0 OR toLower(coalesce(d.status, '')) IN ['superseded', 'archived', 'retired']
        RETURN count(DISTINCT c) AS c`),
     one(g,
       `MATCH (c:Chunk) OPTIONAL MATCH (:Document)-[h:HAS_CHUNK]->(c) WHERE h.until IS NULL
