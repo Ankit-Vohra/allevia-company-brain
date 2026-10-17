@@ -14,6 +14,7 @@ import { Markdown } from "../components/Markdown";
 import { Reveal } from "../components/Reveal";
 import { Sheet } from "../components/Sheet";
 import { fmtMoney } from "../lib/format";
+import { briefFirstLine } from "../lib/home";
 import { useApp, useAsync } from "../state/app";
 import type { Approval, Freshness, Recommendation } from "../types-ext";
 import "../components/approval/approval.css";
@@ -22,7 +23,7 @@ import "./insights.css";
 const TOP = 5;
 
 /** The note's first paragraph as plain words, for the one line on top. */
-const firstLine = (md: string) => withoutCites(md.split(/\n\s*\n/)[0] ?? "").replace(/\*\*|__|[*_`#>]/g, "").replace(/\s+/g, " ").trim();
+const firstLine = briefFirstLine;
 
 export default function InsightsPage() {
   const { tenant } = useApp();

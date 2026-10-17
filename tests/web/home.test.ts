@@ -5,7 +5,7 @@ import type { ProgramGoal } from "../../shared/contracts.js";
 import { ownerJargon } from "../../src/agent/style.js";
 import { askPath, chatPath, TEAM } from "../../web/src/lib/chat.js";
 import {
-  firstFew, goalsTally, homeStatus, meetingWords, noteLine, notePicks, planSummary, plainTitle, pulseWords, teamStrip, toolsSummary, waitingList, whoIsWorking,
+  briefFirstLine, firstFew, goalsTally, homeStatus, meetingWords, noteLine, notePicks, planSummary, plainTitle, pulseWords, teamStrip, toolsSummary, waitingList, whoIsWorking,
   type StandupLike, type ToolLike,
 } from "../../web/src/lib/home.js";
 
@@ -221,5 +221,15 @@ describe("the words on Home are the owner's words", () => {
       "First reading next week", "going well",
     ];
     for (const l of lines) expect(ownerJargon(l), l).toEqual([]);
+  });
+});
+
+describe("today's note in one line (Insights)", () => {
+  it("skips the note's own title and reads the first thing it says", () => {
+    const brief = "Today's note, Shiftly (synthetic demo), 17 Oct 2026\n\nYour team met this morning\n- Nothing new worth your time today.\n\nYour goals\n- Weekly signups: Goal: 20. [[goal:weekly-signups]]";
+    expect(briefFirstLine(brief)).toBe("Your team met this morning: Nothing new worth your time today.");
+  });
+  it("keeps a prose opening whole, without marks or [[ids]]", () => {
+    expect(briefFirstLine("**Good morning.** Reels are carrying Instagram [[observation:ig]].\n\nMore later.")).toBe("Good morning. Reels are carrying Instagram.");
   });
 });

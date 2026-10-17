@@ -72,6 +72,20 @@ export function noteLine(standup: StandupLike | null | undefined): string {
   return standup.heading || `Your team noticed ${drafted} ${drafted === 1 ? "thing" : "things"} worth doing today`;
 }
 
+/**
+ * Today's note (the written brief) in one line, for the top of Insights: not its own title ("Today's note, Shiftly, 17 Oct
+ * 2026" under the heading "Today's note" said nothing), but the first thing it says ("Your team met this morning: …").
+ */
+export function briefFirstLine(md: string): string {
+  const clean = (s: string) => s.replace(/\s*\[\[[^\]\n]+\]\]/g, "").replace(/\*\*|__|[*_`#>]/g, "").replace(/\s+/g, " ").trim();
+  const paras = md.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  const p = paras.find((x) => !/^#*\s*today['’]s note\b/i.test(x)) ?? paras[0] ?? "";
+  const [head = "", next] = p.split("\n").map((l) => l.trim());
+  // a heading with its first point under it reads as one sentence
+  if (next && /^[-•*]\s+/.test(next) && !/^[-•*]\s+/.test(head)) return clean(`${head.replace(/[:.]$/, "")}: ${next.replace(/^[-•*]\s+/, "")}`);
+  return clean(p);
+}
+
 /** The stand-up's picks, each with its reason: the full note, behind one tap. */
 export function notePicks(standup: StandupLike | null | undefined): Array<{ key: string; agent: AgentId; title: string; why: string; approvalId?: string }> {
   return (standup?.items ?? []).filter((i) => i.status === "drafted").map((i) => ({ key: i.key, agent: i.agent, title: plainTitle(i.title), why: humanDates(i.why), ...(i.approvalId ? { approvalId: i.approvalId } : {}) }));
