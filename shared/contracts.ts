@@ -186,7 +186,9 @@ export type DirectivePatch =
   // A rule for one skill ("our posts always end with a question" -> Miss Influencer's Instagram post craft); skill "*" = all the agent's skills.
   | { kind: "skill.rule"; agents: AgentId[]; skill: string; text: string; channel?: string }
   // A skill of this business's own (or one that replaces a shipped skill of the same id) for the named agents.
-  | { kind: "skill.add"; agents: AgentId[]; id: string; name: string; when: string; text: string };
+  | { kind: "skill.add"; agents: AgentId[]; id: string; name: string; when: string; text: string }
+  // The business's main goal, in the owner's words ("our main goal is more app downloads"): the north star every agent works toward.
+  | { kind: "north_star.set"; text: string; goal: string };
 
 export interface DirectiveDiffLine {
   patch: number;              // index into patches

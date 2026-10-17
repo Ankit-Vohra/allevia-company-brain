@@ -32,7 +32,7 @@ import {
   seoRulesWrite, seoWrite, understandingLinks, websiteChannelWrite, type BrandVoice, type Profile, type CrawlOptions, type CrawlResult, type PageData,
 } from "../ingest/sources/website/index.js";
 import type { BaselineResult } from "../program/program.js";
-import { baselineStage, capabilitiesStage, goalsStage, profileStage, type GoalsResult, type ProfileResult, type ProgramStageCtx } from "./enroll.js";
+import { baselineStage, capabilitiesStage, goalsStage, northStarStage, profileStage, type GoalsResult, type ProfileResult, type ProgramStageCtx } from "./enroll.js";
 import type { ResolvedRegion } from "./region.js";
 import { fetchWebsiteBrandFiles, type BrandFetch } from "../brand/website.js";
 import type { AssetStore } from "../studio/store.js";
@@ -530,6 +530,13 @@ export async function onboard(typed: OnboardInput, emit: (e: OnboardEvent) => vo
     try {
       goals = await goalsStage(ctx, profile);
       result.program = goals;
+    } catch (e) {
+      fail("goals", e);
+    }
+  }
+  if (profile && !stopped()) {
+    try {
+      await northStarStage(ctx);
     } catch (e) {
       fail("goals", e);
     }

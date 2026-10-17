@@ -30,6 +30,7 @@ import type { SkillRule } from "../agent/skills/catalog.js";
 import { lintBusinessSkill, SKILL_ID } from "../agent/skills/format.js";
 import { targetsIn } from "../agent/skills/targets.js";
 import { entityId, sha256, slugify } from "../util/ids.js";
+import { loadNorthStar, mainGoalIn, northStarWrite, ownerNorthStar } from "../northstar/northstar.js";
 import { isoDate, istDate } from "../util/time.js";
 import { AGENT_MODES, CHIEF, agentChangeRefusal, listAgentsWithSettings, setAgentSettings } from "./team.js";
 
@@ -268,6 +269,9 @@ export function parseClause(clause: string): ClauseResult | undefined {
   // Mode and autonomy before the switches: "put Growth Hacker on light mode" is not "put Growth Hacker on".
   const m = modeOrAutonomy(c, to);
   if (m) return m;
+  // "our main goal is more app downloads": the north star, for the whole team
+  const main = mainGoalIn(rest);
+  if (main) return { patches: [{ kind: "north_star.set", text: clip(sentence(rest), MAX_PATCH_TEXT), goal: clip(main.goal, 200) }], notes: [] };
   const t = toggle(c);
   if (t) return t;
 
@@ -476,7 +480,7 @@ const skillLabel = (skill: string, agents: string[]): string => {
 };
 const agentLabel = (id: string): string => plainWho(id);
 
-function diffOf(patches: DirectivePatch[], agents: AgentSettings[], existingRules: Set<string>, previewId: string, skillRules: readonly SkillRule[] = []): DirectiveDiffLine[] {
+function diffOf(patches: DirectivePatch[], agents: AgentSettings[], existingRules: Set<string>, previewId: string, skillRules: readonly SkillRule[] = [], currentGoal?: string): DirectiveDiffLine[] {
   const byId = new Map(agents.map((a) => [a.id, a]));
   return patches.map((p, i): DirectiveDiffLine => {
     switch (p.kind) {
@@ -507,6 +511,8 @@ function diffOf(patches: DirectivePatch[], agents: AgentSettings[], existingRule
         const ch = p.channel ? channelRef(p.channel) : undefined;
         return { patch: i, op: has ? "same" : "add", target: instructionId(previewId, i), label: `Rule for ${skillLabel(p.skill, p.agents)}${ch ? ` on ${ch.name}` : ""}`, after: p.text };
       }
+      case "north_star.set":
+        return { patch: i, op: norm(currentGoal ?? "") === norm(p.goal) ? "same" : "change", target: "memory:north-star", label: "Your main goal (what every post, ad and plan works toward)", ...(currentGoal ? { before: currentGoal } : {}), after: p.goal };
       case "skill.add": {
         const shipped = codeCatalog().skills.some((k) => k.id === p.id);
         const who = p.agents.map((a) => agentById(a)?.name ?? a).join(", ");
@@ -565,7 +571,8 @@ export async function previewDirective(g: GraphHandle, input: { text: string; ac
       { ids: patches.filter((p) => p.kind === "brand_rule.add").map((p) => brandRuleId(p.text)) }),
   ]);
   const skillRules = patches.some((p) => p.kind === "skill.rule") ? (await loadBusinessSkills(g)).rules : [];
-  const diff = diffOf(patches, agents, new Set(rules.map((r) => r.id)), id, skillRules);
+  const currentGoal = patches.some((p) => p.kind === "north_star.set") ? (await loadNorthStar(g).catch(() => null))?.outcome : undefined;
+  const diff = diffOf(patches, agents, new Set(rules.map((r) => r.id)), id, skillRules, currentGoal);
   const preview: DirectivePreview = { id, text, actor, status: "preview", patches, diff, unparsed: parsed.unparsed, notes: unique(parsed.notes), parser };
 
   const props: Record<string, Prim> = {
@@ -607,6 +614,7 @@ function validPatch(p: DirectivePatch): boolean {
     case "brand_rule.add": return typeof p.text === "string" && !!p.text.trim();
     case "skill.rule": return Array.isArray(p.agents) && p.agents.length > 0 && p.agents.every((a) => !!agentById(a)) && typeof p.text === "string" && !!p.text.trim()
       && (p.skill === "*" || SKILL_ID.test(p.skill));
+    case "north_star.set": return typeof p.goal === "string" && !!p.goal.trim() && p.goal.length <= 200;
     case "skill.add": return Array.isArray(p.agents) && lintBusinessSkill({ id: p.id, name: p.name, when: p.when, body: p.text, agents: p.agents }, (a) => agentById(a)?.tools ?? undefined).length === 0;
     default: return false;
   }
@@ -631,6 +639,13 @@ export async function applyDirective(g: GraphHandle, previewId: string, opts: { 
       if (p.kind === "agent.enabled") await setAgentSettings(g, p.agent, { enabled: p.enabled, ...(p.note ? { statusNote: p.note } : {}) }, { now, src: previewId });
       else if (p.kind === "agent.mode") await setAgentSettings(g, p.agent, { mode: p.mode }, { now, src: previewId });
       else if (p.kind === "agent.autonomy") await setAgentSettings(g, p.agent, { autonomy: p.autonomy }, { now, src: previewId });
+      else if (p.kind === "north_star.set") {
+        if (same.has(i) || !businessId) continue;
+        const said = mainGoalIn(`our main goal is ${p.goal}`) ?? { goal: p.goal };
+        const w = await northStarWrite(g, { ...ownerNorthStar(await loadNorthStar(g), said, previewId), businessId, now, ...(stated ? { statedBy: d.actor } : {}) });
+        const s = await writeBatch(g, w.write, now);
+        if (s.errors.length) throw new Error(s.errors.map((e) => e.error).join("; "));
+      }
       else if (!same.has(i)) {
         const actor = stated ? d.actor : undefined;
         const w = p.kind === "memory.instruction"

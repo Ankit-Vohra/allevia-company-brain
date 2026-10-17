@@ -485,6 +485,7 @@ export function previewDirective(t: string, text: string): DirectivePreview {
       // the sample mode never produces these (its parser only knows the older shapes); shown plainly if one arrives
       case "skill.rule": return { patch: i, op: "add", target: `${id.replace("document:", "memory:")}-${i + 1}`, label: `Rule for ${p.agents.map((a) => agentById(a)?.name).join(", ")}`, after: p.text };
       case "skill.add": return { patch: i, op: "add", target: `${id.replace("document:", "memory:")}-${i + 1}`, label: `New skill: ${p.name}`, after: p.text };
+      case "north_star.set": return { patch: i, op: "change", target: "memory:north-star", label: "Your main goal (what every post, ad and plan works toward)", after: p.goal };
     }
   });
   const preview: DirectivePreview = { id, text, actor: "person:owner", status: "preview", patches, diff, unparsed, notes, parser: "rules" };

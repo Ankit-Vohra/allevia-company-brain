@@ -13,6 +13,7 @@ import { fmt, shortDate } from "../insights/text.js";
 import {
   baselinesWrite, checkpointWrite, goalOwners, programAndGoalsWrite, programGoals, type BaselineResult,
 } from "../program/program.js";
+import { deriveNorthStar, northStarWrite, type NorthStarInput } from "../northstar/northstar.js";
 import { localDate, resolveRegion, type ResolvedRegion } from "./region.js";
 import { templateByKey, templateByKind, templateFor, templateMatching, type IndustryTemplate } from "./templates.js";
 
@@ -83,6 +84,19 @@ export async function goalsStage(c: ProgramStageCtx, p: ProfileResult): Promise<
   }));
   await c.write("goals", r.write);
   return { program: r.program, created: r.created, goals: r.goals, startDate: r.startDate };
+}
+
+// ---------- the main goal (north star) ----------
+
+// What the business is for, derived by code from the website's records, the growth-plan goals and the industry template, as a fact
+// with its source and date (src/northstar). Every agent reads it; the owner corrects it in their own words ("our main goal is …").
+// An earlier one the owner set is kept.
+export async function northStarStage(c: ProgramStageCtx): Promise<NorthStarInput | null> {
+  const ns = await c.retry(() => deriveNorthStar(c.g, { businessId: c.businessId, source: "onboarding" }));
+  const w = await c.retry(() => northStarWrite(c.g, { ...ns, businessId: c.businessId, now: c.now() }));
+  if (w.previous?.source === "owner") return null;
+  if (!w.same) await c.write("goals", { ...w.write, observations: [] });
+  return ns;
 }
 
 // ---------- baseline ----------
