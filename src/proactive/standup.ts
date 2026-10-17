@@ -4,7 +4,8 @@
 // OK (draft.ts). Today's note then leads with it ("Your team noticed 2 things and drafted them"), or says "Nothing new
 // worth your time today" when nothing cleared the bar.
 //
-// Saved as Document {kind:'standup', date} PRODUCED by the Chief of Staff, MENTIONS every card, idea and person in it. One a
+// Saved as Document {kind:'standup', date} PRODUCED by the Chief of Staff, MENTIONS every card, idea and person in it, what each pick
+// stands on (role 'evidence', pickKey) and the biggest moves in the numbers it read (role 'signal'). One a
 // day: a second run the same day returns the first unless forced, and a forced run only adds what is new (the same
 // dedupe applies), so the scheduler and the CLI can both call it safely.
 //
@@ -54,6 +55,19 @@ function reviewedOf(s: Signals): Reviewed {
   };
 }
 
+// What each drafted card's idea stands on: the nodes its Recommendation is EVIDENCED_BY now (up to eight, the ones draft.ts linked), by
+// pick key. Read from the graph, so a forced second run keeps the evidence of the cards the first one drafted.
+async function evidenceOf(g: GraphHandle, items: DraftedItem[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  for (const i of items) {
+    if (i.status !== "drafted" || !i.recommendationId) continue;
+    const rows = await g.roQuery<{ id: string }>(
+      "MATCH (:Entity:Recommendation {id:$id})-[e:EVIDENCED_BY]->(x:Entity) WHERE e.until IS NULL RETURN x.id AS id ORDER BY e.since, x.id LIMIT 8", { id: i.recommendationId });
+    for (const r of rows) out.set(r.id, [...new Set([...(out.get(r.id) ?? []), i.key])]);
+  }
+  return out;
+}
+
 export async function runStandup(tenant: string, opts: StandupOpts): Promise<Standup> {
   const g = opts.graph ?? (await openGraph(tenant));
   const now = opts.now ?? Date.now();
@@ -64,7 +78,7 @@ export async function runStandup(tenant: string, opts: StandupOpts): Promise<Sta
   if (before && !opts.force) return { ...before, reused: true };
 
   const businessId = await findBusinessId(g, tenant);
-  const signals = await gatherSignals(g, { now, tenant, businessId, ...(opts.since !== undefined ? { since: opts.since } : {}) });
+  const signals = await gatherSignals(g, { now, tenant, businessId, log, ...(opts.since !== undefined ? { since: opts.since } : {}) });
   const opps = opportunitiesFrom(signals);
   const screened = screen(opps, await loadHistory(g, now), now, opts.minScore !== undefined ? { minScore: opts.minScore } : {});
   const choice = await choose(screened.kept, { ...(opts.runner ? { runner: opts.runner } : {}), business: signals.business, today: signals.today, ...(opts.max ? { max: opts.max } : {}), log });
@@ -109,12 +123,24 @@ export async function runStandup(tenant: string, opts: StandupOpts): Promise<Sta
     asOf: date,
   }, now);
   await upsertEdge(g, { from: chief, type: "PRODUCED", to: id }, now);
-  const mentions = [...new Set([...all.flatMap((i) => [i.approvalId, i.recommendationId].filter((x): x is string => !!x)), ...waiting.map((w) => w.approvalId)])];
-  for (const a of attendees) mentions.push(await ensureAgentNode(g, a, now));
-  const present = await existingIds(g, mentions);
+  // What the note mentions: its cards and ideas and the people at it (plumbing), what each pick stands on (role 'evidence', with the pick's
+  // key) and the biggest moves in the numbers it read (role 'signal'). One edge per node: a number that is both a pick's evidence and a
+  // big move is 'evidence'; a node two picks stand on carries the first pick's key as `pickKey` and every key as `pickKeys`.
+  const plumbing = [...new Set([...all.flatMap((i) => [i.approvalId, i.recommendationId].filter((x): x is string => !!x)), ...waiting.map((w) => w.approvalId)])];
+  for (const a of attendees) plumbing.push(await ensureAgentNode(g, a, now));
+  const stands = await evidenceOf(g, all);
+  const signalIds = [...new Set(signals.numbers.changes.map((c) => c.obsId))];
+  const present = await existingIds(g, [...plumbing, ...stands.keys(), ...signalIds]);
+  const mentions = new Map<string, Record<string, string | string[]>>();
+  for (const m of plumbing) if (present.has(m)) mentions.set(m, {});
+  for (const [node, keys] of stands) if (present.has(node)) mentions.set(node, { role: "evidence", pickKey: keys[0]!, ...(keys.length > 1 ? { pickKeys: keys } : {}) });
+  for (const node of signalIds) if (present.has(node) && !mentions.has(node)) mentions.set(node, { role: "signal" });
   const had = await g.roQuery<{ id: string }>("MATCH (:Entity:Document {id:$id})-[m:MENTIONS]->(x:Entity) WHERE m.until IS NULL RETURN x.id AS id", { id });
-  for (const m of mentions) if (present.has(m)) await upsertEdge(g, { from: id, type: "MENTIONS", to: m }, now);
-  for (const h of had) if (!mentions.includes(h.id)) await closeEdge(g, id, "MENTIONS", h.id, now, "not in this stand-up");
+  for (const [m, props] of mentions) {
+    await upsertEdge(g, { from: id, type: "MENTIONS", to: m, ...(Object.keys(props).length ? { props } : {}), src: id, asOf: date }, now)
+      .catch((e: unknown) => log(`stand-up ${tenant}: the note could not mention ${m}: ${e instanceof Error ? e.message : String(e)}`));
+  }
+  for (const h of had) if (!mentions.has(h.id)) await closeEdge(g, id, "MENTIONS", h.id, now, "not in this stand-up");
   return standup;
 }
 

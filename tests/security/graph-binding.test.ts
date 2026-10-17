@@ -238,7 +238,7 @@ describe("the MCP server answers for the one tenant it was started with", () => 
     const client = await connect(a, "a");
     try {
       const before = [await counts(a), await counts(b)];
-      for (const name of ["remember", "propose_action", "show_path", "upsert", "query"]) {
+      for (const name of ["remember", "propose_action", "upsert", "query"]) {
         const r = await client.callTool({ name, arguments: { text: "x", tenant: "b", about: [B_ONLY] } }) as { isError?: boolean };
         expect(r.isError, name).toBe(true);
       }

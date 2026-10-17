@@ -2,6 +2,7 @@
 //   POST /api/:t/studio/intake    multipart {photo, note?}; the run streams back as AgentEvents (SSE): asset, assessment,
 //                                 asset (variant A), asset (variant B), review, proposal, final
 //   GET  /api/:t/assets/:id       the asset's file (?w= for a smaller copy), only when the Asset is in this tenant's graph
+//   GET  /api/:t/assets/:id/lineage  how it was made: parents, jobs and cost, rules, Nisha's check, the card and the post
 //   GET  /api/:t/studio/latest    the last run's events and where its card stands (for the page after a reload)
 //   POST /api/:t/studio/approve   {approvalId, variantId?, caption?}: the owner picks a variant; writes the draft post
 //   POST /api/:t/studio/revise    {approvalId, instruction | retryOf}: a change in the owner's words (free light and colour, or the AI editor)
@@ -21,6 +22,8 @@ import { ImageRejected, thumbnail } from "../studio/image.js";
 import { assetUrl } from "../studio/intake.js";
 import { CHECKS_NA, latestStudioRun, runStudio, type StudioDeps } from "../studio/pipeline.js";
 import { generateVariant } from "../studio/generate.js";
+import { makePremiumAd } from "../studio/premium.js";
+import { assetLineage } from "../studio/lineage.js";
 import type { ClipPort } from "../studio/clip.js";
 import { reviseVariant } from "../studio/revise.js";
 import { routeRequest } from "../studio/request.js";
@@ -149,7 +152,7 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
           const status = (text: string) => send({ type: "agent_status", agent: TARA, text });
           if (req.kind === "chat") {
             send({ type: "agent_done", agent: TARA, ms: 0, ok: true });
-            return say("Tell me what you would like changed, for example \"make it warmer\", \"make it festive\", \"a different background\", or \"make this into an ad saying ...\".");
+            return say("Tell me what you would like changed, for example \"make it warmer\", \"make it festive\", \"a different background\", \"make this a premium UGC ad\", or \"make this into an ad saying ...\".");
           }
           if (req.kind === "clip") {
             send({ type: "agent_done", agent: TARA, ms: 0, ok: true });
@@ -162,6 +165,17 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
             send({ type: "asset", agent: TARA, assetId: r.variant.id, kind: "variant", parentId: "", thumb: assetUrl(reg.slug, r.variant.id, 640) });
             send({ type: "review", agent: NISHA, findingId: r.variant.id, verdict: r.fidelity.badge === "unchanged" ? "ok" : "reject", note: `Variant ${r.variant.label}: ${r.fidelity.note}` });
             return say(`Option ${r.variant.label}: ${r.adjustment.label} (free, made with the team's own light and colour tools).`);
+          }
+          if (req.kind === "premium") {
+            const r = await makePremiumAd(g, { ...ids, request: { words: req.words, ...(req.headline ? { headline: req.headline } : {}), ...(req.sub ? { sub: req.sub } : {}) } }, { ...w.deps, now: h.now(), status });
+            send({ type: "agent_done", agent: TARA, ms: Math.max(0, h.now() - t0), ok: r.ok });
+            if (!r.ok) return say(r.message);
+            send({ type: "asset", agent: TARA, assetId: r.variant.id, kind: "variant", parentId: "", thumb: assetUrl(reg.slug, r.variant.id, 640) });
+            send({ type: "review", agent: NISHA, findingId: r.variant.id, verdict: r.passed ? "ok" : "reject", note: `Variant ${r.variant.label}: ${r.fidelity.note}` });
+            const cost = r.variant.credits !== undefined && r.variant.credits > 0 ? ` It used ${creditsWords(r.variant.credits, { about: true })}.` : "";
+            return say(r.passed
+              ? `Option ${r.variant.label} is your premium ad picture, and Nisha checked that the product is unchanged.${cost} Ask for "a clip" and I will price a 5 second vertical clip from it first.`
+              : `Option ${r.variant.label} was held back: ${r.fidelity.note}${cost} You can ask for it again in other words, or pick another option.`);
           }
           const request = req.kind === "retry" ? { kind: "retry" as const, ...(retryOf ? { of: retryOf } : {}) }
             : req.kind === "ad" ? { kind: "ad" as const, words: req.words, ...(req.headline ? { headline: req.headline } : {}), ...(req.sub ? { sub: req.sub } : {}) }
@@ -186,6 +200,15 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
       busy = false;
       throw e;
     }
+  });
+
+  // How a Studio picture or clip was made, read from the graph (studio/lineage.ts): the photo it came from, each step, the Higgsfield
+  // jobs and what they cost, the rules, Nisha's check, the card and the post.
+  app.get("/api/:t/assets/:id/lineage", async (c) => {
+    const { g } = await h.tenantOf(c);
+    const lineage = await assetLineage(g, c.req.param("id"));
+    if (!lineage.root) h.fail(404, "No such asset.");
+    return c.json(lineage);
   });
 
   app.get("/api/:t/assets/:id", async (c) => {

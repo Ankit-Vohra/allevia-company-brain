@@ -214,7 +214,7 @@ export async function disconnectSearchConsole(deps: GoogleDeps, g: GraphHandle, 
   const tokens = await deps.store.get(tenant, CONNECTOR).catch(() => null);
   if (tokens) await deps.client.revoke(tokens.refreshToken).catch(() => undefined);
   await deps.store.delete(tenant, CONNECTOR);
-  if (await readSystem(g)) await writeSystem(g, deps.now(), { status: "disconnected", property: null, siteChoices: null, lastError: null });
+  if (await readSystem(g)) await writeSystem(g, deps.now(), { status: "not_connected", property: null, siteChoices: null, lastError: null });
 }
 
 // ---------- pulling ----------

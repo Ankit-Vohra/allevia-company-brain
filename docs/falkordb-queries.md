@@ -124,7 +124,7 @@ Plan: two `Node By Index Scan` anchors, then `ProcedureCall`.
 
 | | |
 |---|---|
-| Code | `src/graph/algorithms.ts:131`, from `src/agent/tools/ranking.ts:39`; the librarian stores it as `rank` (`src/ingest/librarian.ts:180`) |
+| Code | `src/graph/algorithms.ts:131`, from `src/agent/tools/ranking.ts:39`; stored as `rank` by `rankAndCommunities` (`src/ingest/librarian.ts:173`): the librarian runs it after an ingest, and onboarding runs it at the end for a business read from a website |
 | Answers | The most central things in the business, optionally one label and/or one relationship type ("core systems" = `System` over `DEPENDS_ON`). |
 | Why a graph | Importance here is "how much of the business leads to it", a property of the whole link structure, not of any row. |
 
@@ -144,7 +144,7 @@ publisher, Instagram.
 | | |
 |---|---|
 | Code | `src/graph/algorithms.ts:155`, from `src/agent/tools/ranking.ts:94`; stored communities read at `src/agent/tools/ranking.ts:85`; projection reads at `src/graph/projection.ts:149` and `src/graph/projection.ts:167`, writes at `src/graph/projection.ts:254` |
-| Answers | Clusters of documents and the things they mention or link, each named by its best-connected members. |
+| Answers | Clusters of documents and the things they mention or link, each named by its best-connected members. The relationships it groups by are `MENTIONS`, `LINKS_TO` and `LINKS_TO_PAGE` (a website's own link structure), stored as `community` by the same `rankAndCommunities`. |
 
 ```cypher
 CALL algo.labelPropagation({relationshipTypes: $rels}) YIELD node, communityId
@@ -291,6 +291,34 @@ MATCH (x:Entity) WHERE x.id IN $ids WITH x MATCH (t:Turn)-[:TOUCHED|CITED]->(x) 
 WITH DISTINCT t RETURN t.id AS id, t.question AS q, t.answer AS a, t.at AS at ORDER BY t.at DESC, t.id LIMIT 8
 ```
 
+**What else a turn leaves in the graph (17 October 2026).** The Turn and its Findings carry `src` (the turn) and `asOf`, and so does
+every `TOUCHED`, `CITED`, `HANDLED_BY`, `PRODUCED`, `REVIEWED`, `GUIDED_BY`, `BASED_ON` and `PART_OF` edge `saveTurn` writes
+(`src/agent/memory.ts:249`). Four more things became edges so they can be traversed:
+
+- **The path under an answer.** `Turn.pathIds` holds the ids the "How we know" path drew, in order, and each `TOUCHED` edge to a node
+  on it is marked `onPath = true, pathIndex = n`. `show_path` only draws ids a tool returned that turn (`ctx.touched`, which includes
+  the recall brief) and leaves out a pair with no link within four hops. "Which answers walked through this node" is
+  `answersThrough` (`src/agent/memory.ts:380`), and the node-detail API carries it as `answers`:
+
+```cypher
+MATCH (n:Entity {id:$id}) WITH n
+MATCH (t:Turn)-[r:TOUCHED]->(n) WHERE r.onPath = true AND r.until IS NULL AND coalesce(t.status, 'ok') = 'ok'
+RETURN t.id AS id, t.question AS q, t.at AS at, r.pathIndex AS idx, t.sessionId AS sid ORDER BY at DESC, id LIMIT $limit
+```
+
+- **Skills and the rules that shaped a turn.** A skill a turn opens is a `Playbook{kind:'skill'}` (`playbook:skill-<id>`,
+  `src/agent/tools/skills.ts:20`): the agent `USES` it, the Turn `TOUCHED` it, the desk's Finding is `GUIDED_BY` it, and the Turn and
+  Finding are `GUIDED_BY` the business's own rules for the skill and the lessons learned from the owner's edits that `use_skill`
+  showed. A card is `GUIDED_BY` each learned rule that rewrote its draft, with `how` (`rewrote` with `find` and `replace`, or
+  `instructed`) on the edge (`src/actions/learning.ts:280`), and `LEARNED_FROM` keeps `src` (the approval), `asOf`, `conf` and the
+  words before and after the edit. Search never returns a skill.
+- **What a turn made.** A card or a memory whose own `src` is the turn is `SOURCED_FROM` that Turn; a chat proposal `ADVANCES` the goal
+  tracking the metric it is evidenced by (else a goal of its area), like the detectors' cards.
+- **A changed preference.** `remember` writes `newMemory -SUPERSEDES-> old` when an active note of the same kind about the same entity
+  says something different about the same thing (`src/agent/tools/memory.ts:167`, `:176`), so recall and the brief show one, not two.
+  Turns are embedded (`Turn.embedding`, the question), so `recall` with a query also finds an earlier question by meaning
+  (`src/agent/tools/memory.ts:31`): a vector search on the `Searchable` index, kept to the nearest few within a cosine distance of 0.12.
+
 ## 12. Provenance behind a cited answer
 
 | | |
@@ -390,3 +418,227 @@ so a repeat of the question a day later says "the fix task you approved is open,
   at `asOf`.
 - The crash rules (every `ORDER BY` ends in a unique key; no unguarded division before a sort) are refused client-side
   before a query is sent, and held over all of `src/` by `tests/graph/cypher-sources.test.ts`.
+
+## 15. Sales: where a lead came from, what it is for, and the approval behind a message
+
+| | |
+|---|---|
+| Code | `src/sales/graph.ts:535` (`attributionReport`), `src/sales/graph.ts:116` (`enquiryGoal`), `src/sales/graph.ts:90` (`resolveAttribution`), `src/agent/tools/sales.ts:146` (`crm_read` view `attribution`) |
+| Answers | "Where do my leads come from, and which goal are they for?" and "which approval made this message?" |
+| Why a graph | The answer is a join through three kinds of node that nothing else relates: a lead (`Lead`), what it came through (`Channel`, and the `Campaign` or `Content` its own enquiry named) and what it is for (`Goal`). A table of leads with a `source` column cannot say that a lead came by WhatsApp **and** from one reel, or that the same message is the end of two approvals (a draft, then the send). |
+
+**The links the sales writers leave** (all current edges, each with `src`, `asOf` and `since`):
+
+- `Message -CAME_VIA{direction: in|out}-> Channel`: the channel a message went through. A meeting's is `channel:calendar`.
+- `Lead -CAME_VIA{matchedOn, text}-> Campaign | Content`: only when the enquiry's own source text or UTM campaign names an existing
+  node exactly, by its id, its name or its `utm_campaign`, in any case (`resolveAttribution`). A text that names two nodes, or none, links
+  nothing: attribution is never guessed, and the body of the message is never searched.
+- `Lead | Deal | Meeting | Message -ADVANCES-> Goal`: the business's goal whose metric is enquiries, leads or bookings, found by the first query
+  below; failing that, the goal whose name says so; failing that, no edge. Best effort: a failed link never fails the write.
+
+**Which goal counts enquiries.** The goal tracking a metric whose key or name is about enquiries, leads or bookings, first by the plan's
+priority (the word match is in TypeScript: `\b(enquiry|inquiry|lead|booking)`):
+
+```cypher
+MATCH (gl:Entity:Goal) WHERE NOT coalesce(gl.status, '') IN ['retired', 'superseded']
+OPTIONAL MATCH (gl)-[t:TRACKS]->(m:Metric) WHERE t.until IS NULL
+RETURN gl.id AS id, gl.name AS name, m.name AS metric, coalesce(m.key, gl.metricKey) AS key ORDER BY coalesce(gl.priority, 99), gl.id LIMIT 200
+```
+
+**Leads grouped by what they came through and the goal they advance** (the `attribution` view of `crm_read`). Group in a `WITH`, because the
+goal can be missing, and bind both edges under the `collect`:
+
+```cypher
+MATCH (l:Entity:Lead)-[r:CAME_VIA]->(x:Entity) WHERE ID(r) >= 0 AND r.until IS NULL AND (x:Channel OR x:Campaign OR x:Content)
+OPTIONAL MATCH (l)-[a:ADVANCES]->(gl:Goal) WHERE ID(a) >= 0 AND a.until IS NULL
+WITH x, gl, labels(x) AS kinds, collect(DISTINCT l.id) AS leads
+RETURN x.id AS viaId, x.name AS viaName, kinds, gl.id AS goalId, gl.name AS goalName, leads ORDER BY viaId, goalId
+```
+
+**What advances each goal** (leads, deals, meetings and messages; the kind is the id's prefix, counted in code):
+
+```cypher
+MATCH (n:Entity)-[a:ADVANCES]->(gl:Goal) WHERE a.until IS NULL AND (n:Lead OR n:Deal OR n:Meeting OR n:Message)
+RETURN gl.id AS goalId, gl.name AS goalName, n.id AS nodeId ORDER BY goalId, nodeId
+```
+
+**From an approval to the message or meeting it made** (the demo business, `demo_growth`, follows it for every Sales record that came from a
+card; `src/sales/demo.ts:77`). Two hops of `RESULTED_IN`, with the recommendation that proposed the card at the front:
+
+```cypher
+MATCH (rec:Recommendation)-[p:PROPOSES]->(a:Approval)-[r1:RESULTED_IN]->(x:Action)-[r2:RESULTED_IN]->(m:Entity)
+WHERE p.until IS NULL AND r1.until IS NULL AND r2.until IS NULL AND (m:Message OR m:Meeting)
+RETURN rec.id AS recommendation, a.id AS approval, a.status AS status, x.id AS action, m.id AS made ORDER BY approval, made
+```
+
+**A draft that went out.** `Message.status` is a tracked property, so approving the same words to send finds the earlier draft in the lead's
+thread (`findDraftMessage`, `src/sales/graph.ts:321`) and makes it `sent`, with Gmail's message id as `externalId`; the draft stays one hop
+away as a `Version`. A meeting's `status` and `calendarEventId` work the same way:
+
+```cypher
+MATCH (m:Entity:Message {id:$id})-[h:HAD_VERSION]->(v:Version) WHERE 'status' IN v.changed
+RETURN v.props AS was, v.until AS until ORDER BY v.until, v.id
+```
+
+Plan note: every one of these anchors on an id or scans one label on purpose (the first, the second and the third are surveys of leads,
+goals and their edges, a handful per business); `tests/graph/explain.test.ts` holds the id-anchored ones to an index lookup.
+
+## 16. The stand-up's evidence: what each pick stands on, as edges
+
+| | |
+|---|---|
+| Code | `src/proactive/standup.ts:140` (the note's `MENTIONS`), `src/proactive/standup.ts:60` (`evidenceOf`), `src/proactive/festivals.ts:19` (`writeFestivals`), `src/proactive/draft.ts:184` (`link`) |
+| Answers | "Why did the team bring this up today?" and "which of our ideas were for Diwali?" |
+| Why a graph | A pick's reason is a set of nodes (a number that moved, a goal that slipped, a festival, a check that failed), and the same node can be the reason for two picks on two days. As a JSON list inside the note, nothing could ask which notes stood on a given reading. |
+
+The stand-up is a `Document{kind:'standup'}`. Besides the cards, ideas and people it already mentioned, it now `MENTIONS` each node a pick is
+`EVIDENCED_BY` (edge props `role: 'evidence'`, `pickKey`, and `pickKeys` when two picks share the node) and the biggest like-for-like moves in
+the numbers it read (`role: 'signal'`; a move that also backs a pick stays `'evidence'`). A festival is an `Event{kind:'festival', date}` the
+stand-up writes for the dates it is about to use (a fixed table in code, `src/proactive/calendar.ts`; edges to it are `src: allevia:festival-calendar`
+dated by when that table was last checked), so a seasonal pick is `EVIDENCED_BY` a node too. A link that could not be written (the node is not
+in the graph, the write failed) is said through the stand-up's log, no longer swallowed.
+
+For every pick, what the note says it stood on:
+
+```cypher
+MATCH (d:Entity:Document {id:$id})-[m:MENTIONS]->(x:Entity) WHERE m.until IS NULL AND m.role IS NOT NULL
+RETURN m.role AS role, m.pickKey AS pick, x.id AS node, labels(x) AS kinds ORDER BY node
+```
+
+Which ideas were for a festival, and when it falls:
+
+```cypher
+MATCH (r:Recommendation)-[e:EVIDENCED_BY]->(x:Event) WHERE e.until IS NULL AND x.kind = 'festival'
+RETURN r.id AS recommendation, r.standupKey AS pick, x.id AS festival, x.date AS date ORDER BY recommendation, festival
+```
+
+## 17. A tool many things rely on and nobody looks after (`tech.unowned_critical_system`)
+
+| | |
+|---|---|
+| Code | `src/insights/detectors.ts:1121` (`techUnownedCriticalSystem`), `src/graph/algorithms.ts:147` (`pageRank`), `src/insights/text.ts:123` (`unownedSystemText`) |
+| Answers | "Which tool or service would hurt most if it broke and has no one named to look after it?" |
+| Why a graph | Both halves are structure: reliance is a path (a feature relies on checkout, which relies on the payment gateway: two steps), and "owned" can be inherited (a cache is part of the platform, which a team owns). A table of tools with an `owner` column holds neither. |
+
+Reliance: the `DEPENDS_ON` edges that still hold, read once (`reliance` in the detector walks them: the things that reach a tool in one to
+three steps, each counted once with the fewest steps it takes, which is what `DEPENDS_ON*1..3` with every edge tested would count). The walk
+is in code because counting paths over a hub with thousands of dependents is the one shape that made this slow (14.8 s on the degenerate
+test graph, 5 ms now); the answer is the same:
+
+```cypher
+MATCH (a:Entity)-[d:DEPENDS_ON]->(b:Entity) WHERE d.until IS NULL RETURN a.id AS from, b.id AS to, labels(b) AS kinds ORDER BY from, to LIMIT $limit
+```
+
+Owned: a person, team or agent with a current `OWNS` edge into the tool, or into a tool it is `PART_OF` (up to three steps). A business owning
+it does not count, and neither does an `OWNS` edge that was closed when the owner left:
+
+```cypher
+MATCH (o:Entity)-[w:OWNS]->(s:System) WHERE w.until IS NULL AND (o:Person OR o:Agent OR o:Team) RETURN DISTINCT s.id AS id ORDER BY id LIMIT $limit
+```
+
+```cypher
+MATCH (s:System)-[p:PART_OF]->(t:System) WHERE p.until IS NULL RETURN s.id AS id, t.id AS parent ORDER BY id, parent LIMIT $limit
+```
+
+Ranking: `algo.pageRank('System', 'DEPENDS_ON')` on the projection of the edges that hold now (`src/graph/projection.ts`): a tool that the most
+relied-on tools rely on ranks above one only a leaf uses. Scores that tie are not a place (the card says "the most leaned on of your 5 tools"
+only for a tool that stands alone in the top three); ties fall back to the number of things that rely on it. The evidence is the dependency
+path: the tool, then what relies on it, the nearest first, at most eight.
+
+## 18. What moved a goal, and why its target is what it is
+
+| | |
+|---|---|
+| Code | `src/program/aimed.ts:49` (`goalAims`), `src/program/aimed.ts:29` (`aimSentence`), `src/program/target-decision.ts:62` (`recordTargetDecision`), `src/server/routes/goals.ts:57` (`POST /api/:t/goals/:id`) |
+| Answers | "What is aimed at my enquiries goal?" ("2 approved drafts and 1 fix") and "why is the target 150?" |
+| Why a graph | The plan's aims are the current `ADVANCES` edges into a goal: a card, the idea behind it, a post, a lead, a deal. They are written by five different features, so only a traversal over the edge sees them together; and "why 150" is a decision with an owner and the reading it stood on, not a number someone changed. |
+
+Everything that advances the goals, grouped by what it is (the edge is bound and tested under the count; the status and the kind can be missing,
+so the grouping is in a `WITH`):
+
+```cypher
+MATCH (x:Entity)-[a:ADVANCES]->(gl:Goal) WHERE ID(a) >= 0 AND a.until IS NULL AND gl.id IN $ids
+WITH gl.id AS goalId, labels(x) AS kinds, x.status AS status, coalesce(x.kind, x.format) AS what, count(x) AS n
+RETURN goalId, kinds, status, what, n
+```
+
+Each post that advances a goal, with its newest reading (`Observation -MEASURES-> Content`, the baseline Observation never counted):
+
+```cypher
+MATCH (c:Entity:Content)-[a:ADVANCES]->(gl:Goal) WHERE a.until IS NULL AND gl.id IN $ids
+OPTIONAL MATCH (o:Observation)-[m:MEASURES]->(c) WHERE m.until IS NULL AND coalesce(o.baseline, false) = false
+WITH gl, c, o ORDER BY coalesce(o.windowEnd, o.asOf) DESC, o.id DESC
+WITH gl, c, collect(o)[0] AS o
+RETURN gl.id AS goalId, c.id AS id, c.name AS name, c.status AS status, o.id AS obsId, o.metric AS metric, o.value AS value, o.unit AS unit,
+       coalesce(o.windowEnd, o.asOf) AS at ORDER BY goalId, id LIMIT 200
+```
+
+The plan's line counts the owner's cards (the Approvals) once: the idea behind a card advances the same goal and would say everything twice.
+It is part of `GET /api/:t/program` as `goals[].aimed` (`sentence`, `groups`, `content`).
+
+When the owner changes a target, or says OK to the suggestion, the route writes a `Decision{kind:'goal_target'}`: `DECIDED` by the owner,
+`AFFECTS` the goal, `BASED_ON` the Observation the goal's starting number was locked from (when it has one), and `SUPERSEDES` the decision
+about the same goal's target before it (which becomes `superseded`, a Version keeping `accepted`). The Goal's own update carries the decision
+as `src` and the time as `asOf`, so the old target stays a `Version` with where it came from. `trace_decision {id: <goal>}` returns the latest
+decision that affects it. To read them without the tool:
+
+```cypher
+MATCH (p:Person)-[d:DECIDED]->(x:Decision)-[a:AFFECTS]->(gl:Goal {id:$goal}) WHERE d.until IS NULL AND a.until IS NULL AND x.kind = 'goal_target'
+OPTIONAL MATCH (x)-[b:BASED_ON]->(o:Observation) WHERE b.until IS NULL
+RETURN x.id AS decision, x.target AS target, x.previousTarget AS before, x.status AS status, p.id AS owner, o.id AS startedFrom ORDER BY decision
+```
+
+## 19. How the brain grew: nodes and edges per day, by kind (`graph:story`)
+
+| | |
+|---|---|
+| Code | `src/graph/story.ts:83` (nodes), `src/graph/story.ts:96` (edges), `src/graph/story.ts:109` (facts that ended), `src/graph/story.ts:135` (`graphStory`), the CLI `src/cli/graph.ts:46`, the API `src/server/routes/graph-work.ts:80` |
+| Answers | "How many things did the team learn each day or week, of what kind, and how much of that came after the first big load?" Two clocks: when the team recorded it (`createdAt` on nodes, `recordedAt` on edges) and when it happened (`asOf`, the date of the source). |
+| Why a graph | Every write in the product goes through `upsertNode` and `upsertEdge`, which stamp both clocks, so the count is read from the facts themselves: nothing is drawn by hand. A fact that ended keeps its edge with `retiredAt`, so "learned" and "retired" are two reads of the same edges. |
+
+The day is computed without float math (`t - t % 86400000`, then the date in TypeScript); the rows are grouped on the grouping keys, so no sort can tie.
+
+```cypher
+MATCH (n:Entity) WHERE n.createdAt IS NOT NULL
+WITH n.createdAt - n.createdAt % 86400000 AS d, [x IN labels(n) WHERE x <> 'Entity' AND x <> 'Searchable'][0] AS k
+RETURN d, k, count(*) AS c ORDER BY d, k
+```
+
+```cypher
+MATCH ()-[r]->() WHERE ID(r) >= 0 AND r.recordedAt IS NOT NULL
+WITH r.recordedAt - r.recordedAt % 86400000 AS d, type(r) AS k
+RETURN d, k, count(*) AS c ORDER BY d, k
+```
+
+On 17 October 2026 the real business's graph read: 3,799 nodes and 11,897 edges recorded on 15 October (the first ingest), then 283 nodes and
+4,911 edges on 16 October from use alone (conversations, findings, approvals, what the team learned): `npm run cli -- graph:story <tenant>`.
+
+## 20. How a Studio picture was made: the lineage (`graph:lineage`)
+
+| | |
+|---|---|
+| Code | `src/studio/lineage.ts:80` (one hop up or down `DERIVED_FROM`), `src/studio/lineage.ts:91` (`assetLineage`), the writes `src/studio/lineage.ts:31` (`recordGeneration`), the CLI `src/cli/graph.ts:65`, the API `src/server/studio.ts:207` |
+| Answers | For a premium ad picture or a clip: the owner's photo it came from and each step (`relight`, `premium-ad`, `clip`), the Higgsfield job behind each with its model, mode and cost, the brand and fidelity rules the prompt was built from, Nisha's verdict, the card it is on and the post that uses it. |
+| Why a graph | The chain has no fixed length (a clip comes from a picture that comes from a photo, and a retry or a re-compose adds a link), and the questions run both ways: "what was made from this photo?" is the same edge read the other way. The cost is not a column on a row: it is an `Observation` that `MEASURES` the asset and is `SOURCED_FROM` the job's `Document`, like every other number. |
+
+One hop (the code asks per hop, so each starts from the id index and walks only the frontier):
+
+```cypher
+UNWIND $ids AS fid MATCH (a:Entity:Asset {id:fid})-[r:DERIVED_FROM]->(p:Entity:Asset) WHERE ID(r) >= 0 AND r.until IS NULL
+RETURN a.id AS from, p.id AS to, r.step AS step ORDER BY a.id, p.id
+```
+
+The jobs and their cost, and the review:
+
+```cypher
+MATCH (x:Entity:Asset)-[r:SOURCED_FROM]->(d:Entity:Document) WHERE x.id IN $ids AND ID(r) >= 0 AND d.kind = 'generation'
+RETURN x.id AS assetId, d.jobId AS jobId, d.model AS model, d.credits AS credits, d.mode AS mode, d.id AS doc ORDER BY x.id, d.id
+```
+
+```cypher
+MATCH (o:Observation {metric:'studio_credits_spent'})-[:MEASURES]->(a:Asset {id:$id})
+MATCH (o)-[:SOURCED_FROM]->(d:Document {kind:'generation'}) RETURN o.value AS credits, d.id AS job ORDER BY d.id
+```
+
+Checked live on 17 October (`demo_growth`, 11.5 credits): clip `DERIVED_FROM` the premium picture `DERIVED_FROM` the owner's photo; two jobs
+(`gpt_image_2` 6.5, `seedance_2_0_mini` 5); Nisha: "Product unchanged"; one card waiting; `npm run cli -- graph:lineage demo_growth asset:clip-4f59984a34a5-c7774dde`.

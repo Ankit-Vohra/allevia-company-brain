@@ -6,6 +6,7 @@ import { beyondAdjustments, parseAdjustment, type Adjustment } from "./revise.js
 
 export type StudioRequest =
   | { kind: "adjust"; adjustment: Adjustment }
+  | { kind: "premium"; words: string; headline?: string; sub?: string }
   | { kind: "ad"; words: string; headline?: string; sub?: string }
   | { kind: "retry" }
   | { kind: "clip" }
@@ -16,6 +17,9 @@ const CHATTER = /^(?:thanks?(?: you)?|thank u|ok(?:ay)?|great|nice|cool|good|lov
 const RETRY = /^(?:please\s+)?(?:try again|retry|try that again|do it again|redo(?: it)?|have another go|another go|one more try)\b/i;
 const CLIP = /\b(?:clip|reel|video|animate|animation|short film)\b/i;
 const AD = /\b(?:ad|ads|advert|advertisement|promo|promotion|poster|flyer|banner)\b/i;
+// "make this a premium ad", "UGC style", "lifestyle shot", "a proper photoshoot": a premium, UGC-style ad picture of the product
+// (premium.ts: Higgsfield's product-photoshoot backend), not a light-and-colour change and not a clean-up.
+const PREMIUM = /\b(?:ugc|premium|lifestyle|luxury|high[- ]end|studio[- ]quality|photo ?shoot|product shoot|brand shoot|campaign (?:photo|image|shot))\b/i;
 
 // The message an ad should carry, from the owner's words: in quotes, or after "saying", "that says", "with the offer", "offer:".
 export function adMessage(words: string): { headline?: string; sub?: string } {
@@ -32,6 +36,7 @@ export function routeRequest(words: string): StudioRequest {
   const t = words.trim();
   if (!t || CHATTER.test(t)) return { kind: "chat" };
   if (RETRY.test(t)) return { kind: "retry" };
+  if (PREMIUM.test(t) && /\b(?:make|turn|create|build|design|into|as|for|want|give|need|shoot)\b/i.test(t)) return { kind: "premium", words: t.slice(0, 300), ...adMessage(t) };
   if (AD.test(t) && /\b(?:make|turn|create|build|design|into|as|for|want)\b/i.test(t)) return { kind: "ad", words: t, ...adMessage(t) };
   if (CLIP.test(t) && /\b(?:make|turn|create|want|can|could)\b/i.test(t)) return { kind: "clip" };
   const adjustment = parseAdjustment(t);

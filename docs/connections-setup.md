@@ -106,7 +106,8 @@ with `publish_post`, and `publish_status` and `publish_cancel` list and cancel w
   given and checked again at the moment of posting; a post that changed since is never sent. Every post waits for the owner at every
   autonomy level: nothing here posts by itself, and "always ask before posting" is a standing instruction the owner can give.
 - **Dry run.** Until `ALLEVIA_ACTIONS_LIVE=1`, the card says it **would have posted** and nothing leaves (not even a look at the
-  account). A scheduled post whose time comes in a dry run says so and posts nothing.
+  account). The post is still kept, as a **planned post** (a `Content` with status `dry_run`, on its channel and advancing the same
+  goals), so the card has something to show. A scheduled post whose time comes in a dry run says so and posts nothing.
 - **The actions used** (read from Composio's own tool lists on 16 October 2026; `npm run cli -- connect publish-check` asks again,
   read only, and says which action or argument has gone missing; the executor checks the same list before every post):
   Instagram `INSTAGRAM_GET_USER_INFO`, `INSTAGRAM_CREATE_MEDIA_CONTAINER`, `INSTAGRAM_GET_POST_STATUS`, `INSTAGRAM_CREATE_POST`,
@@ -121,8 +122,12 @@ with `publish_post`, and `publish_status` and `publish_cancel` list and cancel w
   is never repeated by itself: the owner is asked to look first, and Instagram's retry carries on with the same container, so a
   second post cannot be made. A crash half way is treated the same way.
 - **Where it is recorded.** A `Content` node per post (platform, account, words, picture, time, status scheduled, publishing,
-  published, failed or cancelled, the post's address and time), `PUBLISHED_ON` the channel, `USES_ASSET` the picture, `RESULTED_IN` from
-  the card's Action. The card shows the result on the web (Home, Approvals, "Your posts") and in Discord (the closed card, plus a
+  published, failed, cancelled or dry_run, the post's address and time), `USES_ASSET` the picture, `RESULTED_IN` from the card's Action,
+  and `ADVANCES` the goals of the recommendation behind the card. Every change of status is a `Version` (the claim that takes a post to
+  "publishing" is one statement that writes its own Version). `PUBLISHED_ON {state}` is written the moment the post is scheduled, to the
+  platform's channel (`channel:instagram`, which the numbers measure) and to the account it goes from (`channel:instagram:cafe`,
+  `PART_OF` the platform's channel, so two accounts on one platform are two nodes); `state` follows the post (scheduled, published, failed,
+  cancelled, dry_run). The card shows the result on the web (Home, Approvals, "Your posts") and in Discord (the closed card, plus a
   note when a scheduled post goes out or fails).
 
 ## 5. Not yet proven against the live services

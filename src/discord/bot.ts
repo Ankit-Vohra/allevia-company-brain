@@ -33,6 +33,7 @@ import { isNumbersButton, NumbersOnDiscord, pickSpreadsheet } from "./numbers-bo
 import type { CheckupJobs, CheckupOutcome } from "../checkup/jobs.js";
 import { latestCheckup, tenantSite, topFiveText } from "../checkup/tenant.js";
 import { studioButtonId } from "./studio-bot.js";
+import { personOfDiscordUser } from "./hub-graph.js";
 import { pathViewUrl, renderAnswer, renderCitations, splitMessage, threadName } from "./format.js";
 import { findThreadSession, linkSessionThread, openThreadSession, recentUnlinkedSessions } from "./sessions.js";
 import { ThrottledEditor, WorkLogState } from "./worklog.js";
@@ -597,8 +598,10 @@ export class AlleviaBot {
     const id = m[2]!;
     try {
       await b.defer?.();
+      // a member who joined through the hub is a Person in this business's records: the decision is theirs (otherwise the owner's, as before)
+      const actor = await personOfDiscordUser(this.d.graph, b.userId).catch(() => null);
       const after = await decideAndNotify(this.d.graph, this.d.tenant, id, { decision }, {
-        now: this.now(), log: (l) => this.log(l), ...(this.d.onDecision ? { onDecision: this.d.onDecision } : {}), ...(this.d.actions ? { actions: this.d.actions } : {}),
+        now: this.now(), log: (l) => this.log(l), ...(actor ? { actor } : {}), ...(this.d.onDecision ? { onDecision: this.d.onDecision } : {}), ...(this.d.actions ? { actions: this.d.actions } : {}),
       });
       const verdict = after.status === "rejected" ? "❌ Rejected by the owner" : `✅ Approved by the owner${after.status === "edited" ? " (edited)" : ""}`;
       await b.update({ content: `${approvalCard(after, { buttons: false }).content}\n${verdict}${after.result ? ` · ${clip(after.result, 200)}` : ""}`, buttons: [] });

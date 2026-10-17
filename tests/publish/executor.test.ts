@@ -8,7 +8,7 @@ import { ComposioError, ComposioToolError } from "../../src/connections/composio
 import { runDue } from "../../src/publish/scheduler.js";
 import { cancelScheduled, retryPost, runJob } from "../../src/publish/executor.js";
 import { verifyMediaToken } from "../../src/publish/media.js";
-import { contentIdFor, countedSince, readPost, writePost } from "../../src/publish/record.js";
+import { contentIdFor, countedSince, dueIds, readPost, writePost } from "../../src/publish/record.js";
 import { approvedHash } from "../../src/publish/types.js";
 import type { Payload } from "../../src/actions/shared.js";
 import { ACCOUNTS, addAsset, addCard, BASE, KEY, NOW, publishHarness, scriptFacebook, scriptInstagram, scriptLinkedIn, TENANT, type PublishHarness } from "./harness.js";
@@ -128,7 +128,8 @@ describe("a dry run", () => {
     expect(a.status).toBe("dry_run");
     expect(a.result).toMatch(/^Dry run: would have posted to Instagram \(your account @cafe\): "Diwali sale: 20% off everything this week #diwali"\. Nothing was posted; ALLEVIA_ACTIONS_LIVE=1 posts it\.$/);
     expect(h.composio.calls.filter((c) => c.op === "execute")).toHaveLength(0);
-    expect(await readPost(h.g, contentIdFor(id))).toBeNull();
+    // the post is still kept, as a planned post: nothing was sent, but the card has something to show
+    expect(await readPost(h.g, contentIdFor(id))).toMatchObject({ status: "dry_run", platform: "instagram", retryable: false, attempts: 0 });
   });
 
   it("a scheduled card in a dry run says when it would have gone, and schedules nothing", async () => {
@@ -137,7 +138,9 @@ describe("a dry run", () => {
     const a = await run(id, await addCard(h.g, { id, at, tz: "Asia/Dubai" }), { dryRun: true });
     expect(a.status).toBe("dry_run");
     expect(a.result).toMatch(/would have posted to Instagram \(your account @cafe\) at /);
-    expect(await readPost(h.g, contentIdFor(id))).toBeNull();
+    // planned, never scheduled: the scheduler only takes posts whose status is "scheduled"
+    expect(await readPost(h.g, contentIdFor(id))).toMatchObject({ status: "dry_run", publishAt: at });
+    expect(await dueIds(h.g, at + 1)).not.toContain(contentIdFor(id));
   });
 });
 

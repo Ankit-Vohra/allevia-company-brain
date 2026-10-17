@@ -10,8 +10,10 @@
 //    not forgotten). Edges are written through upsertEdge (re-deriving is a no-op apart from fresher props) and marked
 //    derivedBy: 'librarian'; one whose support is gone is closed, never deleted. Edges the librarian did not derive (agent
 //    memory's KNOWS_ABOUT for Allevia's own staff) are never touched, and Allevia's reserved actors get none.
-// 2. `rank` (PageRank over the SEARCHABLE types, current edges) and `community` (label propagation over MENTIONS and
-//    LINKS_TO) as node props for the UI. These are raw writes, so noteGraphWrite follows them.
+// 2. `rank` (PageRank over the SEARCHABLE types, current edges) and `community` (label propagation over MENTIONS,
+//    LINKS_TO and LINKS_TO_PAGE: a site's own link structure groups its pages) as node props for the UI. These are raw
+//    writes, so noteGraphWrite follows them. They need only the graph handle, so rankAndCommunities() is exported and
+//    onboarding calls it for a business read from a website (src/onboard/onboard.ts), where no ingest ever runs.
 // 3. Orphans: WCC singletons among searchable knowledge, where authorship and KNOWS_ABOUT do not count as links:
 //    "knowledge nobody links to". Actors, the Business, the pipeline's own ingest Events and anything an Observation
 //    measures or cites are left out.
@@ -35,6 +37,8 @@ export const OWNS_WEIGHT = 1;
 const DAY = 86_400_000;
 const ALGO_TIMEOUT_MS = 120_000;
 const WRITE_PAGE = 500;
+// What groups nodes into communities: what a document mentions, what it links to, and how a site's pages link to each other.
+export const COMMUNITY_RELS: RelType[] = ["MENTIONS", "LINKS_TO", "LINKS_TO_PAGE"];
 
 // What a piece of evidence of `amount` is worth at `now`, given its date.
 export function knowsAboutWeight(amount: number, at: number, now: number): number {
@@ -162,6 +166,22 @@ async function setProp(g: GraphHandle, prop: "rank" | "community", rows: Array<{
   }
 }
 
+export interface RankReport { rank: { nodes: number }; community: { nodes: number; communities: number } }
+
+// PageRank and label-propagation communities over the current edges, stored as `rank` and `community` on each node (the
+// Brain map and `important` read the stored values). Needs only the graph: no tenant config, no ingest.
+export async function rankAndCommunities(g: GraphHandle, opts: { timeoutMs?: number; log?: (line: string) => void } = {}): Promise<RankReport> {
+  const timeoutMs = opts.timeoutMs ?? ALGO_TIMEOUT_MS;
+  const ranks = await pageRank(g, "Entity", undefined, { timeoutMs });
+  await setProp(g, "rank", ranks.map((r) => ({ id: r.id, v: Number(r.score.toPrecision(6)) })));
+  const comms = await communities(g, ["Entity"], COMMUNITY_RELS, { timeoutMs });
+  await setProp(g, "community", comms.map((c) => ({ id: c.id, v: c.communityId })));
+  await noteGraphWrite(g.name);
+  const groups = new Set(comms.map((c) => c.communityId)).size;
+  opts.log?.(`[librarian] rank on ${ranks.length} nodes; ${groups} communities`);
+  return { rank: { nodes: ranks.length }, community: { nodes: comms.length, communities: groups } };
+}
+
 // ---------- entry point ----------
 
 export async function runLibrarian(g: GraphHandle, opts: LibrarianOptions = {}): Promise<LibrarianReport> {
@@ -177,12 +197,7 @@ export async function runLibrarian(g: GraphHandle, opts: LibrarianOptions = {}):
   const knowsAbout = await writeKnowsAbout(g, await deriveKnowsAbout(g, now), now);
   log(`[librarian] KNOWS_ABOUT: ${knowsAbout.edges} edges from ${knowsAbout.actors} actors (${knowsAbout.created} new, ${knowsAbout.closed} closed)`);
 
-  const ranks = await pageRank(g, "Entity", undefined, { timeoutMs });
-  await setProp(g, "rank", ranks.map((r) => ({ id: r.id, v: Number(r.score.toPrecision(6)) })));
-  const comms = await communities(g, ["Entity"], ["MENTIONS", "LINKS_TO"], { timeoutMs });
-  await setProp(g, "community", comms.map((c) => ({ id: c.id, v: c.communityId })));
-  await noteGraphWrite(g.name);
-  log(`[librarian] rank on ${ranks.length} nodes; ${new Set(comms.map((c) => c.communityId)).size} communities`);
+  const { rank, community } = await rankAndCommunities(g, { timeoutMs, log });
 
   const comps = await components(g, ["Entity"], ORPHAN_RELS, { timeoutMs });
   const size = new Map<number, number>();
@@ -206,8 +221,8 @@ export async function runLibrarian(g: GraphHandle, opts: LibrarianOptions = {}):
   return {
     merge,
     knowsAbout,
-    rank: { nodes: ranks.length },
-    community: { nodes: comms.length, communities: new Set(comms.map((c) => c.communityId)).size },
+    rank,
+    community,
     orphans: { count: orphans.length, byType, sample: orphans.slice(0, 25) },
     ms: Date.now() - t0,
   };

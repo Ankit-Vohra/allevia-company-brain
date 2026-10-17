@@ -12,10 +12,11 @@ import { agentById } from "../../shared/roster.js";
 import { loadTeamSettings } from "../settings/team.js";
 import { loadLanguagePreference } from "./language.js";
 import { fillInFromSession, isFillItIn } from "./fillin.js";
+import { VECTOR_DIM } from "../graph/indexes.js";
 import { checkTurn, extractCitations } from "./checks.js";
 import { getSession, newSessionId, newTurnId, recallBrief, saveTurn, startSession } from "./memory.js";
 import { runTurn, type TurnOutcome } from "./orchestrator.js";
-import type { AgentRuntime, Emit } from "./runtime.js";
+import { UsageMeter, type AgentRuntime, type Emit, type Usage } from "./runtime.js";
 import { TouchedSet, type AlleviaTool, type ToolContext } from "./tool.js";
 import { loadBusinessSkills } from "./skills/business.js";
 import type { SkillCatalog } from "./skills/catalog.js";
@@ -35,6 +36,9 @@ export interface AskInput {
   // A direct chat with one roster agent (src/agent/orchestrator.ts TurnInput.target). A new thread remembers it
   // (Session.agent). Absent or the Chief: the whole team, the Chief routes.
   target?: string;
+  // Answer without writing anything: no session, no Turn, no memory (and, with deps.readOnly, no tool writes). For measuring
+  // an answer on a business's real graph (scripts/bench-efficiency.ts) and for read-only checks; the answer is not kept.
+  ephemeral?: boolean;
 }
 
 export interface AskDeps {
@@ -70,10 +74,25 @@ export interface AskResult {
   checks: TurnChecks;
   agents: string[];
   ms: number;
+  /** What the model read and wrote for this answer, summed over every agent run, and how many tools were called. */
+  usage?: Usage & { toolCalls: number };
   outcome?: TurnOutcome;
 }
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+// The question's vector, saved on the Turn so "have we been asked something like this" is a vector search (recall, search with
+// types:["Turn"]). Best effort and short: no embedder, a wrong-sized vector or a slow one is simply no embedding.
+const EMBED_TURN_MS = 4_000;
+async function embedQuestion(embed: AskDeps["embedQuery"], question: string): Promise<number[] | undefined> {
+  if (!embed || !question) return undefined;
+  try {
+    const v = await Promise.race([embed(question), new Promise<undefined>((r) => setTimeout(() => r(undefined), EMBED_TURN_MS).unref())]);
+    return v && v.length === VECTOR_DIM && v.every(Number.isFinite) ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
 export const STOPPED_MESSAGE = "Stopped before the answer was finished.";
 const EMPTY_BRIEF: RecallBrief = { text: "", ids: [] };
 
@@ -93,6 +112,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
   const out: Emit = (e) => { if (closed) return; log.push(e); deliver(e); };
 
   out({ type: "session", tenant: input.tenant, sessionId, turnId, question });
+  const meter = new UsageMeter();
 
   let g: GraphHandle | undefined = deps.graph;
   let outcome: TurnOutcome | undefined;
@@ -103,7 +123,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
     if (target && !agentById(target)) throw new Error("That person is not on the team.");
     g ??= await openGraph(input.tenant);
     const continuing = input.sessionId ? !!(await getSession(g, input.sessionId)) : false;
-    if (!continuing) await startSession(g, { channel: input.channel, asker, title: question, id: sessionId, ...(target ? { agent: target } : {}) }, now);
+    if (!continuing && !input.ephemeral) await startSession(g, { channel: input.channel, asker, title: question, id: sessionId, ...(target ? { agent: target } : {}) }, now);
 
     let seeds: string[] = [];
     try { seeds = deps.seedSearch ? await deps.seedSearch(question) : []; } catch { seeds = []; } // recall is best-effort
@@ -153,7 +173,7 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
     if (!outcome) outcome = await runTurn(
       { tenant: input.tenant, question, sessionId, turnId, asker, recall, ...(target ? { target } : {}) },
       {
-        runtime: deps.runtime, getTools: deps.getTools, graph: g, now,
+        runtime: meter.wrap(deps.runtime), getTools: deps.getTools, graph: g, now,
         ...(deps.model ? { model: deps.model } : {}), ...(deps.agentTimeoutMs ? { agentTimeoutMs: deps.agentTimeoutMs } : {}),
         ...(deps.embedQuery ? { embedQuery: deps.embedQuery } : {}), ...(deps.readOnly !== undefined ? { readOnly: deps.readOnly } : {}),
         ...(deps.timeZone ? { timeZone: deps.timeZone } : {}), ...(deps.signal ? { signal: deps.signal } : {}),
@@ -177,14 +197,20 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
   const final: AgentEvent = { type: "final", turnId, answer, citations, checks, agents, ms };
   closed = true;
   log.push(final);
+  const usage = { ...meter.total, toolCalls: log.filter((e) => e.type === "tool_call").length };
 
-  if (g) {
+  if (g && !input.ephemeral) {
     try {
+      const embedding = await embedQuestion(deps.embedQuery, question);
       const saved = await saveTurn(g, {
         turnId, sessionId, question, answer, asker, source: input.channel, at: now, ms, status: failure ? "failed" : "ok", ...(failure ? { error: failure } : {}),
         ...(target ? { target } : {}), checks, agents, events: log, touched: outcome?.touched ?? [], citations,
         findings: outcome?.findings ?? [], reviews: outcome?.reviews ?? [], guidedBy: outcome?.guidedBy ?? [],
+        ...(embedding ? { embedding } : {}),
         ...(outcome?.skills?.length ? { skills: outcome.skills } : {}),
+        made: [...(outcome?.proposals ?? []).flatMap((p) => [p.recommendationId, p.approvalId]), ...(outcome?.memories ?? [])].filter(Boolean),
+        ...(outcome?.path?.nodes.length ? { pathIds: outcome.path.nodes.map((n) => n.id), ...(outcome.pathGrounded !== undefined ? { pathGrounded: outcome.pathGrounded } : {}) } : {}),
+        cost: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, cacheReadTokens: usage.cacheReadTokens, cacheWriteTokens: usage.cacheWriteTokens, modelCalls: usage.modelCalls, toolCalls: usage.toolCalls },
       });
       if (saved.errors.length) deliver({ type: "error", message: `Saved the turn with ${saved.errors.length} skipped write(s): ${saved.errors[0]}` });
     } catch (e) {
@@ -192,5 +218,5 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
     }
   }
   deliver(final);
-  return { ok: !failure, turnId, sessionId, answer, citations, checks, agents, ms, ...(outcome ? { outcome } : {}) };
+  return { ok: !failure, turnId, sessionId, answer, citations, checks, agents, ms, usage, ...(outcome ? { outcome } : {}) };
 }

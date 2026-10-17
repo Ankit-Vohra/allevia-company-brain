@@ -80,6 +80,8 @@ export interface NodeDetailDto {
   neighbors: { edge: EdgeRef; node: NodeRef; direction: "out" | "in" }[];
   versions: VersionRecordDto[];
   sources: SourceRef[];
+  // The answers whose "How we know" path walked through this node, newest first (memory.ts answersThrough).
+  answers?: { turnId: string; question: string; at: string; sessionId?: string; pathIndex: number }[];
 }
 
 export interface AgentStatsDto {
@@ -151,7 +153,7 @@ export interface ApprovalPreview {
   /** Meetings: when, and who is invited. `start` and `end` are ISO times; `timeZone` is the owner's. */
   when?: { start: string; end?: string; timeZone?: string; guests: string[] };
   /** Posts, posters and clips: the options to show (asset ids, served by /api/:t/assets/:id) and which one approving uses. */
-  media?: { kind: "photo" | "poster" | "image" | "clip"; options: Array<{ id: string; label: string; note: string; pick: boolean; held: boolean }> };
+  media?: { kind: "photo" | "poster" | "image" | "clip"; options: Array<{ id: string; label: string; note: string; pick: boolean; held: boolean }>; extras?: Array<{ id: string; label: string; kind: "clip"; note: string }> };
   /** A post to the owner's own account (publish_post): where it goes ("Instagram (your account @cafe)"), and when, when it is not straight away. */
   post?: { where: string; when?: { at: string; timeZone?: string; words: string }; textOnly?: boolean };
 }

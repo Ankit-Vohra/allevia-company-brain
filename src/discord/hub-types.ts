@@ -168,8 +168,12 @@ export interface HubStore {
   listAreas(): Promise<AreaRecord[]>;
   // Merges `patch` into the area (creating it); `base` fills the fields a new area needs.
   saveArea(slug: string, base: { guildId: string; businessName: string }, patch: AreaPatch, now: number): Promise<AreaRecord>;
-  // Replaces the channel index of one business: exactly these channel ids map to it afterwards.
-  setChannels(slug: string, guildId: string, channels: Partial<Record<ChannelKind, string>>): Promise<void>;
+  // Replaces the channel index of one business: exactly these channel ids map to it afterwards. A channel that stops being the
+  // business's is closed (its mapping gets an end time at `at`), not deleted, so who had which channel when stays on record.
+  setChannels(slug: string, guildId: string, channels: Partial<Record<ChannelKind, string>>, at?: number): Promise<void>;
+  // Adds the registry's missing relationships (Tenant -HAS_AREA-> Area, ...) to rows written before they existed. Idempotent. Absent in
+  // a store that is not a graph.
+  link?(): Promise<unknown>;
   // THE lookup: a Discord channel id (in this guild) to the business and which of its channels it is. Never a name.
   channel(guildId: string, channelId: string): Promise<ChannelRef | null>;
   // One writer per business at a time, across processes. Returns a token, or null when someone else holds it.

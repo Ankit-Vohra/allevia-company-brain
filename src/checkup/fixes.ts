@@ -59,7 +59,7 @@ export const FIXES: FixDef[] = [
     what: "Add the mobile viewport setting to the page template (one line in the page head).",
     why: "Without it, phones show a tiny desktop page that people have to pinch to read." },
   { key: "clear-offer", base: 75, minutes: 30, who: "you", title: () => "Say what you do in the first line of the home page",
-    what: "Replace the opening headline with one sentence that says what you offer, for whom and where, e.g. 'Interiors for homes and offices in Raipur'.",
+    what: "Replace the opening headline with one sentence that says what you offer, for whom and where, e.g. 'Fresh bread baked every morning in Pune'.",
     why: "Visitors decide in a few seconds whether they are in the right place; a greeting or just the name does not tell them." },
   { key: "proof", base: 65, minutes: 60, who: "you", title: () => "Show reviews or proof from customers",
     what: "Add 3 to 5 real customer reviews (or your Google rating) to the home page, with names and photos of the work where you can.",
@@ -68,7 +68,7 @@ export const FIXES: FixDef[] = [
     what: "Update or remove the links that lead to missing pages.",
     why: "Dead links make the site feel neglected and stop visitors on their way to you." },
   { key: "titles", base: 60, minutes: 45, who: "you", title: (n) => `Write clear page titles for ${pages(n)}`,
-    what: "Give each page its own title of up to 60 characters: what is on the page, then your name, e.g. 'Kitchen interiors in Raipur | AVS Atelier'.",
+    what: "Give each page its own title of up to 60 characters: what is on the page, then your name, e.g. 'Sourdough bread in Pune | Your Bakery Name'.",
     why: "The title is the blue link people click on Google. Missing, repeated or cut-off titles get fewer clicks." },
   { key: "location", base: 50, minutes: 20, who: "you", title: () => "Show where you are",
     what: "Add your address and a Google Maps link (or map) to the contact page and the footer.",
@@ -113,7 +113,7 @@ export const FIXES: FixDef[] = [
     what: "Each page should have exactly one main heading (H1) that says what the page is about.",
     why: "Google and screen readers use the main heading to understand the page." },
   { key: "image-text", base: 25, minutes: 45, who: "you", title: (n) => `Describe the photos on ${pages(n)}`,
-    what: "Add a short description (alt text) to each photo, e.g. 'Living room with walnut panelling, Raipur'.",
+    what: "Add a short description (alt text) to each photo, e.g. 'Sourdough loaves cooling on a wooden rack'.",
     why: "Google Images and visitors using screen readers rely on it; it is also an easy way to show what you do." },
   { key: "button-labels", base: 20, minutes: 30, who: "your web person", title: (n) => `Name the unlabelled buttons on ${pages(n)}`,
     what: "Give icon-only buttons and links a text label.",
@@ -250,6 +250,12 @@ export const pageWeight = (url: string): number => {
   }
 };
 
+// The ranking rule: the most enquiries first, ties to the quicker fix, then by key. Shared with the graph reader (history.ts),
+// which rebuilds the list from the open FAILS edges and must order it the same way.
+export const byImpact = (x: Pick<Fix, "impact" | "minutes" | "key">, y: Pick<Fix, "impact" | "minutes" | "key">): number =>
+  y.impact - x.impact || x.minutes - y.minutes || x.key.localeCompare(y.key);
+export const topFixes = <T extends Pick<Fix, "impact">>(ranked: T[], n = 5): T[] => ranked.filter((f) => f.impact >= TOP_MIN_IMPACT).slice(0, n);
+
 interface Acc { def: FixDef; pages: Map<string, number>; evidence: string[]; sources: Set<Fix["sources"][number]>; over?: number; what?: string }
 
 export function buildVerdict(input: CheckupInput, topN = 5): CheckupVerdict {
@@ -363,7 +369,7 @@ export function buildVerdict(input: CheckupInput, topN = 5): CheckupVerdict {
       pages: pagesSorted.map(([p]) => pathOf(p)).slice(0, 12), urls: pagesSorted.map(([p]) => p).slice(0, 50), pageCount: pagesSorted.length,
       evidence: a.evidence, sources: [...a.sources].sort(),
     };
-  }).sort((x, y) => y.impact - x.impact || x.minutes - y.minutes || x.key.localeCompare(y.key));
+  }).sort(byImpact);
 
   const good: string[] = [];
   const passed = new Set(input.conversion.filter((c) => c.pass).map((c) => c.check));
@@ -374,7 +380,7 @@ export function buildVerdict(input: CheckupInput, topN = 5): CheckupVerdict {
   if (scores.accessibility !== undefined && scores.accessibility >= 90) good.push(`It is easy to read and use (${scores.accessibility}/100).`);
   if (input.site.https) good.push("It is secure (https).");
 
-  return { top: all.filter((f) => f.impact >= TOP_MIN_IMPACT).slice(0, topN), all, scores, good, kind: input.kind };
+  return { top: topFixes(all, topN), all, scores, good, kind: input.kind };
 }
 
 function sameUrl(a: string, b: string): boolean {

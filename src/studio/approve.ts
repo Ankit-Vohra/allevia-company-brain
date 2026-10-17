@@ -44,6 +44,9 @@ export interface StudioCard {
   // then made assets rather than variants of a photo, and an option Nisha could not check ("unchecked") may be approved
   // (the owner is told it was not double-checked); one she held back ("held") never can.
   creative?: { kind: "poster" | "image" | "clip"; aspect: string; channel: string; by: string; allowUnchecked: boolean; format?: string };
+  // Things made from one of the options that go with the card but are not themselves a choice (the 5 second clip made from the
+  // premium ad picture, clip.ts): shown and attached next to the options, saved with the draft when the card is approved.
+  extras?: Array<{ id: string; label: string; kind: "clip"; from: string; note: string; seconds?: number; credits?: number }>;
 }
 
 // `publish`: set when approving POSTS this (a publish_post card, src/publish): where it goes and when.
@@ -182,6 +185,8 @@ export async function finalizeStudioDraft(g: GraphHandle, approvalId: string, p:
     await upsertEdge(g, { from: actionId, type: "RESULTED_IN", to: contentId, src, asOf }, now);
   }
   await upsertEdge(g, { from: contentId, type: "USES_ASSET", to: variantId, src, asOf }, now);
+  // a clip made from the chosen picture goes with the draft too
+  for (const x of s.extras ?? []) if (x.from === variantId) await upsertEdge(g, { from: contentId, type: "USES_ASSET", to: x.id, props: { part: "clip" }, src, asOf }, now).catch(() => undefined);
   if (cr) {
     await upsertEdge(g, { from: agentNodeId(cr.by), type: "PRODUCED", to: contentId, src, asOf }, now).catch(() => undefined);
   } else {

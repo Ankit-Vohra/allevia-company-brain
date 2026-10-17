@@ -209,4 +209,16 @@ export function socialProfile(href: string): SocialProfile | null {
 
 // The Document that holds one crawled page's text: "https://www.example.com/about/" -> "document:web-www-example-com-about".
 export const pageDocId = (url: string): string => entityId("Document", `web ${pageKey(url)}`);
+
+// What a Page is called: its title, else its path. The one rule every writer of a Page node follows (onboarding's pageWrite,
+// the check-up, keyword rankings), so one page never has two names. A title is clipped to 200 characters.
+export function pageName(url: string, title?: string | null): string {
+  const t = title?.trim();
+  if (t) return t.length <= 200 ? t : `${t.slice(0, 199).trimEnd()}…`;
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
 export const pageId = (url: string): string => entityId("Page", url);

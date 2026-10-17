@@ -133,7 +133,7 @@ export interface ApprovalPreview {
   subject?: string;
   draftOnly?: boolean;
   when?: { start: string; end?: string; timeZone?: string; guests: string[] };
-  media?: { kind: "photo" | "poster" | "image" | "clip"; options: Array<{ id: string; label: string; note: string; pick: boolean; held: boolean }> };
+  media?: { kind: "photo" | "poster" | "image" | "clip"; options: Array<{ id: string; label: string; note: string; pick: boolean; held: boolean }>; extras?: Array<{ id: string; label: string; kind: "clip"; note: string }> };
   post?: { where: string; when?: { at: string; timeZone?: string; words: string }; textOnly?: boolean };
 }
 

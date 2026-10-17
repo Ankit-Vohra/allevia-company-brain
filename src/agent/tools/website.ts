@@ -17,7 +17,8 @@ import {
   type DfsConfig, type DfsFetch,
 } from "../../checkup/dataforseo.js";
 import type { Fix } from "../../checkup/fixes.js";
-import { progress, type CheckupMetric } from "../../checkup/store.js";
+import { SCORE_WORDS, checkupHistory } from "../../checkup/history.js";
+import { changeLines, progress, readingLines, type CheckupMetric } from "../../checkup/store.js";
 import { storedCheckups } from "../../checkup/run.js";
 import { writeBatch } from "../../graph/upsert.js";
 import { Collector, InputError, defineTool, getNodes, refuseIfReadOnly, refuseIfStopped } from "./common.js";
@@ -25,10 +26,6 @@ import { Collector, InputError, defineTool, getNodes, refuseIfReadOnly, refuseIf
 // Test seam: the DataForSEO config and transport. Production reads the env file and uses fetch.
 export interface WebsiteToolDeps { dfsConfig?: DfsConfig; dfsFetch?: DfsFetch }
 const deps = (ctx: ToolContext): WebsiteToolDeps => (ctx as ToolContext & { website?: WebsiteToolDeps }).website ?? {};
-
-const SCORE_WORDS: Partial<Record<CheckupMetric, string>> = {
-  checkup_mobile_speed: "speed on phones", checkup_easy_to_use: "easy to use", checkup_google_basics: "Google basics",
-};
 
 async function runCheckupTool(args: { all?: boolean }, ctx: ToolContext) {
   const runs = await storedCheckups(ctx.graph, 2);
@@ -40,9 +37,14 @@ async function runCheckupTool(args: { all?: boolean }, ctx: ToolContext) {
       nodes: [], edges: [], sources: [], note: "No check-up stored yet.",
     };
   }
-  const top = cur.top as Array<Pick<Fix, "key" | "title" | "what" | "why" | "who" | "effort" | "impact" | "tier" | "pages" | "pageCount" | "evidence">>;
+  // The findings, what was fixed since last time and the trend come from the graph (the open and the closed FAILS edges, the
+  // readings on the website channel); the report's own JSON speaks only for a run stored before the edges carried a finding.
+  const h = await checkupHistory(ctx.graph, { asOf: cur.asOf, fixCount: cur.fixTitles.length }, !!prev);
+  const top = (h.fromGraph ? h.top : cur.top) as Array<Pick<Fix, "key" | "title" | "what" | "why" | "who" | "effort" | "impact" | "tier" | "pages" | "pageCount" | "evidence">>;
   const scores = Object.fromEntries(cur.readings.filter((r) => SCORE_WORDS[r.metric as CheckupMetric]).map((r) => [SCORE_WORDS[r.metric as CheckupMetric]!, r.value]));
-  const p = prev ? progress(prev.readings, cur.readings, prev.fixTitles, cur.fixTitles, prev.asOf) : undefined;
+  const p = prev
+    ? h.fromGraph ? { lines: [...readingLines(prev.readings, cur.readings), ...changeLines(h.fixed, h.fresh)] } : progress(prev.readings, cur.readings, prev.fixTitles, cur.fixTitles, prev.asOf)
+    : undefined;
   const col = new Collector();
   const nodes = await getNodes(ctx, [cur.docId, ...(prev ? [prev.docId] : [])]);
   for (const n of nodes.values()) col.node(n);
@@ -53,6 +55,7 @@ async function runCheckupTool(args: { all?: boolean }, ctx: ToolContext) {
     scores, scoresNote: "Out of 100; 90+ is good. Lighthouse lab test of the home page on a simulated mid-range phone over slow 4G.",
     topFixes: top.map((f, i) => ({ rank: i + 1, title: f.title, whatToChange: f.what, why: f.why, effort: f.effort, who: f.who, where: f.pageCount ? f.pages.slice(0, 5) : ["whole site"], key: f.key })),
     ...(p && p.lines.length ? { sinceLastCheckup: p.lines, previousCheckOn: prev!.asOf.slice(0, 10) } : prev ? { sinceLastCheckup: ["No change worth reporting since the last check-up."] } : {}),
+    ...(h.trend.length > 1 ? { scoreTrend: h.trend.map((t) => ({ checkedOn: t.checkedOn, ...t.scores })) } : {}),
     alreadyGood: cur.good, notes: cur.notes,
     ...(args.all ? { showHow: { method: "Each problem has a base score for how directly it loses an enquiry, weighted by the page (home 1, key pages 0.8, others 0.5), plus a little for each extra page; ties go to the quicker fix.", evidence: Object.fromEntries(top.map((f) => [f.key, f.evidence])) } } : {}),
     draftable: top.filter((f) => ["titles", "descriptions", "clear-offer", "image-text", "share-preview"].includes(f.key)).map((f) => ({ key: f.key, pages: f.pages })),

@@ -164,8 +164,10 @@ describe("schema v2 (product design §7)", () => {
     expect(TRACKED_PROPS.Business).toEqual(["country", "currency", "locale", "timeZone", "designStyle", "templateKey"]);
     expect(TRACKED_PROPS.Business).not.toContain("privacyRegime");
     expect(TRACKED_PROPS.Business).not.toContain("vertical");
-    expect(TRACKED_PROPS.Agent).toEqual(["enabled", "mode", "autonomy"]);
-    expect(TRACKED_PROPS.Rule).toEqual(["status"]);
+    expect(TRACKED_PROPS.Agent).toEqual(["enabled", "mode", "autonomy", "skillsOff"]);
+    expect(TRACKED_PROPS.Rule).toEqual(["status", "confidence"]);
+    // the graph audit: progress of a connection, a post, a message and an action is bi-temporal
+    for (const t of ["System", "Content", "Message", "Action"] as const) expect(TRACKED_PROPS[t], t).toEqual(["status"]);
     expect(TRACKED_PROPS.Approval).toEqual(["status"]);
   });
   it("searches Goals only", () => {

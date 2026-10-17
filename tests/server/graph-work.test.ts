@@ -1,6 +1,6 @@
 // GET /api/:t/graph/at-work: the Brain page's "The graph at work" panel, read-only, from the agents' own tools.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import type { GraphAtWorkDto } from "../../src/server/routes/graph-work.js";
+import { plainNames, type GraphAtWorkDto } from "../../src/server/routes/graph-work.js";
 import { seedDepthChain } from "../fixtures/seed-depth.js";
 import { harness, TENANT, type Harness } from "./harness.js";
 
@@ -45,5 +45,14 @@ describe("GET /api/:t/graph/at-work (integration)", () => {
     const byName = await get("?focus=Reels%20scheduler");
     expect(byName.focus!.id).toBe("system:reel-scheduler");
     expect(byName.focus!.deep.items.map((i) => i.id)).toEqual(["task:weekly-reel-batch", "task:diwali-launch"]);
+  });
+});
+
+describe("plainNames", () => {
+  it("drops the privacy filter's marker from a name the owner reads", () => {
+    const dto = { candidates: [{ id: "system:supabase-prod", name: "Supabase prod ([redacted:supabase-ref])", dependents: 3 }], note: "no marker here" };
+    expect(plainNames(dto)).toEqual({ candidates: [{ id: "system:supabase-prod", name: "Supabase prod", dependents: 3 }], note: "no marker here" });
+    expect(plainNames({ a: "key [redacted:secret] rest" })).toEqual({ a: "key rest" });
+    expect(plainNames({ name: "Supabase prod ([redacted:supabase-ref], Mumbai)" })).toEqual({ name: "Supabase prod (Mumbai)" });
   });
 });

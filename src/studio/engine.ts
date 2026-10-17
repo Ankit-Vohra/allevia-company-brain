@@ -29,6 +29,22 @@ export interface EditOpts {
 // What an edit would cost, said before anything is spent.
 export interface EngineQuote { credits: number; words: string }
 
+// Higgsfield's product-photoshoot modes (the `higgsfield product-photoshoot` backend assembles the prompt for each one, so
+// the studio never freehands it): "lifestyle_scene" is a product in a real-world scene with hands and atmosphere (the UGC look),
+// "closeup_product_with_person" a tight crop with hands, "product_shot" a clean studio shot, "ad_creative_pack" a paid-social ad.
+export const PHOTOSHOOT_MODES = ["lifestyle_scene", "closeup_product_with_person", "product_shot", "ad_creative_pack"] as const;
+export type PhotoshootMode = (typeof PHOTOSHOOT_MODES)[number];
+
+export interface PhotoshootOpts {
+  mode: PhotoshootMode;
+  treatment: string;        // the recording key: "premium-ad:<mode>"
+  aspect: "4:5" | "1:1" | "9:16" | "3:4";
+  brandContext?: string;    // what the business is and how it sounds (passed to the backend as --brand_context)
+  productContext?: string;  // what the product is, so the backend writes about the right thing (--product_context)
+  maxCredits?: number;      // a cap tighter than the engine's per-run cap
+  onQuote?: (q: EngineQuote) => void;
+}
+
 export type DeclineCode = "missing" | "not-logged-in" | "low-balance" | "run-cap" | "daily-cap" | "failed" | "timeout" | "unavailable";
 
 // The engine will not generate this time. `message` is the owner's plain words; nothing was spent unless it says so.
@@ -55,6 +71,9 @@ export interface GenerationEngine {
   edit(input: EditInput, prompt: string, opts: EditOpts): Promise<EditResult | null>;
   /** What this edit would cost, spending nothing; absent for engines that cost nothing (recordings, fakes). */
   quote?(input: EditInput, prompt: string, opts: EditOpts): Promise<EngineQuote>;
+  /** A premium, UGC-style ad picture of the owner's product from Higgsfield's product-photoshoot backend (premium.ts). */
+  photoshoot?(input: EditInput, intent: string, opts: PhotoshootOpts): Promise<EditResult | null>;
+  quotePhotoshoot?(input: EditInput, intent: string, opts: PhotoshootOpts): Promise<EngineQuote>;
 }
 
 export const recordingKey = (originalSha256: string, treatment: string): string => `${originalSha256}:${treatment}`;
@@ -84,6 +103,10 @@ export class RecordedEngine implements GenerationEngine {
 
   has(originalSha256: string, treatment: string): boolean {
     return this.recordings().some((r) => r.key === recordingKey(originalSha256, treatment));
+  }
+
+  async photoshoot(input: EditInput, _intent: string, opts: PhotoshootOpts): Promise<EditResult | null> {
+    return this.edit(input, "", { treatment: opts.treatment, aspect: "same" });
   }
 
   async edit(input: EditInput, _prompt: string, opts: EditOpts): Promise<EditResult | null> {
@@ -128,6 +151,28 @@ export class ChainEngine implements GenerationEngine {
     if (decline) throw decline;
     return null;
   }
+  async quotePhotoshoot(input: EditInput, intent: string, opts: PhotoshootOpts): Promise<EngineQuote> {
+    for (const e of this.engines) {
+      if (e instanceof RecordedEngine) { if (e.has(input.originalSha256, opts.treatment)) return { credits: 0, words: "no Studio credits (made earlier)" }; continue; }
+      if (e.quotePhotoshoot) return e.quotePhotoshoot(input, intent, opts);
+    }
+    return { credits: 0, words: "no Studio credits" };
+  }
+  async photoshoot(input: EditInput, intent: string, opts: PhotoshootOpts): Promise<EditResult | null> {
+    let decline: EngineDecline | undefined;
+    for (const e of this.engines) {
+      if (!e.photoshoot) continue;
+      try {
+        const r = await e.photoshoot(input, intent, opts);
+        if (r) return r;
+      } catch (err) {
+        if (!(err instanceof EngineDecline)) throw err;
+        decline = err;
+      }
+    }
+    if (decline) throw decline;
+    return null;
+  }
 }
 
 // Tests: returns a fixed image for any input, and records the prompts it was given.
@@ -136,6 +181,16 @@ export class FakeEngine implements GenerationEngine {
   readonly prompts: string[] = [];
   constructor(private make: (input: EditInput) => Promise<Buffer> | Buffer, private opts: { credits?: number } = {}) {}
   readonly calls: Array<{ input: EditInput; opts: EditOpts }> = [];
+  readonly shoots: Array<{ input: EditInput; intent: string; opts: PhotoshootOpts }> = [];
+  async quotePhotoshoot(): Promise<EngineQuote> {
+    const c = this.opts.credits ?? 0;
+    return { credits: c, words: c > 0 ? `about ${c} Studio credit${c === 1 ? "" : "s"}` : "no Studio credits" };
+  }
+  async photoshoot(input: EditInput, intent: string, opts: PhotoshootOpts): Promise<EditResult> {
+    this.shoots.push({ input, intent, opts });
+    if (opts.onQuote && this.opts.credits !== undefined && this.opts.credits > 0) opts.onQuote({ credits: this.opts.credits, words: `about ${this.opts.credits} Studio credit${this.opts.credits === 1 ? "" : "s"}` });
+    return { image: await this.make(input), engine: "fake", model: "fake-photoshoot", prompt: `[${opts.mode}] ${intent}`, recorded: false, ...(this.opts.credits !== undefined ? { credits: this.opts.credits } : {}) };
+  }
   async quote(): Promise<EngineQuote> {
     const c = this.opts.credits ?? 0;
     return { credits: c, words: c > 0 ? `about ${c} Studio credit${c === 1 ? "" : "s"}` : "no Studio credits" };

@@ -1,0 +1,23 @@
+/* ---------- It keeps growing (Brain page): one quiet row that opens to a bar per day or week ---------- */
+.gg { display: grid; gap: var(--space-xs); padding-top: var(--space-sm); border-top: 1px solid var(--color-rule-2); }
+.gg-body { display: grid; gap: var(--space-sm); }
+.gg-lede { font-size: var(--text-sm); color: var(--color-ink-2); max-width: 64ch; line-height: 1.55; text-wrap: pretty; }
+.gg-lede b { font-weight: 600; color: var(--color-ink); }
+.gg-switch { display: flex; flex-wrap: wrap; gap: 6px; }
+.gg-chip { border: 1px solid var(--color-rule-2); background: transparent; color: var(--color-ink-2); padding: 6px 12px; min-height: 36px; border-radius: 999px; font: inherit; font-size: var(--text-sm); cursor: pointer; }
+.gg-chip.is-on { background: var(--color-paper-2); color: var(--color-ink); border-color: var(--color-ink-2); }
+.gg-rows { display: grid; gap: 6px; list-style: none; padding: 0; margin: 0; }
+.gg-row { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: var(--text-sm); }
+.gg-when { color: var(--color-ink-2); white-space: nowrap; }
+.gg-bar { display: flex; height: 14px; border-radius: 3px; overflow: hidden; background: var(--color-paper-2); min-width: 0; }
+.gg-seg { display: block; height: 100%; background: oklch(62% 0.11 var(--hue)); min-width: 1px; }
+.gg-num { color: var(--color-ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gg-edges { color: var(--color-muted); font-size: var(--text-xs); }
+.gg-key { display: flex; flex-wrap: wrap; gap: 4px 14px; list-style: none; padding: 0; margin: 0; font-size: var(--text-xs); color: var(--color-muted); }
+.gg-key li { display: inline-flex; align-items: center; gap: 6px; }
+.gg-dot { width: 8px; height: 8px; border-radius: 50%; background: oklch(62% 0.11 var(--hue)); }
+.gg-note { font-size: var(--text-xs); color: var(--color-muted); }
+@media (max-width: 560px) {
+  .gg-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+  .gg-bar { grid-column: 1 / -1; order: 3; }
+}

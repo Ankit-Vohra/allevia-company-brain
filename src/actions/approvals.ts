@@ -18,7 +18,7 @@ import type { ActionKind } from "../../shared/contracts.js";
 import { openGraph, type GraphHandle } from "../graph/client.js";
 import { upsertEdge, upsertNode } from "../graph/upsert.js";
 import type { LlmRunner } from "../ingest/llm.js";
-import { toIso } from "../util/time.js";
+import { isoDate, toIso } from "../util/time.js";
 import { executeApproval, type ActionView, type ExecutorDeps } from "./executors.js";
 import { editDistance, learnFromEdit, recordLearningMetrics, type LearnedEvent, type LearnedRule, type LearningMetrics } from "./learning.js";
 import { ensureActor, findBusinessId, parsePayload, type Payload } from "./shared.js";
@@ -188,7 +188,8 @@ async function decideClaimed(g: GraphHandle, input: DecideInput, deps: DecideDep
       ...(changed ? { editedPayload: JSON.stringify(edited) } : {}),
     },
   }, now);
-  await upsertEdge(g, { from: input.approvalId, type: input.decision === "approve" ? "APPROVED_BY" : "REJECTED_BY", to: actor }, now);
+  // who decided, from which card, and on what day: the approval itself is the source of "approved by"
+  await upsertEdge(g, { from: input.approvalId, type: input.decision === "approve" ? "APPROVED_BY" : "REJECTED_BY", to: actor, since: now, src: input.approvalId, asOf: isoDate(now) }, now);
   if (before.recommendationId) {
     const [rec] = await g.roQuery<{ name: string }>("MATCH (r:Entity:Recommendation {id:$id}) RETURN r.name AS name", { id: before.recommendationId });
     if (rec) await upsertNode(g, { type: "Recommendation", id: before.recommendationId, name: rec.name, props: { status: input.decision === "approve" ? "approved" : "dismissed" } }, now);

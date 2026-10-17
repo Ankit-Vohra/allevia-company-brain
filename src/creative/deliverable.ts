@@ -138,7 +138,7 @@ export async function saveDeliverable(g: GraphHandle, deps: SaveDeps, r: SaveReq
     `Uses ${credits} credit${credits === 1 ? "" : "s"} on approval.`,
   ].join(" ");
   const asOf = isoDate(deps.now);
-  const src = `turn:${deps.turnId}`;
+  const src = deps.turnId.startsWith("turn:") ? deps.turnId : `turn:${deps.turnId}`; // a turn id already starts with "turn:"
   const approvalId = await serial(g.name, async () => {
     const [pending] = await g.roQuery<{ id: string }>(
       "MATCH (rec:Entity:Recommendation {id:$rid}) WITH rec MATCH (rec)-[p:PROPOSES]->(a:Approval) WHERE p.until IS NULL AND a.status = 'pending' RETURN a.id AS id ORDER BY a.id LIMIT 1", { rid: recId });

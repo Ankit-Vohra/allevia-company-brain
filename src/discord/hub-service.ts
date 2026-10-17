@@ -3,6 +3,7 @@
 // the CLI (`discord-hub`) and the bot process. Hub mode is on exactly when DISCORD_HUB_GUILD_ID is set.
 import type { DiscordHome, DiscordInfo } from "../../shared/contracts.js";
 import { loadConfig, type AlleviaConfig } from "../config.js";
+import { openGraph } from "../graph/client.js";
 import { getTenant } from "../graph/tenants.js";
 import { checkHub, type Check } from "./hub-check.js";
 import { GraphHubStore } from "./hub-store.js";
@@ -107,6 +108,7 @@ export async function productionHub(opts: { cfg?: AlleviaConfig; log?: (line: st
   return createHubService({
     hub, store: opts.store ?? new GraphHubStore(), staffRoleId: s.settings.staffRoleId, redact,
     tenant: async (slug) => { const t = await getTenant(slug); return t ? { name: t.name } : null; },
+    graph: (slug) => openGraph(slug),
     ...(opts.log ? { log: opts.log } : {}),
   });
 }

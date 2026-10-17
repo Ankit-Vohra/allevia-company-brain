@@ -8,7 +8,7 @@
 //   reviews      Google reviews of the business with no reply yet (only when public data was looked up)
 //   competitors  new public numbers on a competitor, with the reading before (only when public data was looked up)
 //   website      the website check-up: failing checks, how many pages, and which started failing since
-//   dates        festivals, shopping days and seasons in the next weeks (calendar.ts)
+//   dates        festivals, shopping days and seasons in the next weeks (calendar.ts), also written as Event nodes (festivals.ts)
 //   findings     open ideas from the existing rule checks (src/insights/detectors.ts), with their card if any
 //   sales        enquiries nobody answered, deals with nothing happening for two weeks, calls tomorrow (src/sales)
 import type { GraphHandle } from "../graph/client.js";
@@ -18,6 +18,7 @@ import { localDate, regionOf, regionOfDomain } from "../onboard/region.js";
 import { getLead, meetingsBetween, stalledDeals, unanswered } from "../sales/graph.js";
 import { tomorrowWindow } from "../sales/times.js";
 import { upcomingDates, type Upcoming } from "./calendar.js";
+import { writeFestivals } from "./festivals.js";
 
 type Read = Pick<GraphHandle, "roQuery">;
 
@@ -80,9 +81,11 @@ export async function businessInfo(g: Read, businessId: string | null, tenant: s
   };
 }
 
-export interface SignalOpts { now: number; since?: number; tenant: string; businessId: string | null; horizonDays?: number }
+export interface SignalOpts { now: number; since?: number; tenant: string; businessId: string | null; horizonDays?: number; log?: (line: string) => void }
 
-export async function gatherSignals(g: Read, o: SignalOpts): Promise<Signals> {
+// Reads everything the stand-up looks at. The one thing it writes: the festival dates it is about to use, as Event nodes (festivals.ts),
+// so a pick for one is EVIDENCED_BY a node. A write that fails is said through `log` and the stand-up goes on without that evidence.
+export async function gatherSignals(g: GraphHandle, o: SignalOpts): Promise<Signals> {
   const { now } = o;
   const business = await businessInfo(g, o.businessId, o.tenant);
   let since = o.since;
@@ -148,9 +151,15 @@ export async function gatherSignals(g: Read, o: SignalOpts): Promise<Signals> {
 
   const sales = await salesSignals(g, now, business.timeZone ?? "UTC");
 
+  const dates = upcomingDates(business.countryCode, today, o.horizonDays ?? 30);
+  if (dates.length) {
+    await writeFestivals(g, dates, { now, ...(business.countryCode ? { countryCode: business.countryCode } : {}) })
+      .catch((e: unknown) => o.log?.(`stand-up ${o.tenant}: the festival dates could not be written to the graph: ${e instanceof Error ? e.message : String(e)}`));
+  }
+
   return {
     tenant: o.tenant, business, now, since, today, numbers, uploads, goals, decisions, learned: lr?.n ?? 0, publicData, reviews, competitors,
-    website: { checked: (checked?.n ?? 0) > 0, fails }, dates: upcomingDates(business.countryCode, today, o.horizonDays ?? 30), findings,
+    website: { checked: (checked?.n ?? 0) > 0, fails }, dates, findings,
     ...(sales ? { sales } : {}),
   };
 }

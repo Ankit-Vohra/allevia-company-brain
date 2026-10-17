@@ -123,5 +123,13 @@ describe("score and rules", () => {
     expect(String(fail.props!.evidence)).toMatch(/canonical/);
     expect(w.edges.filter((e) => e.type === "PASSES").length).toBe(report.results.filter((r) => r.pass).length);
     expect(w.observations[0]).toMatchObject({ subject: "channel:website", metric: "seo_site_score", value: report.score, asOf: "2026-10-15" });
+    // each page's own score is a reading that MEASURES the Page (G26), after the site's
+    const perPage = w.observations.filter((o) => o.metric === "seo_page_score");
+    expect(perPage.map((o) => [o.subject, o.value, o.asOf])).toEqual([
+      ["page:www.kestrel.example/about", report.pageScores[good("/about").finalUrl], "2026-10-15"],
+      ["page:www.kestrel.example/services", report.pageScores[good("/services").finalUrl], "2026-10-15"],
+    ]);
+    expect(perPage[0]!.value).toBeLessThan(perPage[1]!.value); // /about lacks a canonical link
+    expect(perPage.every((o) => o.src === w.nodes[0]!.id && o.unit === "/100")).toBe(true);
   });
 });

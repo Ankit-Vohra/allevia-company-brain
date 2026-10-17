@@ -19,6 +19,7 @@
 //   sales_reminder  a reminder for a call tomorrow (Neel)
 import { CONTENT_METRIC, FUNNEL_METRIC, SEO_METRIC } from "./words.js";
 import { whenWords } from "./calendar.js";
+import { festivalEventId } from "./festivals.js";
 import type { Signals } from "./signals.js";
 import { cap1, clip, fmt, humanise, oneLine, pct, plural } from "../insights/text.js";
 
@@ -119,7 +120,7 @@ export function opportunitiesFrom(s: Signals): Opportunity[] {
         ? `${cap1(d.name)} is ${whenWords(d)}. Purpose: give people a reason to choose ${biz.name} that week. Draft one simple offer to test, with its wording, who it is for and how we will know it worked.`
         : `${cap1(d.name)} is ${whenWords(d)}. Purpose: be in front of people${where} when they think about ${d.name}, in ${biz.name}'s own voice, without a hard sell. Draft the post${kind === "poster" ? " and a poster headline" : ""}.`,
       facts: [`${cap1(d.name)}: ${d.date}${d.approx ? " (expected; moon-calendar date)" : ""}`],
-      evidence: [], score: (suits ? 0.5 : 0.3) + 0.3 * Math.max(0, near),
+      evidence: [festivalEventId(d.key)], score: (suits ? 0.5 : 0.3) + 0.3 * Math.max(0, near),
       occasion: { name: d.name, date: d.date, ...(d.approx ? { approx: true } : {}) },
     }));
   }

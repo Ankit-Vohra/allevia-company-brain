@@ -1,15 +1,25 @@
 // The graph side of posting. A post is a Content node (id content:publish-<approval>), written when the owner says OK and updated as
-// it goes: scheduled -> publishing -> published | failed | cancelled. It keeps exactly what was approved (platform, account, caption,
-// the one picture or video, the time, a hash of those) plus what came of it (the post's address, the time, why it failed). Wired in:
-//   Content -USES_ASSET-> the Asset posted     Content -PUBLISHED_ON-> Channel (Instagram, Facebook, LinkedIn)
+// it goes: scheduled -> publishing -> published | failed | cancelled (a dry run is written as dry_run: a planned post). It keeps exactly
+// what was approved (platform, account, caption, the one picture or video, the time, a hash of those) plus what came of it (the post's
+// address, the time, why it failed). Every change of status leaves a Version (Content.status is tracked). Wired in:
+//   Content -USES_ASSET-> the Asset posted
+//   Content -PUBLISHED_ON {state}-> Channel   from the moment it is scheduled (state: scheduled, then published, failed, cancelled or
+//                                             dry_run), on the platform's channel (channel:instagram, which the numbers measure) AND on
+//                                             the account it went from (channel:instagram:cafe, PART_OF the platform's channel), so
+//                                             two accounts on one platform are two nodes
+//   Content -ADVANCES-> Goal                  the goals of the Recommendation behind the card (Approval <-PROPOSES- Recommendation)
 //   Approval -RESULTED_IN-> Action -RESULTED_IN-> Content
 // Claims are one statement each (like the Approval's decisionToken), so a cancel, the scheduler and a retry never act on the same
-// post at once.
+// post at once; the statement that claims a post also writes the Version of the state it leaves.
 import { randomBytes } from "node:crypto";
 import type { GraphHandle } from "../graph/client.js";
+import { ENTITY_VECTOR_PROP, CHUNK_VECTOR_PROP } from "../graph/indexes.js";
+import { noteGraphWrite } from "../graph/projection.js";
 import { upsertEdge, upsertNode, type Prim } from "../graph/upsert.js";
-import { existingIds } from "../actions/shared.js";
-import { entityId } from "../util/ids.js";
+import { defined } from "../graph/validate.js";
+import { advanceGoals, existingIds } from "../actions/shared.js";
+import { entityId, sha256, slugify } from "../util/ids.js";
+import { isoDate } from "../util/time.js";
 import { PLATFORMS, type PlatformId } from "./platforms.js";
 import type { PostRow, PostStatus } from "./types.js";
 
@@ -58,7 +68,7 @@ const PROP_KEYS = [
   "attempts", "attemptedAt", "postedAt", "counted", "postUrl", "postId", "publishedAt", "containerId", "pendingSince", "failure", "retryable", "maybePosted", "reconnect", "by",
 ] as const satisfies ReadonlyArray<keyof PostRow>;
 
-/** Writes (or updates) the post. Only the fields given are changed; a field set to null is cleared. */
+/** Writes (or updates) the post. Only the fields given are changed; a field set to null is cleared. A change of status also brings the post's channel edges (state) up to date. */
 export async function writePost(g: GraphHandle, id: string, name: string, change: { [K in keyof PostRow]?: PostRow[K] | null }, now: number): Promise<void> {
   const props: Record<string, Prim> = { format: "post" };
   for (const k of PROP_KEYS) {
@@ -68,31 +78,100 @@ export async function writePost(g: GraphHandle, id: string, name: string, change
   }
   if (change.platform) props.channel = change.platform;
   await upsertNode(g, { type: "Content", id, name: name.slice(0, 200) || id, props }, now);
+  if (typeof change.status === "string") await linkChannels(g, id, change.status, now);
 }
 
-/** The edges around a post: the asset it posts, where it went, who made it. Missing ends are skipped, never invented. */
-export async function linkPost(g: GraphHandle, row: Pick<PostRow, "id" | "platform" | "assetId" | "by">, now: number, o: { published: boolean }): Promise<void> {
-  const channelId = `channel:${row.platform}`;
-  if (o.published) {
-    if (!(await existingIds(g, [channelId])).has(channelId)) await upsertNode(g, { type: "Channel", id: channelId, name: PLATFORMS[row.platform].name, props: { platform: row.platform } }, now);
-    await upsertEdge(g, { from: row.id, type: "PUBLISHED_ON", to: channelId }, now).catch(() => undefined);
+/** The generic channel of a platform: channel:instagram. The numbers (followers, reach) measure it, and posts have always been PUBLISHED_ON it. */
+export const platformChannelId = (platform: PlatformId): string => `channel:${platform}`;
+
+/** The account a post goes from, as a node of its own: channel:<platform>:<handle, else the account's id>. */
+export function accountChannelId(platform: PlatformId, a: { accountId: string; accountHandle?: string }): string {
+  const key = slugify(a.accountHandle ?? a.accountId) || sha256(a.accountId).slice(0, 12);
+  return `channel:${platform}:${key}`;
+}
+
+/**
+ * Content -PUBLISHED_ON {state}-> the platform's channel and the account's channel (made when missing; the account is PART_OF the
+ * platform's channel), from the first time a post is written, so a scheduled or a planned (dry run) post is already on the channel it
+ * is for. `state` follows the post: scheduled, publishing, published, failed, cancelled, dry_run. Missing ends are skipped, never invented.
+ */
+export async function linkChannels(g: GraphHandle, id: string, status: PostStatus, now: number): Promise<void> {
+  const [r] = await g.roQuery<{ platform: string | null; approval: string | null; accountId: string | null; accountName: string | null; accountHandle: string | null }>(
+    "MATCH (c:Entity:Content {id:$id}) RETURN c.platform AS platform, c.approval AS approval, c.accountId AS accountId, c.accountName AS accountName, c.accountHandle AS accountHandle", { id });
+  const platform = r?.platform as PlatformId | null | undefined;
+  if (!r || !platform || !PLATFORMS[platform]) return;
+  const spec = PLATFORMS[platform];
+  const generic = platformChannelId(platform);
+  const asOf = isoDate(now);
+  const stamp = { since: now, asOf, ...(r.approval ? { src: r.approval } : {}) };
+  try {
+    if (!(await existingIds(g, [generic])).has(generic)) await upsertNode(g, { type: "Channel", id: generic, name: spec.name, props: { platform } }, now);
+    await upsertEdge(g, { from: id, type: "PUBLISHED_ON", to: generic, props: { state: status }, ...stamp }, now);
+    if (r.accountId) {
+      const account = accountChannelId(platform, { accountId: r.accountId, ...(r.accountHandle ? { accountHandle: r.accountHandle } : {}) });
+      const label = r.accountHandle ?? r.accountName ?? r.accountId;
+      await upsertNode(g, {
+        type: "Channel", id: account, name: `${spec.name} ${label}`,
+        props: { platform, kind: "account", accountId: r.accountId, ...(r.accountHandle ? { handle: r.accountHandle } : {}), ...(r.accountName ? { accountName: r.accountName } : {}) },
+        ...(r.approval ? { src: r.approval } : {}), asOf,
+      }, now);
+      await upsertEdge(g, { from: account, type: "PART_OF", to: generic, ...stamp }, now);
+      await upsertEdge(g, { from: id, type: "PUBLISHED_ON", to: account, props: { state: status }, ...stamp }, now);
+    }
+  } catch {
+    // the post stands without its channel edges: the next change of status writes them again
   }
-  if (row.assetId && (await existingIds(g, [row.assetId])).has(row.assetId)) await upsertEdge(g, { from: row.id, type: "USES_ASSET", to: row.assetId }, now).catch(() => undefined);
+}
+
+/** The edges around a post: the asset it posts, the goals its card advances. Missing ends are skipped, never invented. */
+export async function linkPost(g: GraphHandle, row: Pick<PostRow, "id" | "approval" | "assetId">, now: number): Promise<void> {
+  if (row.assetId && (await existingIds(g, [row.assetId])).has(row.assetId)) {
+    await upsertEdge(g, { from: row.id, type: "USES_ASSET", to: row.assetId, since: now, asOf: isoDate(now), ...(row.approval ? { src: row.approval } : {}) }, now).catch(() => undefined);
+  }
+  // the post advances what the card advanced: Approval <-PROPOSES- Recommendation -ADVANCES-> Goal, copied onto the Content
+  if (row.approval) await advanceGoals(g, { from: row.id, approvalId: row.approval, src: row.approval, now });
+}
+
+// One atomic step from one of `from` to a new status, for one caller only: the state it leaves is written as a Version in the same
+// statement (the way src/graph/nodes.ts does for a tracked prop, with the version's id inside the CREATE), and `rev` moves so an
+// upsertNode that read the old state retries. A statement that lost a race to a change of another prop reads again and tries again.
+async function step(g: GraphHandle, id: string, from: PostStatus[], to: PostStatus, set: Record<string, Prim>, inc: number, now: number): Promise<boolean> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const [cur] = await g.peek<{ kv: Array<[string, unknown]> }>(
+      "MATCH (c:Entity:Content {id:$id}) RETURN [k IN keys(c) WHERE NOT k IN $skip | [k, c[k]]] AS kv LIMIT 1", { id, skip: [ENTITY_VECTOR_PROP, CHUNK_VECTOR_PROP] });
+    if (!cur) return false;
+    const old = Object.fromEntries(cur.kv);
+    if (typeof old.status !== "string" || !from.includes(old.status as PostStatus)) return false;
+    const rev = n(old.rev) ?? 0;
+    const snapshot = JSON.stringify(old);
+    const since = n(old.stateSince) ?? n(old.updatedAt) ?? n(old.createdAt) ?? now;
+    const vid = `version:${id}@${now}-${sha256(snapshot).slice(0, 8)}`;
+    const version = defined({ id: vid, name: "", of: id, props: snapshot, changed: ["status"], since, until: Math.max(since, now), src: s(old.src), asOf: s(old.asOf), createdAt: now, updatedAt: now });
+    const rows = await g.query<{ c: number }>(
+      `MATCH (c:Entity:Content {id:$id}) WHERE c.status IN $from AND coalesce(c.rev, 0) = $rev
+       CREATE (c)-[h:HAD_VERSION]->(v:Entity:Version {id: $vid}) SET v += $version, h += $hv
+       SET c += $set, c.status = $to, c.attempts = coalesce(c.attempts, 0) + $inc, c.rev = $rev + 1, c.updatedAt = $now, c.stateSince = $now
+       RETURN count(c) AS c`,
+      { id, from, rev, vid, version, hv: { since: now, recordedAt: now }, set, to, inc, now });
+    if (rows[0]?.c) {
+      await noteGraphWrite(g.name); // a Version node and a HAD_VERSION edge appeared
+      return true;
+    }
+  }
+  return false;
 }
 
 /** One atomic claim: the post moves to `publishing` for this caller only. Null when it was not in one of the `from` states (or someone else got it first). */
 export async function claim(g: GraphHandle, id: string, from: PostStatus[], now: number): Promise<string | null> {
   const token = randomBytes(8).toString("hex");
-  const rows = await g.query<{ mine: boolean }>(
-    "MATCH (c:Entity:Content {id:$id}) WHERE c.status IN $from SET c.status = 'publishing', c.claim = $token, c.attemptedAt = $now, c.attempts = coalesce(c.attempts, 0) + 1 RETURN c.claim = $token AS mine",
-    { id, from, token, now });
-  return rows[0]?.mine ? token : null;
+  return (await step(g, id, from, "publishing", { claim: token, attemptedAt: now }, 1, now)) ? token : null;
 }
 
 /** Cancels a post that has not gone out. False when it already went, is going, or was cancelled. */
 export async function cancelPost(g: GraphHandle, id: string, now: number): Promise<boolean> {
-  const rows = await g.query<{ id: string }>("MATCH (c:Entity:Content {id:$id}) WHERE c.status = 'scheduled' SET c.status = 'cancelled', c.cancelledAt = $now RETURN c.id AS id", { id, now });
-  return rows.length > 0;
+  if (!(await step(g, id, ["scheduled"], "cancelled", { cancelledAt: now }, 0, now))) return false;
+  await linkChannels(g, id, "cancelled", now);
+  return true;
 }
 
 /** Posts waiting for their time: the oldest first. */

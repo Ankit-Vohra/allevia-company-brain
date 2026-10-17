@@ -8,7 +8,7 @@ import { entityId, pageKey, sha256 } from "../../../util/ids.js";
 import type { GraphWrite } from "../../types.js";
 import { channelId, channelNode } from "../channels.js";
 import { chunkText, type PageData } from "./page.js";
-import { pageDocId } from "./urls.js";
+import { pageDocId, pageName } from "./urls.js";
 
 export * from "./urls.js";
 export * from "./fetch.js";
@@ -43,7 +43,7 @@ export function pageWrite(p: PageData): GraphWrite {
   const id = pageId(url);
   const doc = pageDocId(url);
   const asOf = p.fetchedAt;
-  const name = p.title?.trim() || u.pathname;
+  const name = pageName(url, p.title);
   const props: Record<string, Prim> = {
     url, path: u.pathname + u.search, statusCode: p.status, wordCount: p.wordCount, h1Count: p.h1.length, imageCount: p.images.length,
     imagesMissingAlt: p.images.filter((i) => i.alt === null).length, internalLinkCount: p.internalLinks.length,

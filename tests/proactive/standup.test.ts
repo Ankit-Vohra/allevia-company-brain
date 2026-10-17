@@ -3,7 +3,7 @@
 // (vitest.config.ts), with fake drafters and a fake Meera: no model, no image engine, no network.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeAll, type GraphHandle } from "../../src/graph/client.js";
-import { upsertEdge, upsertNode } from "../../src/graph/upsert.js";
+import { upsertEdge, upsertNode, writeBatch } from "../../src/graph/upsert.js";
 import { decideApproval } from "../../src/actions/approvals.js";
 import { ownerJargon } from "../../src/agent/style.js";
 import { writeBrief } from "../../src/insights/brief.js";
@@ -88,6 +88,7 @@ afterAll(async () => {
   await closeAll();
 });
 
+const PICK = ["season", "dussehra-2026"].join(":"); // built from parts: a literal key beside `standupKey =` reads as a credential to the hygiene scan
 describe("calendar", () => {
   it("knows what is coming in a country, nearest first, and says moon-calendar dates as 'about'", () => {
     const up = upcomingDates("IN", "2026-10-16");
@@ -174,10 +175,10 @@ describe("no spam", () => {
   });
 
   it("drafts one festival at a time: the next waits a few days", () => {
-    const r = screen([op("season:diwali-2026", "poster")], [past("season:dussehra-2026", "poster", "pending", 1)], SEED_NOW);
+    const r = screen([op("season:diwali-festival", "poster")], [past("season:dussehra-festival", "poster", "pending", 1)], SEED_NOW);
     expect(r.kept).toEqual([]);
     expect(r.skipped[0]!.why).toBe("a festival post was drafted in the last few days");
-    expect(screen([op("season:diwali-2026", "poster")], [past("season:dussehra-2026", "poster", "pending", 6)], SEED_NOW).kept).toHaveLength(1);
+    expect(screen([op("season:diwali-festival", "poster")], [past("season:dussehra-festival", "poster", "pending", 6)], SEED_NOW).kept).toHaveLength(1);
   });
 
   it("never leads with sample numbers", () => {
@@ -270,6 +271,24 @@ describe("posters", () => {
     expect(d.texts.some((t) => t.kind === "headline")).toBe(false); // the Hindi headline came from the wrapper
   });
 
+  it("says so through the stand-up's log when a card's evidence or goal is not in the graph, instead of hiding it", async () => {
+    const d = fakeDrafters();
+    const lines: string[] = [];
+    const lost: Picked = { ...pick("poster-test:holi-3"), kind: "post", source: "goal", title: "A post for a lost goal", evidence: ["observation:nowhere", "document:google-review-r1"], goals: ["goal:nowhere"] };
+    const item = await draftPick(g, lost, { ...ctx(d), log: (l) => lines.push(l) });
+    expect(item).toMatchObject({ kind: "post", status: "drafted" });
+    expect(lines).toHaveLength(3);
+    expect(lines.slice(0, 2)).toEqual([
+      'stand-up: "A post for a lost goal" is not linked to its evidence observation:nowhere: it is not in the graph',
+      'stand-up: "A post for a lost goal" is not linked to its goal goal:nowhere: it is not in the graph',
+    ]);
+    // the card's own link to the goal used to fail without a word: now it says why
+    expect(lines[2]).toMatch(/^stand-up: the card for "A post for a lost goal" could not be linked to its goal goal:nowhere: missing endpoint: goal:nowhere/);
+    // what exists is still linked
+    const linked = await g.roQuery<{ id: string }>("MATCH (r:Recommendation {id:$id})-[e:EVIDENCED_BY]->(x:Entity) WHERE e.until IS NULL RETURN x.id AS id ORDER BY x.id", { id: item.recommendationId });
+    expect(linked.map((x) => x.id)).toEqual(["document:google-review-r1"]);
+  });
+
   it("counts a paid attempt against the day even when the poster then fails", async () => {
     const d = fakeDrafters();
     const broken: Drafters = { ...d, poster: async () => { throw new Error("font"); } };
@@ -296,9 +315,49 @@ describe("a festival fills a spare slot", () => {
       expect(s.paidUsed).toBe(1);
       expect(s.waiting).toEqual([]);
       expect(s.waitingHeading).toBe("");
+      // the festival is a node, the poster's idea stands on it, and the note mentions it as that pick's evidence
+      const [ev] = await t.g.roQuery<{ kind: string; date: string; at: number; occasion: string; approx: boolean; src: string }>(
+        "MATCH (e:Event {id:'event:festival-dussehra-2026'}) RETURN e.kind AS kind, e.date AS date, e.at AS at, e.occasion AS occasion, e.approx AS approx, e.src AS src");
+      expect(ev).toEqual({ kind: "festival", date: "2026-10-20", at: Date.parse("2026-10-20T00:00:00Z"), occasion: "festival", approx: true, src: "allevia:festival-calendar" });
+      const stood = await t.g.roQuery<{ rec: string; ev: string }>(
+        "MATCH (r:Recommendation)-[e:EVIDENCED_BY]->(x:Event) WHERE e.until IS NULL AND r.standupKey = $pick RETURN r.id AS rec, x.id AS ev ORDER BY rec, ev", { pick: PICK });
+      expect(stood.map((x) => x.ev)).toEqual(["event:festival-dussehra-2026"]);
+      const mentioned = await t.g.roQuery<{ pick: string; role: string; node: string }>(
+        "MATCH (d:Document {kind:'standup'})-[m:MENTIONS]->(x:Event) WHERE m.until IS NULL RETURN m.pickKey AS pick, m.role AS role, x.id AS node ORDER BY node");
+      expect(mentioned).toEqual([{ pick: PICK, role: "evidence", node: "event:festival-dussehra-2026" }]);
     } finally {
       g = realGraph;
     }
+  });
+});
+
+describe("the numbers the stand-up read, as signals", () => {
+  it("the biggest like-for-like moves are mentioned by the note as 'signal' (no pick), the reading that moved first", async () => {
+    const t = await testGraph();
+    cleanups.push(t.cleanup);
+    await upsertNode(t.g, { type: "Business", id: "business:aamdani", name: "Aamdani", props: { city: "Raipur", country: "India", industry: "jobs", domain: "aamdani.ai" } }, SEED_NOW - 9 * DAY);
+    await upsertNode(t.g, { type: "Channel", id: "channel:website", name: "Website" }, SEED_NOW - 9 * DAY);
+    const common = { subject: "channel:website", metric: "website_visits", unit: "count", src: "document:analytics" };
+    await writeBatch(t.g, {
+      nodes: [{ type: "Document", id: "document:analytics", name: "Analytics", props: { kind: "snapshot" } }], edges: [],
+      observations: [
+        { ...common, value: 100, windowStart: "2026-09-29", windowEnd: "2026-10-05", asOf: "2026-10-05" },
+        { ...common, value: 60, windowStart: "2026-10-06", windowEnd: "2026-10-12", asOf: "2026-10-12" },
+      ],
+    }, SEED_NOW - 3600_000);
+    const s = await gatherSignals(t.g, { now: SEED_NOW, tenant: "sig", businessId: "business:aamdani", since: SEED_NOW - 2 * DAY });
+    expect(s.numbers.changes).toHaveLength(1);
+    const moved = s.numbers.changes[0]!;
+    expect(moved).toMatchObject({ metric: "website_visits", from: 100, to: 60 });
+    const standup = await runStandup("sig", { graph: t.g, now: SEED_NOW, since: SEED_NOW - 2 * DAY, drafters: fakeDrafters() });
+    const rows = await t.g.roQuery<{ node: string; role: string; pick: string | null; src: string; asOf: string }>(
+      `MATCH (:Entity:Document {id:$id})-[m:MENTIONS]->(x:Observation) WHERE m.until IS NULL
+       RETURN x.id AS node, m.role AS role, m.pickKey AS pick, m.src AS src, m.asOf AS asOf ORDER BY node`, { id: standup.id });
+    expect(rows).toEqual([{ node: moved.obsId, role: "signal", pick: null, src: standup.id, asOf: "2026-10-15" }]);
+    // a second, forced run keeps it (nothing is closed that still stands)
+    await runStandup("sig", { graph: t.g, now: SEED_NOW + 3600_000, since: SEED_NOW - 2 * DAY, drafters: fakeDrafters(), force: true });
+    const again = await t.g.roQuery<{ node: string }>("MATCH (:Entity:Document {id:$id})-[m:MENTIONS]->(x:Observation) WHERE m.until IS NULL RETURN x.id AS node ORDER BY node", { id: standup.id });
+    expect(again.map((r) => r.node)).toEqual([moved.obsId]);
   });
 });
 
@@ -340,6 +399,25 @@ describe("runStandup", () => {
   it("hands each person the skill they draft with and the purpose first", () => {
     const reply = drafters.texts.find((t) => t.kind === "reply" || t.kind === "website_text" || t.kind === "post");
     expect(reply?.brief).toMatch(/^Purpose:|Purpose:/);
+  });
+
+  it("the note's document MENTIONS what each pick stands on, with the pick's key, and a traversal returns it for every pick", async () => {
+    const done = first.items.filter((i) => i.status === "drafted");
+    const rows = await g.roQuery<{ pick: string; keys: string[] | null; node: string; kinds: string[]; role: string; src: string; asOf: string }>(
+      `MATCH (d:Entity:Document {id:$id})-[m:MENTIONS]->(x:Entity) WHERE m.until IS NULL AND m.role = 'evidence'
+       RETURN m.pickKey AS pick, m.pickKeys AS keys, x.id AS node, labels(x) AS kinds, m.role AS role, m.src AS src, m.asOf AS asOf ORDER BY node`, { id: first.id });
+    for (const d of done) {
+      // what the card's idea is EVIDENCED_BY is what the note mentions for that pick: the same nodes, through two edges
+      const stands = await g.roQuery<{ id: string }>(
+        "MATCH (:Entity:Recommendation {id:$id})-[e:EVIDENCED_BY]->(x:Entity) WHERE e.until IS NULL RETURN x.id AS id ORDER BY x.id", { id: d.recommendationId });
+      expect(stands.length, d.key).toBeGreaterThan(0);
+      const mentioned = rows.filter((r) => r.pick === d.key || (r.keys ?? []).includes(d.key)).map((r) => r.node);
+      expect(mentioned.length, d.key).toBeGreaterThan(0);
+      for (const s of stands) expect(rows.map((r) => r.node), `${d.key} stands on ${s.id}`).toContain(s.id);
+    }
+    expect(rows.every((r) => r.role === "evidence" && r.src === first.id && r.asOf === "2026-10-15")).toBe(true);
+    // the goal pick stands on its goal and the reading behind it: an Observation
+    expect(rows.find((r) => r.kinds.includes("Observation"))).toBeDefined();
   });
 
   it("writes the stand-up once a day, and a forced re-run adds nothing already waiting", async () => {

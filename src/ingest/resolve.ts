@@ -13,7 +13,7 @@
 //
 // Existing nodes are never renamed or re-summarised by extraction; they only learn new aliases. Extracted edges are
 // never functional: a document read by an LLM does not close facts that came from deterministic sources.
-import { isAllowed, type EntityType, type RelType } from "../graph/schema.js";
+import { ONTOLOGY_VERSION, isAllowed, type EntityType, type RelType } from "../graph/schema.js";
 import { observationId, type EdgeInput, type NodeInput, type ObservationInput, type Prim } from "../graph/upsert.js";
 import { entityId, typeFromId } from "../util/ids.js";
 import { CONTENT_FORMATS, LIMITS, isExtractableRel, isExtractableType, type Extraction } from "./extract-schema.js";
@@ -38,6 +38,9 @@ export interface ResolveContext {
   existing: Map<string, KnownEntity>;     // id → entity already in the graph (or written earlier in this run)
   similar?: (type: EntityType, name: string) => Promise<{ id: string; score: number } | null>;
   founderNames?: string[];                // the tenant founder's own names ("Ankit"); they win over everything else
+  // The model that read the document. When given, every edge the extraction writes records `extractedBy` (the model) and
+  // `ontologyVersion`, so "which model said this, under which ontology" is a property of the fact itself.
+  model?: string;
 }
 
 export interface Dropped { item: unknown; reason: string }
@@ -71,6 +74,7 @@ class DocResolver {
   private readonly docDay?: string;
   private readonly prov: { src: string; asOf?: string };
   private readonly edgeBase: { src: string; asOf?: string; since?: number; functional: false };
+  private readonly madeBy: Record<string, Prim>;
   private readonly slots = new Map<string, Slot>();
   private readonly docNames = new Map<string, string>();          // `${type}|${norm}` → id
   private readonly docBareNames = new Map<string, Set<string>>(); // norm → ids (an endpoint given with the wrong type)
@@ -88,6 +92,7 @@ class DocResolver {
     this.prov = { src: ctx.docId, ...(ctx.asOf ? { asOf: ctx.asOf } : {}) };
     const since = ctx.asOf && Number.isFinite(Date.parse(ctx.asOf)) ? Date.parse(ctx.asOf) : undefined;
     this.edgeBase = { ...this.prov, ...(since !== undefined ? { since } : {}), functional: false };
+    this.madeBy = ctx.model ? { extractedBy: ctx.model, ontologyVersion: ONTOLOGY_VERSION } : {};
   }
 
   private drop(item: unknown, reason: string): void {
@@ -289,7 +294,7 @@ class DocResolver {
     const conf = Math.round(r.conf * 100) / 100;
     const key = `${from}|${type}|${to}`;
     if ((this.relEdges.get(key)?.conf ?? -1) >= conf) return;
-    this.relEdges.set(key, { from, type, to, conf, ...this.edgeBase, props: { evidence: clip(r.evidence.trim(), LIMITS.evidenceChars) } });
+    this.relEdges.set(key, { from, type, to, conf, ...this.edgeBase, props: { evidence: clip(r.evidence.trim(), LIMITS.evidenceChars), ...this.madeBy } });
   }
 
   // ---------- phase 4: the write ----------
@@ -300,10 +305,11 @@ class DocResolver {
     for (const s of this.slots.values()) {
       const node = this.nodeFor(s);
       if (node) nodes.push(node);
-      edges.push({ from: s.id, type: "SOURCED_FROM", to: this.ctx.docId, ...this.edgeBase });
+      const made = Object.keys(this.madeBy).length ? { props: this.madeBy } : {};
+      edges.push({ from: s.id, type: "SOURCED_FROM", to: this.ctx.docId, ...this.edgeBase, ...made });
       edges.push({
-        from: this.ctx.docId, type: "MENTIONS", to: s.id, ...this.edgeBase,
-        ...(s.maybeSameAs ? { conf: AMBIGUOUS_MENTION_CONF, props: { maybeSameAs: s.maybeSameAs } } : {}),
+        from: this.ctx.docId, type: "MENTIONS", to: s.id, ...this.edgeBase, ...made,
+        ...(s.maybeSameAs ? { conf: AMBIGUOUS_MENTION_CONF, props: { ...this.madeBy, maybeSameAs: s.maybeSameAs } } : {}),
       });
     }
     edges.push(...this.relEdges.values());

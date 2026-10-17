@@ -179,6 +179,31 @@ describe("competitor_watch and ad_library", () => {
     const r2 = await call(competitorWatch, { competitors: [comp], ads: false }, ctxWith(later, { now: NOW + 4 * DAY }));
     expect(r2.data.competitors[0].instagram).toEqual(expect.objectContaining({ followers: 1620, followersBefore: 1500, followersBeforeAsOf: "2026-10-15" }));
     expect(await count("MATCH (o:Observation)-[:MEASURES]->(:Entity {id:'competitor:rival-rolls'}) WHERE o.metric = 'followers' RETURN count(o) AS c")).toBe(2);
+    // G6: the rival's Instagram account is a Channel it OWNS and the follower readings MEASURE it (the Competitor keeps them too)
+    const rows = await g.roQuery<{ ch: string; name: string; day: string; v: number }>(
+      `MATCH (:Competitor {id:'competitor:rival-rolls'})-[w:OWNS]->(ch:Channel)<-[m:MEASURES]-(o:Observation {metric:'followers'})
+       WHERE w.until IS NULL AND m.until IS NULL RETURN ch.id AS ch, ch.name AS name, o.asOf AS day, o.value AS v ORDER BY day, o.id`);
+    expect(rows).toEqual([
+      { ch: "channel:rival-rolls-instagram", name: "Rival Rolls on Instagram", day: "2026-10-15", v: 1500 },
+      { ch: "channel:rival-rolls-instagram", name: "Rival Rolls on Instagram", day: "2026-10-19", v: 1620 },
+    ]);
+    // ... and never looks like the business's own Instagram to what finds that by platform or handle
+    const [rivalCh] = await g.roQuery<{ rival: boolean; platform: string | null; handle: string | null; username: string; network: string }>(
+      "MATCH (c:Channel {id:'channel:rival-rolls-instagram'}) RETURN c.rival AS rival, c.platform AS platform, c.handle AS handle, c.username AS username, c.network AS network");
+    expect(rivalCh).toEqual({ rival: true, platform: null, handle: null, username: "rivalrolls", network: "instagram" });
+    expect(await count("MATCH (c:Channel)-[:PART_OF]->(:Business) WHERE c.rival = true RETURN count(c) AS c")).toBe(0);
+    // G6: its ads are Content it OWNS, PUBLISHED_ON its own channel on that library, one per ad, with their dates and button
+    const ads = await g.roQuery<{ ad: string; ch: string; active: boolean | null; cta: string | null; src: string }>(
+      `MATCH (:Competitor {id:'competitor:rival-rolls'})-[w:OWNS]->(a:Content)-[p:PUBLISHED_ON]->(ch:Channel), (a)-[s:SOURCED_FROM]->(d:Document)
+       WHERE w.until IS NULL AND p.until IS NULL AND s.until IS NULL RETURN a.id AS ad, ch.id AS ch, a.active AS active, a.cta AS cta, d.id AS src ORDER BY ad`);
+    expect(ads).toEqual([
+      { ad: "content:google-ad-cr0001fake", ch: "channel:rival-rolls-google-ads", active: null, cta: null, src: "document:public-ads-google-rivalrolls-example" },
+      { ad: "content:meta-ad-111222333", ch: "channel:rival-rolls-facebook", active: true, cta: "Order now", src: "document:public-ads-meta-rival-rolls" },
+      { ad: "content:meta-ad-444555666", ch: "channel:rival-rolls-facebook", active: false, cta: "Learn more", src: "document:public-ads-meta-rival-rolls" },
+    ]);
+    expect(await count("MATCH (:Competitor {id:'competitor:rival-rolls'})-[w:OWNS]->(c:Channel) WHERE w.until IS NULL RETURN count(c) AS c")).toBe(3);
+    // the earlier way of finding a rival's reading (a reading that MEASURES the Competitor) is unchanged, and so is the trend the tool reports
+    expect(await count("MATCH (o:Observation {metric:'followers'})-[:MEASURES]->(:Competitor {id:'competitor:rival-rolls'}) RETURN count(o) AS c")).toBe(2);
     // a competitor's numbers never move the business's own capabilities
     const caps = Object.fromEntries((await deriveCapabilities(g, { now: NOW + 4 * DAY })).map((c) => [c.key, c.accessMode]));
     expect(caps.ads).not.toBe("public");

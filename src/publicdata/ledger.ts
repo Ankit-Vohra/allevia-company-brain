@@ -100,15 +100,20 @@ export class SpendLedger {
 
   entries(): SpendEntry[] { return this.read().entries; }
 
-  /** Reserve a run's estimate, or throw OverBudget naming the budget it would break (the month's first). */
-  async reserve(e: { id: string; tenant: string; actor: string; usd: number }, caps: SpendCaps): Promise<SpendEntry> {
+  /**
+   * Reserve a run's estimate, or throw OverBudget naming the budget it would break (the month's first). `known.monthSpent` is
+   * what the business's own graph says it has spent this month (every spend is an Observation there, from every machine): the
+   * month is the higher of that and this file's, so a spend made elsewhere still counts. The day's cap across all businesses is
+   * the file's alone: it is what the lock is for.
+   */
+  async reserve(e: { id: string; tenant: string; actor: string; usd: number }, caps: SpendCaps, known: { monthSpent?: number } = {}): Promise<SpendEntry> {
     return this.locked(() => {
       const f = this.read();
       const at = this.now();
       const day = dayOf(at);
       const month = day.slice(0, 7);
       const live = f.entries.filter(counts);
-      const monthSpent = sum(live.filter((x) => x.tenant === e.tenant && x.month === month));
+      const monthSpent = Math.max(sum(live.filter((x) => x.tenant === e.tenant && x.month === month)), known.monthSpent ?? 0);
       if (monthSpent + e.usd > caps.monthlyPerBusiness + 1e-9) throw new OverBudget("month", monthSpent, caps.monthlyPerBusiness, e.usd);
       const daySpent = sum(live.filter((x) => x.day === day));
       if (daySpent + e.usd > caps.dailyAll + 1e-9) throw new OverBudget("day", daySpent, caps.dailyAll, e.usd);

@@ -15,14 +15,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isIP } from "node:net";
 import { CreditLedger, DailyCapReached, creditCaps, creditsWords, type CreditCaps } from "./credits.js";
-import type { EditInput, EditOpts, EditResult, EngineQuote, GenerationEngine } from "./engine.js";
+import type { EditInput, EditOpts, EditResult, EngineQuote, GenerationEngine, PhotoshootOpts } from "./engine.js";
 import { EngineDecline } from "./engine.js";
 
 export interface CliResult { code: number | null; stdout: string; stderr: string; timedOut: boolean; missing: boolean }
 export type CliRun = (args: string[], o?: { timeoutMs?: number }) => Promise<CliResult>;
 
 export const DEFAULT_IMAGE_MODEL = "nano_banana_2_1";
-export const DEFAULT_CLIP_MODEL = "kling3_0";
+// The premium ad picture is made by Higgsfield's product-photoshoot backend on gpt_image_2 (about 6.5 credits at 2k), so it has
+// its own per-run cap (ALLEVIA_STUDIO_PREMIUM_CREDIT_CAP, default 8): the ordinary per-edit cap of 5 would always refuse it.
+export const PHOTOSHOOT_MODEL = "gpt_image_2";
+export const DEFAULT_PREMIUM_CAP = 8;
+// The parameters of a silent clip differ by model: Kling takes `sound off`, Seedance `generate_audio false` (and a 720p ceiling).
+export function clipParams(model: string, seconds: number, aspect: string): Record<string, string> {
+  return /^seedance/.test(model)
+    ? { duration: String(seconds), aspect_ratio: aspect, resolution: "720p", generate_audio: "false" }
+    : { duration: String(seconds), aspect_ratio: aspect, sound: "off" };
+}
+export const DEFAULT_CLIP_MODEL = process.env.ALLEVIA_STUDIO_CLIP_MODEL?.trim() || "kling3_0";
 const MAX_OUTPUT = 8 * 1024 * 1024;
 const MAX_RESULT_BYTES = 40 * 1024 * 1024;
 
@@ -176,6 +186,8 @@ interface JobSpec {
   keyParts: string[];
   maxCredits: number;
   onQuote?: (q: EngineQuote) => void;   // told the price just before the generation starts
+  /** What identifies the request when the prompt itself is not stable (a model-written prompt differs run to run). */
+  keyPrompt?: string;
 }
 
 export class HiggsfieldEngine implements GenerationEngine {
@@ -248,12 +260,64 @@ export class HiggsfieldEngine implements GenerationEngine {
     return { image: run.bytes, engine: this.name, model: spec.model, prompt: spec.prompt, jobId: run.jobId, credits: run.credits, recorded: false, createdAt: new Date(run.at).toISOString() };
   }
 
+  // ----- the premium ad picture (Higgsfield product-photoshoot) -----
+
+  // The product-photoshoot backend writes the prompt for a mode (the studio never freehands it). Its `--enhance-only` answer is
+  // free and fast and needs no picture; the picture itself then goes to gpt_image_2 as the reference through the same ledgered,
+  // capped, idempotent path as every other generation (the all-in-one `product-photoshoot create` with a picture was found to
+  // run past the CLI's own 60 second limit on the enhance call, and gives no job id to reserve before waiting).
+  private async enhance(intent: string, opts: PhotoshootOpts): Promise<{ prompt: string; model: string; aspect: string }> {
+    const args = ["--json", "product-photoshoot", "create", "--mode", opts.mode, "--prompt", this.prompt(intent).slice(0, 1500), "--count", "1", "--aspect_ratio", opts.aspect, "--enhance-only"];
+    if (opts.brandContext) args.push("--brand_context", opts.brandContext.slice(0, 600));
+    if (opts.productContext) args.push("--product_context", opts.productContext.slice(0, 600));
+    const r = await this.o.cli(args, { timeoutMs: 150_000 });
+    const j = r.code === 0 ? parseCliJson(r.stdout) : undefined;
+    const first = j && typeof j === "object" && Array.isArray((j as { prompts?: unknown }).prompts) ? ((j as { prompts: unknown[] }).prompts[0] as Record<string, unknown> | undefined) : undefined;
+    const prompt = typeof first?.prompt === "string" ? first.prompt.trim() : "";
+    if (!prompt) {
+      this.log(`photoshoot prompt failed (exit ${r.code}${r.timedOut ? ", timed out" : ""}): ${r.stderr.slice(0, 160).replace(/\s+/g, " ")}`);
+      throw new EngineDecline("unavailable", "The ad styling didn't answer, so no ad picture was made. Nothing was spent.");
+    }
+    // the backend names gpt_image_2; the price was checked for exactly that model, so it is the one used
+    return { prompt, model: PHOTOSHOOT_MODEL, aspect: opts.aspect };
+  }
+
+  private photoshootSpec(input: EditInput, prompt: string, opts: PhotoshootOpts, model: string = PHOTOSHOOT_MODEL, keyPrompt?: string): JobSpec {
+    const ext = input.mime === "image/png" ? "png" : "jpg";
+    return {
+      kind: "image", model, prompt: this.prompt(prompt), params: { resolution: this.o.resolution ?? "2k", aspect_ratio: opts.aspect },
+      file: { flag: "image", name: `product.${ext}`, bytes: input.image }, tenant: input.tenant ?? "unknown",
+      keyParts: [input.originalSha256, opts.treatment, opts.aspect], maxCredits: opts.maxCredits ?? premiumCap(),
+      ...(opts.onQuote ? { onQuote: opts.onQuote } : {}), ...(keyPrompt ? { keyPrompt } : {}),
+    };
+  }
+
+  /** What the premium ad picture would cost, checked against the caps and the balance. Spends nothing. */
+  async quotePhotoshoot(input: EditInput, intent: string, opts: PhotoshootOpts): Promise<EngineQuote> {
+    const spec = this.photoshootSpec(input, intent, opts);
+    return this.withFile(spec, async (file) => (await this.vet(spec, file)).quote);
+  }
+
+  async photoshoot(input: EditInput, intent: string, opts: PhotoshootOpts): Promise<EditResult> {
+    const probe = this.photoshootSpec(input, intent, opts, PHOTOSHOOT_MODEL, intent);
+    // the same request again joins its job (the ledger), so the backend is not asked for a prompt a second time
+    const key = createHash("sha256").update([probe.model, probe.keyPrompt, JSON.stringify(probe.params), ...probe.keyParts].join("\u0001")).digest("hex");
+    const prior = this.o.ledger.existing(key);
+    const e = prior ? { prompt: probe.prompt, model: probe.model, aspect: opts.aspect } : await this.enhance(intent, opts);
+    // The reference picture is attached, and one sentence is added so the model keeps the product itself: the backend's prompt is
+    // written for a product in words, the picture is what it must match.
+    const guard = "Use the attached photo as the exact reference for the product: keep its shape, colour, material, label and logo exactly as in the photo, and do not invent any new text.";
+    const spec = this.photoshootSpec(input, `${e.prompt}\n\n${guard}`, opts, e.model, intent);
+    const run = await this.runJob(spec);
+    return { image: run.bytes, engine: this.name, model: spec.model, prompt: e.prompt, jobId: run.jobId, credits: run.credits, recorded: false, createdAt: new Date(run.at).toISOString() };
+  }
+
   /** A short clip from a still (a 9:16 start frame), priced and capped like an image edit. */
   async clip(o: { image: Buffer; tenant: string; sourceSha256: string; prompt: string; seconds?: number; aspect?: "9:16" | "4:5" | "1:1"; maxCredits?: number; onQuote?: (q: EngineQuote) => void }): Promise<{ video: Buffer; jobId: string; credits: number; model: string }> {
     const seconds = o.seconds ?? 5;
     const spec: JobSpec = {
       kind: "video", model: this.o.clipModel ?? DEFAULT_CLIP_MODEL, prompt: this.prompt(o.prompt),
-      params: { duration: String(seconds), aspect_ratio: o.aspect ?? "9:16", sound: "off" },
+      params: clipParams(this.o.clipModel ?? DEFAULT_CLIP_MODEL, seconds, o.aspect ?? "9:16"),
       file: { flag: "start-image", name: "start.jpg", bytes: o.image }, tenant: o.tenant,
       keyParts: [o.sourceSha256, "clip", String(seconds), o.aspect ?? "9:16"], maxCredits: o.maxCredits ?? this.caps.run,
       ...(o.onQuote ? { onQuote: o.onQuote } : {}),
@@ -288,7 +352,7 @@ export class HiggsfieldEngine implements GenerationEngine {
     const seconds = o.seconds ?? 5;
     const spec: JobSpec = {
       kind: "video", model: this.o.clipModel ?? DEFAULT_CLIP_MODEL, prompt: this.prompt(o.prompt),
-      params: { duration: String(seconds), aspect_ratio: o.aspect ?? "9:16", sound: "off" },
+      params: clipParams(this.o.clipModel ?? DEFAULT_CLIP_MODEL, seconds, o.aspect ?? "9:16"),
       file: { flag: "start-image", name: "start.jpg", bytes: o.image }, tenant: o.tenant, keyParts: [], maxCredits: o.maxCredits ?? this.caps.run,
     };
     return this.withFile(spec, async (file) => (await this.vet(spec, file)).quote);
@@ -332,7 +396,7 @@ export class HiggsfieldEngine implements GenerationEngine {
 
   private async runJob(spec: JobSpec): Promise<{ bytes: Buffer; jobId: string; credits: number; at: number }> {
     return this.withFile(spec, async (file) => {
-      const key = createHash("sha256").update([spec.model, spec.prompt, JSON.stringify(spec.params), ...spec.keyParts].join("\u0001")).digest("hex");
+      const key = createHash("sha256").update([spec.model, spec.keyPrompt ?? spec.prompt, JSON.stringify(spec.params), ...spec.keyParts].join("\u0001")).digest("hex");
       // The same request again joins its job: nothing is created or charged twice.
       const prior = this.o.ledger.existing(key);
       let jobId = prior?.jobId;
@@ -378,6 +442,12 @@ export class HiggsfieldEngine implements GenerationEngine {
       return { bytes, jobId: id, credits, at: Date.now() };
     });
   }
+}
+
+/** The most one premium ad picture may cost, in Studio credits. */
+export function premiumCap(env: NodeJS.ProcessEnv = process.env): number {
+  const n = Number(env.ALLEVIA_STUDIO_PREMIUM_CREDIT_CAP);
+  return env.ALLEVIA_STUDIO_PREMIUM_CREDIT_CAP !== undefined && env.ALLEVIA_STUDIO_PREMIUM_CREDIT_CAP.trim() !== "" && Number.isFinite(n) && n > 0 ? n : DEFAULT_PREMIUM_CAP;
 }
 
 function envNumber(name: string, fallback: number): number {

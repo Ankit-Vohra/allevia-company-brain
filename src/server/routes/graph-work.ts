@@ -16,6 +16,8 @@ import { TouchedSet, type AlleviaTool, type ToolContext } from "../../agent/tool
 import { impactOf } from "../../agent/tools/impact.js";
 import { whoOwns } from "../../agent/tools/people.js";
 import { important, topics } from "../../agent/tools/ranking.js";
+import { plainName } from "../../util/plain.js";
+import { graphStory, type StoryAxis, type StoryBucket } from "../../graph/story.js";
 import { HttpError, errorMessage, type RouteCtx } from "../http.js";
 
 export type AtWorkStatus = "impact" | "nothing_depends" | "not_mapped" | "not_in_records";
@@ -73,6 +75,22 @@ export function impactView(data: { depth: number; total: number; id: string; nam
 }
 
 export function registerGraphWorkRoutes(app: Hono, rc: RouteCtx): void {
+  // "How your team's brain grew" (Brain page, `graph:story` in the CLI): nodes and edges per day or week by kind, counted in
+  // the business's own graph. ?by=recorded (when the team learned it, the default) or happened (the date of the source);
+  // ?bucket=day|week. Read-only: three grouped GRAPH.RO_QUERY reads.
+  app.get("/api/:t/graph/story", async (c) => {
+    const { reg, g } = await rc.tenantOf(c);
+    const by = c.req.query("by") ?? "recorded";
+    const bucket = c.req.query("bucket") ?? "auto";
+    if (!["recorded", "happened"].includes(by) || !["auto", "day", "week"].includes(bucket)) throw new HttpError(400, "by is recorded or happened; bucket is day or week.");
+    try {
+      return c.json(await graphStory(g, { axis: (by === "recorded" ? "recorded" : "source") as StoryAxis, bucket: bucket as StoryBucket | "auto", tenant: reg.slug }));
+    } catch (e) {
+      rc.log(`[api] graph story for ${reg.slug}: ${errorMessage(e)}`);
+      throw new HttpError(503, "The growth story could not be read just now.");
+    }
+  });
+
   app.get("/api/:t/graph/at-work", async (c) => {
     const { reg, g } = await rc.tenantOf(c);
     const asked = (c.req.query("focus") ?? "").trim();
@@ -125,6 +143,12 @@ export function registerGraphWorkRoutes(app: Hono, rc: RouteCtx): void {
       groups: (topData.topics ?? []).map((t) => ({ label: t.label, size: t.size, members: t.members.slice(0, 5).map((m) => ({ id: m.id, name: m.name, type: m.type })) })),
       errors,
     };
-    return c.json(dto);
+    return c.json(plainNames(dto));
   });
+}
+
+// A project reference the privacy filter replaced reads "Supabase prod ([redacted:supabase-ref])" on the Brain page (found in the
+// audit on the real business): the owner sees the name without the marker.
+export function plainNames<T>(dto: T): T {
+  return JSON.parse(JSON.stringify(dto), (_k, v) => (typeof v === "string" && v.includes("[redacted:") ? plainName(v) : v)) as T;
 }

@@ -3,10 +3,13 @@
 // by mode and deliverables approved. Everything is read from the graph; nothing is backfilled, so a program that
 // started today shows Day 0 with whatever the business really has.
 //
+// Each goal also says what is aimed at it (aimed.ts): the current ADVANCES edges into it, grouped by what they are, and the posts with their
+// newest reading, so the plan can say "2 approved drafts and 1 fix are aimed at Enquiries".
+//
 // With `write` (the default), it first brings the program up to date: each goal's newest complete period becomes a
 // reading on the goal, a checkpoint that has come due (day 30, 60, 90) is written with the Observations that measure
 // it, and on day 90 the program graduates. Public mode passes write: false and gets the same card, read only.
-import type { AccessMode, CapabilityState, FirstPassPoint, GoalState, ProgramCheckpoint, ProgramGoal, ProgramScorecard } from "../../shared/contracts.js";
+import type { AccessMode, CapabilityState, FirstPassPoint, GoalAim, GoalState, ProgramCheckpoint, ProgramGoal, ProgramScorecard } from "../../shared/contracts.js";
 import { agentById } from "../../shared/roster.js";
 import type { GraphHandle } from "../graph/client.js";
 import { upsertNode, writeBatch } from "../graph/upsert.js";
@@ -16,6 +19,7 @@ import { learningMetrics } from "../actions/learning.js";
 import { goalPulse } from "../insights/brief.js";
 import { addDays, round } from "../insights/text.js";
 import { localDate } from "../onboard/region.js";
+import { goalAims } from "./aimed.js";
 import {
   CHECKPOINT_DAYS, PROGRAM_DAYS, checkpointWrite, currentProgram, measureGoals, programCheckpoints, programDay, programGoals,
   type CheckpointDay, type GoalRow,
@@ -58,7 +62,7 @@ export async function getProgram(g: GraphHandle, opts: ProgramOpts = {}): Promis
     goals = await programGoals(g, program.id);
   }
 
-  const [checkpoints, pulse, kpi, series, rules, caps, deliverables] = await Promise.all([
+  const [checkpoints, pulse, kpi, series, rules, caps, deliverables, aims] = await Promise.all([
     checkpointList(g, program.id, program.startDate, day),
     goalPulse(g, now, biz),
     learningMetrics(g, now),
@@ -66,6 +70,7 @@ export async function getProgram(g: GraphHandle, opts: ProgramOpts = {}): Promis
     learnedRules(g, program.startAt),
     write ? getCapabilities(g, { now, businessId: biz }) : deriveCapabilities(g, { now, businessId: biz }),
     deliverablesSince(g, program.startAt),
+    goalAims(g, goals),
   ]);
 
   return {
@@ -74,7 +79,7 @@ export async function getProgram(g: GraphHandle, opts: ProgramOpts = {}): Promis
     checkpoints,
     firstPass: { rate: kpi.firstPassRate, decided30d: kpi.decided30d, firstPass30d: kpi.firstPass30d, series },
     learnedRules: rules,
-    goals: goals.map((gl) => programGoal(gl, pulse.find((p) => p.id === gl.id))),
+    goals: goals.map((gl) => programGoal(gl, pulse.find((p) => p.id === gl.id), aims.get(gl.id))),
     capabilities: capabilitySummary(caps),
     deliverables,
   };
@@ -95,7 +100,7 @@ async function programName(g: GraphHandle, id: string): Promise<string | undefin
   return (await g.roQuery<{ n: string }>("MATCH (p:Entity:Program {id:$id}) RETURN p.name AS n", { id }))[0]?.n;
 }
 
-function programGoal(gl: GoalRow, p: Awaited<ReturnType<typeof goalPulse>>[number] | undefined): ProgramGoal {
+function programGoal(gl: GoalRow, p: Awaited<ReturnType<typeof goalPulse>>[number] | undefined, aimed?: GoalAim): ProgramGoal {
   const owner = gl.owner ? agentById(gl.owner) : undefined;
   const conf = gl.baselineConf === "measured" || gl.baselineConf === "reported" ? gl.baselineConf : "unknown";
   return {
@@ -105,6 +110,7 @@ function programGoal(gl: GoalRow, p: Awaited<ReturnType<typeof goalPulse>>[numbe
     targetBasis: gl.targetBasis === "baseline" || gl.targetBasis === "template" ? gl.targetBasis : null,
     current: p?.current ?? null, currentAt: p?.currentAt ?? null, progress: p?.progress ?? null,
     status: (p?.status ?? "no_data") as GoalState, dueAt: gl.dueAt,
+    aimed: aimed ?? { total: 0, groups: [], content: [], sentence: null },
   };
 }
 

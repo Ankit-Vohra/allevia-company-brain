@@ -106,7 +106,7 @@ describe("publish_post", () => {
     expect(d.action).toMatchObject({ status: "dry_run" });
     expect(d.action!.result).toMatch(/^Dry run: would have posted to Instagram \(your account @cafe\): "Dry run caption for the test"\. Nothing was posted; ALLEVIA_ACTIONS_LIVE=1 posts it\.$/);
     expect(h.composio.executed()).toHaveLength(0);
-    expect(await readPost(h.g, contentIdFor(r.data.approvalId))).toBeNull();
+    expect(await readPost(h.g, contentIdFor(r.data.approvalId))).toMatchObject({ status: "dry_run", platform: "instagram" }); // a planned post, nothing sent
   });
 
   it("the owner's edit to the words is what is posted (the OK is on the edited text)", async () => {
@@ -241,17 +241,19 @@ describe("what a made thing becomes when the channel is connected", () => {
     expect((await h.g.roQuery<{ c: string | null }>("MATCH (a:Approval {id:$id}) RETURN a.contentId AS c", { id: saved.approvalId }))[0]!.c).toBe(post.id);
   });
 
-  it("in a dry run no draft is saved either: approving says it would have posted, and the records hold no Content for it", async () => {
+  it("in a dry run the card's post is kept as planned (status dry_run), the Studio's part is attached to it, and nothing is posted", async () => {
     scriptInstagram(h);
     const saved = await madePoster("c");
     const plan = await planPublish({ graph: h.g, connections: h.svc.port(TENANT) }, "instagram");
     if (!plan.ok) throw new Error("no plan");
     await upgradeToPublish(h.g, saved.approvalId, plan.block, NOW);
     const decideWith = (id: string) => decide(h.g, TENANT, id, { decision: "approve" }, { now: NOW, actions: actions(false) });
+    const postedBefore = h.composio.executed("INSTAGRAM_CREATE_POST").length;
     const r = await approveStudioDraft(h.g, { approvalId: saved.approvalId, now: NOW }, decideWith);
-    expect(r.contentId).toBe("");
+    expect(r.contentId).toBe(contentIdFor(saved.approvalId));
     expect((await h.g.roQuery<{ r: string }>("MATCH (a:Approval {id:$id}) RETURN a.result AS r", { id: saved.approvalId }))[0]!.r).toMatch(/^Dry run: would have posted to Instagram/);
-    expect((await h.g.roQuery<{ n: number }>("MATCH (:Approval {id:$id})-[:RESULTED_IN]->(:Action)-[:RESULTED_IN]->(c:Content) RETURN count(c) AS n", { id: saved.approvalId }))[0]!.n).toBe(0);
+    expect((await h.g.roQuery<{ n: number }>("MATCH (:Approval {id:$id})-[:RESULTED_IN]->(:Action)-[:RESULTED_IN]->(c:Content {status:'dry_run'}) RETURN count(c) AS n", { id: saved.approvalId }))[0]!.n).toBe(1);
+    expect(h.composio.executed("INSTAGRAM_CREATE_POST")).toHaveLength(postedBefore);
   });
 
   it("without the channel connected the card stays a draft, and the reason is plain", async () => {

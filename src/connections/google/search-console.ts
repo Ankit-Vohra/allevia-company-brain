@@ -9,12 +9,16 @@ import {
 import { syncCapabilities } from "../../capabilities/ladder.js";
 import { NeedsAttentionError, NotConnectedError, type Availability, type CompleteOutcome, type ConnectionHealth, type ConnectionStatus, type Connector, type ConnectorCtx, type ConnectorInfo, type ConnectStart } from "../types.js";
 import { once } from "../once.js";
+import { noteConnection, noteRead, type ConnRef } from "../graph.js";
+import { isoDate } from "../../util/time.js";
 import { consentUrl, googleAvailability, newPkce, type GoogleConnSettings } from "./oauth.js";
 
 export interface SearchConsoleSession {
   property: string;
   query(q: Omit<AnalyticsQuery, "rowLimit"> & { rowLimit?: number }): Promise<AnalyticsRow[]>;
 }
+
+const REF: ConnRef = { id: CONNECTOR, system: { id: "system:search-console", name: "Search Console" }, provider: "google" };
 
 export class SearchConsoleConnector implements Connector {
   readonly info: ConnectorInfo = {
@@ -54,6 +58,7 @@ export class SearchConsoleConnector implements Connector {
     if (!params.code) throw new ConnectError("google", "Google didn't send a sign-in code. Start again from the app.");
     const g = await ctx.graph();
     const r = await handleCallback(this.deps, g, ctx.tenant, params.code, ctx.businessId, data.verifier);
+    await noteConnection(ctx, REF, r.state === "choose_property" ? "pending" : "connected"); // who and when, and the edges around the System
     if (r.state === "choose_property") return { result: "choose" };
     void this.pull(ctx).catch(() => undefined); // the first look; the daily read retries
     return { result: "connected" };
@@ -62,11 +67,13 @@ export class SearchConsoleConnector implements Connector {
   async select(ctx: ConnectorCtx, value: string): Promise<void> {
     const g = await ctx.graph();
     await chooseProperty(this.deps, g, ctx.tenant, value);
+    await noteConnection(ctx, REF, "picked", { property: value });
     void this.pull(ctx).catch(() => undefined);
   }
 
   async disconnect(ctx: ConnectorCtx): Promise<void> {
     await disconnectSearchConsole(this.deps, await ctx.graph(), ctx.tenant);
+    await noteConnection(ctx, REF, "disconnected"); // also brings the ladder up to date
     await syncCapabilities(await ctx.graph(), { now: ctx.now(), ...(ctx.businessId ? { businessId: ctx.businessId } : {}) }).catch(() => undefined);
   }
 
@@ -78,6 +85,8 @@ export class SearchConsoleConnector implements Connector {
   pull(ctx: ConnectorCtx): Promise<{ ok: boolean; message: string }> {
     return once(`${ctx.tenant}\u0000${CONNECTOR}`, async () => {
       const r = await pullSearchConsole(this.deps, await ctx.graph(), ctx.tenant, ctx.businessId ? { businessId: ctx.businessId } : {});
+      // the read is a node: the snapshot it wrote is PRODUCED by the System, which keeps when it read and how many facts that was
+      if (r.status === "ok") await noteRead(ctx, REF, { docId: `document:gsc-pull-${isoDate(ctx.now())}`, factCount: (r.written ?? 0) + 1, ...(r.through ? { dataThrough: r.through } : {}), settle: false });
       return { ok: r.status === "ok", message: r.message };
     });
   }

@@ -13,6 +13,8 @@ export interface FakeCliOpts {
   /** What `generate get` says: completed, failed or running. May be a function of the call count, per job. */
   status?: "completed" | "failed" | "running" | ((n: number) => "completed" | "failed" | "running");
   resultUrl?: string;
+  /** `product-photoshoot create --enhance-only` fails (the backend's prompt writer is down). */
+  enhanceFails?: boolean;
 }
 
 export interface FakeCli {
@@ -43,6 +45,11 @@ export function fakeCli(o: FakeCliOpts = {}): FakeCli {
       images.push({ path: img, existed: ok, dirMode: ok ? statSync(dirname(img)).mode & 0o777 : null, fileMode: ok ? statSync(img).mode & 0o777 : null, bytes: ok ? readFileSync(img).length : 0 });
     }
     if (cmd === "account status") return o.loggedIn === false ? fail("not logged in") : out({ credits: o.balance ?? 600, email: "owner@example.test" });
+    if (cmd === "product-photoshoot create") {
+      if (o.enhanceFails) return fail("Cannot reach the enhance endpoint");
+      const mode = args[args.indexOf("--mode") + 1] ?? "lifestyle_scene";
+      return out({ mode, prompts: [{ prompt: `[SCENE]\nA ${mode} scene. [PRODUCT PLACEMENT] the product, hands, soft daylight.`, aspect_ratio: args[args.indexOf("--aspect_ratio") + 1] ?? "4:5", model: "gpt_image_2", resolution: "2k" }] });
+    }
     if (cmd === "generate cost") return o.cost === "garbage" ? { ...out({}), stdout: "not json at all" } : out({ credits: o.cost ?? 2 });
     if (cmd === "generate create") {
       if (o.createFails) return fail("boom");
