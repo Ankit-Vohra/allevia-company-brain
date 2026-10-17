@@ -200,12 +200,14 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
   const { groups, rest } = useMemo(() => {
     if (!data) return { groups: [], rest: [] as ConnectionRow[] };
     const order = new Map(data.recommended.map((r, i) => [r.id, i]));
-    const shown = data.recommended.filter((r, i) => i < FIRST || r.state !== "not_connected" || r.id === focusId);
-    const rest = [...data.recommended.filter((r) => !shown.includes(r)), ...data.more];
+    // on Your tools every connected tool sits in its own "Connected" list at the top, so the groups below are what to add next
+    const isOn = (r: ConnectionRow) => variant === "page" && r.state === "connected";
+    const shown = data.recommended.filter((r, i) => !isOn(r) && (i < FIRST || r.state !== "not_connected" || r.id === focusId));
+    const rest = [...data.recommended.filter((r) => !isOn(r) && !shown.includes(r)), ...data.more.filter((r) => !isOn(r))];
     const by = new Map<ConnectionRow["group"], ConnectionRow[]>();
     for (const r of shown) by.set(r.group, [...(by.get(r.group) ?? []), r]);
     return { groups: [...by.entries()].sort((a, b) => Math.min(...a[1].map((r) => order.get(r.id)!)) - Math.min(...b[1].map((r) => order.get(r.id)!))), rest };
-  }, [data, focusId]);
+  }, [data, focusId, variant]);
 
   const connectedRows = data ? [...data.recommended, ...data.more].filter((r) => r.state === "connected") : [];
   const never = data?.never ?? "We never post, send, spend or book without your OK, and your data stays in your own space.";
@@ -230,6 +232,14 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
           {connectedRows.map((r) => <li key={r.id}>{r.message}</li>)}
         </ul>
       )}
+
+      {variant === "page" && connectedRows.length > 0 && (
+        <section className="cx-group" aria-labelledby="cx-g-on">
+          <h2 id="cx-g-on" className="cx-group-h">Connected</h2>
+          <ul className="cx-list">{connectedRows.map((r) => <Row key={r.id} {...rowProps(r)} />)}</ul>
+        </section>
+      )}
+      {variant === "page" && connectedRows.length > 0 && groups.length > 0 && <h2 className="cx-group-h cx-add-h">Add more</h2>}
 
       {groups.map(([g, rows]) => (
         <section key={g} className="cx-group" aria-labelledby={`cx-g-${g}`}>
@@ -258,7 +268,9 @@ export function ConnectionsPanel({ tenantId, variant = "page", onChanged }: { te
                 <li key={f.id} className="cx-row">
                   <Logo row={{ name: f.name, logo: `https://logos.composio.dev/api/${f.id.slice(4)}` }} />
                   <div className="cx-main"><h3 className="cx-name">{f.name}</h3><p className="cx-line">{f.description || `Your team can use ${f.name}.`}</p><p className="cx-meta">Anything it changes in {f.name} waits for your OK.</p>{failed?.id === f.id && <p className="cx-status is-bad" role="alert">{failed.text}</p>}</div>
-                  <div className="cx-act"><button type="button" className="btn btn-gold btn-sm" disabled={busy === f.id} onClick={() => onConnect({ id: f.id, name: f.name } as ConnectionRow)}>Connect</button></div>
+                  <div className="cx-act">{connectedRows.some((r) => r.id === f.id)
+                    ? <span className="cx-on">Connected</span>
+                    : <button type="button" className="btn btn-gold btn-sm" disabled={busy === f.id} onClick={() => onConnect({ id: f.id, name: f.name } as ConnectionRow)}>Connect</button>}</div>
                 </li>
               ))}
             </ul>

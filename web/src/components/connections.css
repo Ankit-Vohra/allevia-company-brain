@@ -75,3 +75,7 @@
 .cx-sheet-field .field { width: 100%; font-family: var(--font-mono, ui-monospace, monospace); }
 .cx-sheet-help, .cx-sheet-promise { font-size: var(--text-xs); line-height: 1.45; color: var(--color-muted); text-wrap: pretty; }
 .cx-sheet-act { display: flex; justify-content: flex-end; gap: var(--space-xs); padding-top: var(--space-xs); }
+
+/* Your tools: what is connected comes first; a tool found by search that is already connected says so */
+.cx-on { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.8125rem; font-weight: 600; color: var(--color-ok, #276b45); }
+.cx-add-h { margin-top: 0.5rem; }
