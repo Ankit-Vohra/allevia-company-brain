@@ -37,3 +37,17 @@ export function firstSentence(s: string) {
 
 /** A quiet word instead of a percentage or a meter. */
 export const likelihood = (c: number) => (c >= 0.8 ? "Very likely to help" : c >= 0.65 ? "Likely to help" : c >= 0.5 ? "Worth trying" : "An early guess");
+
+const PER: Record<string, string> = { week: "a week", month: "a month", year: "a year" };
+
+/** How big an idea is, as one figure: the money at stake when there is a figure, else what it could gain ("≈3× reach"). */
+export function stakeOf(
+  r: { value?: { amount: number; currency?: string; per?: "week" | "month" | "year"; note?: string }; impact: string },
+  money: (n: number, cur?: string) => string,
+): { label: string; big: string; small?: string } {
+  if (r.value) {
+    const small = r.value.per ? PER[r.value.per] : r.value.note;
+    return { label: "At stake", big: money(r.value.amount, r.value.currency), ...(small ? { small } : {}) };
+  }
+  return { label: "Could gain", big: withoutSim(r.impact) };
+}

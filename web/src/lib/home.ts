@@ -1,6 +1,7 @@
 // Home's logic, kept out of the components so it can be tested as it is (tests/web/home.test.ts): which drafts wait for the
-// owner and in what order, what the stand-up's note says in one line, which tool to ask the owner to connect next, who is
-// working right now, and how a meeting is said. The words follow docs/owner-words.md. No React and no DOM.
+// owner and in what order, the status line, what the stand-up's note says in one line, the goals in one figure, which tool to
+// ask the owner to connect next, who is working right now, and how a meeting is said. The words follow docs/owner-words.md.
+// No React and no DOM.
 //
 // Types are the narrow shapes this file reads (the web app's own types satisfy them), so the file runs under the server's
 // compiler too.
@@ -92,6 +93,29 @@ export function planSummary(p: { day: number; goals: ProgramGoal[] } | null | un
   const goals = p.goals.slice(0, 3).map((g) => goalView(g, p.day, fmt));
   const allWaiting = p.goals.length > 0 && p.goals.slice(0, 3).every((g) => goalState(g, p.day) === "no_data" || notStartedYet(g, p.day) || g.current === null);
   return { when: monthWeek(p.day), goals, allWaiting };
+}
+
+/** The goals in one figure for Home's small tile: "2 of 3 going well", or that the first reading is still coming. */
+export function goalsTally(plan: PlanSummary | null): { big: string; line: string } | null {
+  if (!plan || plan.goals.length === 0) return null;
+  const n = plan.goals.length;
+  if (plan.allWaiting) return { big: `${n} ${n === 1 ? "goal" : "goals"}`, line: "First reading next week" };
+  const well = plan.goals.filter((g) => g.status?.tone === "ok").length;
+  return { big: `${well} of ${n}`, line: "going well" };
+}
+
+/** How the business is doing, in a few words for Home's status line: "Weekly signups up 18%". Null before a first reading. */
+export function pulseWords(goals: ReadonlyArray<Pick<ProgramGoal, "name" | "current" | "baseline">> | undefined, pct: (n: number) => string): string | null {
+  const g = (goals ?? []).find((x) => x.current !== null && x.baseline !== null && x.baseline > 0);
+  if (!g) return null;
+  const change = (g.current! - g.baseline!) / g.baseline!;
+  return Math.abs(change) < 0.005 ? `${g.name} level` : `${g.name} ${change > 0 ? "up" : "down"} ${pct(Math.abs(change))}`;
+}
+
+/** Home's one status line: what needs the owner, then how the business is doing. */
+export function homeStatus(waiting: number, pulse: string | null): string {
+  const need = waiting === 0 ? "Nothing needs you" : `${waiting} ${waiting === 1 ? "thing needs" : "things need"} you`;
+  return pulse ? `${need} · ${pulse}` : need;
 }
 
 // ---------------------------------------------------------------- your tools

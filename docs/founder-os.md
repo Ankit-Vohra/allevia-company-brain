@@ -94,19 +94,22 @@ Missing for the Founder OS:
 
 ## Home and Discord
 
-Home (`/`, web app) is the founder's workspace: an ask box, then one calm card per area, each with a "See all" link into
-its full page. The office is its own page (`/office`). The cards are data (`web/src/pages/home-cards.tsx`), so a new area
-(Sales, #41) adds one entry and the layout does not change. Nothing on Home is web-only unless it is listed as a gap.
+Home (`/`, web app) is what a busy founder reads in five seconds: a greeting and one status line ("3 things need you ·
+Weekly signups up 18%"), the ask box, the living brain, "Needs your OK" as compact rows, one row of small tiles, and a "Set
+up" chip row only while something is not set up. The office, the team and the tools have their own pages. The tiles are
+data (`web/src/pages/home-cards.tsx`), so a new area (Sales, #41) adds one entry and the layout does not change. Nothing on
+Home is web-only unless it is listed as a gap.
 
-| Home card | What the owner does there | The same on Discord |
+| On Home | What the owner does there | The same on Discord |
 |---|---|---|
 | Ask box | Types a question; the team's chat opens and the question is sent | `/ask`, or a message in the channel |
-| Waiting for your OK | Sees the real content (poster options and our pick, the email and who gets it, the meeting and when, the words of a post or a fix) and taps Approve, Change or No thanks | The same card, with the same content and the same three buttons (#approvals, and under Today's note) |
-| Today's note | One line; a tap shows the stand-up's picks with their reasons | `/brief`, and the daily post |
-| Your plan | Sees the three goals with bars (week one says "We'll know after your first full week") | Today's note carries the goals. **Gap:** saying OK to the suggested goals, or changing a number, is on the growth plan page only |
-| Your tools | Sees what is connected and the tool that would help most ("Connect Google Analytics to see visits"); Connect opens the provider's page and returns to Home | `/connect` (a link only the owner sees) |
-| Check my website | A button in the same card | `/checkup` |
-| Your team | A strip of the people, the ones working first; a tap opens a chat with that person | The team answers in the hub; nothing to decide there |
+| Needs your OK | Up to three rows (what it is, who made it, how big) with OK, and Look, which opens the real content in a sheet (poster options and our pick, the email and who gets it, the meeting and when, the words of a post or a fix) with Approve, Change or No thanks | The same card, with the same content and the same three buttons (#approvals, and under Today's note) |
+| Today's note tile | One line; a tap opens the full note on "What we noticed" | `/brief`, and the daily post |
+| Goals tile | "2 of 3 going well" with a small bar per goal (week one says "First reading next week"); a tap opens the growth plan | Today's note carries the goals. **Gap:** saying OK to the suggested goals, or changing a number, is on the growth plan page only |
+| Credits tile | Credits left this month; a tap opens Plan and credits | When credits run out, the same sentence with its two buttons as links to the plan page |
+| Set up chips | Only while something is not set up: "OK your goals", "Connect Gmail" (or "Reconnect" a tool that stopped working); Connect opens the provider's page and returns to Home | `/connect` (a link only the owner sees) |
+
+Check my website lives on the growth plan page (`/checkup` on Discord); the team strip lives in the office.
 
 Deciding a draft from Home is the same call as the Approvals page and the Discord buttons (`POST /api/:t/approvals/:id`),
 so an edit becomes a habit the team keeps on every door.

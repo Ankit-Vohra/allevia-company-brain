@@ -5,7 +5,7 @@ import type { ProgramGoal } from "../../shared/contracts.js";
 import { ownerJargon } from "../../src/agent/style.js";
 import { askPath, chatPath, TEAM } from "../../web/src/lib/chat.js";
 import {
-  firstFew, meetingWords, noteLine, notePicks, planSummary, plainTitle, teamStrip, toolsSummary, waitingList, whoIsWorking,
+  firstFew, goalsTally, homeStatus, meetingWords, noteLine, notePicks, planSummary, plainTitle, pulseWords, teamStrip, toolsSummary, waitingList, whoIsWorking,
   type StandupLike, type ToolLike,
 } from "../../web/src/lib/home.js";
 
@@ -101,6 +101,28 @@ describe("your plan, in week one", () => {
     expect(planSummary(null, f)).toBeNull();
     expect(planSummary(undefined, f)).toBeNull();
   });
+  it("comes down to one figure for Home's tile: how many are going well, or that the first reading is coming", () => {
+    const g = (n: number, over: Partial<ProgramGoal> = {}) => goal({ id: `g${n}`, baseline: 20, baselineConf: "measured", current: 35, progress: 0.5, ...over });
+    expect(goalsTally(planSummary({ day: 40, goals: [g(1), g(2), g(3, { status: "at_risk" })] }, f))).toEqual({ big: "2 of 3", line: "going well" });
+    expect(goalsTally(planSummary({ day: 3, goals: [goal(), goal({ id: "g2" })] }, f))).toEqual({ big: "2 goals", line: "First reading next week" });
+    expect(goalsTally(null)).toBeNull();
+    expect(goalsTally(planSummary({ day: 3, goals: [] }, f))).toBeNull();
+  });
+});
+
+describe("Home's status line", () => {
+  const pct = (n: number) => `${Math.round(n * 100)}%`;
+  it("says what needs the owner, then how the business is doing, in a few words", () => {
+    const goals = [{ name: "Weekly signups", current: 312, baseline: 264 }];
+    expect(homeStatus(3, pulseWords(goals, pct))).toBe("3 things need you · Weekly signups up 18%");
+    expect(homeStatus(1, pulseWords([{ name: "Enquiries", current: 38, baseline: 40 }], pct))).toBe("1 thing needs you · Enquiries down 5%");
+    expect(homeStatus(0, pulseWords([{ name: "Enquiries", current: 40, baseline: 40 }], pct))).toBe("Nothing needs you · Enquiries level");
+  });
+  it("leaves the business half out before a first reading", () => {
+    expect(pulseWords([{ name: "Enquiries", current: null, baseline: 40 }, { name: "Visits", current: 10, baseline: 0 }], pct)).toBeNull();
+    expect(pulseWords(undefined, pct)).toBeNull();
+    expect(homeStatus(2, null)).toBe("2 things need you");
+  });
 });
 
 describe("your tools: what is connected and what would help most", () => {
@@ -195,6 +217,8 @@ describe("the words on Home are the owner's words", () => {
       noteLine(null), noteLine({ heading: "", items: [] }),
       toolsSummary([{ id: "google-analytics", name: "Google Analytics", state: "not_connected", available: true }]).next!.line,
       teamStrip(undefined, new Set()).line,
+      homeStatus(3, "Weekly signups up 18%"), homeStatus(0, null),
+      "First reading next week", "going well",
     ];
     for (const l of lines) expect(ownerJargon(l), l).toEqual([]);
   });
