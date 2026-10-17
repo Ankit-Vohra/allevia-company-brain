@@ -242,9 +242,11 @@ async function facts(g: Read, businessId: string): Promise<Facts> {
     `MATCH (a:Audience) OPTIONAL MATCH (x)-[t:TARGETS]->(a) WHERE t.until IS NULL AND NOT x:Competitor
      WITH a, count(x) AS n RETURN a.name AS name ORDER BY n DESC, a.id LIMIT 4`).catch(soft);
   const products = await g.roQuery<{ name: string | null }>(
-    `MATCH (p) WHERE (p:Product OR p:Feature) AND p.mergedInto IS NULL
+    // what the business sells: real products (not app features or funnel steps, never sample records); features only when no product exists
+    `MATCH (p) WHERE (p:Product OR p:Feature) AND p.mergedInto IS NULL AND coalesce(p.simulated, false) = false
      OPTIONAL MATCH (rival:Competitor)-[:OWNS]->(p) WITH p, rival WHERE rival IS NULL
-     OPTIONAL MATCH (p)<-[r]-() WITH p, count(r) AS n RETURN p.name AS name ORDER BY n DESC, p.id LIMIT 4`).catch(soft);
+     OPTIONAL MATCH (p)<-[r]-() WITH p, count(r) AS n
+     RETURN p.name AS name ORDER BY CASE WHEN p:Product THEN 0 ELSE 1 END, n DESC, p.id LIMIT 4`).catch(soft);
   const channels = await g.roQuery<Facts["channels"][number]>(
     "MATCH (c:Channel) WHERE c.rival IS NULL RETURN c.id AS id, c.name AS name, c.url AS url, c.handle AS handle, c.platform AS platform ORDER BY c.id LIMIT 40").catch(soft);
   const pages = await g.roQuery<{ id: string; url: string | null; title: string | null }>(
@@ -288,7 +290,8 @@ function ctaFor(kind: OutcomeKind, f: Facts): { cta: Cta; altCta?: Cta; channel:
       return { cta: { kind: "download", text: "Download the app", ...(play ?? apple ? { url: (play ?? apple)! } : {}) }, channel: play && apple ? "Play Store and App Store" : apple ? "App Store" : "Play Store" };
     }
     case "visits": {
-      const locator = pick(/store|locat|cafe|caf%C3%A9|outlet|find-us|visit/i);
+      // a store-locator page, never a blog post or press article that happens to mention cafés
+      const locator = f.pages.map((p) => p.url ?? "").find((u) => /store|locat|cafe|caf%C3%A9|outlet|find-us|visit/i.test(u) && !/\/(blog|blogs|press|news|article)s?\//i.test(u));
       const order = pick(/order|shop|delivery/i);
       return {
         cta: { kind: "visit", text: "Visit your nearest café", ...(locator ? { url: locator } : {}) },
