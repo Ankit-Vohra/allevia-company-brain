@@ -52,13 +52,13 @@ const kindOf = (t: string): string => ({ Business: "biz", Person: "person", Team
 
 /** The agents who work in the run, in the order they sit along the bottom of the ask picture. */
 const AGENT_ROW: { id: string; roster: string; name: string }[] = [
-  { id: "chief-of-staff", roster: "chief-of-staff", name: "Meera" },
-  { id: "data-analyst", roster: "data-analyst", name: "Kabir" },
-  { id: "oncall-engineer", roster: "oncall-engineer", name: "Zoya" },
-  { id: "qa-release", roster: "qa-release", name: "Imran" },
-  { id: "librarian", roster: "librarian", name: "Sara" },
-  { id: "tech-lead", roster: "tech-lead", name: "Arjun" },
-  { id: "coe-lead", roster: "coe-lead", name: "Isha" },
+  { id: "chief-of-staff", roster: "chief-of-staff", name: "The Chief" },
+  { id: "data-analyst", roster: "data-analyst", name: "Data Detective" },
+  { id: "oncall-engineer", roster: "oncall-engineer", name: "Firefighter" },
+  { id: "qa-release", roster: "qa-release", name: "Bug Hunter" },
+  { id: "librarian", roster: "librarian", name: "Memory Keeper" },
+  { id: "tech-lead", roster: "tech-lead", name: "Techie" },
+  { id: "coe-lead", roster: "coe-lead", name: "Number Cruncher" },
 ];
 const CHIP_Y = 512;
 const chipX = (i: number) => 100 + i * 100;
@@ -248,8 +248,8 @@ export function madeRail(): string {
   <div class="rail__lead"><h2 class="h2" id="made-h">${esc(COPY.made.h2a)} <span class="h2__soft">${esc(COPY.made.h2b)}</span></h2></div>
   ${card("made--tall", "/media/work-avs-ad.webp", 600, 750, "A portrait Instagram ad for an architecture studio: a bright bedroom, the headline 'Rooms planned around how your family lives'.", m[0].what, m[0].who + ", Content")}
   ${card("made--tall", "/media/work-aamdani-poster.webp", 600, 750, "A poster in Hindi for a jobs app: a young man at a roadside stall looks at his phone.", m[1].what, m[1].who + ", Content")}
-  ${card("made--card", "/media/shot-email-times.webp", 720, 894, "A drafted email from Neel to a new enquiry: yes, we can help, and three free times to talk, Monday 19 October 11:00, Tuesday 20 October 09:30, Wednesday 21 October 11:30.", m[2].what, m[2].who + ", Sales")}
-  ${card("made--card made--short", "/media/shot-fix-card.webp", 720, 580, "An approval card: 'Fix sign-up crash in PhoneInput when no country is detected (2.8.1)', a fix for the website, by Meera, with Approve, Change and No thanks.", m[3].what, "Meera and Zoya, Tech")}
+  ${card("made--card", "/media/shot-email-times.webp", 720, 894, "A drafted email from Deal Closer to a new enquiry: yes, we can help, and three free times to talk, Monday 19 October 11:00, Tuesday 20 October 09:30, Wednesday 21 October 11:30.", m[2].what, m[2].who + ", Sales")}
+  ${card("made--card made--short", "/media/shot-fix-card.webp", 720, 580, "An approval card: 'Fix sign-up crash in PhoneInput when no country is detected (2.8.1)', a fix for the website, by The Chief, with Approve, Change and No thanks.", m[3].what, "Firefighter, Tech")}
   <div class="rail__end" aria-hidden="true"></div>
 </div>`;
 }
@@ -260,7 +260,7 @@ export function okPair(): string {
   return `<div class="ok__pair">
   <figure class="frame ok__web">
     <div class="ok__stack">
-      <span class="tag ok__lab">Before</span><img class="ok__img ok__img--before" src="/media/shot-ok-before.webp" width="720" height="564" loading="lazy" decoding="async" alt="A card waiting for your OK: 'Instagram portrait poster: Dussehra in Pune, a few days away', by Tara, with Approve, Change and No thanks.">
+      <span class="tag ok__lab">Before</span><img class="ok__img ok__img--before" src="/media/shot-ok-before.webp" width="720" height="564" loading="lazy" decoding="async" alt="A card waiting for your OK: 'Instagram portrait poster: Dussehra in Pune, a few days away', by Miss Influencer, with Approve, Change and No thanks.">
       <span class="tag ok__lab">After one tap</span><img class="ok__img ok__img--after" data-sc-reveal="right" data-sc-reveal-at="0.28 0.58" src="/media/shot-ok-after.webp" width="720" height="564" loading="lazy" decoding="async" alt="After one tap: a green line says 'Approved: Instagram portrait poster. Draft saved. Nothing was posted.' and the next card moves up.">
     </div>
     <figcaption class="frame__cap">${esc(COPY.ok.web)}</figcaption>
@@ -286,7 +286,7 @@ export function okPair(): string {
 // ---------- the plan ----------
 
 export function planBars(): string {
-  const who: Record<string, string> = { Rohan: "growth-marketer", Tara: "content-strategist", Kabir: "data-analyst" };
+  const who: Record<string, string> = { "Growth Hacker": "growth-marketer", "Miss Influencer": "content-strategist", "Data Detective": "data-analyst" };
   const rows = PLAN_SAMPLE.map((g) => {
     const from = (g.from / g.goal).toFixed(3);
     const to = (g.now / g.goal).toFixed(3);

@@ -51,7 +51,7 @@ export const COPY = {
     h2a: "Ask why.",
     h2b: "The team goes looking.",
     q: "Why did sign-ups drop this week, and what should we do?",
-    s1: "Meera splits the question and sends four colleagues into the brain.",
+    s1: "The Chief splits the question and sends four colleagues into the brain.",
     s2: "Each reads what it holds: the numbers, the crashes, the releases, what you decided before.",
     s3: "The answer comes back with its path, and two things wait for your OK.",
     cap: "A real run on the sample business, recorded in the app. Made-up data.",
@@ -60,10 +60,10 @@ export const COPY = {
     h2a: "They make things.",
     h2b: "Each one waits for you.",
     items: [
-      { id: "ad", what: "An ad from the studio's photos", who: "Tara" },
-      { id: "poster", what: "A launch poster in Hindi", who: "Tara" },
-      { id: "reply", what: "A reply with three times", who: "Neel" },
-      { id: "fix", what: "A fix for the website", who: "Zoya" },
+      { id: "ad", what: "An ad from the studio's photos", who: "Miss Influencer" },
+      { id: "poster", what: "A launch poster in Hindi", who: "Miss Influencer" },
+      { id: "reply", what: "A reply with three times", who: "Deal Closer" },
+      { id: "fix", what: "A fix for the website", who: "Firefighter" },
     ],
   },
   ok: {
@@ -89,7 +89,7 @@ export const COPY = {
 
 /** The growth plan's sample numbers (web/src/mock/program.ts, Aamdani): where it started, where it is, the goal. */
 export const PLAN_SAMPLE: { name: string; unit: string; from: number; now: number; goal: number; status: string; who: string }[] = [
-  { name: "Weekly signups", unit: "a week", from: 264, now: 312, goal: 360, status: "Going well", who: "Rohan" },
-  { name: "Instagram reach", unit: "accounts a month", from: 52_400, now: 61_900, goal: 78_600, status: "Going well", who: "Tara" },
-  { name: "Search clicks", unit: "clicks a month", from: 9_800, now: 10_100, goal: 12_700, status: "Needs a push", who: "Kabir" },
+  { name: "Weekly signups", unit: "a week", from: 264, now: 312, goal: 360, status: "Going well", who: "Growth Hacker" },
+  { name: "Instagram reach", unit: "accounts a month", from: 52_400, now: 61_900, goal: 78_600, status: "Going well", who: "Miss Influencer" },
+  { name: "Search clicks", unit: "clicks a month", from: 9_800, now: 10_100, goal: 12_700, status: "Needs a push", who: "Data Detective" },
 ];

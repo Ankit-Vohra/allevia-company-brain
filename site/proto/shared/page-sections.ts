@@ -117,12 +117,12 @@ export function productBrain(): string {
 /** What the team gets done: the things a founder asks about, one line each (Sales, Studio and posting, the website check-up, the morning stand-up, the numbers, the memory). */
 export function productWork(): string {
   const items: [string, string, string][] = [
-    ["sales-lead", "Enquiries answered, calls booked.", "Neel replies to every new lead and finds a time that suits you both."],
-    ["content-strategist", "Posters, ads and reels, posted after your OK.", "Tara turns a rough phone photo into a post in your voice. Say OK and it goes to Instagram or your Facebook Page at the time you choose."],
-    ["tech-lead", "A check-up for your website.", "Arjun finds what is slow, missing or unclear, and files the fix for your developer."],
+    ["sales-lead", "Enquiries answered, calls booked.", "Deal Closer replies to every new lead and finds a time that suits you both."],
+    ["content-strategist", "Posters, ads and reels, posted after your OK.", "Miss Influencer turns a rough phone photo into a post in your voice. Say OK and it goes to Instagram or your Facebook Page at the time you choose."],
+    ["tech-lead", "A check-up for your website.", "Techie finds what is slow, missing or unclear, and files the fix for your developer."],
     ["chief-of-staff", "A stand-up every morning.", "Your team meets, notices what changed, and puts it in Today’s note before you ask."],
-    ["coe-lead", "Numbers you can trust.", "Ask why sign-ups dropped. Isha checks every figure before it reaches you."],
-    ["librarian", "Nothing lives only in your head.", "Sara keeps every decision, who made it and why, so anyone on your team can find it."],
+    ["coe-lead", "Numbers you can trust.", "Ask why sign-ups dropped. Number Cruncher checks every figure before it reaches you."],
+    ["librarian", "Nothing lives only in your head.", "Memory Keeper keeps every decision, who made it and why, so anyone on your team can find it."],
   ];
   const rows = items.map(([id, h, p]) => `<li class="work__item" data-reveal><span class="face face--md" role="img" aria-label="${esc(AGENTS[id]?.name ?? id)}">${AGENTS[id]?.svg ?? ""}</span><div><h3 class="work__h">${esc(h)}</h3><p>${esc(p)}</p></div></li>`).join("");
   return `<section class="sec work" id="work" aria-labelledby="work-h"><div class="wrap">
@@ -149,7 +149,7 @@ export function okBlock(id: string, more = ""): string {
     <div class="pair">
       <figure class="frame ok__web">
         <div class="ok__stack" data-ok-stack>
-          <img class="ok__img ok__img--before" src="/media/shot-ok-before.webp" width="720" height="564" loading="lazy" decoding="async" alt="A card waiting for your OK: an Instagram poster draft by Tara, with Approve, Change and No thanks.">
+          <img class="ok__img ok__img--before" src="/media/shot-ok-before.webp" width="720" height="564" loading="lazy" decoding="async" alt="A card waiting for your OK: an Instagram poster draft by Miss Influencer, with Approve, Change and No thanks.">
           <img class="ok__img ok__img--after" src="/media/shot-ok-after.webp" width="720" height="564" loading="lazy" decoding="async" alt="After one tap: Approved. Draft saved. Nothing was posted.">
           <span class="ok__tap" aria-hidden="true"></span>
         </div>
@@ -170,7 +170,7 @@ export function productPlan(): string {
     return `<li class="goal ${g.status === "Needs a push" ? "goal--push" : ""}">
       <div class="goal__top"><span class="goal__name">${esc(g.name)}</span><span class="goal__status">${esc(g.status)}</span></div>
       <div class="goal__bar"><span class="goal__fill" style="--to:${frac(g.now).toFixed(3)}"></span></div>
-      <p class="goal__nums"><span class="goal__now num">${f(g.now)} ${esc(g.unit)}</span><span>Started at ${f(g.from)}. Goal ${f(g.goal)}.</span><span class="goal__who">${face(({ Rohan: "growth-marketer", Tara: "content-strategist", Kabir: "data-analyst" } as Record<string, string>)[g.who] ?? "chief-of-staff")}${esc(g.who)}</span></p>
+      <p class="goal__nums"><span class="goal__now num">${f(g.now)} ${esc(g.unit)}</span><span>Started at ${f(g.from)}. Goal ${f(g.goal)}.</span><span class="goal__who">${face(({ "Growth Hacker": "growth-marketer", "Miss Influencer": "content-strategist", "Data Detective": "data-analyst" } as Record<string, string>)[g.who] ?? "chief-of-staff")}${esc(g.who)}</span></p>
     </li>`;
   }).join("");
   return `<section class="sec" id="plan" aria-labelledby="ch6-h" data-plan><div class="wrap chapter chapter--split">
