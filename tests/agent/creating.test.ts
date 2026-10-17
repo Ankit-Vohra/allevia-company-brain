@@ -3,6 +3,7 @@
 // event, the outcome carries the deliverable, the Chief's answer is saved with the card waiting, and nothing is posted.
 // The creating tools reach only the agents whose roster lists them, and a reviewer can never use them.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { CREDIT_COSTS } from "../../shared/plans.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -53,7 +54,7 @@ describe("a request becomes a made thing (integration)", () => {
     // the tool call and its result are visible work
     expect(events.some((e) => e.type === "tool_call" && e.name === "make_poster")).toBe(true);
     const made = events.find((e) => e.type === "deliverable") as Extract<AgentEvent, { type: "deliverable" }>;
-    expect(made).toMatchObject({ agent: "chief-of-staff", kind: "poster", credits: 1 });
+    expect(made).toMatchObject({ agent: "chief-of-staff", kind: "poster", credits: CREDIT_COSTS.static_post });
     expect(made.options).toHaveLength(2);
     expect(made.options.every((o) => o.badge === "ok" && o.thumb.startsWith(`/api/${TENANT}/assets/`))).toBe(true);
     const proposal = events.find((e) => e.type === "proposal") as Extract<AgentEvent, { type: "proposal" }>;
