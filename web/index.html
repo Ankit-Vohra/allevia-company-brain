@@ -5,13 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Allevia · your company brain</title>
     <meta name="description" content="Allevia: a company brain for small business owners. Its AI staff walk your knowledge graph and show their work." />
-    <meta name="theme-color" content="#FBF9F4" />
+    <meta name="theme-color" content="#f4eee3" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- installable: Add to Home Screen opens Allevia full screen, like an app (no push notifications) -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Allevia" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <script>
       try {
         // light unless the owner chose the night office; never the OS setting
         var t = localStorage.getItem("allevia.theme");
         document.documentElement.dataset.theme = t === "dark" ? "dark" : "light";
+        if (t === "dark") document.querySelector('meta[name="theme-color"]').setAttribute("content", "#2f2621");
       } catch (e) {}
     </script>
   </head>

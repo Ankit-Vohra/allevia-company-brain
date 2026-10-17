@@ -85,6 +85,8 @@ export function AppProvider({ mode, initialTenants, authRequired = false, accoun
     const root = document.documentElement;
     root.dataset.theme = effectiveTheme;
     root.dataset.effectiveTheme = effectiveTheme;
+    // the installed app's status bar follows the office: peach by day, dark warm at night
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", effectiveTheme === "dark" ? "#2f2621" : "#f4eee3");
     if (mood === "dusk") root.dataset.dusk = "1";
     else delete root.dataset.dusk;
   }, [effectiveTheme, mood]);
