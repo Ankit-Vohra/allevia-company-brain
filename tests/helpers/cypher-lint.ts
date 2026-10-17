@@ -28,7 +28,9 @@ function nodePatterns(text: string): NodePattern[] {
   return out;
 }
 
-const labelOk = (labels: string[]): boolean => labels.includes("Entity") || labels.includes("__EXPR__");
+// Registry labels with their own unique, indexed id (src/auth/accounts.ts ACCOUNT_INDEXES): a lookup by id uses that index.
+const OWN_ID_INDEX = ["User"];
+const labelOk = (labels: string[]): boolean => labels.includes("Entity") || labels.includes("__EXPR__") || labels.some((l) => OWN_ID_INDEX.includes(l));
 
 export function idAnchorsWithoutEntity(text: string): string[] {
   const found: string[] = [];

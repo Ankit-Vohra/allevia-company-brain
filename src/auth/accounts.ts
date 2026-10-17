@@ -248,8 +248,8 @@ export async function resolveSession(raw: unknown, opts?: AccountOpts): Promise<
   if (!isSecret(raw)) return null;
   const hash = sha256(raw);
   const rows = await read<UserRow & { expiresAt: number; lastSeenAt: number; ms: Array<{ slug: string | null; name: string | null; role: string | null }> }>(opts,
-    `MATCH (u:User)-[:HAS_SESSION]->(s:Session {idHash:$hash})
-     WHERE s.revokedAt IS NULL AND s.expiresAt > $now AND u.disabledAt IS NULL
+    `MATCH (u:User)-[hs:HAS_SESSION]->(s:Session {idHash:$hash})
+     WHERE hs IS NOT NULL AND s.revokedAt IS NULL AND s.expiresAt > $now AND u.disabledAt IS NULL
      OPTIONAL MATCH (u)-[m:MEMBER_OF]->(t:Tenant)
      WITH u, s, collect({slug: t.slug, name: t.name, role: m.role}) AS ms
      RETURN u.id AS id, u.email AS email, u.name AS name, u.createdAt AS createdAt, s.expiresAt AS expiresAt, s.lastSeenAt AS lastSeenAt, ms LIMIT 1`,
@@ -284,7 +284,7 @@ export async function revokeSession(hash: string, opts?: AccountOpts): Promise<n
 export async function revokeSessions(userId: string, o: AccountOpts & { except?: string } = {}): Promise<number> {
   const meta = await writable(o);
   const rows = await meta.query<{ n: number }>(
-    "MATCH (u:User {id:$uid}) WITH u MATCH (u)-[:HAS_SESSION]->(s:Session) WHERE s.revokedAt IS NULL AND s.idHash <> $keep SET s.revokedAt = $now RETURN count(s) AS n",
+    "MATCH (u:User {id:$uid}) WITH u MATCH (u)-[hs:HAS_SESSION]->(s:Session) WHERE s.revokedAt IS NULL AND s.idHash <> $keep SET s.revokedAt = $now RETURN count(hs) AS n",
     { uid: userId, keep: o.except ?? "", now: nowOf(o) });
   return rows[0]?.n ?? 0;
 }
@@ -341,7 +341,7 @@ export async function membersOf(slug: string, opts?: AccountOpts): Promise<Membe
 /** Invites not used yet and not expired. */
 export async function openInviteCount(slug: string, opts?: AccountOpts): Promise<number> {
   const rows = await read<{ n: number }>(opts,
-    "MATCH (t:Tenant {slug:$slug}) WITH t MATCH (t)-[:HAS_INVITE]->(i:Invite) WHERE i.usedAt IS NULL AND i.expiresAt > $now RETURN count(i) AS n", { slug, now: nowOf(opts) });
+    "MATCH (t:Tenant {slug:$slug}) WITH t MATCH (t)-[hi:HAS_INVITE]->(i:Invite) WHERE i.usedAt IS NULL AND i.expiresAt > $now RETURN count(hi) AS n", { slug, now: nowOf(opts) });
   return rows[0]?.n ?? 0;
 }
 
