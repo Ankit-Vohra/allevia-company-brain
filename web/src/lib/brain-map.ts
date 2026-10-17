@@ -158,13 +158,13 @@ export function readingNow(events: AgentEvent[], o: { people?: number; max?: num
   return ids.size ? { ids: [...ids], nodes, edges, who } : NOT_READING;
 }
 
-/** "Sara", "Sara and Kabir", "Sara, Kabir and Meera". */
+/** "Memory Keeper", "Memory Keeper and Data Detective", "Memory Keeper, Data Detective and The Chief". */
 export function namesWords(names: string[]): string {
   if (names.length <= 1) return names[0] ?? "";
   return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
-/** "Sara is reading 5 things", "Sara and Kabir are reading 1 thing". */
+/** "Memory Keeper is reading 5 things", "Memory Keeper and Data Detective are reading 1 thing". */
 export function readingWords(names: string[], count: number): string {
   if (!names.length || !count) return "";
   return `${namesWords(names)} ${names.length === 1 ? "is" : "are"} reading ${count} ${count === 1 ? "thing" : "things"}`;

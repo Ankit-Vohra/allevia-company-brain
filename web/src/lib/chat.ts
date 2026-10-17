@@ -4,6 +4,7 @@
 import type { AgentEvent, AgentId, AgentMode, SkillView, SourceRef, TurnChecks } from "../../../shared/contracts.js";
 import { PLAIN_TOOLS } from "../../../shared/plain-tools.js";
 import { AGENTS, agentById } from "../../../shared/roster.js";
+import { LEGACY_NAMES } from "../../../shared/legacy-names.js";
 import { STARTERS } from "./starters.js";
 import { humanDates } from "./words.js";
 
@@ -32,8 +33,11 @@ export function askPath(text: string, who: Who = TEAM): string {
 export function whoFrom(param: string | undefined): Who {
   if (!param || param === TEAM || param === CHIEF) return TEAM;
   if (agentById(param)) return param;
-  const byName = AGENTS.find((a) => a.name.toLowerCase() === param.toLowerCase()); // /chat/rohan reads as well as /chat/growth-marketer
-  return byName ? byName.id : TEAM;
+  // /chat/growth-hacker reads as well as /chat/growth-marketer, and an old link by the name before the rename still lands
+  const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const byName = AGENTS.find((a) => slug(a.name) === slug(param));
+  const byOldName = Object.entries(LEGACY_NAMES).find(([old]) => old.toLowerCase() === param.toLowerCase())?.[1];
+  return byName ? byName.id : byOldName ?? TEAM;
 }
 
 /** Which entry a thread belongs to: the person it was a direct chat with, else the whole team. */
@@ -131,7 +135,7 @@ export function teamTalk(events: readonly AgentEvent[]): TalkLine[] {
         const k = `${e.from}>${e.to}>${e.note}`;
         if (handed.has(k)) break;
         handed.add(k);
-        // a handoff often carries the sender's own notes ("Zoya's finding: …"): the name is already on the line
+        // a handoff often carries the sender's own notes ("Firefighter's finding: …"): the name is already on the line
         out.push({ kind: "handoff", from: e.from, to: e.to, text: clip(noteText(e.note).replace(/^[A-Z][\w-]*['’]s (?:notes?|findings?):\s*/i, ""), 260), at });
         break;
       }

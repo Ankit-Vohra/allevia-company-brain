@@ -266,7 +266,7 @@ export default function AskPage() {
           ) : turns.length === 0 && !detail.loading ? (
             <div className="ask-empty">
               <h2 className="ask-empty-title">Ask {tenant.name}'s team anything about the business.</h2>
-              <p className="muted">Meera reads your question, asks the right people on your team, and gives you one clear answer with its sources.</p>
+              <p className="muted">The Chief reads your question, asks the right people on your team, and gives you one clear answer with its sources.</p>
               {suggestions.length > 0 && (
                 <ul className="ask-suggest" aria-label="Try one of these">
                   {suggestions.map((s) => (
@@ -392,12 +392,12 @@ function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onRe
   const checksOk = !!checks && checks.citationsValid && checks.numbersGrounded && checks.simulatedDisclosed && checks.freshnessDisclosed;
   const nSteps = view.laneOrder.reduce((n, k) => n + view.lanes[k]!.steps.length, 0);
 
-  // while the team works: one quiet line, "Tara is drafting ideas…"
+  // while the team works: one quiet line, "Miss Influencer is drafting ideas…"
   const working = view.activeAgents[view.activeAgents.length - 1];
   const lane = working ? laneOf(view, working) : undefined;
   const status = plain(lane?.status ?? lane?.task ?? "").replace(/[.…]+$/, "").trim();
   const nm = working ? agentDef(working)?.name : undefined;
-  const workingLine = !live ? "" : !nm ? "Meera is reading your question…" : !status ? `${nm} is on it…` : status.startsWith(`${nm} is `) ? `${status}…` : /^\w+ing\b/i.test(status) ? `${nm} is ${status.charAt(0).toLowerCase()}${status.slice(1)}…` : `${nm}: ${status.charAt(0).toLowerCase()}${status.slice(1)}…`;
+  const workingLine = !live ? "" : !nm ? "The Chief is reading your question…" : !status ? `${nm} is on it…` : status.startsWith(`${nm} is `) ? `${status}…` : /^\w+ing\b/i.test(status) ? `${nm} is ${status.charAt(0).toLowerCase()}${status.slice(1)}…` : `${nm}: ${status.charAt(0).toLowerCase()}${status.slice(1)}…`;
 
   return (
     <li className={`turn${live ? " is-live" : ""}`}>
@@ -418,7 +418,7 @@ function TurnBlock({ turn, view, caps, latest, activeCite, onCite, onNodes, onRe
             <div className={`answer${view.final ? "" : " is-streaming"}`}>
               <div className="answer-by">
                 <AgentAvatar id="chief-of-staff" size={24} ring={!view.final} />
-                <span><b>Meera</b></span>
+                <span><b>The Chief</b></span>
               </div>
               <Markdown text={view.answer} nodes={view.nodes} onCite={(id) => { onCite(id); }} activeId={activeCite} className="answer-md" />
               {view.final && latest && quickReplies(view.answer).map((q) => (

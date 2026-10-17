@@ -107,7 +107,7 @@ export interface Speech { agent: string; text: string; ms: number }
 export interface Meeting {
   attendees: string[];
   lines: Speech[];
-  handoffs: string[];              // the people Meera hands a brief to (a dog carries each)
+  handoffs: string[];              // the people The Chief hands a brief to (a dog carries each)
   phase: "gather" | "talk";
   t0: number;
   said: number;
@@ -456,9 +456,9 @@ export class Life {
   // ------------------------------------------------------------------ the morning stand-up
 
   /**
-   * The team stand-up: Meera and the people who got work walk to the board table in the game room (or the nearest free
-   * seats), Meera says what the team noticed, each person says what they will draft, then everyone goes back to their desk
-   * and a dog carries Meera's brief to each of them. With reduced motion nobody walks: the briefs are only counted.
+   * The team stand-up: The Chief and the people who got work walk to the board table in the game room (or the nearest free
+   * seats), The Chief says what the team noticed, each person says what they will draft, then everyone goes back to their desk
+   * and a dog carries The Chief's brief to each of them. With reduced motion nobody walks: the briefs are only counted.
    */
   standup(attendees: string[], lines: Speech[], handoffs: string[]) {
     const who = attendees.filter((id) => this.people.has(id) && this.L.desks[id]);

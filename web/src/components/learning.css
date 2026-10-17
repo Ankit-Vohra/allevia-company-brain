@@ -36,7 +36,7 @@ button.rule-text:hover { text-decoration-color: var(--color-accent); }
 .rule-row.is-retired .rule-book { filter: grayscale(1); opacity: 0.45; }
 .rule-row.is-compact { padding: 6px 0; }
 
-/* ---------- the LEARNED_FROM path, opened from Sara's shelf ---------- */
+/* ---------- the LEARNED_FROM path, opened from Memory Keeper's shelf ---------- */
 dialog.lp-dialog {
   width: min(620px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 0; border: var(--rule); border-radius: var(--radius-md);
   background: var(--color-paper); color: var(--color-ink); box-shadow: var(--shadow-lift); overflow: auto;

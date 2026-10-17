@@ -4,7 +4,7 @@
 // client only.
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentEvent, AgentId } from "@shared/contracts";
-import { AGENTS, DEPARTMENTS } from "@shared/roster";
+import { AGENTS, DEPARTMENTS, plainWho } from "@shared/roster";
 import { lightingAt } from "../lib/daylight";
 import { plain } from "../lib/words";
 import { type LaneView, type RunView, laneOf } from "../state/derive";
@@ -53,14 +53,14 @@ export interface OfficeCanvasProps {
   onSelect: (agent: AgentId) => void;
   /** Desks the owner switched off (Team settings): the agent sits idle, dimmed, with an "off" sign. */
   off?: ReadonlySet<AgentId>;
-  /** One book on Sara's shelf per learned rule, oldest first. */
+  /** One book on Memory Keeper's shelf per learned rule, oldest first. */
   books?: ShelfBook[];
   onBook?: (ruleId: string) => void;
   /** Said to screen readers and shown in the page when something happens (a dog delivers). */
   onStatus?: (text: string) => void;
-  /** Pinned to the bottom of the office (the quiet "Tara is drafting ideas…" line). */
+  /** Pinned to the bottom of the office (the quiet "Miss Influencer is drafting ideas…" line). */
   overlay?: ReactNode;
-  /** The morning stand-up to act out: the people walk to the board table, talk, and the dogs carry Meera's briefs. */
+  /** The morning stand-up to act out: the people walk to the board table, talk, and the dogs carry The Chief's briefs. */
   standup?: OfficeStandup | null;
   /** Bump to play the stand-up (again). */
   standupPlay?: number;
@@ -77,7 +77,7 @@ const libraryShelf = (L: OfficeLayout) => L.rooms.find((r) => r.dept.id === "kno
 // The picture frame in the Content Studio zone, where the Studio pins the newest photo.
 const studioFrame = (L: OfficeLayout) => L.rooms.find((r) => r.dept.id === "content")?.wall.find((w) => w.kind === "frame")?.rect;
 
-/** The people the current request has put to work: the plan's steps, whoever has started, and Meera while she writes. */
+/** The people the current request has put to work: the plan's steps, whoever has started, and The Chief while she writes. */
 function busyOf(v: RunView | undefined): Set<string> {
   const s = new Set<string>();
   if (!v) return s;
@@ -219,7 +219,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
         if (e.thumb) nextPhoto = { src: e.thumb.replace(/\?w=\d+$/, "?w=96"), kind: e.kind };
         const fr = studioFrame(L);
         if (fr && !catchUp && !live.current.reducedMotion) effects.current.push({ kind: "sparkle", x: fr.x + fr.w / 2, y: fr.y + fr.h / 2, t0: now, dur: 900 });
-        if (!catchUp) nextTransients[e.agent] = { text: e.kind === "original" ? "New photo in: having a look" : "A version is ready for Nisha", tone: "done", until: Date.now() + 2600 / sp };
+        if (!catchUp) nextTransients[e.agent] = { text: e.kind === "original" ? "New photo in: having a look" : "A version is ready for Fact Checker", tone: "done", until: Date.now() + 2600 / sp };
       } else if (e.type === "assessment") {
         if (!catchUp) nextTransients[e.agent] = { text: `${e.verdict[0]!.toUpperCase()}${e.verdict.slice(1)} it`, tone: "ok", until: Date.now() + 2600 / sp };
       } else if (e.type === "agent_done") {
@@ -340,7 +340,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
         }
       }
 
-      // Sara's shelf: one book per learned rule
+      // Memory Keeper's shelf: one book per learned rule
       const shelf = libraryShelf(L);
       if (shelf && shelfBooks) drawLearnedShelf(ctx, shelf, shelfBooks, p, lit);
 
@@ -547,7 +547,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
                   className={`agent-hit${phase === "working" ? " is-working" : ""}${phase === "done" ? " is-done" : ""}${selected === a.id ? " is-selected" : ""}${isOff ? " is-off" : ""}`}
                   style={{ left: (d.desk.x - 3) * k, top: (d.sprite.y + 1) * k, width: (d.desk.w + 6) * k, height: (d.desk.y + d.desk.h - d.sprite.y + 1) * k }}
                   onClick={() => onSelect(a.id)}
-                  aria-label={`${a.name}, ${a.title}${isOff ? ", switched off" : phase === "working" ? `, working: ${lane?.status ?? lane?.task ?? ""}` : phase === "done" ? ", finished" : ""}. Open profile.`}
+                  aria-label={`${plainWho(a.id)}${isOff ? ", switched off" : phase === "working" ? `, working: ${lane?.status ?? lane?.task ?? ""}` : phase === "done" ? ", finished" : ""}. Open profile.`}
                 >
                   {isOff && <span className="desk-off" style={{ left: (d.desk.w / 2 + 3) * k, top: (d.desk.y - d.sprite.y + 10) * k }} aria-hidden="true">off</span>}
                   <span className="agent-name" style={{ top: (d.desk.h + d.desk.y - d.sprite.y + 2) * k }}>
@@ -562,7 +562,7 @@ export function OfficeCanvas({ view, events, runKey, dark, reducedMotion, speed,
               if (!shelf) return null;
               const { slots, capacity } = learnedSlots(shelf, books.length);
               return (
-                <div className="shelf-hits" role="group" aria-label={`Sara's shelf: ${books.length} ${books.length === 1 ? "thing" : "things"} learned from your edits`}>
+                <div className="shelf-hits" role="group" aria-label={`Memory Keeper's shelf: ${books.length} ${books.length === 1 ? "thing" : "things"} learned from your edits`}>
                   {slots.map((sl, i) => (
                     <button
                       key={books[i]!.id}

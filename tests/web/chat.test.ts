@@ -14,7 +14,7 @@ import {
 
 const GOOD: TurnChecks = { citationsValid: true, invalidCitations: [], numbersGrounded: true, ungroundedNumbers: [], simulatedDisclosed: true, freshnessDisclosed: true, modeDisclosed: true };
 
-// One team turn: Meera plans, Kabir finds, Tara builds on it, Isha and Nisha check, Meera answers.
+// One team turn: The Chief plans, Data Detective finds, Miss Influencer builds on it, Number Cruncher and Fact Checker check, The Chief answers.
 const RUN: AgentEvent[] = [
   { type: "session", tenant: "t", sessionId: "session:1", turnId: "turn:1", question: "What should we post?" },
   { type: "plan", by: "chief-of-staff", rationale: "A plan question: numbers first, then ideas.", steps: [
@@ -45,7 +45,7 @@ describe("addresses and who a thread belongs to", () => {
   it("the team is the default; a roster id is a person; the Chief is the team", () => {
     expect(whoFrom(undefined)).toBe(TEAM);
     expect(whoFrom("team")).toBe(TEAM);
-    expect(whoFrom("Rohan")).toBe("growth-marketer"); // a first name in the address works too
+    expect(whoFrom("Growth Hacker")).toBe("growth-marketer"); // a first name in the address works too
     expect(whoFrom("chief-of-staff")).toBe(TEAM);
     expect(whoFrom("content-strategist")).toBe("content-strategist");
     expect(whoFrom("ghost")).toBe(TEAM);
@@ -89,12 +89,12 @@ describe("watch the team talk", () => {
     ]);
   });
   it("says it in names and plain sentences, with no [[ids]]", () => {
-    expect(talk[0]!.text).toBe("A plan question: numbers first, then ideas. I'm asking Kabir and Tara.");
+    expect(talk[0]!.text).toBe("A plan question: numbers first, then ideas. I'm asking Data Detective and Miss Influencer.");
     expect(talk[1]!.text).toBe("Rank our hooks");
-    expect(talk[2]!.text).toBe("Write three briefs (after Kabir)");
+    expect(talk[2]!.text).toBe("Write three briefs (after Data Detective)");
     expect(talk.find((l) => l.kind === "finding")!.text).toBe("Salary reveals got 3.4 times our median reach.");
-    expect(talk.find((l) => l.kind === "review" && l.from === "coe-lead")).toMatchObject({ verdict: "fix", text: "Sent Kabir's note back for a fix. Use the 90 day figure." });
-    expect(talk.find((l) => l.kind === "review" && l.from === "fact-checker")!.text).toBe("Checked Tara's note: fine. All claims trace.");
+    expect(talk.find((l) => l.kind === "review" && l.from === "coe-lead")).toMatchObject({ verdict: "fix", text: "Sent Data Detective's note back for a fix. Use the 90 day figure." });
+    expect(talk.find((l) => l.kind === "review" && l.from === "fact-checker")!.text).toBe("Checked Miss Influencer's note: fine. All claims trace.");
     expect(talk.at(-1)!.text).toBe("Suggests: Draft 3 reels. This waits for your OK.");
     for (const l of talk) expect(ownerJargon(l.text), l.text).toEqual([]);
   });
@@ -105,7 +105,7 @@ describe("watch the team talk", () => {
   it("reads clean as the founder saw it: no bold marks, no repeated '<name>'s finding:', a skill named once, days in words", () => {
     const lines = teamTalk([
       { type: "finding", agent: "oncall-engineer", findingId: "z1", text: "**Most likely still happening today.** The newest crash data is from 2026-10-15.", citations: [] },
-      { type: "handoff", from: "oncall-engineer", to: "data-analyst", note: "Zoya's finding: **Most likely still happening today.**" },
+      { type: "handoff", from: "oncall-engineer", to: "data-analyst", note: "Firefighter's finding: **Most likely still happening today.**" },
       { type: "skill_used", agent: "qa-release", skillId: "release-check", name: "Did the last release break anything?", source: "code" },
     ]);
     expect(lines.map((l) => l.text)).toEqual([
@@ -200,7 +200,7 @@ describe("what to say", () => {
   });
   it("the tone sentences are one instruction each, naming the person", () => {
     expect(TONES.map((t) => t.id)).toEqual(["warm", "direct", "playful", "formal"]);
-    expect(toneDirective("Tara", TONES[0]!)).toBe("Tara, always write in a warm, friendly tone, like a good neighbour");
+    expect(toneDirective("Miss Influencer", TONES[0]!)).toBe("Miss Influencer, always write in a warm, friendly tone, like a good neighbour");
   });
   it("only the Discord door is called out", () => {
     expect(doorWords("discord")).toBe("From Discord");

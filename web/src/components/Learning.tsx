@@ -1,6 +1,6 @@
 // Learning, made visible (product design §3.2, §8): the chip an edit earns on the Approvals card, a learned rule as a
 // list row with its retire action, and the path a rule was learned along (rule -LEARNED_FROM-> approval -RESULTED_IN->
-// the draft), opened from a book on Sara's shelf in the office.
+// the draft), opened from a book on Memory Keeper's shelf in the office.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import type { LearnedRuleDto, NodeRef } from "@shared/contracts";
@@ -166,7 +166,7 @@ export function LearnedPathDialog({ rule, onClose, onRetired }: { rule: LearnedR
           <header className="lp-head">
             <span className="lp-portrait" aria-hidden="true"><img src={avatarUrl("librarian", 4)} width={44} height={44} alt="" /></span>
             <div>
-              <p className="lp-eyebrow">From Sara’s shelf · learned {fmtDate(rule.learnedAt ?? undefined)}</p>
+              <p className="lp-eyebrow">From Memory Keeper’s shelf · learned {fmtDate(rule.learnedAt ?? undefined)}</p>
               <h2 id="lp-title" className="lp-title">{rule.text}</h2>
             </div>
             <button type="button" className="btn btn-quiet btn-icon" onClick={onClose} aria-label="Close"><Icon name="close" /></button>

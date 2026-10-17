@@ -1,9 +1,9 @@
-// Chat: one calm place to talk to your team. On the left, "Your team" (the whole team: Meera sends the work to the right
+// Chat: one calm place to talk to your team. On the left, "Your team" (the whole team: The Chief sends the work to the right
 // people) and one entry per person, each with a dot for working, ready or resting and the conversations had with them. In
 // the middle, the conversation. The same conversations are in Discord: one conversation, two doors.
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Link, NavLink, useNavigate, useParams, useSearchParams } from "react-router";
-import { AGENTS } from "@shared/roster";
+import { AGENTS, teamOf } from "@shared/roster";
 import { api, getMode, getPublicMode, type AgentPatch } from "../api";
 import { AgentDrawer } from "../components/AgentDrawer";
 import { AgentAvatar, agentDef, fmtAgo } from "../components/bits";
@@ -72,7 +72,7 @@ export default function ChatPage() {
     if (pending?.sessionId && pending.sessionId !== sessionId) nav(chatPath(who, pending.sessionId), { replace: true });
   }, [pending?.sessionId, sessionId, who, nav]);
   // a link into a thread under the wrong person is sent to the right one
-  // (not while a new thread is still being set up: it has no turns and no person yet, and a question to Kabir jumped to
+  // (not while a new thread is still being set up: it has no turns and no person yet, and a question to Data Detective jumped to
   // "Your team" until his answer was saved)
   useEffect(() => {
     const d = thread.detail;
@@ -385,7 +385,7 @@ function Rail({ who, sessionId, team, threads, mine, loading, working, onPick }:
       <ul className="rail-list">
         {people.map((a) => {
           const s = team?.find((x) => x.id === a.id);
-          return entry(a.id, <AgentAvatar id={a.id} size={36} />, a.name, a.title, dotOf(s, working.has(a.id)));
+          return entry(a.id, <AgentAvatar id={a.id} size={36} />, a.name, teamOf(a.id) ?? a.title, dotOf(s, working.has(a.id)));
         })}
       </ul>
     </nav>

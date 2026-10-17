@@ -12,7 +12,7 @@ import { mockConnections } from "./mock/connections";
 const CONNECT_LIVE_ONLY = "Connecting Search Console needs the live server.";
 const CHECKUP_LIVE_ONLY = "The website check-up needs the live server.";
 const NUMBERS_LIVE_ONLY = "Adding your numbers needs the live server: your file is read and kept there.";
-const STUDIO_LIVE_ONLY = "The Studio needs the live server: the photos, Tara's and Nisha's checks and the edits all run there.";
+const STUDIO_LIVE_ONLY = "The Studio needs the live server: the photos, Miss Influencer's and Fact Checker's checks and the edits all run there.";
 
 /** GET /api/:t/studio/latest: the last Studio run's events and where its card stands. */
 export interface StudioLatest {

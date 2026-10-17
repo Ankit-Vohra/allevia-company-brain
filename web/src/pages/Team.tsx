@@ -3,7 +3,7 @@
 // your instructions to them and what they learned from your edits. Switching someone on or off redraws the office.
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import type { AgentMode, DirectiveDiffLine, DirectivePreview } from "@shared/contracts";
-import { AGENTS } from "@shared/roster";
+import { AGENTS, teamOf } from "@shared/roster";
 import { api, getPublicMode, type AgentPatch } from "../api";
 import { AgentAvatar } from "../components/bits";
 import { Icon } from "../components/Icon";
@@ -30,10 +30,10 @@ const AUTONOMY = [
 ];
 
 const EXAMPLES = [
-  "No emojis on LinkedIn; switch Arjun off",
-  "Tara, always mention the free first consultation",
+  "No emojis on LinkedIn; switch Techie off",
+  "Miss Influencer, always mention the free first consultation",
   "Never say cheap",
-  "Rohan, go light till the season starts",
+  "Growth Hacker, go light till the season starts",
 ];
 
 const changed = () => window.dispatchEvent(new Event(TEAM_CHANGED));
@@ -166,7 +166,7 @@ function PersonRow({ a, open, onToggle, onPatch, onRetire, onRemoveNote, onTell 
         <button type="button" className="tm-open" aria-expanded={open} aria-controls={`${uid}-detail`} onClick={onToggle}>
           <AgentAvatar id={a.id} size={40} />
           <span className="tm-id">
-            <span className="tm-name">{a.name}<span className="tm-role">{a.title}</span></span>
+            <span className="tm-name">{a.name}<span className="tm-role">{teamOf(a.id) ?? a.title}</span></span>
             <span className="tm-status">{status}</span>
           </span>
           <Icon name="chevron-right" size={16} className="tm-chevron" />
@@ -321,7 +321,7 @@ function TellYourTeam({ tenantId, prefill, onApplied }: { tenantId: string; pref
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seeded]);
 
-  // "Tell Tara something" in a person's row: start the sentence here and put the cursor at its end
+  // "Tell Miss Influencer something" in a person's row: start the sentence here and put the cursor at its end
   useEffect(() => {
     if (!prefill) return;
     setText(prefill.text);
@@ -372,7 +372,7 @@ function TellYourTeam({ tenantId, prefill, onApplied }: { tenantId: string; pref
           className="field tell-field"
           rows={3}
           value={text}
-          placeholder="No emojis on LinkedIn, and let Arjun rest till the new site launches"
+          placeholder="No emojis on LinkedIn, and let Techie rest till the new site launches"
           onChange={(e) => { setText(e.target.value); if (preview) setPreview(null); }}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void doPreview(); } }}
           disabled={ro}
@@ -415,7 +415,7 @@ export function DiffCard({ preview, changes, busy, onApply, onDiscard }: { previ
         <div className="diff-unparsed" role="note">
           <p><Icon name="warn" size={14} /> We did not understand this part, so nothing changes for it:</p>
           <ul>{preview.unparsed.map((u) => <li key={u}>“{u}”</li>)}</ul>
-          <p className="diff-tip">Try starting with a name (“Tara, …”) or saying on, off, light, or always / never.</p>
+          <p className="diff-tip">Try starting with a name (“Miss Influencer, …”) or saying on, off, light, or always / never.</p>
         </div>
       )}
       {preview.notes.length > 0 && (

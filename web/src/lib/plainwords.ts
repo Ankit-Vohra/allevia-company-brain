@@ -24,7 +24,7 @@ export interface GoalView {
   now: string | null;                     // where you are now; null when there is no reading yet
   progress: number | null;                // 0..1 for the bar; null: no bar
   known: boolean;                         // there is a reading to talk about
-  owner: string | null;                   // "Rohan"
+  owner: string | null;                   // "Growth Hacker"
 }
 
 const per = (g: ProgramGoal) => (g.period === "week" ? "a week" : "a month");

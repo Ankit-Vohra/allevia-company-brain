@@ -218,7 +218,7 @@ class RunStore {
   }
 
   /** A Studio run: the photo goes up, the content desks' work streams back as the same AgentEvents, so the office shows
-   *  Tara, Nisha and Dev at work (and the Content Studio room reacts to each new asset). */
+   *  Miss Influencer, Fact Checker and Wordsmith at work (and the Content Studio room reacts to each new asset). */
   studio(tenant: string, photo: Blob, note: string): string {
     const key = `studio-${++this.seq}`;
     const ctrl = new AbortController();

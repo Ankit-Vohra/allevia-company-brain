@@ -135,10 +135,10 @@ describe("what the team is reading right now", () => {
     expect(both.who).toEqual(["librarian", "data-analyst"]);
   });
   it("says who is reading, in plain words", () => {
-    expect(readingWords(["Sara"], 5)).toBe("Sara is reading 5 things");
-    expect(readingWords(["Sara", "Kabir", "Meera"], 1)).toBe("Sara, Kabir and Meera are reading 1 thing");
+    expect(readingWords(["Memory Keeper"], 5)).toBe("Memory Keeper is reading 5 things");
+    expect(readingWords(["Memory Keeper", "Data Detective", "The Chief"], 1)).toBe("Memory Keeper, Data Detective and The Chief are reading 1 thing");
     expect(readingWords([], 3)).toBe("");
-    expect(namesWords(["Sara", "Kabir"])).toBe("Sara and Kabir");
+    expect(namesWords(["Memory Keeper", "Data Detective"])).toBe("Memory Keeper and Data Detective");
   });
 });
 
@@ -191,7 +191,7 @@ describe("the words around the map", () => {
   });
   it("no word the owner should not read", () => {
     const words = [
-      ...mapHeadline({ things: 2, links: 3, sources: 4 }), knowsLine(5), readingWords(["Sara", "Kabir"], 4), askAbout("Instagram"),
+      ...mapHeadline({ things: 2, links: 3, sources: 4 }), knowsLine(5), readingWords(["Memory Keeper", "Data Detective"], 4), askAbout("Instagram"),
       impactLine("X", "impact", 2, 5), impactLine("X", "not_mapped", 0, 0), impactLine("X", "nothing_depends", 0, 0),
       ...kindTotals({ Product: 1, Audience: 1, Person: 1, Metric: 1, Decision: 1, Content: 1, Page: 1, Document: 1, System: 1 }).map((k) => k.name),
     ];

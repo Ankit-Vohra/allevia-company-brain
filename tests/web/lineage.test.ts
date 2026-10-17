@@ -1,5 +1,5 @@
 // The Studio page's "How this was made" (web/src/lib/lineage.ts): a photo's history told in four plain steps from the lineage read.
-// The words are the owner's: no ids, models or edges, costs in Studio credits, the check in Nisha's name.
+// The words are the owner's: no ids, models or edges, costs in Studio credits, the check in Fact Checker's name.
 import { describe, expect, it } from "vitest";
 import type { Lineage, LineageAsset } from "../../shared/contracts.js";
 import { ownerJargon } from "../../src/agent/style.js";
@@ -9,7 +9,7 @@ const asset = (over: Partial<LineageAsset> & { id: string }): LineageAsset => ({
 const ORIGINAL = asset({ id: "asset:photo", kind: "original", status: "used" });
 const A = asset({ id: "asset:a", label: "A", badge: "unchanged", status: "declined" });
 const B = asset({ id: "asset:b", label: "B", aiEdited: true, badge: "unchanged", status: "approved" });
-const nameOf = (id: string): string | undefined => (id === "fact-checker" ? "Nisha" : undefined);
+const nameOf = (id: string): string | undefined => (id === "fact-checker" ? "Fact Checker" : undefined);
 
 const lineage = (over: Partial<Lineage> = {}): Lineage => ({
   root: ORIGINAL, ancestors: [], descendants: [A, B], steps: [], jobs: [{ assetId: "asset:b", jobId: "job1", model: "gpt_image_2", credits: 6.5, document: "document:higgsfield-job-job1" }], spent: 6.5,
@@ -33,7 +33,7 @@ describe("lineageStory", () => {
     const s = lineageStory(lineage(), nameOf);
     expect(s.cost).toBe("About 6.5 Studio credits so far.");
     expect(s.followed).toEqual(["Plain, warm words"]);
-    expect(s.checks).toEqual(["Nisha on option B: same roofline and windows"]); // Tara's own read of the photo is not a check of an option
+    expect(s.checks).toEqual(["Fact Checker on option B: same roofline and windows"]); // Miss Influencer's own read of the photo is not a check of an option
   });
 
   it("says nothing about cost when nothing was spent, and keeps the plural right for one credit", () => {

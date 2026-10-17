@@ -225,15 +225,15 @@ function makeProgram(t: string): ProgramScorecard | null {
   });
   const goals: ProgramGoal[] = t === "aamdani"
     ? [
-      goal({ id: "goal:weekly-signups", name: "Weekly signups", metricKey: "new_accounts", unit: "signups", period: "week", owner: { id: "growth-marketer", name: "Rohan" }, baseline: 264, baselineConf: "measured", target: 360, targetBasis: "baseline", current: 312, progress: 0.5, status: "on_track", started: s }),
-      goal({ id: "goal:instagram-reach", name: "Instagram reach", metricKey: "account_reach", unit: "accounts", period: "month", owner: { id: "content-strategist", name: "Tara" }, baseline: 52_400, baselineConf: "measured", target: 78_600, targetBasis: "baseline", current: 61_900, progress: 0.36, status: "on_track", started: s }),
-      goal({ id: "goal:search-clicks", name: "Search clicks", metricKey: "gsc_clicks", unit: "clicks", period: "month", owner: { id: "data-analyst", name: "Kabir" }, baseline: 9_800, baselineConf: "measured", target: 12_700, targetBasis: "baseline", current: 10_100, progress: 0.1, status: "at_risk", started: s }),
-      goal({ id: "goal:gbp-calls", name: "Calls from Google", metricKey: "gbp_calls", unit: "calls", period: "month", owner: { id: "ops-manager", name: "Vikram" }, baseline: null, baselineConf: "unknown", target: 30, targetBasis: "template", current: null, progress: null, status: "no_data", started: s }),
+      goal({ id: "goal:weekly-signups", name: "Weekly signups", metricKey: "new_accounts", unit: "signups", period: "week", owner: { id: "growth-marketer", name: "Growth Hacker" }, baseline: 264, baselineConf: "measured", target: 360, targetBasis: "baseline", current: 312, progress: 0.5, status: "on_track", started: s }),
+      goal({ id: "goal:instagram-reach", name: "Instagram reach", metricKey: "account_reach", unit: "accounts", period: "month", owner: { id: "content-strategist", name: "Miss Influencer" }, baseline: 52_400, baselineConf: "measured", target: 78_600, targetBasis: "baseline", current: 61_900, progress: 0.36, status: "on_track", started: s }),
+      goal({ id: "goal:search-clicks", name: "Search clicks", metricKey: "gsc_clicks", unit: "clicks", period: "month", owner: { id: "data-analyst", name: "Data Detective" }, baseline: 9_800, baselineConf: "measured", target: 12_700, targetBasis: "baseline", current: 10_100, progress: 0.1, status: "at_risk", started: s }),
+      goal({ id: "goal:gbp-calls", name: "Calls from Google", metricKey: "gbp_calls", unit: "calls", period: "month", owner: { id: "ops-manager", name: "Taskmaster" }, baseline: null, baselineConf: "unknown", target: 30, targetBasis: "template", current: null, progress: null, status: "no_data", started: s }),
     ]
     : [
-      goal({ id: "goal:qualified-enquiries", name: "Qualified enquiries per month", metricKey: "enquiries", unit: "enquiries", period: "month", owner: { id: "growth-marketer", name: "Rohan" }, baseline: null, baselineConf: "unknown", target: 8, targetBasis: "template", current: null, progress: null, status: "no_data", started: s }),
-      goal({ id: "goal:instagram-reach", name: "Instagram reach", metricKey: "account_reach", unit: "accounts", period: "month", owner: { id: "content-strategist", name: "Tara" }, baseline: null, baselineConf: "unknown", target: 1000, targetBasis: "template", current: null, progress: null, status: "no_data", started: s }),
-      goal({ id: "goal:search-clicks", name: "Search clicks", metricKey: "gsc_clicks", unit: "clicks", period: "month", owner: { id: "data-analyst", name: "Kabir" }, baseline: null, baselineConf: "unknown", target: 50, targetBasis: "template", current: null, progress: null, status: "no_data", started: s }),
+      goal({ id: "goal:qualified-enquiries", name: "Qualified enquiries per month", metricKey: "enquiries", unit: "enquiries", period: "month", owner: { id: "growth-marketer", name: "Growth Hacker" }, baseline: null, baselineConf: "unknown", target: 8, targetBasis: "template", current: null, progress: null, status: "no_data", started: s }),
+      goal({ id: "goal:instagram-reach", name: "Instagram reach", metricKey: "account_reach", unit: "accounts", period: "month", owner: { id: "content-strategist", name: "Miss Influencer" }, baseline: null, baselineConf: "unknown", target: 1000, targetBasis: "template", current: null, progress: null, status: "no_data", started: s }),
+      goal({ id: "goal:search-clicks", name: "Search clicks", metricKey: "gsc_clicks", unit: "clicks", period: "month", owner: { id: "data-analyst", name: "Data Detective" }, baseline: null, baselineConf: "unknown", target: 50, targetBasis: "template", current: null, progress: null, status: "no_data", started: s }),
     ];
   const caps = capabilitiesOf(t);
   const byMode = { api: 0, delegated: 0, upload: 0, public: 0, benchmark: 0, none: 0 } as Record<AccessMode, number>;
@@ -342,7 +342,7 @@ Next step
     return [
       `Today's note, ${name}, ${date}`, "", "Your goals", ...p.goals.map(goalLine), "",
       "What changed since yesterday", "- 46 new numbers came in and 3 new ideas.", "",
-      "What we noticed", "1. Home page: title, main heading and local business details (Rohan). [[rec:avs-home-seo]]", "2. Verify the Google Business Profile (Vikram). [[rec:avs-gbp]]", "",
+      "What we noticed", "1. Home page: title, main heading and local business details (Growth Hacker). [[rec:avs-home-seo]]", "2. Verify the Google Business Profile (Taskmaster). [[rec:avs-gbp]]", "",
       "Waiting for your OK", "- 2 things are waiting for your OK.", "", "Next step", "- Say OK or edit: Home page: title, main heading and local business details. [[appr:avs-gh-home-seo]]",
     ].join("\n");
   }
@@ -355,12 +355,12 @@ Next step
     ...(newest ? [`- Your team learned: ${newest.text} [[${newest.id}]]`] : []),
     `- Drafts you approved as they were: ${p.firstPass.firstPass30d} of ${p.firstPass.decided30d} in the last 30 days (${Math.round((p.firstPass.rate ?? 0) * 100)}%). Things your team learned from your edits: ${p.learnedRules.active}.`,
     "", "What we noticed",
-    "1. Make salary-reveal reels the weekly anchor (Tara). [[rec:salary-reveal-reels]]",
-    "2. Unique titles and descriptions for 38 job pages (Arjun). [[rec:jobs-meta]]",
-    "3. Add a missed-call fallback to the sign-up code step (Kabir). [[rec:otp-fallback]]",
+    "1. Make salary-reveal reels the weekly anchor (Miss Influencer). [[rec:salary-reveal-reels]]",
+    "2. Unique titles and descriptions for 38 job pages (Techie). [[rec:jobs-meta]]",
+    "3. Add a missed-call fallback to the sign-up code step (Data Detective). [[rec:otp-fallback]]",
     "", "On call",
-    "- Checkout errors have doubled since Tuesday's update (Zoya).",
-    "- Version 4.2 is waiting for review on the Play Store (Imran).",
+    "- Checkout errors have doubled since Tuesday's update (Firefighter).",
+    "- Version 4.2 is waiting for review on the Play Store (Bug Hunter).",
     "", "Waiting for your OK", "- 3 things are waiting for your OK; the oldest has waited 3 days.",
     "- Draft 3 reels: two salary reveals and a day with the screening call (a post draft). [[appr:content-3-reels]]",
     "", "Next step", "- Say OK or edit: Draft 3 reels: two salary reveals and a day with the screening call. [[appr:content-3-reels]]",
@@ -401,7 +401,7 @@ export function activeRulesFor(t: string, agent: AgentId) {
     .map(({ id, text, confidence, appliedCount, learnedAt }) => ({ id, text, confidence, appliedCount, learnedAt }));
 }
 
-const CHIEF_REFUSAL = "Meera can't be switched off: the Chief of Staff plans every request and writes every answer.";
+const CHIEF_REFUSAL = "The Chief can't be switched off: the Chief of Staff plans every request and writes every answer.";
 
 export function setAgent(t: string, id: string, patch: { enabled?: boolean; mode?: AgentMode; autonomy?: number; statusNote?: string | null; skillsOff?: string[] }) {
   const s = settingsOf(t)[id];

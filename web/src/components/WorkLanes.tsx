@@ -63,7 +63,7 @@ function Lane({ lane, view, nodes, onCite, onNodes, activeCite }: {
         <AgentAvatar id={lane.agent} size={28} ring={lane.phase === "working"} />
         <div className="lane-id">
           <b>{a?.name ?? lane.agent}</b>
-          <span>{a?.title}</span>
+          <span>{deptOf(lane.agent)?.name ?? a?.title}</span>
         </div>
         <LanePhase lane={lane} />
       </header>

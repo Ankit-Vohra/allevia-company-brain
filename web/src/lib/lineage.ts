@@ -1,6 +1,6 @@
 // The Studio page's "How this was made": a photo's history in four plain steps (your photo, the options made from it, your OK, the post),
 // told from the graph's lineage read (GET /api/:t/assets/:id/lineage, src/studio/lineage.ts). Pure words, no drawing: the page draws it.
-// No ids, models or edges reach the owner: an option is "A, a free clean-up" or "B, an AI edit", the check is Nisha's, the cost is in
+// No ids, models or edges reach the owner: an option is "A, a free clean-up" or "B, an AI edit", the check is Fact Checker's, the cost is in
 // Studio credits.
 import type { Lineage, LineageAsset } from "../../../shared/contracts.js";
 
@@ -43,7 +43,7 @@ const POST_WORDS: Record<string, string> = {
   dry_run: "A practice run: it would have posted.",
 };
 
-/** `nameOf` turns a roster id ("fact-checker") into the name the owner knows ("Nisha"). */
+/** `nameOf` turns a roster id ("fact-checker") into the name the owner knows ("Fact Checker"). */
 export function lineageStory(l: Lineage, nameOf: (rosterId: string) => string | undefined = () => undefined): LineageStory {
   const options = l.descendants.filter((a) => !isClip(a)).sort((a, b) => (a.label ?? a.id).localeCompare(b.label ?? b.id));
   const clips = l.descendants.filter(isClip);

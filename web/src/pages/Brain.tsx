@@ -251,7 +251,7 @@ export default function BrainPage() {
   );
 }
 
-/** "Sara is reading 5 things" while a question is being worked on; nothing otherwise. */
+/** "Memory Keeper is reading 5 things" while a question is being worked on; nothing otherwise. */
 function ReadingLine({ who, count }: { who: AgentId[]; count: number }) {
   if (!count || !who.length) return <span className="bm-reading" aria-live="polite" />;
   return (

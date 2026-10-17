@@ -1,5 +1,5 @@
 // One exchange in the chat: what the owner said, then the reply. In a team chat the reply shows what each person added (with
-// their avatar and name), then Meera's answer; in a direct chat it is that person's answer. Everything about how it was
+// their avatar and name), then The Chief's answer; in a direct chat it is that person's answer. Everything about how it was
 // reached sits behind one "How we got this" line. Waiting-for-OK cards and made things (posters, drafts) appear inline.
 import { useState } from "react";
 import { useNavigate } from "react-router";
@@ -23,7 +23,7 @@ import { AnswerPath } from "./AnswerPath";
 
 const nameOf = (id: AgentId) => agentDef(id)?.name ?? id;
 const jobOf = (id: AgentId) => agentDef(id)?.title ?? "";
-/** "Kabir, Zoya and Imran", not "Kabir and Zoya and Imran". */
+/** "Data Detective, Firefighter and Bug Hunter", not "Data Detective and Firefighter and Bug Hunter". */
 const listWords = (names: string[]) => (names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0] ?? "");
 
 export interface TurnProps {

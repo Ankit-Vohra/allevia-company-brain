@@ -1,9 +1,9 @@
-// Studio (product design §6, §8): drop a phone photo and a line about it. Tara looks at it (her boxes are drawn on the
+// Studio (product design §6, §8): drop a phone photo and a line about it. Miss Influencer looks at it (her boxes are drawn on the
 // photo), the studio straightens and grades it (option A, free and local) and the AI editor restyles it (option B, quoted
-// and shown in Studio credits), Nisha checks both against the original, Dev holds the caption to the brand's voice, and the
+// and shown in Studio credits), Fact Checker checks both against the original, Wordsmith holds the caption to the brand's voice, and the
 // owner approves one. Under the options the owner can ask for a change in their own words (light and colour are free;
 // "make it festive", "a different background", "make this into an ad saying ..." use the AI editor), or try again when
-// Nisha held an AI edit back. One setting: "Blur people's faces in my content" (off by default).
+// Fact Checker held an AI edit back. One setting: "Blur people's faces in my content" (off by default).
 // The run streams as AgentEvents through the shared run store, so the office shows the content desks at work too.
 import { chargesTotal, studioCharges, usesWords } from "@shared/credits";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
@@ -105,7 +105,7 @@ export default function StudioPage() {
   const f = useMemo(() => fold(events), [events]);
   const running = record?.status === "running";
 
-  // the nodes behind the events: the assessment, each variant's treatment and Nisha's numbers, the card
+  // the nodes behind the events: the assessment, each variant's treatment and Fact Checker's numbers, the card
   const [cardVariantIds, setCardVariantIds] = useState<string[]>([]);
   const ids = useMemo(() => [...new Set([f.originalId, ...f.variants, ...cardVariantIds, f.proposal?.approvalId].filter((x): x is string => !!x))], [f.originalId, f.variants, cardVariantIds, f.proposal?.approvalId]);
   const idsKey = `${ids.join("|")}#${refresh}`;
@@ -222,7 +222,7 @@ export default function StudioPage() {
   };
 
   const hasRun = !!f.originalId;
-  // once the team has the photo, the picker goes: left up, it showed the same photo twice and a second "Send to Tara"
+  // once the team has the photo, the picker goes: left up, it showed the same photo twice and a second "Send to Miss Influencer"
   // beside the finished options (a run that fails before that keeps the photo, to send again)
   useEffect(() => { if (hasRun) { setFile(null); setPreview((p) => { if (p) URL.revokeObjectURL(p); return null; }); } }, [hasRun]);
   return (
@@ -273,7 +273,7 @@ export default function StudioPage() {
               </label>
               <div className="drop-actions">
                 <button type="button" className="btn btn-gold" disabled={!file || !live || getPublicMode()} onClick={() => file && start(file, note)}>
-                  Send to Tara
+                  Send to Miss Influencer
                 </button>
                 {preview && <button type="button" className="btn btn-ghost" onClick={() => { setFile(null); setPreview(null); }}>Choose another</button>}
                 {!preview && sample && <button type="button" className="btn btn-ghost" onClick={useSample}>Use the demo photo</button>}
@@ -304,7 +304,7 @@ export default function StudioPage() {
                 <span>{isSample ? sample!.caption : "Your photo, as sent (location data removed)."}</span>
                 {f.assessment && (
                   <button type="button" className="btn btn-quiet btn-sm" onClick={() => setShowBoxes((s) => !s)} aria-pressed={showBoxes}>
-                    {showBoxes ? "Hide" : "Show"} Tara's boxes
+                    {showBoxes ? "Hide" : "Show"} Miss Influencer's boxes
                   </button>
                 )}
               </figcaption>
@@ -315,13 +315,13 @@ export default function StudioPage() {
             <article className="card tara">
               <header className="card-head">
                 <AgentAvatar id="content-strategist" size={30} />
-                <div><b>Tara</b><span>her read of the photo</span></div>
+                <div><b>Miss Influencer</b><span>her read of the photo</span></div>
                 <span className={`verdict verdict-${f.assessment.verdict}`}>{VERDICT_LINE[f.assessment.verdict] ?? f.assessment.verdict}</span>
               </header>
               {assessment ? (
                 <>
                   <p className="tara-subject">{assessment.subject}</p>
-                  <Reveal label="Tara's notes">
+                  <Reveal label="Miss Influencer's notes">
                   <dl className="facts">
                     <dt>Angle</dt><dd>{assessment.angle}</dd>
                     <dt>Light</dt><dd>{assessment.lighting}</dd>
@@ -330,7 +330,7 @@ export default function StudioPage() {
                     {origProps?.tiltDeg !== undefined && (
                       <><dt>Level</dt><dd>
                         Straightened by {Math.abs(Number(origProps.tiltDeg)).toFixed(1)}°, measured from the photo's own edges
-                        {origProps.tiltSource === "edges" && assessment.quality.tiltDeg !== Number(origProps.tiltDeg) ? ` (Tara read it as ${assessment.quality.tiltDeg ? `${assessment.quality.tiltDeg}°` : "level"})` : ""}.
+                        {origProps.tiltSource === "edges" && assessment.quality.tiltDeg !== Number(origProps.tiltDeg) ? ` (Miss Influencer read it as ${assessment.quality.tiltDeg ? `${assessment.quality.tiltDeg}°` : "level"})` : ""}.
                       </dd></>
                     )}
                   </dl>
@@ -341,7 +341,7 @@ export default function StudioPage() {
                   {assessment.coaching && <p className="coaching"><Icon name="pen" size={14} /> Next time: {assessment.coaching}</p>}
                   </Reveal>
                 </>
-              ) : <p className="muted small">Loading Tara's notes…</p>}
+              ) : <p className="muted small">Loading Miss Influencer's notes…</p>}
             </article>
           )}
         </section>
@@ -384,7 +384,7 @@ export default function StudioPage() {
                     </span>
                     <span className={`badge badge-${badge}`}>
                       <Icon name={ok ? "check" : badge === "pending" ? "clock" : "x"} size={14} />
-                      {ok ? "Building unchanged" : badge === "pending" ? "Nisha is checking" : badge === "unchecked" ? "Not checked" : "Held back"}
+                      {ok ? "Building unchanged" : badge === "pending" ? "Fact Checker is checking" : badge === "unchecked" ? "Not checked" : "Held back"}
                     </span>
                     {card?.request && <span className="variant-treat">You asked: {card.request}</span>}
                     {(review || card?.note) && <span className="variant-note">{(card?.note ?? review?.note ?? "").replace(/^Building unchanged · /, "").replace(/^Changed: /, "")}</span>}
@@ -434,7 +434,7 @@ export default function StudioPage() {
             <article className="card approve">
               <header className="card-head">
                 <AgentAvatar id="copy-editor" size={30} />
-                <div><b>Dev</b><span>the caption</span></div>
+                <div><b>Wordsmith</b><span>the caption</span></div>
               </header>
               <label className="caption-field">
                 <span className="visually-hidden">Caption</span>

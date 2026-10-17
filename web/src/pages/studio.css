@@ -31,7 +31,7 @@
 .drop-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
 .studio-note { font-size: var(--text-xs); color: var(--color-muted); }
 
-/* the original, with Tara's boxes */
+/* the original, with Miss Influencer's boxes */
 .orig { display: grid; gap: 6px; margin: 0; }
 .orig-frame { position: relative; border-radius: var(--radius-md); overflow: hidden; background: var(--color-ink); box-shadow: var(--shadow-whisper); }
 .orig-frame img { display: block; width: 100%; height: auto; }
@@ -51,7 +51,7 @@
 .box-tag-text { background: oklch(92% 0 0); }
 .orig figcaption { display: flex; justify-content: space-between; align-items: center; gap: var(--space-sm); font-size: var(--text-xs); color: var(--color-muted); }
 
-/* cards: Tara's read, Dev's caption */
+/* cards: Miss Influencer's read, Wordsmith's caption */
 .card { display: grid; gap: var(--space-sm); padding: var(--space-md); border: var(--rule); border-radius: var(--radius-md); background: var(--color-card); box-shadow: var(--shadow-whisper); }
 .card-head { display: flex; align-items: center; gap: 10px; }
 .card-head > div { display: grid; line-height: 1.25; }
@@ -118,7 +118,7 @@
 .studio-avatars { display: flex; gap: 4px; }
 
 @media (max-width: 900px) {
-  /* one column, in the order an owner reads it: the photo, the versions, the caption, then Tara's notes */
+  /* one column, in the order an owner reads it: the photo, the versions, the caption, then Miss Influencer's notes */
   .studio-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-md); }
   .studio-grid > .studio-col { display: contents; }
   .drop, .orig { order: 1; }

@@ -448,7 +448,7 @@ export function drawLampGlow(c: Ctx, d: DeskSpot, pal: OfficePalette) {
   c.fillRect(cx - 30, cy - 30, 60, 60);
 }
 
-// ---------------------------------------------------------------- Sara's shelf: one book per learned rule
+// ---------------------------------------------------------------- Memory Keeper's shelf: one book per learned rule
 
 const SHELVES = 3;              // the bookshelf's shelves (drawFloorItem "bookshelf")
 const LEARNED_SHELVES = 2;      // the top two hold what the team learned; the bottom one keeps its reference books

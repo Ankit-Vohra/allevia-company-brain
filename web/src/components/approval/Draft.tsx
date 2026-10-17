@@ -9,6 +9,7 @@ import { kindWords } from "../../lib/approval-words";
 import { meetingWords, plainTitle } from "../../lib/home";
 import type { Approval } from "../../types-ext";
 import { AgentAvatar, agentDef } from "../bits";
+import { plainWho } from "@shared/roster";
 import { Icon } from "../Icon";
 import { whenWords } from "../insights-words";
 import type { Payload } from "./decide";
@@ -72,7 +73,7 @@ export function DraftView({ a, why, big, stake, tz, locale, tenantId, readOnly, 
       <h2 id={`dr-${a.id}`} className="dr-title">{plainTitle(a.title)}</h2>
       <p className="dr-from">
         <AgentAvatar id={a.by} size={22} />
-        <span><b>{who?.name ?? "Your team"}</b> · {whenWords(a.createdAt, tz, locale)}{stake ? <> · <b className="dr-stake">{stake}</b></> : null}</span>
+        <span><b>{who ? plainWho(who.id) : "Your team"}</b> · {whenWords(a.createdAt, tz, locale)}{stake ? <> · <b className="dr-stake">{stake}</b></> : null}</span>
       </p>
       {why && <p className="dr-why">{why}</p>}
 

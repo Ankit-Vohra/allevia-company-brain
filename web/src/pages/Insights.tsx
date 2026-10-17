@@ -1,13 +1,14 @@
 // Ideas: the team's ideas, best first, one line each (what it is, who suggests it, how big). The same idea found on several
 // mornings is one row with "×2" (the newest leads), the top five show, and anything over a week old folds under "Older". A tap opens the idea in a
 // sheet: why, what is at stake, the one next step, and the reasoning (the sources and the chain of facts) behind "Why we think
-// this". Today's note from Meera sits on top in one line, the whole note one tap away; where the numbers come from is at the
+// this". Today's note from The Chief sits on top in one line, the whole note one tap away; where the numbers come from is at the
 // bottom, and sample numbers are said beside the idea they belong to (docs/owner-words.md).
 import { useMemo, useState } from "react";
 import type { NodeRef } from "@shared/contracts";
 import { Link, useNavigate } from "react-router";
 import { api } from "../api";
 import { AgentAvatar, agentDef } from "../components/bits";
+import { plainWho } from "@shared/roster";
 import { EvidenceChain } from "../components/EvidenceChain";
 import { Icon } from "../components/Icon";
 import { firstSentence, likelihood, stakeOf, whenWords, withoutCites, withoutSim } from "../components/insights-words";
@@ -116,7 +117,7 @@ function TodayNote({ brief, loading, names, onOpen }: { brief?: string; loading:
       <div className="note-head">
         <AgentAvatar id="chief-of-staff" size={26} />
         <h2 id="note-title" className="note-title">Today’s note</h2>
-        <span className="small muted">from Meera</span>
+        <span className="small muted">from The Chief</span>
       </div>
       {loading || !brief ? (
         <span className="skeleton" style={{ display: "block", height: 44 }} />
@@ -187,7 +188,7 @@ function IdeaView({ rec: r, rank, approval, onOpen, names, tz, locale }: { rec: 
       <p className="idea-by">
         <span className="idea-rank-sm num">#{rank}</span>
         <AgentAvatar id={r.by} size={22} />
-        <span><b>{a?.name ?? "Your team"}</b> · {whenWords(r.createdAt, tz, locale)}</span>
+        <span><b>{a ? plainWho(a.id) : "Your team"}</b> · {whenWords(r.createdAt, tz, locale)}</span>
       </p>
       <h2 id="idea-sheet-t" className="idea-title-lg">{withoutSim(r.title)}</h2>
       <p className="idea-why">{withoutCites(firstSentence(r.why))}</p>

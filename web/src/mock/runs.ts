@@ -22,7 +22,7 @@ export const storiesRun: ScriptSpec = {
       .start("Read the request and plan who does what", 400)
       .status("Reading the question and what we already know", 200)
       .tool("search", { q: "pause daily stories" }, 800, "4 matches: decision 007, Instagram and 2 observations from 28 Sep", [D007, "channel:instagram", OBS_SP, OBS_REELS], 600)
-      .status("Splitting the work: history to Sara, numbers to Kabir, briefs to Tara", 400)
+      .status("Splitting the work: history to Memory Keeper, numbers to Data Detective, briefs to Miss Influencer", 400)
       .emit({
         type: "plan",
         by: "chief-of-staff",
@@ -125,7 +125,7 @@ export const storiesRun: ScriptSpec = {
 
 **Post reels that open on a real salary or follow a real shift.** Over the last 90 days (18 reels), salary-reveal hooks got 3.4× our median reach and day-in-the-life hooks 2.1×. Question-to-camera hooks got 0.6×, so drop them [[${OBS_HOOKS}]] [[rule:hook-salary-reveal]].
 
-Three briefs, checked by Dev for voice and Nisha for facts:
+Three briefs, checked by Wordsmith for voice and Fact Checker for facts:
 
 1. **Seekers · "₹18,000 + PF: a forklift operator's real month."** Open on the payslip, then the shift. Same hook as our best reel [[content:reel-2026-09-12-forklift-salary]].
 2. **Seekers · "What a delivery partner takes home."** Salary reveal, Hindi first, English captions [[need:seekers-real-salary]].

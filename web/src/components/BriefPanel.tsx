@@ -1,4 +1,4 @@
-// The morning brief as Meera writes it (src/insights/brief.ts): a goal pulse first (each goal against its day-0
+// The morning brief as The Chief writes it (src/insights/brief.ts): a goal pulse first (each goal against its day-0
 // baseline and target), then what changed since yesterday, the top three, what waits on the owner and one next step.
 // The text is a template filled from the graph; this splits it into its sections and keeps every [[id]] as a source chip.
 // "Run today's brief" asks the server to bring the goals' readings up to date and write it again (no language model).
@@ -111,7 +111,7 @@ export function BriefPanel({ tenantId, onRan }: { tenantId: string; onRan?: () =
         <div>
           <h2 id="brief-card-title" className="section-title">Today's note</h2>
           <p className="small muted">
-            From Meera{b ? <> · {fresh ? fmtAgo(fresh.at) : fmtDate(b.asOf ?? b.date)}</> : null}
+            From The Chief{b ? <> · {fresh ? fmtAgo(fresh.at) : fmtDate(b.asOf ?? b.date)}</> : null}
           </p>
         </div>
         <button type="button" className="btn btn-ghost btn-sm" onClick={run} disabled={busy || ro} title={ro ? "Turned off in the public demo" : "Bring the goals up to date and write today's note"}>

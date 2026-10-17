@@ -38,7 +38,7 @@ const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 const NUMBER_WORDS = ["Nothing", "One thing", "Two things", "Three things"];
 
-/** The stand-up as the office acts it out: who walks to the table, what each says, who gets a brief from Meera. */
+/** The stand-up as the office acts it out: who walks to the table, what each says, who gets a brief from The Chief. */
 export function officeStandup(s: Standup): OfficeStandup {
   const drafted = s.items.filter((i) => i.status === "drafted" && i.approvalId);
   const n = drafted.length;
@@ -186,16 +186,16 @@ export function OfficePage() {
   const working = view?.activeAgents ?? [];
   const askHref = view?.sessionId ? `/ask/${view.sessionId}` : "/ask";
 
-  // the quiet line at the bottom while a request runs: "Tara is drafting ideas…"
+  // the quiet line at the bottom while a request runs: "Miss Influencer is drafting ideas…"
   const tickerLine = useMemo(() => {
     if (!view || !record) return null;
-    if (view.final) return { agent: "chief-of-staff" as AgentId, text: `Meera has your answer · ${fmtMs(view.final.ms)}`, done: true };
+    if (view.final) return { agent: "chief-of-staff" as AgentId, text: `The Chief has your answer · ${fmtMs(view.final.ms)}`, done: true };
     const a = working[working.length - 1];
-    if (!a) return { agent: "chief-of-staff" as AgentId, text: "Meera is reading your question…", done: false };
+    if (!a) return { agent: "chief-of-staff" as AgentId, text: "The Chief is reading your question…", done: false };
     const lane = laneOf(view, a);
     const status = plain(lane?.status ?? lane?.task ?? "").replace(/[.…]+$/, "").trim();
     const nm = agentDef(a)?.name ?? "";
-    // "Tara is using: Instagram post craft" already starts with the name
+    // "Miss Influencer is using: Instagram post craft" already starts with the name
     const text = !status ? `${nm} is on it…` : nm && status.startsWith(`${nm} is `) ? `${status}…` : /^\w+ing\b/i.test(status) ? `${nm} is ${lowerFirst(status)}…` : `${nm}: ${lowerFirst(status)}…`;
     return { agent: a, text, done: false };
   }, [view, record, working]);

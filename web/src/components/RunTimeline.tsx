@@ -19,7 +19,7 @@ export function RunTimeline({ view, running, onPick }: { view: RunView; running:
         const a = agentDef(lane.agent);
         const isAnswer = lane.key.endsWith("#answer");
         const isPlan = lane.agent === view.plan?.by && !isAnswer;
-        out.push({ lane, label: a?.name ?? lane.agent, sub: isAnswer ? "answer" : isPlan ? "plan" : a?.title ?? "", role: isAnswer || isPlan });
+        out.push({ lane, label: a?.name ?? lane.agent, sub: isAnswer ? "answer" : isPlan ? "plan" : deptOf(lane.agent)?.name ?? a?.title ?? "", role: isAnswer || isPlan });
       }
     }
     return out;

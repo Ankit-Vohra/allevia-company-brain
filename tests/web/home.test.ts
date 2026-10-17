@@ -163,17 +163,17 @@ describe("your team: who is working", () => {
     const s = teamStrip(settings, new Set(["content-strategist", "growth-marketer"]));
     expect(s.people.slice(0, 2).map((p) => p.id)).toEqual(["growth-marketer", "content-strategist"]);
     expect(s.people.at(-1)!.dot).toBe("off");
-    expect(s.line).toBe("Rohan and Tara are working.");
+    expect(s.line).toBe("Growth Hacker and Miss Influencer are working.");
     expect(s.working).toBe(2);
     expect(s.resting).toBe(1);
   });
   it("is calm when nobody is working", () => {
     expect(teamStrip(settings, new Set()).line).toBe("Your team is ready.");
     expect(teamStrip([], new Set()).line).toBe("Your team is ready.");
-    expect(teamStrip(undefined, new Set(["chief-of-staff"])).line).toBe("Meera is working.");
+    expect(teamStrip(undefined, new Set(["chief-of-staff"])).line).toBe("The Chief is working.");
   });
   it("counts more than two", () => {
-    expect(teamStrip(undefined, new Set(["chief-of-staff", "growth-marketer", "content-strategist", "tech-lead"])).line).toMatch(/^\w+, \w+ and 2 more are working\.$/);
+    expect(teamStrip(undefined, new Set(["chief-of-staff", "growth-marketer", "content-strategist", "tech-lead"])).line).toBe("The Chief, Growth Hacker and 2 more are working.");
   });
   it("reads who is working from live runs in this tab and from the server's running threads", () => {
     const runs = [

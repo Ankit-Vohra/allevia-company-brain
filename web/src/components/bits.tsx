@@ -22,7 +22,7 @@ export function AgentChip({ id, sub }: { id: AgentId; sub?: string }) {
     <span className="agent-chip">
       <AgentAvatar id={id} size={22} />
       <span className="agent-chip-name">{a?.name ?? id}</span>
-      {sub && <span className="agent-chip-sub">{sub}</span>}
+      {(sub ?? deptOf(id)?.name) && <span className="agent-chip-sub">{sub ?? deptOf(id)?.name}</span>}
     </span>
   );
 }
