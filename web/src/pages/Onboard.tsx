@@ -94,7 +94,7 @@ interface RunState {
 }
 
 export default function OnboardPage() {
-  const { refreshTenants, setTenant, effectiveTheme, reducedMotion, account, tenants } = useApp();
+  const { refreshTenants, setTenant, effectiveTheme, reducedMotion, account, tenants, authRequired } = useApp();
   // a new account's first business (straight after signing up)
   const first = !!account && !tenants.some((t) => !t.readOnly);
   const nav = useNavigate();
@@ -200,7 +200,10 @@ export default function OnboardPage() {
         ) : null}
       </header>
 
-      {!run || run.error ? (
+      {authRequired && !account ? (
+        // looking at the demo without an account: setting up needs one, so say that before the form, not after a refusal
+        <p className="notice">To add your own business, <a href="/signup">create a free account</a> or <a href="/login">sign in</a>.</p>
+      ) : !run || run.error ? (
         <form className="ob-form" onSubmit={onSubmit} aria-label="Add a business">
           <label className="label">
             Your website
