@@ -13,19 +13,9 @@ import { mockConnections } from "./mock/connections";
 const CONNECT_LIVE_ONLY = "Connecting Search Console needs the live server.";
 const CHECKUP_LIVE_ONLY = "The website check-up needs the live server.";
 const NUMBERS_LIVE_ONLY = "Adding your numbers needs the live server: your file is read and kept there.";
-const STUDIO_LIVE_ONLY = "The Studio needs the live server: the photos, Miss Influencer's and Fact Checker's checks and the edits all run there.";
+const STUDIO_LIVE_ONLY = "Making a post from a photo needs the live server: the photos, Miss Influencer's and Fact Checker's checks and the edits all run there.";
 
-/** GET /api/:t/studio/latest: the last Studio run's events and where its card stands. */
-export interface StudioLatest {
-  run: null | {
-    assetId: string;
-    at: number;
-    note: string;
-    events: AgentEvent[];
-    approval: { id: string; status: string; result: string | null; contentId: string | null } | null;
-  };
-}
-import type { AgentMode, CapabilityState, DirectivePreview, DiscordHome, LearnedRuleDto, Lineage, ProgramScorecard } from "@shared/contracts";
+import type { AgentMode, CapabilityState, DirectivePreview, DiscordHome, LearnedRuleDto, LibraryDto, Lineage, ProgramScorecard } from "@shared/contracts";
 import type {
   ConnectionRow, ConnectionsPage, ConnectStart,
   PostView, AgentDetail, AgentSummary, AgentView, Approval, ApprovalDecision, Brief, DecisionResult, GoalSetup, GraphData, LearningFeed, LiveTurn, NodeDetail,
@@ -351,30 +341,29 @@ export const api = {
     return postSse<AgentEvent>(`/api/${enc(t)}/ask`, body, onEvent, opts.signal);
   },
 
-  // ---- Studio (live server only: the photos, the vision checks and the edits live there) ----
+  // ---- Photos, pictures and the Library (live server only: the photos, the vision checks and the edits live there) ----
 
-  /** POST /api/:t/studio/intake (multipart), an SSE stream of AgentEvent. */
-  async studioIntake(t: string, photo: Blob, note: string, onEvent: (e: AgentEvent) => void, opts: { signal?: AbortSignal } = {}): Promise<void> {
+  /** POST /api/:t/chat/photo (multipart): a photo sent in the chat with what the owner wants; the Studio's pipeline runs as a turn
+   *  in the conversation and streams back like an ask. */
+  async askWithPhoto(t: string, body: { photo: Blob; note: string; sessionId?: string; target?: AgentId }, onEvent: (e: AgentEvent) => void, opts: { signal?: AbortSignal } = {}): Promise<void> {
     if (mode === "mock") throw new ApiError(STUDIO_LIVE_ONLY, 501);
     const form = new FormData();
-    form.append("photo", photo, "photo.jpg");
-    if (note.trim()) form.append("note", note.trim());
-    return postSseForm<AgentEvent>(`/api/${enc(t)}/studio/intake`, form, onEvent, opts.signal);
+    form.append("photo", body.photo, body.photo instanceof File && body.photo.name ? body.photo.name : "photo.jpg");
+    if (body.note.trim()) form.append("note", body.note.trim());
+    if (body.sessionId) form.append("sessionId", body.sessionId);
+    if (body.target) form.append("target", body.target);
+    return postSseForm<AgentEvent>(`/api/${enc(t)}/chat/photo`, form, onEvent, opts.signal);
   },
-  async studioLatest(t: string): Promise<StudioLatest> {
-    if (mode === "mock") return { run: null };
-    return getJson(`/api/${enc(t)}/studio/latest`);
+  /** GET /api/:t/library: everything the team made and every photo the owner sent, newest first. */
+  async library(t: string): Promise<LibraryDto> {
+    if (mode === "mock") return { items: [] };
+    return getJson(`/api/${enc(t)}/library`);
   },
   async studioApprove(t: string, body: { approvalId: string; variantId?: string; caption?: string }): Promise<{ contentId: string; status: string; variantId: string; approval: Approval | null }> {
     if (mode === "mock") throw new ApiError(STUDIO_LIVE_ONLY, 501);
     return getJson(`/api/${enc(t)}/studio/approve`, {
       method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body),
     });
-  },
-  /** POST /api/:t/studio/revise: a change in the owner's words (or a retry), an SSE stream of AgentEvent. */
-  async studioRevise(t: string, body: { approvalId: string; instruction?: string; retryOf?: string }, onEvent: (e: AgentEvent) => void, opts: { signal?: AbortSignal } = {}): Promise<void> {
-    if (mode === "mock") throw new ApiError(STUDIO_LIVE_ONLY, 501);
-    return postSse<AgentEvent>(`/api/${enc(t)}/studio/revise`, body, onEvent, opts.signal);
   },
   /** GET /api/:t/studio/settings: "Blur people's faces in my content" (off by default) and the answer language. */
   async studioSettings(t: string): Promise<{ blurFaces: boolean; language: string }> {
@@ -387,25 +376,10 @@ export const api = {
       method: "PUT", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body),
     });
   },
-  /** POST /api/:t/studio/clip: without confirm, the price of a 5 second clip (nothing is made); with confirm, the clip. */
-  async studioClip(t: string, body: { approvalId: string; variantId?: string; confirm?: boolean }): Promise<{ ok: boolean; message: string; words?: string; credits?: number; variantId?: string; url?: string }> {
-    if (mode === "mock") throw new ApiError(STUDIO_LIVE_ONLY, 501);
-    return getJson(`/api/${enc(t)}/studio/clip`, {
-      method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body),
-    });
-  },
   /** GET /api/:t/assets/:id/lineage: how a Studio picture was made, read from the graph (the photo, the options, the OK, the post). Null when there is none. */
   async assetLineage(t: string, id: string): Promise<Lineage | null> {
     if (mode === "mock") return null;
     return getOrNull<Lineage>(`/api/${enc(t)}/assets/${enc(id)}/lineage`);
-  },
-  async studioSample(t: string): Promise<{ note: string; caption: string; url: string } | null> {
-    if (mode === "mock") return null;
-    try {
-      return await getJson(`/api/${enc(t)}/studio/sample`);
-    } catch {
-      return null;
-    }
   },
 
   // ---- Add your numbers (live server only: the file is read and kept there) ----

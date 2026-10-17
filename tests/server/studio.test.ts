@@ -76,7 +76,7 @@ describe("server: studio (integration)", () => {
     expect(latest.run.assetId).toBe(assets[0]!.assetId);
     expect(latest.run.approval).toMatchObject({ id: proposal.approvalId, status: "pending", contentId: null });
 
-    // the Studio page's "How this was made", read from the graph's lineage route: before the OK it waits for it
+    // the Library's "How this was made", read from the graph's lineage route: before the OK it waits for it
     const readStory = async () => {
       const res = await app.request(`/api/mini/assets/${encodeURIComponent(assets[0]!.assetId)}/lineage`);
       expect(res.status).toBe(200);

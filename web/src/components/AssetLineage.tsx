@@ -1,4 +1,4 @@
-// "How this was made" on the Studio page: a photo's history drawn as four short steps, from what the graph holds about it (your photo, the
+// "How this was made" in the Library's sheet: a photo's history drawn as four short steps, from what the graph holds about it (your photo, the
 // options made from it, your OK, the post). Compact on purpose: a thin rail, a line of words per step, small pictures where there are
 // pictures, and the cost and the rules it followed behind one "More". The words come from web/src/lib/lineage.ts.
 import { useEffect, useMemo, useState } from "react";
@@ -6,6 +6,7 @@ import { api } from "../api";
 import { lineageStory, type LineageStory, type StoryAsset } from "../lib/lineage";
 import { agentDef } from "./bits";
 import { Icon } from "./Icon";
+import "./asset-lineage.css";
 
 const thumb = (tenant: string, id: string) => `/api/${encodeURIComponent(tenant)}/assets/${encodeURIComponent(id)}?w=120`;
 const CHECK_WORD: Record<NonNullable<StoryAsset["check"]>, string> = { ok: "Checked", held: "Held back", unchecked: "Not checked" };

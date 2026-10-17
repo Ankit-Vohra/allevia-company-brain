@@ -6,10 +6,12 @@ import { api, type BrandAssetDto } from "../api";
 import { useAsync } from "../state/app";
 import { Icon } from "./Icon";
 import { Reveal } from "./Reveal";
+import "./brand-library.css";
 
 const KIND: Record<string, string> = { logo: "Logo", colour: "Colour", font: "Font", "font-file": "Font file", palette: "Colours", guide: "Brand guide", "product-photo": "Product photo", "past-design": "Past design", "font-sample": "Font sample", other: "Other" };
 
-export function BrandLibrary({ tenant }: { tenant: string }) {
+/** `open`: the files are shown as they are (the Library's Brand tab), not behind "See your files". */
+export function BrandLibrary({ tenant, open = false }: { tenant: string; open?: boolean }) {
   const [version, setVersion] = useState(0);
   const [said, setSaid] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -44,19 +46,22 @@ export function BrandLibrary({ tenant }: { tenant: string }) {
           onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
       </label>
       </div>
-      {files.length > 0 && (
-        <Reveal label="See your files">
-          <ul className="brand-lib-files">
-            {files.slice(0, 12).map((a) => (
-              <li key={a.id}>
-                {a.url && a.mime?.startsWith("image/") ? <img src={a.url} alt={a.name} loading="lazy" /> : <span className="brand-lib-icon"><Icon name="pen" size={18} /></span>}
-                <span><b>{KIND[a.kind] ?? a.kind}</b>{a.family ? ` · ${a.family}` : ""}{a.needsBetter ? " · a better file would help" : ""}</span>
-              </li>
-            ))}
-          </ul>
-        </Reveal>
-      )}
+      {files.length > 0 && (open ? fileList(files, 60) : <Reveal label="See your files">{fileList(files, 12)}</Reveal>)}
+      {open && !lib.loading && files.length === 0 && <p className="brand-lib-empty">Add your logo and the team puts it on every poster.</p>}
       {said && <p className="brand-lib-said" role="status">{said}</p>}
     </section>
+  );
+}
+
+function fileList(files: BrandAssetDto[], max: number) {
+  return (
+    <ul className="brand-lib-files">
+      {files.slice(0, max).map((a) => (
+        <li key={a.id}>
+          {a.url && a.mime?.startsWith("image/") ? <img src={a.url} alt={a.name} loading="lazy" /> : <span className="brand-lib-icon"><Icon name="pen" size={18} /></span>}
+          <span><b>{KIND[a.kind] ?? a.kind}</b>{a.family ? ` · ${a.family}` : ""}{a.needsBetter ? " · a better file would help" : ""}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

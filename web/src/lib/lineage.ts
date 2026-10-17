@@ -1,4 +1,4 @@
-// The Studio page's "How this was made": a photo's history in four plain steps (your photo, the options made from it, your OK, the post),
+// "How this was made" (the Library's sheet): a photo's history in four plain steps (your photo, the options made from it, your OK, the post),
 // told from the graph's lineage read (GET /api/:t/assets/:id/lineage, src/studio/lineage.ts). Pure words, no drawing: the page draws it.
 // No ids, models or edges reach the owner: an option is "A, a free clean-up" or "B, an AI edit", the check is Fact Checker's, the cost is in
 // Studio credits.

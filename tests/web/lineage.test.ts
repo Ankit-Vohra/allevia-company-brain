@@ -1,4 +1,4 @@
-// The Studio page's "How this was made" (web/src/lib/lineage.ts): a photo's history told in four plain steps from the lineage read.
+// "How this was made" in the Library's sheet (web/src/lib/lineage.ts): a photo's history told in four plain steps from the lineage read.
 // The words are the owner's: no ids, models or edges, costs in Studio credits, the check in Fact Checker's name.
 import { describe, expect, it } from "vitest";
 import type { Lineage, LineageAsset } from "../../shared/contracts.js";

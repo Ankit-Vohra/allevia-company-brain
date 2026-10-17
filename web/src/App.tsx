@@ -14,7 +14,7 @@ const ApprovalsPage = lazy(() => import("./pages/Approvals"));
 const OnboardPage = lazy(() => import("./pages/Onboard"));
 const ProgramPage = lazy(() => import("./pages/Program"));
 const PlanPage = lazy(() => import("./pages/Plan"));
-const StudioPage = lazy(() => import("./pages/Studio"));
+const LibraryPage = lazy(() => import("./pages/Library"));
 const TeamPage = lazy(() => import("./pages/Team"));
 const ConnectionsPage = lazy(() => import("./pages/Connections"));
 const ConnectedPage = lazy(() => import("./pages/Connections").then((m) => ({ default: m.ConnectedPage })));
@@ -22,7 +22,7 @@ const AccountPage = lazy(() => import("./pages/Account"));
 
 const TITLES: Record<string, string> = {
   "/": "Home", "/office": "Office", "/chat": "Chat", "/ask": "Ask", "/brain": "Brain", "/insights": "Ideas", "/approvals": "Needs your OK", "/onboard": "Add a business",
-  "/studio": "Studio", "/team": "Your team", "/plan": "Plan and credits", "/program": "Your growth plan", "/connections": "Your tools", "/connected": "Connected",
+  "/library": "Library", "/team": "Your team", "/plan": "Plan and credits", "/program": "Your growth plan", "/connections": "Your tools", "/connected": "Connected",
   "/account": "Your account",
 };
 
@@ -60,7 +60,8 @@ export function App() {
             <Route path="/insights" element={<InsightsPage />} />
             <Route path="/approvals" element={<ApprovalsPage />} />
             <Route path="/onboard" element={<OnboardPage />} />
-            <Route path="/studio" element={<StudioPage />} />
+            <Route path="/library" element={<LibraryPage />} />
+            <Route path="/studio" element={<Navigate to="/library" replace />} />
             <Route path="/team" element={<TeamPage />} />
             <Route path="/plan" element={<PlanPage />} />
             <Route path="/program" element={<ProgramPage />} />

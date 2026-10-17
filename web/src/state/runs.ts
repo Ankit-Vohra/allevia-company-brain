@@ -25,7 +25,7 @@ export interface RunRecord {
   events: AgentEvent[];
   status: "running" | "done" | "error" | "stopped";
   error?: string;
-  kind: "live" | "replay" | "studio";
+  kind: "live" | "replay";
   startedAt: number;
   /** The owner pressed Stop: the server is winding the turn down; its `final` is on the way. */
   stopping?: boolean;
@@ -104,14 +104,18 @@ class RunStore {
     return !!r && r.kind === "live" && !!r.turnId && getMode() === "live" && !getPublicMode();
   }
 
-  start(tenant: string, question: string, opts: { sessionId?: string; seekMs?: number; target?: string } = {}): string {
+  /** Ask the team. With `photo`, the photo goes up with the words (POST /chat/photo): Miss Influencer makes it into a post as a turn
+   *  in the same conversation, so it streams, re-attaches and stops like any other. */
+  start(tenant: string, question: string, opts: { sessionId?: string; seekMs?: number; target?: string; photo?: Blob } = {}): string {
     const key = `run-${++this.seq}`;
     const ctrl = new AbortController();
     this.controllers.set(key, ctrl);
     this.put({ key, tenant, question, sessionId: opts.sessionId, ...(opts.target ? { target: opts.target } : {}), events: [], status: "running", kind: "live", startedAt: Date.now() - (opts.seekMs ?? 0) });
     let following = false;
-    api
-      .ask(tenant, { question, sessionId: opts.sessionId, ...(opts.target ? { target: opts.target } : {}) }, (e) => this.append(key, e), { signal: ctrl.signal, seekMs: opts.seekMs })
+    const onEvent = (e: AgentEvent) => this.append(key, e);
+    (opts.photo
+      ? api.askWithPhoto(tenant, { photo: opts.photo, note: question, sessionId: opts.sessionId, ...(opts.target ? { target: opts.target } : {}) }, onEvent, { signal: ctrl.signal })
+      : api.ask(tenant, { question, sessionId: opts.sessionId, ...(opts.target ? { target: opts.target } : {}) }, onEvent, { signal: ctrl.signal, seekMs: opts.seekMs }))
       .then(() => {
         const r = this.runs.get(key);
         if (!r || r.events.some((e) => e.type === "final")) return;
@@ -215,26 +219,6 @@ class RunStore {
     this.controllers.get(key)?.abort();
     this.controllers.delete(key);
     this.patch(key, (r) => (r.status === "running" ? { ...r, status: "stopped", stopping: false } : { ...r, stopping: false }));
-  }
-
-  /** A Studio run: the photo goes up, the content desks' work streams back as the same AgentEvents, so the office shows
-   *  Miss Influencer, Fact Checker and Wordsmith at work (and the Content Studio room reacts to each new asset). */
-  studio(tenant: string, photo: Blob, note: string): string {
-    const key = `studio-${++this.seq}`;
-    const ctrl = new AbortController();
-    this.controllers.set(key, ctrl);
-    this.put({ key, tenant, question: note.trim() ? `Studio: ${note.trim()}` : "Studio: a new photo", events: [], status: "running", kind: "studio", startedAt: Date.now() });
-    api
-      .studioIntake(tenant, photo, note, (e) => this.append(key, e), { signal: ctrl.signal })
-      .then(() => {
-        this.patch(key, (r) => (r.status === "running" ? { ...r, status: r.events.some((e) => e.type === "final") ? "done" : "error", error: r.error ?? "The stream ended before the card was ready." } : r));
-      })
-      .catch((err: unknown) => {
-        if ((err as Error)?.name === "AbortError") return;
-        this.patch(key, (r) => ({ ...r, status: "error", error: (err as Error)?.message ?? "Something went wrong" }));
-      })
-      .finally(() => { this.controllers.delete(key); this.emit(); });
-    return key;
   }
 
   /** Replay a stored turn's event log with a gentle pace (or instantly), through the same renderer as a live run. */

@@ -19,7 +19,7 @@ const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
 const MORE_GROUPS: { label: string; items: { to: string; label: string; icon: IconName }[] }[] = [
   { label: "Your business", items: [
     { to: "/office", label: "Office", icon: "office" },
-    { to: "/studio", label: "Studio", icon: "sparkle" },
+    { to: "/library", label: "Library", icon: "image" },
     { to: "/program", label: "Growth plan", icon: "insights" },
     { to: "/insights", label: "Ideas", icon: "insights" },
   ] },

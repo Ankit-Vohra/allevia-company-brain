@@ -1,0 +1,77 @@
+/* ---------- Library: a calm wall of what the team made, the photos you sent, and your brand files ---------- */
+.library-page {
+  width: 100%; max-width: 1180px; margin: 0 auto;
+  padding: var(--space-xl) clamp(16px, 3vw, 32px) var(--space-2xl);
+  display: grid; gap: var(--space-md); align-content: start;
+}
+.lib-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-sm); flex-wrap: wrap; }
+.lib-sub { margin-top: 4px; color: var(--color-muted); font-size: var(--text-sm); }
+.lib-make { gap: 6px; }
+
+/* the filters: one quiet row of pills */
+.lib-filters { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.lib-filters::-webkit-scrollbar { display: none; }
+.lib-filter {
+  flex: none; min-height: 32px; padding: 0 14px; border-radius: var(--radius-pill); border: 1px solid var(--color-rule);
+  background: transparent; color: var(--color-ink-2); font: inherit; font-size: var(--text-sm); font-weight: 500; cursor: pointer;
+  transition: background-color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+}
+.lib-filter:hover { border-color: var(--color-ink-2); }
+.lib-filter.is-on { background: var(--color-ink); border-color: var(--color-ink); color: var(--color-paper); }
+.lib-filter:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+/* the grid: as many as fit on a wide screen, two on a phone */
+.lib-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-lg) var(--space-md); }
+.lib-tile { min-width: 0; }
+.lib-tile-btn { display: grid; gap: 6px; width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.lib-tile-btn:focus-visible { outline: none; }
+.lib-tile-btn:focus-visible .lib-thumb { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+.lib-thumb {
+  position: relative; display: block; aspect-ratio: 4 / 5; border-radius: var(--radius-md); overflow: hidden;
+  background: var(--color-paper-2); box-shadow: 0 0 0 1px var(--color-rule-2);
+}
+.lib-thumb img, .lib-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform var(--dur-long) var(--ease-out); }
+@media (hover: hover) { .lib-tile-btn:hover .lib-thumb img, .lib-tile-btn:hover .lib-thumb video { transform: scale(1.02); } }
+.lib-play {
+  position: absolute; right: 8px; bottom: 8px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  background: oklch(20% 0.02 50 / 0.6); color: #fff;
+}
+.lib-state {
+  position: absolute; left: 8px; top: 8px; padding: 3px 8px; border-radius: var(--radius-pill); font-size: var(--text-2xs); font-weight: 600;
+  background: var(--color-card); color: var(--color-ink-2); box-shadow: var(--shadow-whisper);
+}
+.lib-state.is-waiting { background: var(--color-accent-soft); color: var(--color-accent-ink); }
+.lib-state.is-posted { background: var(--color-ok-soft); color: var(--color-ok); }
+.lib-state.is-declined { color: var(--color-muted); }
+.lib-title { font-size: var(--text-sm); font-weight: 600; color: var(--color-ink); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lib-meta { font-size: var(--text-xs); color: var(--color-muted); }
+.lib-none { color: var(--color-muted); font-size: var(--text-sm); padding: var(--space-md) 0; }
+
+/* nothing yet: one line and the way to make the first one */
+.lib-empty {
+  display: grid; justify-items: center; gap: var(--space-sm); text-align: center; padding: var(--space-2xl) var(--space-md);
+  border: 1px dashed var(--color-rule); border-radius: var(--radius-frame); color: var(--color-ink-2);
+}
+.lib-empty-icon { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--color-paper-2); color: var(--color-muted); }
+.lib-empty p { max-width: 36ch; }
+
+/* the sheet: the big picture, what it is, the few things to do, how it was made */
+.lib-sheet { display: grid; gap: var(--space-md); }
+.lib-big { margin: 0; border-radius: var(--radius-md); overflow: hidden; background: var(--color-paper-2); display: grid; place-items: center; }
+.lib-big img, .lib-big video { display: block; width: 100%; max-height: 62dvh; object-fit: contain; }
+.lib-sheet-head { display: grid; gap: 4px; }
+.lib-sheet-title { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 400; line-height: 1.2; letter-spacing: -0.01em; }
+.lib-state-text.is-waiting { color: var(--color-accent-ink); font-weight: 600; }
+.lib-state-text.is-posted { color: var(--color-ok); font-weight: 600; }
+.lib-decide { display: flex; gap: var(--space-xs); flex-wrap: wrap; padding: var(--space-sm); border-radius: var(--radius-md); background: var(--color-accent-soft); }
+.lib-said { display: flex; gap: 6px; align-items: center; font-size: var(--text-sm); color: var(--color-ok); }
+.lib-said.is-bad { color: var(--color-bad); }
+.lib-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.lib-actions .btn { gap: 6px; }
+
+@media (max-width: 760px) {
+  .library-page { padding-top: var(--space-md); padding-bottom: 6rem; gap: var(--space-sm); }
+  .library-page .page-title { font-size: var(--text-lg); }
+  .lib-filters { margin-inline: -16px; padding-inline: 16px; }
+  .lib-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-md) var(--space-sm); }
+}
