@@ -8,16 +8,16 @@ import type { AgentId, LearnedRuleDto } from "@shared/contracts";
 import { AGENTS } from "@shared/roster";
 import { api } from "../api";
 import { AgentDrawer } from "../components/AgentDrawer";
-import { BriefPanel } from "../components/BriefPanel";
 import { DiscordHomeCard } from "../components/DiscordCard";
 import { AgentAvatar, agentDef, deptOf, fmtMs } from "../components/bits";
 import { ClockChip } from "../components/ClockChip";
 import { Icon } from "../components/Icon";
 import { LearnedPathDialog } from "../components/Learning";
-import { ProgramCard, weekLine } from "../components/ProgramCard";
-import { Reveal } from "../components/Reveal";
+import { weekLine } from "../components/ProgramCard";
+import { withoutSim } from "../components/insights-words";
 import { chatPath } from "../lib/chat";
-import { usePendingApprovals } from "../components/TopBar";
+import { APPROVALS_CHANGED } from "../components/TopBar";
+import { plainTitle, waitingGroups } from "../lib/home";
 import { WorkFeed } from "../components/WorkFeed";
 import { usePreviewFromUrl, useOfficeClock } from "../lib/daylight";
 import { OfficeCanvas, type OfficeStandup, type ShelfBook } from "../office/OfficeCanvas";
@@ -96,13 +96,17 @@ export function OfficePage() {
     window.addEventListener(TEAM_CHANGED, on);
     return () => window.removeEventListener(TEAM_CHANGED, on);
   }, []);
+  const [pendingTick, setPendingTick] = useState(0);
+  useEffect(() => {
+    const on = () => setPendingTick((t) => t + 1);
+    window.addEventListener(APPROVALS_CHANGED, on);
+    return () => window.removeEventListener(APPROVALS_CHANGED, on);
+  }, []);
   const program = useAsync(() => api.program(tenant.id), [tenant.id, tick]);
-  const caps = useAsync(() => api.capabilities(tenant.id).catch(() => []), [tenant.id]);
   const team = useAsync(() => api.team(tenant.id).catch(() => []), [tenant.id, tick]);
   const learning = useAsync(() => api.learning(tenant.id).catch(() => null), [tenant.id, tick]);
   const recs = useAsync(() => api.recommendations(tenant.id).catch(() => []), [tenant.id]);
   const standup = useAsync(() => api.standup(tenant.id).catch(() => null), [tenant.id]);
-  const drafted = useMemo(() => (standup.data?.items ?? []).filter((i) => i.status === "drafted" && i.approvalId), [standup.data]);
   const stage = useMemo(() => (standup.data ? officeStandup(standup.data) : null), [standup.data]);
   // the stand-up plays by itself the first time this browser sees it; "Watch the stand-up" plays it again
   const [standupPlay, setStandupPlay] = useState(0);
@@ -111,7 +115,10 @@ export function OfficePage() {
     markStandupSeen(stage.id);
     setStandupPlay((n) => n + 1);
   }, [stage]);
-  const pending = usePendingApprovals();
+  // the drafts waiting, repeats folded (the same count as the top bar)
+  const waiting = useAsync(() => api.approvals(tenant.id).catch(() => []), [tenant.id, pendingTick]);
+  const waitingRows = useMemo(() => waitingGroups(waiting.data, standup.data), [waiting.data, standup.data]);
+  const firstTwo = waitingRows.slice(0, 2);
 
   const off = useMemo(() => new Set((team.data ?? []).filter((a) => !a.enabled).map((a) => a.id)), [team.data]);
   const books = useMemo<ShelfBook[]>(() => {
@@ -194,7 +201,11 @@ export function OfficePage() {
   }, [view, record, working]);
 
   const suggestions = (SUGGESTIONS[tenant.id] ?? FIRST_DAY_QUESTIONS).slice(0, 2);
-  const topIdea = useMemo(() => [...(recs.data ?? [])].filter((r) => r.status !== "dismissed").sort((a, b) => b.score - a.score)[0], [recs.data]);
+  // the next step: the best idea that has no draft waiting yet (the drafts are listed just above it)
+  const nextIdea = useMemo(() => {
+    const waitingIds = new Set(waitingRows.flatMap((g) => g.items.map((w) => w.approval.id)));
+    return [...(recs.data ?? [])].filter((r) => r.status !== "dismissed" && !(r.approvalId && waitingIds.has(r.approvalId))).sort((a, b) => b.score - a.score)[0];
+  }, [recs.data, waitingRows]);
   const showSuggest = askFocus && !question.trim() && !running && !narrow;
   const week = weekLine(program.data);
 
@@ -314,94 +325,47 @@ export function OfficePage() {
       </section>
 
       <div className="office-right">
-        <section className="home" aria-label="Today at a glance">
+        {/* one card: how the week is going, the two drafts to look at first, and one next step */}
+        <section className="home office-card" aria-label="Today at a glance">
+          {week && <p className="home-week">{week}</p>}
           <div className="home-row">
-            <p className="home-label">This week</p>
-            <p className="home-week">{week}</p>
-          </div>
-          <div className="home-row">
-            <p className="home-label">Waiting for your OK</p>
-            {standup.data && (
-              <div className="home-standup">
-                {(standup.data.waiting?.length ?? 0) > 0 && (
-                  <>
-                    <p className="home-standup-head">{standup.data.waitingHeading}</p>
-                    <ul className="home-standup-list">
-                      {standup.data.waiting!.map((w) => (
-                        <li key={w.approvalId}>
-                          <Link to={`/approvals#${encodeURIComponent(w.approvalId)}`} className="home-standup-item">
-                            <AgentAvatar id={w.agent} size={22} />
-                            <span className="home-standup-text">
-                              <span className="home-standup-title">{w.title}</span>
-                            </span>
-                            <Icon name="chevron-right" size={14} />
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-                {/* under "Waiting for your OK", a quiet morning says nothing: "Nothing new worth your time" beside "11 things need you" read as a contradiction */}
-                {drafted.length > 0 && <p className="home-standup-head">{standup.data.heading}</p>}
-                {drafted.length > 0 && (
-                  <ul className="home-standup-list">
-                    {drafted.map((i) => (
-                      <li key={i.key}>
-                        <Link to={`/approvals#${encodeURIComponent(i.approvalId!)}`} className="home-standup-item">
-                          <AgentAvatar id={i.agent} size={22} />
-                          <span className="home-standup-text">
-                            <span className="home-standup-title">{agentDef(i.agent)?.name ?? "Your team"} drafted {lowerFirst(i.title)}</span>
-                          </span>
-                          <Icon name="chevron-right" size={14} />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <button type="button" className="btn btn-quiet btn-sm home-standup-watch" onClick={() => setStandupPlay((n) => n + 1)} disabled={running}>
-                  Watch the stand-up
-                </button>
-              </div>
-            )}
-            {pending > 0 ? (
-              <Link to="/approvals" className="home-ok">
-                <span className="count">{pending}</span>
-                <span>{pending === 1 ? "thing needs" : "things need"} you</span>
-                <Icon name="chevron-right" size={15} />
-              </Link>
-            ) : (
-              <p className="home-calm">Nothing right now.</p>
-            )}
+            {firstTwo.length > 0 ? (
+              <ul className="home-standup-list" aria-label="Needs your OK">
+                {firstTwo.map(({ lead: w, items }) => (
+                  <li key={w.approval.id}>
+                    <Link to={`/approvals#${encodeURIComponent(w.approval.id)}`} className="home-standup-item">
+                      <AgentAvatar id={w.approval.by} size={22} />
+                      <span className="home-standup-text">
+                        <span className="home-standup-title">{plainTitle(w.approval.title)}{items.length > 1 && <span className="ap-repeat"> ×{items.length}</span>}</span>
+                      </span>
+                      <Icon name="chevron-right" size={14} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : waiting.data ? (
+              <p className="home-calm">Nothing needs you right now.</p>
+            ) : null}
+            {waitingRows.length > firstTwo.length && <Link to="/approvals" className="home-ok office-all">See all<Icon name="chevron-right" size={15} /></Link>}
           </div>
           <div className="home-row">
             <p className="home-label">Next step</p>
-            {standup.data?.waiting?.[0] ? (
-              <Link to={`/approvals#${encodeURIComponent(standup.data.waiting[0].approvalId)}`} className="home-next">Biggest fix first: {lowerFirst(standup.data.waiting[0].title)}<Icon name="chevron-right" size={15} /></Link>
-            ) : drafted[0] ? (
-              <Link to={`/approvals#${encodeURIComponent(drafted[0].approvalId!)}`} className="home-next">Say OK or change: {lowerFirst(drafted[0].title)}<Icon name="chevron-right" size={15} /></Link>
-            ) : topIdea ? (
-              <Link to="/insights" className="home-next">{topIdea.title}<Icon name="chevron-right" size={15} /></Link>
+            {nextIdea ? (
+              <Link to="/insights" className="home-next">{withoutSim(nextIdea.title)}<Icon name="chevron-right" size={15} /></Link>
             ) : (
               <p className="home-calm">Ask your team below.</p>
             )}
           </div>
+          <div className="office-card-foot">
+            {standup.data && (
+              <button type="button" className="btn btn-quiet btn-sm" onClick={() => setStandupPlay((n) => n + 1)} disabled={running}>Watch the stand-up</button>
+            )}
+            {!running && sessions.data?.length ? (
+              <button type="button" className="btn btn-quiet btn-sm" onClick={replayLatest}><Icon name="replay" size={14} /> Replay the last request</button>
+            ) : null}
+          </div>
         </section>
         <DiscordHomeCard />
-
-      <aside className="office-side" aria-label="Your growth plan and today's note">
-        <div className="panel plan-panel">
-          <ProgramCard program={program.data} caps={caps.data} loading={program.loading} error={program.error} tenantId={tenant.id} onNumbersAdded={() => { program.reload(); caps.reload(); }} />
-        </div>
-        <div className="panel note-panel">
-          <Reveal label="Today's note from Meera" tone="row">
-            <BriefPanel tenantId={tenant.id} onRan={() => program.reload()} />
-          </Reveal>
-        </div>
-        {!running && sessions.data?.length ? (
-          <button type="button" className="btn btn-quiet btn-sm office-replay" onClick={replayLatest}><Icon name="replay" size={14} /> Replay the last request</button>
-        ) : null}
-        <p className="office-cast" title="Point at a dog to see how many documents it has carried today.">{AGENTS.length} people · 3 dogs · 2 cats</p>
-      </aside>
       </div>
 
       <AgentDrawer agentId={selected} onClose={() => setSelected(null)} view={view} />

@@ -44,6 +44,13 @@
 
 /* the plan and today's note: panels, but quiet */
 .office-side { display: grid; gap: 14px; }
+/* the right column is one card */
+.office-card { padding: 4px var(--space-md) 8px; border: 1px solid var(--color-rule-2); border-radius: var(--radius-md); background: var(--color-card); }
+.office-card > .home-week { padding: 12px 0 2px; }
+.office-card > .home-week + .home-row { border-top: 1px solid var(--color-rule-2); }
+.office-all { justify-self: start; font-size: var(--text-sm); }
+.office-card-foot { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 0 2px; border-top: 1px solid var(--color-rule-2); }
+.office-card .ap-repeat { margin-left: 6px; font-size: var(--text-2xs); font-weight: 600; color: var(--color-muted); white-space: nowrap; }
 .plan-panel, .note-panel { box-shadow: none; border-color: var(--color-rule-2); background: var(--color-card); }
 .note-panel { padding: 2px var(--space-md); }
 .note-panel .reveal-btn { padding: 12px 4px 12px 0; }
@@ -166,7 +173,7 @@
   .office-right { display: contents; overflow: visible; }
   .office-head { order: 1; }
   .office-stage { order: 2; flex: none; min-height: 0; }
-  .home { order: 3; }
+  .home, .office-right .discord-card { order: 3; }
   .ask-wrap { order: 4; }
   .suggest { order: 4; }
   .office-side { order: 5; }

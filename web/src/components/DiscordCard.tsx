@@ -65,7 +65,8 @@ export function DiscordHomeCard() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const view = viewOfHome(fresh ?? home.data);
-  if (!view) return null;
+  // "we'll send your link shortly" with no link is a promise, not a place to go: the office shows the card once a link exists
+  if (!view || view.state === "later") return null;
 
   const newLink = async () => {
     setBusy(true);
