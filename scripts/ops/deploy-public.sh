@@ -3,7 +3,8 @@
 #   scripts/ops/deploy-public.sh [ssh-host]        (default: allevia-dev)
 # Copies the code only: never data/, models/, secrets, git history or local builds, so the founder's real businesses and keys
 # stay on the Mac. The server keeps its own settings in ~/.config/allevia/allevia.env (its own FalkorDB, accounts on, billing
-# in test mode), its own data folder, and the models copied once. Then it installs, builds the web app and restarts the server.
+# in test mode), its own data folder, and the models copied once. Its FalkorDB has a password: start it only with
+# ~/allevia-public/falkordb.override.yml (see that file), never with the plain docker-compose.yml. Then it installs, builds the web app and restarts the server.
 set -eu
 HOST="${1:-allevia-dev}"
 cd "$(dirname "$0")/../.."
