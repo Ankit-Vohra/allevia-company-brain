@@ -6,6 +6,7 @@
 //
 // Still frames for QA: add ?still=1 (a frame at ?t= seconds, question ?q=). Reduced motion shows one still frame and a "Next question"
 // button. The loop pauses off-screen and in a hidden tab. Phones get fewer orbits, fewer sparks and no antialiasing.
+import { copyExtent, heroLayout } from "./hero-layout.ts";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
@@ -205,12 +206,11 @@ export async function startHero(root: HTMLElement): Promise<void> {
     const r = stage.getBoundingClientRect(); W = Math.max(1, r.width); H = Math.max(1, r.height);
     renderer.setSize(W, H, false);
     camera.aspect = W / H;
-    const wide = W / H > 1.25 && W > 820;
-    const h1 = root.querySelector<HTMLElement>(".hero__h1"); copyRight = wide && h1 ? h1.getBoundingClientRect().right - r.left : 0;
-    const shift = wide ? W * 0.17 : 0;
-    camera.setViewOffset(W, H, -shift, 0, W, H);
-    const fit = wide ? 1 : Math.min(1, (W / H) * 0.95) * (phone ? 0.92 : 1);
-    world.scale.setScalar(Math.max(0.5, fit));
+    const reach = copyExtent(root, r.left);
+    const lay = heroLayout(W, H, reach, phone);
+    copyRight = lay.wide ? reach : 0;
+    camera.setViewOffset(W, H, -(lay.cx - W / 2), 0, W, H);
+    world.scale.setScalar(lay.scale);
     camera.updateProjectionMatrix();
   };
   new ResizeObserver(resize).observe(stage); resize();
@@ -558,7 +558,7 @@ export async function startHero(root: HTMLElement): Promise<void> {
       bubble.style.transform = `translate3d(${(speaker.x + (left ? -18 : 18)).toFixed(1)}px, ${(speaker.y - 30).toFixed(1)}px, 0) translate(${left ? "-100%" : "0"}, -100%)`;
     }
     answer.style.setProperty("--cx", `${cx.toFixed(0)}px`);
-    stage.style.setProperty("--bx", `${cx.toFixed(1)}px`); stage.style.setProperty("--by", `${cy.toFixed(1)}px`); stage.style.setProperty("--br", `${brainPx.toFixed(1)}px`);
+    stage.style.setProperty("--bx", `${cx.toFixed(1)}px`); stage.style.setProperty("--by", `${cy.toFixed(1)}px`); stage.style.setProperty("--k", (brainPx / 100).toFixed(4));
     renderer.render(scene, camera);
   };
 

@@ -1,17 +1,16 @@
-// Tool logos: the official mark of each tool, from the best source we have.
-//   1. logo.dev, when LOGO_DEV_KEY is set (proto/env.ts reads it from the founder's env file; a publishable "pk_" key, never committed,
-//      never the secret key). The tile points at logo.dev's picture for the tool's domain, hot-linked from its CDN: logo.dev's docs say
-//      to "never host a logo file yourself" (storing logos is a paid Pro/Enterprise licence), and the free plan needs a visible
-//      "Logos provided by Logo.dev" link on a public page (the footer has it). Exception: the tools in `siFirst` (every Google product,
-//      Stripe, QuickBooks), where logo.dev returns the wrong or a generic mark; they keep step 2.
-//   2. Simple Icons (CC0): the brand's own SVG path, drawn in its brand colour. Baked in by scripts/gen-assets.mts.
-//   3. For the brands Simple Icons has removed (Slack, LinkedIn): the picture the app's own Your tools screen shows, where we have
-//      one (Slack). LinkedIn has no logo until the logo.dev key arrives, so it is left out of the pictures that need one.
+// Tool logos: the official mark of each tool, from sources we may use and can host ourselves.
+//   1. Simple Icons (CC0): the brand's own SVG path in its brand colour, baked into the page as inline SVG (no request, no credit needed, sharp at
+//      any size). Baked in by scripts/gen-assets.mts.
+//   2. For the brands Simple Icons has removed: Slack uses the picture the app's own Your tools screen shows (a local file, public/img/tool-slack.webp).
+//      LinkedIn has no mark we may host yet, so it is left out of every list that draws logos (hasLogo is false for it).
+//   3. logo.dev is off. It is used only when the build is run with ALLEVIA_SITE_LOGO_DEV=1 and a LOGO_DEV_KEY (proto/env.ts). That path hot-links
+//      logo.dev's CDN and needs the visible "Logos provided by Logo.dev" credit (footer() adds it when the flag is on), so it is for tests, not for the site.
 // Nothing here draws a logo by hand.
 import { LOGOS, type Logo } from "./assets.generated.ts";
 
 declare const __LOGO_DEV_KEY__: string | undefined;
-const KEY: string = typeof process !== "undefined" && process.env ? (process.env.LOGO_DEV_KEY ?? "") : typeof __LOGO_DEV_KEY__ === "string" ? __LOGO_DEV_KEY__ : "";
+const FLAG = typeof process !== "undefined" && process.env ? process.env.ALLEVIA_SITE_LOGO_DEV === "1" : true;
+const KEY: string = !FLAG ? "" : typeof process !== "undefined" && process.env ? (process.env.LOGO_DEV_KEY ?? "") : typeof __LOGO_DEV_KEY__ === "string" ? __LOGO_DEV_KEY__ : "";
 
 export const usingLogoDev = (): boolean => KEY !== "";
 export const logo = (id: string): Logo | undefined => LOGOS[id];

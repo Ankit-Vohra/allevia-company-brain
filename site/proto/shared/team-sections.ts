@@ -117,7 +117,7 @@ function card(p: (typeof PEOPLE)[number], i: number, row: number): string {
     <div class="card__body">
       <h3 class="card__name" id="who-${p.id}">${esc(a.name)}</h3>
       <p class="card__role">${esc(s.title)}</p>
-      <p class="card__best"><span class="card__label">Best at</span> ${esc(s.best)}</p>
+      <p class="card__best">${esc(s.best)}</p>
       <ul class="card__asks" aria-label="Ask ${esc(a.name)}">${s.asks.map((q) => `<li>“${esc(q)}”</li>`).join("")}</ul>
       ${toolsHtml(p.id)}
     </div>
@@ -189,7 +189,7 @@ function story(): string {
     ${teams()}
     <section class="wrap team team--end" id="after-walk" aria-labelledby="close-h">
       <h2 class="h2 h2--wide h2--split" id="close-h"><span class="t1">Meet them on your own business.</span> <span class="t2">We set it up.</span></h2>
-      <p class="team__cta"><a class="btn btn-gold" href="/contact/">Get a free Brain Snapshot</a></p>
+      <p class="team__cta"><a class="btn btn-gold" href="/contact/#snapshot">Get a free Brain Snapshot</a></p>
     </section>
   </div>
 </main>`;

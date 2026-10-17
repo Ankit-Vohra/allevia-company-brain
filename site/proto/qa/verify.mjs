@@ -2,7 +2,7 @@
 // the page height, at desktop, phone and reduced motion. Usage (from site/): node proto/qa/verify.mjs
 import { chromium } from "playwright";
 const BASE = process.env.BASE ?? "http://127.0.0.1:8812";
-const pages = ["/", "/a/", "/b/", "/product/", "/integrations/", "/pricing/", "/security/", "/faq/", "/team/", "/contact/"];
+const pages = ["/", "/a/", "/product/", "/integrations/", "/pricing/", "/security/", "/faq/", "/team/", "/contact/"];
 const configs = [
   { name: "desktop 1440", opts: { viewport: { width: 1440, height: 900 } } },
   { name: "phone 390", opts: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } },

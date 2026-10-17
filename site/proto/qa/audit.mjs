@@ -5,14 +5,13 @@ import { chromium } from "playwright";
 const BASE = process.env.BASE ?? "http://127.0.0.1:8812";
 const [, , widthArg = "1440", ...rest] = process.argv;
 const width = Number(widthArg);
-const pages = rest.length ? rest : ["a", "b", "product", "integrations", "pricing", "security", "faq", "team", "contact"];
+const pages = rest.length ? rest : ["a", "product", "integrations", "pricing", "security", "faq", "team", "contact"];
 const browser = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
 const phone = width < 700;
 const ctx = await browser.newContext({ viewport: { width, height: phone ? 844 : 900 }, isMobile: phone, hasTouch: phone, reducedMotion: "reduce" });
 for (const p of pages) {
   const page = await ctx.newPage();
   await page.goto(`${BASE}/${p}/`, { waitUntil: "load", timeout: 60000 });
-  await page.addStyleTag({ content: ".proto-switch { display: none !important; }" });
   await page.waitForTimeout(1500);
   const total = await page.evaluate(() => document.documentElement.scrollHeight);
   for (let y = 0; y < total; y += 700) { await page.evaluate((yy) => window.scrollTo(0, yy), y); await page.waitForTimeout(60); }

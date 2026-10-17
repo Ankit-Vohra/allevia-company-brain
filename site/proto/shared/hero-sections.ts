@@ -46,7 +46,7 @@ export function heroData(): string {
 /** The one supporting line under the headline: not something that only answers, but a brain that remembers and a team that does the work. */
 const HERO_SUB = "Allevia is your Founder OS. It remembers everything, works while you’re away, and gets real work done in the tools you already use.";
 
-// ---------- prototype B: the calm diagram ----------
+// ---------- the diagram on the Product page: tools, the brain and its groups, the team, one question ----------
 
 const B_TOOLS = ["gmail", "google-calendar", "google-ads", "meta-ads", "google-analytics", "instagram", "hubspot"];
 const B_TEAM = ["chief-of-staff", "data-analyst", "growth-marketer", "content-strategist", "sales-lead", "tech-lead"];
@@ -80,18 +80,7 @@ function workspaceBlock(): string {
   <script type="application/json" id="hero-data">${heroData()}</script>`;
 }
 
-export function heroB(): string {
-  return `<section class="bhero" data-bhero aria-labelledby="bh-h">
-  <div class="wrap bhero__copy">
-    <h1 id="bh-h" class="bhero__h1"><span class="t1">Your company’s brain.</span> <span class="t2">And the team that runs on it.</span></h1>
-    <p class="bhero__sub">${HERO_SUB}</p>
-    <p class="bhero__cta"><a class="btn btn-gold" href="/contact/">Get a free Brain Snapshot</a><a class="btn btn-ghost" href="#problem">See how it works</a></p>
-  </div>
-${workspaceBlock()}
-</section>`;
-}
-
-/** B's diagram on the Product page: tools, the brain and its groups, the team, one question and its answer. */
+/** The diagram on the Product page: tools, the brain and its groups, the team, one question and its answer. */
 export function productDiagram(): string {
   return `<section class="sec bhero bhero--page" data-bhero aria-label="How your tools, your brain and your team work together">${workspaceBlock()}</section>`;
 }
@@ -116,7 +105,7 @@ export function heroA(): string {
   <div class="wrap hero__copy">
     <h1 id="hero-h" class="hero__h1"><span class="t1">Your company’s brain.</span> <span class="t2">And the team that runs on it.</span></h1>
     <p class="hero__sub">${HERO_SUB}</p>
-    <p class="hero__cta"><a class="btn btn-gold" href="/contact/">Get a free Brain Snapshot</a><a class="btn btn-ghost" href="#problem">See how it works</a></p>
+    <p class="hero__cta"><a class="btn btn-gold" href="/contact/#snapshot">Get a free Brain Snapshot</a><a class="btn btn-ghost" href="#problem">See how it works</a></p>
   </div>
   <button class="hero__next" type="button" data-next hidden>Next question</button>
   <p class="visually-hidden">The brain answers questions founders ask every day. ${esc(sr)}</p>
