@@ -26,7 +26,9 @@ const MAX_TOKENS_CHECKED = 6; // a request stuffed with cookies must not turn in
 
 // Per request: is it a public (read-only demo) view? Set by the tenant middleware; read by refuseInPublicMode and the
 // routes that show less in public mode. Outside a request (and with ALLEVIA_AUTH off) it is the deployment's own switch.
-export const requestView = new AsyncLocalStorage<{ publicView: boolean }>();
+// `role` and `userId` say who is asking (src/server/roles.ts): an owner link makes the caller the owner; a signed-in account
+// carries its own role in the business.
+export const requestView = new AsyncLocalStorage<{ publicView: boolean; role?: "owner" | "member"; userId?: string }>();
 
 const BEARER = /^Bearer ([^\s]+)$/;
 
