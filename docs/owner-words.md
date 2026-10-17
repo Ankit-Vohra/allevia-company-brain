@@ -48,7 +48,7 @@ rules and access levels. The owner sees what it means, not how it works.
 | Capabilities / access mode / api, public, benchmark | What your team can see · "Connect Instagram to see more" |
 | Approval card / pending approval | Waiting for your OK |
 | Recommendation / finding / detector / insight | What we noticed · Idea |
-| Agent / desk / orchestrator / synthesis | Your team · the person's name ("Tara, content") |
+| Agent / desk / orchestrator / synthesis | Your team · the person's role name and team ("Miss Influencer · Content Studio") |
 | Citations / provenance / graph / node | Sources · "how we know" |
 | Simulated | Sample numbers (always said, never hidden) |
 | Morning brief | Today's note |

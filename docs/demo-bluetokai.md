@@ -58,9 +58,9 @@ Wednesday to Sunday for a "this week" story (on 17 or 18 October 2026: release M
 | 1 | **Onboard from the URL** (already done by the commands below; for a second run, Add a business in the web app) | Pages, real products and prices, brand kit, website check, the Google listing and its reviews, Instagram and ads read through public data |
 | 2 | **An unscripted question on Discord**, e.g. "Did the Instagram reach drop cause it?" or "What breaks if UPI payments keep failing?" | "No" with the dates (the dip came nine days earlier); depth 1 against depth 4 from the UPI payments node (order placed, the online store, the campaign) |
 | 3 | **"Poster for Insta with my logo"** | The logo and fonts from the real website; it asks what the poster is for before making one |
-| 4 | **The team notices something and drafts it** (Approvals / Today's note) | Waiting: the fix for the UPI error (sample), Neel's reply to the café's 40 kg a month enquiry with three free times from the sample calendar, a reply to a real Google review, a post; the campaign's pause card (sample) |
+| 4 | **The team notices something and drafts it** (Approvals / Today's note) | Waiting: the fix for the UPI error (sample), Deal Closer's reply to the café's 40 kg a month enquiry with three free times from the sample calendar, a reply to a real Google review, a post; the campaign's pause card (sample) |
 
-Also worth asking: "Reply to the wholesale enquiry" (Neel reads the sample inbox, offers three free times from the sample
+Also worth asking: "Reply to the wholesale enquiry" (Deal Closer reads the sample inbox, offers three free times from the sample
 calendar, waits for OK), "How many orders did Shopify show this week?" (sample Shopify), "Who complained about payments?".
 Approving the email or a meeting is a dry run unless `ALLEVIA_ACTIONS_LIVE=1`, and even then it reaches nobody.
 

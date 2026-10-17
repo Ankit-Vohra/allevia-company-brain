@@ -25,7 +25,7 @@ it came from.
 
 | Step | Type or do | Point at | Graph at work |
 |---|---|---|---|
-| 1. Ask | In Ask (web) or the Discord thread: `Why did sign-ups drop this week, and what should we do?` | **The office.** Meera plans five people at once instead of one: Kabir (what moved, and the day), Zoya (what crashed on those screens), Imran (what shipped, what waits in review), Sara (what we decided before), then Arjun (what else it takes down). Each desk's tool calls stream in the work log. | One question becomes five different traversals of the same graph. |
+| 1. Ask | In Ask (web) or the Discord thread: `Why did sign-ups drop this week, and what should we do?` | **The office.** The Chief plans five people at once instead of one: Data Detective (what moved, and the day), Firefighter (what crashed on those screens), Bug Hunter (what shipped, what waits in review), Memory Keeper (what we decided before), then Techie (what else it takes down). Each desk's tool calls stream in the work log. | One question becomes five different traversals of the same graph. |
 | 2. The answer | Read the first two sentences aloud. | It names the cause and how sure it is ("proven": a record links the release to the crash; "likely": only the dates fit; "not shown"). Numbers carry dates; the paused ad is ruled out by its date. | `metric_trend` on every funnel step: the step where the level stepped (`shift`: the date, the average before and after). |
 | 3. The path | Open "Show how we got this". | **The path**, lit node by node: the step that fell, the sign-up screen, the crash, the 2.8.0 release, Farhan. Click a node: its source and date. | `Feature -DEPENDS_ON-> Page <-AFFECTS- Event <-AFFECTS- Event`; one `algo.SPpaths` call between the step and the release ([`falkordb-queries.md` §13](falkordb-queries.md)). |
 | 4. Depth 1 against depth 4 | Brain page, **What breaks if something stops**, choose the sign-up screen. | Left: what a table lookup sees one step away (the next step, the ad campaign that sends people in). Right: four steps away (job-alert texts, the employer applicant inbox, the first-hire promise to employers), each with its path and owner. | `impact_of`, one traversal per hop (§3). |
@@ -71,7 +71,7 @@ brand kit, search checks, understanding services and audiences, goals, what the 
 
 **Do:** let the viewer type their own question in the business's Discord thread (for example "what breaks if the
 Instagram connector goes down?" or "why did we pause daily stories?"). **Watch:** the live work log in the thread:
-Meera plans, a desk works, tool calls stream. **Point at:** the answer's citations as labels, the checks as badges, and
+The Chief plans, a desk works, tool calls stream. **Point at:** the answer's citations as labels, the checks as badges, and
 the link to the web path view, where the path behind the answer is lit node by node.
 **Graph at work:** on the Brain page, **What breaks if something stops** for the same system: depth 1 (what a table
 lookup sees) against depth 4, with the path to each far item and who looks after it. Then type a name the business
@@ -81,16 +81,16 @@ does not have ("Payroll gateway"): the answer is "I don't have that in your reco
 ### 3. A poster with the owner's logo
 
 **Do:** file the business's logo in its brand library (Studio, brand files), then ask "Poster for Insta with my logo". **Watch:**
-it asks what the poster is for before it makes anything; give the purpose and the line; Rohan reviews the design, Nisha checks
+it asks what the poster is for before it makes anything; give the purpose and the line; Growth Hacker reviews the design, Fact Checker checks
 every word, the draft comes back as an approval card with the logo whole. **Point at:** the asset's lineage in the graph
 (`DERIVED_FROM`, who produced it) and the honest design score. **Costs:** no credits unless paid artwork is switched on
 (`ALLEVIA_STUDIO_ENGINE=recorded` keeps it off).
 
 ### 4. A bad photo turned into good content
 
-**Do:** drop a dark, tilted phone photo into Studio with a one-line note. **Watch:** Tara marks what is wrong on the
-original; two versions come back (a local fix and a generated edit); Nisha compares each with the original and marks
-any added or removed detail; Dev writes the caption. **Point at:** "Enhance, never invent": the version that changed the
+**Do:** drop a dark, tilted phone photo into Studio with a one-line note. **Watch:** Miss Influencer marks what is wrong on the
+original; two versions come back (a local fix and a generated edit); Fact Checker compares each with the original and marks
+any added or removed detail; Wordsmith writes the caption. **Point at:** "Enhance, never invent": the version that changed the
 real place is held back. **Graph at work:** each version is an `Asset` `DERIVED_FROM` the original, with the step that
 made it. **Fallback (labelled "Last run"):** the last Studio run.
 

@@ -23,19 +23,19 @@ that can be run is shown on **Shiftly**, a synthetic shift-jobs app that ships w
 
 > **"Why did sign-ups drop this week, and what should we do?"**
 
-Meera, the Chief of Staff, does not answer from one place: she sends five desks into the same graph at once. Kabir finds
-which step of the sign-up flow fell and on which day, Zoya what crashed on those screens, Imran what shipped and what waits
-in App Store review, Sara what the team decided last time, and Arjun what else breaks one step away against four.
+The Chief (Chief of Staff) does not answer from one place: she sends five desks into the same graph at once. Data Detective finds
+which step of the sign-up flow fell and on which day, Firefighter what crashed on those screens, Bug Hunter what shipped and what waits
+in App Store review, Memory Keeper what the team decided last time, and Techie what else breaks one step away against four.
 
 ```mermaid
 flowchart LR
-  Q["Why did sign-ups drop,<br/>and what should we do?"] --> M[Meera plans five desks]
-  M --> K["Kabir: which step fell, which day"]
-  M --> Z["Zoya: what crashed on those screens"]
-  M --> I["Imran: what shipped, what waits in review"]
-  M --> S["Sara: what we decided before"]
-  Z --> A["Arjun: what else breaks,<br/>one step against four"]
-  K & Z & I & S & A --> C["Meera: cause, chain, path,<br/>two cards for your OK"]
+  Q["Why did sign-ups drop,<br/>and what should we do?"] --> M[The Chief plans five desks]
+  M --> K["Data Detective: which step fell, which day"]
+  M --> Z["Firefighter: what crashed on those screens"]
+  M --> I["Bug Hunter: what shipped, what waits in review"]
+  M --> S["Memory Keeper: what we decided before"]
+  Z --> A["Techie: what else breaks,<br/>one step against four"]
+  K & Z & I & S & A --> C["The Chief: cause, chain, path,<br/>two cards for your OK"]
 ```
 
 What comes back in about 90 seconds, from a recorded live run you can replay: new accounts fell from about 238 a day to about
@@ -92,7 +92,7 @@ path is checked against the graph before it is drawn. Take FalkorDB away and no 
 
 The same questions, the same model (Sonnet) and the same answer rules, on the Claude subscription, three ways: **stuff** (one model call
 whose prompt holds all of the business's documents), **one agent** (the graph tools, no documents in the prompt) and the **team** (the
-product: Meera plans, desks work, reviewers check, Meera answers). "Read" is everything the model read, in the Agent SDK's own usage
+product: the Chief plans, desks work, reviewers check, the Chief answers). "Read" is everything the model read, in the Agent SDK's own usage
 numbers (the cached prompt prefix counts every call, so a multi-call answer reads more than its context); "evidence" is what the tools
 handed the model. Script: [`scripts/bench-efficiency.ts`](scripts/bench-efficiency.ts), every turn now saves its tokens and tool calls on
 the Turn node.
@@ -227,11 +227,11 @@ running), give the owner a team instead of a tool, and make every answer carry i
 
 ## What it does
 
-- **A thirteen-person company in a pixel office.** Meera (Chief of Staff) plans each request and sends it to the right
-  desks: Isha (Center of Excellence, checks every number), Kabir (Analytics), Rohan (Marketing), Tara, Dev and Nisha
-  (Content Studio: strategist, copy editor, fact checker), Arjun, Zoya and Imran (Tech: tech lead, on-call engineer for
-  Sentry errors and crashes, QA and release manager for builds and the app stores), Vikram (Operations), Neel (Sales: answers new
-  enquiries, offers real times from the calendar, books the call once the owner says OK, follows up) and Sara (Library). Every
+- **A thirteen-person company in a pixel office.** The Chief (Chief of Staff) plans each request and sends it to the right
+  desks: Number Cruncher (Center of Excellence, checks every number), Data Detective (Analytics), Growth Hacker (Marketing), Miss Influencer, Wordsmith and Fact Checker
+  (Content Studio: strategist, copy editor, fact checker), Techie, Firefighter and Bug Hunter (Tech: tech lead, on-call engineer for
+  Sentry errors and crashes, QA and release manager for builds and the app stores), Taskmaster (Operations), Deal Closer (Sales: answers new
+  enquiries, offers real times from the calendar, books the call once the owner says OK, follows up) and Memory Keeper (Library). Every
   agent is an `Agent` node in the graph, every step streams to the office and the work log, and every handoff is
   visible. The roster is [`shared/roster.ts`](shared/roster.ts).
 - **Every answer comes with its graph path.** The answer cites node ids; the server checks each citation was returned
@@ -249,8 +249,8 @@ running), give the owner a team instead of a tool, and make every answer carry i
   issues and Discord posts are dry runs unless `ALLEVIA_ACTIONS_LIVE=1`; drafts are never published.
 - **Insights without model guesswork.** 21 deterministic Cypher detectors (SEO, content, funnel, simulated ads,
   knowledge gaps, and on-call and release health for the app) produce findings with evidence ids and numbers from the
-  graph; Today's note (the morning brief) is a goal pulse built from them, with an "On call" section only when Zoya or
-  Imran has something open ([`src/insights/`](src/insights)).
+  graph; Today's note (the morning brief) is a goal pulse built from them, with an "On call" section only when Firefighter or
+  Bug Hunter has something open ([`src/insights/`](src/insights)).
 - **Answers a busy owner can act on.** The Chief of Staff leads with the answer, numbers the steps, ranks at most five
   items and ends on one next action, in plain words (no "baseline" or "agent"). The shape follows the MIT-licensed
   [i-have-adhd](vendor/skills/i-have-adhd/NOTICE.md) rules and [`docs/owner-words.md`](docs/owner-words.md)
@@ -258,19 +258,19 @@ running), give the owner a team instead of a tool, and make every answer carry i
 - **Onboarding from a URL.** A polite, SSRF-safe crawler reads the site, builds the brand kit, runs SEO checks, maps
   services, audiences and needs, and enrols the business in a 90-day program with goals and Day-0 baselines
   ([`src/onboard/`](src/onboard), [`src/ingest/sources/website/`](src/ingest/sources/website)).
-- **Studio.** A phone photo goes in with EXIF stripped; Tara assesses it and the owner gets two options: A, a free local
+- **Studio.** A phone photo goes in with EXIF stripped; Miss Influencer assesses it and the owner gets two options: A, a free local
   clean-up, and B, an AI edit from the real Higgsfield engine, quoted first in Studio credits (about 2) and refused above
-  the per-edit and daily caps. Nisha's fidelity check compares each against the original, marks any structural change
+  the per-edit and daily caps. Fact Checker's fidelity check compares each against the original, marks any structural change
   and picks "our pick"; a held-back AI edit gets one tighter retry. Under the options the owner asks for changes in plain
   words: light and colour are free, "make it festive", "a different background", "remove the pole" and "make this into an ad
   saying ..." use the AI editor, and a 5 second 9:16 clip is an explicit, priced extra. **"Make this a premium UGC ad"** turns a rough product
   photo into a premium, UGC-style ad picture with Higgsfield's product-photoshoot backend (a lifestyle scene, quoted first at about 6.5
-  credits and capped; the owner's photo goes in as the reference), Nisha checks that the *product* is unchanged, and a 5 second vertical clip
+  credits and capped; the owner's photo goes in as the reference), Fact Checker checks that the *product* is unchanged, and a 5 second vertical clip
   from it (about 5 credits) waits on the same card, web and Discord. The job, its cost, the rules it was built from and the chain from the
   photo are in the graph ([`src/studio/premium.ts`](src/studio/premium.ts), [`lineage.ts`](src/studio/lineage.ts); live check on 17 October:
   the founder's private run notes, 11.5 credits). People in a photo are kept as they
   are unless the business turns on "Blur people's faces in my content"; a photo with a child gets the free clean-up only.
-  Dev writes the caption and the owner approves ([`src/studio/`](src/studio)). Spend and the live check are in
+  Wordsmith writes the caption and the owner approves ([`src/studio/`](src/studio)). Spend and the live check are in
   [`docs/higgsfield-spend.md`](docs/higgsfield-spend.md).
 - **Other surfaces.** A Discord bot (a thread per conversation, live work log, approval buttons), a read-only MCP server
   for other agents, a CLI for everything, and a static marketing site (`site/`): one scroll story about the company brain, drawn from the real graph, with prices in US dollars.
@@ -429,7 +429,7 @@ flowchart LR
   end
   subgraph Server["Node + TypeScript"]
     API["Hono API<br/>SSE streams, public mode"]
-    ORCH["Agent company<br/>Meera plans, desks work,<br/>reviewers check, Meera answers"]
+    ORCH["Agent company<br/>The Chief plans, desks work,<br/>reviewers check, the Chief answers"]
     TOOLS["21 graph tools<br/>queries, algo.*, RO Cypher"]
     CHK["Answer checks<br/>citations, numbers,<br/>simulated, freshness, mode"]
     INS["Detectors, brief,<br/>approvals, executors"]
@@ -460,9 +460,9 @@ flowchart LR
   SRC --> ING --> FDB
 ```
 
-A request: recall what the graph already knows about the question; Meera returns a plan (one to three desks); each
+A request: recall what the graph already knows about the question; the Chief returns a plan (one to three desks); each
 desk runs as its own Agent SDK query with only its tools and writes a Finding; the reviewers named in the roster
-check it; Meera writes the answer, calls `show_path`, and may propose an action. The Turn, Findings, reviews and the
+check it; the Chief writes the answer, calls `show_path`, and may propose an action. The Turn, Findings, reviews and the
 full event log are written to the graph, which is what makes replay possible. Design:
 [engineering spec](docs/superpowers/specs/2026-10-15-allevia-design.md) §4–§9 and §16.
 
@@ -605,7 +605,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 | `ask <tenant> "<question>"` | Ask the agent company and watch every agent's steps in the terminal |
 | `insights <tenant>` | Run the 21 detectors; write recommendations and approval cards |
 | `brief <tenant>` | Write today's note (goals, what changed, what we noticed, on call, waiting for your OK, next step) |
-| `standup <tenant>` | Run today's team stand-up now: Meera picks at most 3 things worth doing, the team drafts them for your OK, and today's note leads with them (the server runs it each business's morning; see docs/proactive-trials.md) |
+| `standup <tenant>` | Run today's team stand-up now: the Chief picks at most 3 things worth doing, the team drafts them for your OK, and today's note leads with them (the server runs it each business's morning; see docs/proactive-trials.md) |
 | `approvals <tenant> [approve\|reject <id>]` | List or decide approval cards (`--edit <file>` teaches a learned rule) |
 | `program <tenant> [--read-only]` | The Allevia 90 scorecard |
 | `tell <tenant> "<instruction>"` | "Tell your team": preview a plain-language change, `--apply` to make it |
@@ -623,7 +623,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 | `db:export` / `db:import` / `db:busy` | Copy a graph between FalkorDB servers as a verified JSON-lines file, and see what a server is running ([moving to FalkorDB Cloud](docs/falkordb-cloud.md)) |
 | `privacy-scan <tenant>` | Scan every string in a tenant's graph for secrets and personal data (must report 0) |
 | `graph:story <tenant> [--by recorded\|happened] [--bucket day\|week]` | How the business's brain grew: nodes and edges per day or week by kind, from the graph itself (two clocks: when the team learned it, and the date of its source); read-only |
-| `graph:lineage <tenant> <assetId>` | How a Studio picture or clip was made: the photo it came from, each step, the Higgsfield jobs and their cost, the rules, Nisha's check, the card and the post; read-only |
+| `graph:lineage <tenant> <assetId>` | How a Studio picture or clip was made: the photo it came from, each step, the Higgsfield jobs and their cost, the rules, Fact Checker's check, the card and the post; read-only |
 | `checkup [<url>] --tenant <slug> [--weekly on\|off]` | The free website check-up: top five fixes by likely enquiries; with `--tenant` the site and kind come from onboarding and the run is stored. The web button, `/checkup` and the weekly schedule run it in the background |
 
 ## Tests and evals
@@ -664,7 +664,7 @@ edges nothing refers to; the suite holds both rules (see Tests).
 - **Subscription only:** no API key is used or accepted for model calls. Secrets live in
   `~/.config/allevia/allevia.env`, outside the repo; `.env.example` documents every name with no values.
 - **Studio:** photos are re-encoded without EXIF metadata on intake; edit prompts forbid text, numbers, logos and
-  added or removed structures (except what the owner asked for), and Nisha's fidelity check fails closed. The AI editor
+  added or removed structures (except what the owner asked for), and Fact Checker's fidelity check fails closed. The AI editor
   runs on the founder's `higgsfield` CLI login (argument arrays, no shell, the photo in a private temp dir that is deleted),
   is quoted before every generation, and is capped per edit (`ALLEVIA_STUDIO_RUN_CREDIT_CAP`, 5), per clip
   (`ALLEVIA_STUDIO_CLIP_CREDIT_CAP`, 8) and per day (`ALLEVIA_STUDIO_DAILY_CREDIT_CAP`, 25) in a ledger kept in the data dir.
