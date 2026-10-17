@@ -5,7 +5,7 @@ import { chromium } from "playwright";
 const BASE = process.env.BASE ?? "http://127.0.0.1:8812";
 const [, , widthArg = "1440", ...rest] = process.argv;
 const width = Number(widthArg);
-const pages = rest.length ? rest : ["a", "product", "integrations", "pricing", "security", "faq", "team", "contact"];
+const pages = rest.length ? rest : ["a", "product", "integrations", ...(process.env.ALLEVIA_SITE_PRICING === "1" ? ["pricing"] : []), "security", "faq", "team", "contact"];
 const browser = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
 const phone = width < 700;
 const ctx = await browser.newContext({ viewport: { width, height: phone ? 844 : 900 }, isMobile: phone, hasTouch: phone, reducedMotion: "reduce" });

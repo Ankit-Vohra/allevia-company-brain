@@ -6,6 +6,7 @@ import { CALM, FLOW_PATHS, NOISE, OUTCOMES, PROBLEMS } from "./data.ts";
 import { logoMarkup } from "./logos.ts";
 import { okBlock, PLAN_CARDS } from "./page-sections.ts";
 import { esc } from "./util.ts";
+import { pricingVisible } from "./flags.ts";
 
 const face = (id: string, cls = "face") => `<span class="${cls}" role="img" aria-label="${esc(AGENTS[id]?.name ?? id)}">${AGENTS[id]?.svg ?? ""}</span>`;
 const rng = (seed: number) => () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; };
@@ -131,6 +132,7 @@ export function closeCta(): string {
 // ---------- the plans, in three lines ----------
 
 export function pricingTeaser(): string {
+  if (!pricingVisible()) return ""; // the plans are hidden with the pricing page (flags.ts)
   const cards = PLAN_CARDS.map((c) => `<li class="pmini ${c.lead ? "pmini--lead" : ""}"><h3 class="pmini__name">${esc(c.name)}</h3><p class="pmini__note">${esc(c.note)}</p><p class="pmini__price"><span class="money">$${c.price.toLocaleString("en-US")}</span><span class="per"> a month</span></p></li>`).join("");
   return `<section class="ptease sec" id="plans" aria-labelledby="pt-h">
   <div class="wrap">

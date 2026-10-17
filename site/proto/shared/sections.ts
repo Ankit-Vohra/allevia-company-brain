@@ -10,10 +10,10 @@ import { COMPANY } from "../../src/company.ts";
 import { heroA, productDiagram } from "./hero-sections.ts";
 import { HOME_SECTIONS } from "./home-sections.ts";
 import { PAGE_SECTIONS } from "./page-sections.ts";
+import { pricingVisible } from "./flags.ts";
 export { esc };
 
-/** The pages of the site, in the order of the top bar. */
-export const NAV: { label: string; href: string; id: string }[] = [
+const NAV_ALL: { label: string; href: string; id: string }[] = [
   { label: "Product", href: "/product/", id: "product" },
   { label: "Integrations", href: "/integrations/", id: "integrations" },
   { label: "Team", href: "/team/", id: "team" },
@@ -21,9 +21,12 @@ export const NAV: { label: string; href: string; id: string }[] = [
   { label: "Security", href: "/security/", id: "security" },
 ];
 
+/** The pages of the site, in the order of the top bar. Pricing is left out while the pricing page is hidden (flags.ts). */
+export const navItems = (): { label: string; href: string; id: string }[] => NAV_ALL.filter((n) => n.id !== "pricing" || pricingVisible());
+
 /** The top bar. `current` is the page id that gets aria-current; `home` is where the wordmark goes (the prototype's own home). */
 export function nav(current: string, home: string): string {
-  const links = NAV.map((n) => `<a href="${n.href}"${n.id === current ? ' aria-current="page"' : ""}>${esc(n.label)}</a>`).join("");
+  const links = navItems().map((n) => `<a href="${n.href}"${n.id === current ? ' aria-current="page"' : ""}>${esc(n.label)}</a>`).join("");
   return `<a class="skip" href="#main">Skip to content</a>
 <header class="nav" data-nav>
   <div class="wrap nav__in">
@@ -47,7 +50,7 @@ export function footer(): string {
       <p class="foot__mail"><a href="mailto:${COMPANY.email.general}">${esc(COMPANY.email.general)}</a></p>
       <p><a class="btn btn-gold btn-sm" href="/contact/#demo">Book a demo</a></p>
     </div>
-    ${col("Product", [["How it works", "/product/"], ["Integrations", "/integrations/"], ["Team", "/team/"], ["Pricing", "/pricing/"]])}
+    ${col("Product", [["How it works", "/product/"], ["Integrations", "/integrations/"], ["Team", "/team/"], ...(pricingVisible() ? [["Pricing", "/pricing/"] as [string, string]] : [])])}
     ${col("Company", [["About", "/about/"], ["Contact", "/contact/"], ["Security", "/security/"], ["Questions", "/faq/"]])}
     ${col("Legal", [["Privacy", "/privacy/"], ["Terms", "/terms/"], ["Cookies", "/cookies/"], ["Data deletion", "/data-deletion/"]])}
   </div>
@@ -71,6 +74,6 @@ export const SECTIONS: Record<string, (page: string) => string> = {
   ...PAGE_SECTIONS,
   "hero-a": () => heroA(),
   "product-diagram": () => productDiagram(),
-  nav: (page) => nav(NAV.some((n) => n.id === page) ? page : "", "/a/"),
+  nav: (page) => nav(navItems().some((n) => n.id === page) ? page : "", "/a/"),
   footer: () => footer(),
 };
