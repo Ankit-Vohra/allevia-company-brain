@@ -288,6 +288,15 @@ export default function GraphView({
   }, [data, followGrowth, focusId, hl, pathNodes, reducedMotion]);
   useEffect(() => () => clearTimeout(growTimer.current), []);
 
+  // a big first drawing takes a while to settle (longer on a phone): bring it into view early, before the engine stops
+  const hasData = data.nodes.length > 0;
+  useEffect(() => {
+    if (!hasData || moving || !big) return;
+    const timers = [1200, 2800].map((ms) => setTimeout(() => { if (!userMoved.current && !focusId && !hl.size && !pathNodes.size) fit(reducedMotion ? 0 : 500); }, ms));
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasData, layoutKey]);
+
   // a drifting graph never stops its engine, so it is fitted on a clock instead
   useEffect(() => {
     if (!moving || !data.nodes.length) return;
