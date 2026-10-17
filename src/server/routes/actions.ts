@@ -8,6 +8,7 @@ import { usesFoundersAccounts } from "../../actions/executors.js";
 import { ActionTargetError, APP_TARGET_LABEL, getActionTarget, setActionTarget, type ActionTarget } from "../../actions/target.js";
 import { loadConfig } from "../../config.js";
 import { HttpError, readBody, type RouteCtx } from "../http.js";
+import { requireOwner } from "../roles.js";
 
 const Body = z.discriminatedUnion("target", [
   z.object({ target: z.literal("app") }),
@@ -32,6 +33,7 @@ export function registerActionRoutes(app: Hono, ctx: RouteCtx): void {
   app.post("/api/:t/actions/target", async (c) => {
     const { reg, g } = await ctx.tenantOf(c);
     ctx.refuseInPublicMode();
+    requireOwner(); // where fixes land is one of the owner's connections (src/server/roles.ts)
     const body = await readBody(c, Body);
     try {
       return c.json(dto(await setActionTarget(g, body, { now: ctx.now(), tenant: reg.slug, businessId: reg.businessId, serverRepo: serverRepo() })));

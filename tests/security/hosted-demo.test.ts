@@ -8,8 +8,9 @@ import { ensureRoster } from "../../src/agent/memory.js";
 import { FakeRuntime } from "../../src/agent/runtime.js";
 import { createAskDeps } from "../../src/agent/wiring.js";
 import { issueToken, revokeToken } from "../../src/auth/tokens.js";
-import { closeAll, openGraphByName, type GraphHandle } from "../../src/graph/client.js";
-import { listTenants, setDemo } from "../../src/graph/tenants.js";
+import { getSubscription } from "../../src/billing/subscription.js";
+import { closeAll, openGraph, openGraphByName, type GraphHandle } from "../../src/graph/client.js";
+import { ensureTenant, listTenants, setDemo } from "../../src/graph/tenants.js";
 import { startServer } from "../../src/server/main.js";
 import { fakeEmbed, SEED_NOW } from "../fixtures/seed-graph.js";
 import { testGraphName } from "../helpers/graph.js";
@@ -25,6 +26,7 @@ let url = "";
 let stop: () => Promise<void>;
 let ownerLink = "";
 let warnings: string[] = [];
+const made: string[] = []; // businesses a test signed up and set up: their graphs are dropped at the end
 
 const freePort = (): Promise<number> => new Promise((resolve, reject) => {
   const s = createServer();
@@ -57,7 +59,13 @@ beforeAll(async () => {
     over: {
       // naming listTenants keeps the background schedules (stand-ups, check-ups, posting) off, as in every test
       listTenants: () => listTenants(opts),
-      openGraph: async (slug) => { const g = graphs[slug]; if (!g) throw new Error(`no graph for ${slug}`); return g; },
+      openGraph: async (slug) => graphs[slug] ?? (made.includes(slug) ? openGraph(slug) : Promise.reject(new Error(`no graph for ${slug}`))),
+      // stands in for onboarding (which reads a real website with a model): registers the business, as the real one does first
+      loadOnboard: async () => async (input, emit) => {
+        await ensureTenant({ slug: input.slug, name: input.name }, opts);
+        made.push(input.slug);
+        emit({ type: "done", tenant: input.slug, counts: { Page: 1 } });
+      },
       askDeps: async (tenant) => createAskDeps({ tenant }, { graph: graphs[tenant]!, runtime: new FakeRuntime(SCRIPTS), embedQuery: async (t) => fakeEmbed(t) }),
       tenantCacheMs: 0, heartbeatMs: 0, log: () => {},
     },
@@ -71,6 +79,7 @@ afterAll(async () => {
   await stop?.();
   await demo?.drop();
   await priv?.drop();
+  for (const s of made) await (await openGraph(s)).drop().catch(() => {});
   await (await openGraphByName(metaGraph)).drop();
   if (saved === undefined) delete process.env.ALLEVIA_META_GRAPH; else process.env.ALLEVIA_META_GRAPH = saved;
   await closeAll();
@@ -175,6 +184,34 @@ describe("an owner with a link", () => {
     expect((await get("/api/private_co/overview", { cookie: c2 })).status).toBe(401);
     expect((await get("/api/private_co/overview", { cookie })).status).toBe(401);
     expect((await send("/api/auth/open", { token: second })).status).toBe(401);
+  });
+});
+
+describe("a judge with an account, on the real server", () => {
+  it("signs up, sets up their own business on the trial, still sees the demo read-only, and signs out", async () => {
+    const email = `judge.${Math.random().toString(36).slice(2, 8)}@example.com`;
+    const up = await send("/api/auth/signup", { name: "Jo Judge", email, password: "a long enough password" });
+    expect(up.status).toBe(201);
+    const set = up.headers.getSetCookie().find((c) => c.startsWith("allevia_session=")) ?? "";
+    expect(set).toMatch(/HttpOnly/i);
+    expect(set).toMatch(/SameSite=Lax/i);
+    const cookie = set.split(";")[0]!;
+    const res = await send("/api/onboard", { name: "Judge Bakery", url: "judge-bakery.example" }, { cookie });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toMatch(/"type":"done","tenant":"judge_bakery"/);
+    const list = await (await get("/api/tenants", { cookie })).json() as Array<Record<string, unknown>>;
+    expect(list.map((t) => [t.id, t.role ?? null, t.readOnly ?? false])).toEqual([["judge_bakery", "owner", false], ["demo_co", null, true]]);
+    expect((await get("/api/judge_bakery/overview", { cookie })).status).toBe(200);
+    expect((await get("/api/judge_bakery/overview")).status).toBe(401);
+    expect((await send("/api/demo_co/approvals/approval:t-001-1", { decision: "approve" }, { cookie })).status).toBe(403);
+    // the production wiring started the trial through the server's credits ledger: 100 credits, ending in 14 days
+    const sub = await getSubscription("judge_bakery", opts);
+    expect(sub?.status).toBe("trial");
+    expect(sub!.trialEndsAt!).toBeGreaterThan(Date.now() + 13 * 86_400_000);
+    const credits = await (await get("/api/judge_bakery/credits", { cookie })).json() as { balance: Record<string, unknown> };
+    expect(credits.balance).toMatchObject({ status: "trial", trial: 100, left: 100 });
+    expect((await send("/api/auth/logout", {}, { cookie })).status).toBe(200);
+    expect((await get("/api/judge_bakery/overview", { cookie })).status).toBe(401);
   });
 });
 

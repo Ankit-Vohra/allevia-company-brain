@@ -15,8 +15,9 @@ bound to exactly one business by the server before any agent, tool or query runs
 header, a tool argument, a message, a card) can change which graph is used. Everything a business can tweak (which
 agents are on, how free they are, standing instructions, brand rules, learned rules, goals) is data in that business's
 own graph. A new business starts from code (the roster, the industry template, public playbooks), never from a copy of
-another business. With `ALLEVIA_AUTH=1`, nobody can open a business without its private owner link; only a business
-marked as a public demo opens without one, and then read-only.
+another business. With `ALLEVIA_AUTH=1`, nobody can open a business unless they are signed in to an account that is a
+member of it, or hold its private owner link; only a business marked as a public demo opens without either, and then
+read-only.
 
 ## What isolates what
 
@@ -24,7 +25,7 @@ marked as a public demo opens without one, and then read-only.
 |---|---|---|---|
 | A business's knowledge: facts, documents, numbers, notes, the team's memory, learned rules, settings, goals, approvals, Studio records | Its own graph `allevia_<slug>`. The only way a business becomes a graph name is `graphName(slug)`. | `src/graph/client.ts`, `src/graph/slug.ts` | `slug`, `http-isolation`, `graph-binding` |
 | The slug itself | One rule: lowercase letters and digits joined by single `_`, at most 40 characters, and not a reserved word (`meta`, `operator`, and the API's own path words). So no tenant can be called `allevia_meta`, and no slug can carry a path, a quote or a look-alike letter. | `src/graph/slug.ts` | `slug` (33 crafted slugs against every place a tenant is named) |
-| The registry (`allevia_meta`): which businesses exist, their region, the hashes of owner links, and the Discord hub's mapping and join links | Only the tenant registry, the token store and the hub's store open it. No request reads it directly; a business is shown only its own join link. It never holds a business's knowledge. | `src/graph/tenants.ts`, `src/auth/tokens.ts` | `tokens`, `slug` |
+| The registry (`allevia_meta`): which businesses exist, their region, the hashes of owner links, the accounts (their password hashes, the hashes of their sessions, invites and reset links, and who is a member of which business), and the Discord hub's mapping and join links | Only the tenant registry, the token store, the account store and the hub's store open it. No request reads it directly; a business is shown only its own join link and its own members. It never holds a business's knowledge. | `src/graph/tenants.ts`, `src/auth/tokens.ts`, `src/auth/accounts.ts` | `tokens`, `accounts`, `slug` |
 | What an agent, a tool or the MCP server can read | The graph handle is put in the request by the server (`ToolContext.graph`). No tool has an input that names a tenant, graph or database, and a forged one in the arguments is dropped before the tool runs. | `src/agent/tool.ts`, `src/mcp/server.ts` | `graph-binding` |
 | The free-form `cypher` tool | Read-only three ways: a text guard, `GRAPH.RO_QUERY` (the server itself refuses a write), and bounds on time and size. It runs inside one graph; Cypher has no way to name another. | `src/agent/tools/cypher.ts` | `graph-binding` (graph-switching syntax, over thirty spellings of a write, crafted parameters) |
 | Search: full-text and vector indexes | Per graph. Searching in one business cannot reach another's index. | `src/graph/indexes.ts` | `graph-binding` |
@@ -35,7 +36,8 @@ marked as a public demo opens without one, and then read-only.
 | Onboarding crawl output and run reports | `data/onboard/<slug>/`, `data/runs/<slug>/`. Onboarding refuses a crafted slug before it writes anything. | `src/onboard/onboard.ts` | `paths` |
 | What leaves the system when a card is approved | The GitHub repo and Discord channel in the env file are the founder's, and belong to the founder's own businesses (and any named in `ALLEVIA_ACTION_TENANTS`). Any other business's approved card is skipped, live or dry. A card cannot pick the Discord channel. | `src/actions/executors.ts` | `connectors` |
 | Model calls (Claude on the subscription) | Each call is built from one business's graph through tools bound to it. The agents have no built-in tools (no shell, no files, no web), an empty working folder, and an allow-listed environment with no keys or tokens. | `src/agent/runtime.ts`, `src/agent/sdk-env.ts`, `src/ingest/llm.ts` | `graph-binding`, `tests/agent/sdk-env.test.ts` |
-| Who may open a business | Owner tokens (below), when `ALLEVIA_AUTH=1`. | `src/auth/tokens.ts`, `src/server/auth.ts` | `auth`, `mcp-auth`, `cli-auth` |
+| Who may open a business | Accounts that are members of it, and owner tokens (below), when `ALLEVIA_AUTH=1`. | `src/auth/accounts.ts`, `src/auth/tokens.ts`, `src/server/auth.ts`, `src/server/routes/account.ts` | `login`, `accounts`, `passwords`, `auth`, `hosted-demo`, `mcp-auth`, `cli-auth` |
+| What a person may change inside a business | Their role there: an owner changes everything; a member asks, writes drafts and approves, but cannot change the plan, billing, connections, the team or who is in the business. | `src/server/roles.ts` | `login`, `roles` |
 | What a business's team does by default | Code: the roster, the industry template, the vendored public playbooks. Not a copy of any graph. | `shared/roster.ts`, `src/onboard/templates.ts` | `config-per-tenant` |
 | Discord (the shared hub: one server, one bot, every customer) | Which business a Discord event belongs to is decided only by the channel id, looked up in a saved mapping (`allevia_meta`); channel names, message text, display names and button ids never choose one. A person must hold that business's own Discord role (Allevia staff alone do not ask a customer's team anything or decide its cards). Each business gets its own bot instance over its own graph. `#support` is people only: nothing in it reaches an agent. Join links are single-use, expire in 7 days, and give exactly one business's role. | `src/discord/hub-*.ts` | `tests/discord/hub-*.test.ts` |
 | The older single-business Discord bot (`discord --tenant`) | One business, one server and one channel, fixed when it starts. Nothing in a message, command or button chooses another. | `src/discord/bot.ts` | `discord-isolation` |
@@ -45,7 +47,8 @@ marked as a public demo opens without one, and then read-only.
 
 1. **The path names the business, and only the path.** `/api/<slug>/...`. The slug must be a valid slug and registered;
    otherwise the answer is the same 404 (or, with `ALLEVIA_AUTH=1`, the same 401) for a business that exists and one that
-   does not. A header, a cookie, a query value or a body field naming another business is ignored.
+   does not. A header, a cookie, a query value or a body field naming another business is ignored. A signed-in account is
+   let into the business in the path only if it is a member of that one; being a member of another opens nothing here.
 2. **The server opens that business's graph and hands it to the code.** Routes, agents and tools receive a graph handle,
    not a name. Tools have no `tenant` or `graph` input; the schema drops one if it is sent.
 3. **Every query is parameterised.** Values travel as parameters; a crafted value cannot break out of its quotes. The
@@ -94,10 +97,12 @@ the same deployment would have been readable by the world.
   change is a 403, threads show only showcase turns), exactly as public mode did. A visitor holding a token for
   a business is its owner even on a deployment in public mode. Marking takes up to 5 seconds to apply (the server caches
   the registry that long).
-- **The operator link** (`auth:issue --operator`) opens every business and is the only thing that can start onboarding
-  (a business spends model time and makes a graph). Keep it off shared machines.
-- **The business list** (`/api/tenants`) shows a stranger only the demos, an owner their own business and the demos, the
-  operator everything. `/api/health` stops reporting the number of businesses.
+- **The operator link** (`auth:issue --operator`) opens every business and, with a signed-in account (one business each
+  during the trial, see "Accounts" below), is what can start onboarding (a business spends model time and makes a graph).
+  Keep it off shared machines.
+- **The business list** (`/api/tenants`) shows a stranger only the demos, a signed-in account the businesses it is in
+  (with its role) and the demos, an owner link its own business and the demos, the operator everything.
+  `/api/health` stops reporting the number of businesses.
 - **Cross-site requests are refused** (with the flag on): a change that carries a foreign `Origin`, or is a cross-site
   fetch, is a 403. This also stops a form on another site from posting an attacker's own link to `/api/auth/open`.
 - **MCP over HTTP** needs the same bearer token. stdio MCP is the operator's own process.
@@ -115,6 +120,62 @@ the same deployment would have been readable by the world.
 Before the first paying customer: set `ALLEVIA_AUTH=1`, issue that customer's link and the operator's, mark only the demo
 businesses with `auth:demo`, and keep the database private (see the open items).
 
+### Accounts: email and password (since 17 October)
+
+The founder's choice of 17 October: our own email-and-password sign-in, no outside sign-in service, the accounts kept in
+the registry graph. With `ALLEVIA_AUTH=1` a person signs up with a name, an email and a password, pastes their website,
+and owns the business that is set up from it. Owner links keep working beside accounts.
+
+- **What is stored** (`src/auth/accounts.ts`, in `allevia_meta`, never in a business's graph):
+  `(:User {id, email, name, passHash, createdAt, disabledAt})`, `(:User)-[:MEMBER_OF {role: owner|member, since}]->(:Tenant)`,
+  `(:User)-[:HAS_SESSION]->(:Session {idHash, createdAt, expiresAt, lastSeenAt, revokedAt})`,
+  `(:Tenant)-[:HAS_INVITE]->(:Invite {codeHash, role, createdAt, expiresAt, usedAt, usedBy})` and
+  `(:User)-[:HAS_RESET]->(:PasswordReset {codeHash, createdAt, expiresAt, usedAt})`. Range indexes and unique constraints
+  cover `User.email`, `User.id`, `Session.idHash`, `Invite.codeHash` and `PasswordReset.codeHash`. An email is kept in
+  lower case and has one account.
+- **Passwords** (`src/auth/passwords.ts`): scrypt with N=2^15, r=8, p=1 and a 16-byte random salt per password (the
+  settings travel with the hash, so they can be raised later), compared in constant time, at least 10 characters. A
+  sign-in for an email that has no account still pays for one hash, so the time it takes says nothing. Nothing ever
+  returns or logs a hash.
+- **Sessions**: a 256-bit random id, shown to the browser once in the cookie; only its SHA-256 is stored. The cookie
+  `allevia_session` is `HttpOnly`, `SameSite=Lax`, `Path=/`, 30 days, sliding (moved on at most once an hour). It is
+  `Secure` when the public address (`ALLEVIA_WEB_URL`) is https, when the request itself came over https, or when a
+  trusted reverse proxy says so (`X-Forwarded-Proto: https` with `ALLEVIA_TRUST_PROXY=1`); a visitor's own
+  `X-Forwarded-Proto` is not believed (owner-link cookies follow the same rule). Lax rather than Strict so a person who
+  follows a link from their email arrives signed in; a cross-site change is still refused by the Origin check. A session
+  is looked up by its hash on every request, so signing out, a password change (every other session ends), a reset
+  link (every session ends) and `auth:disable` take effect on the very next request.
+- **The door** (`src/server/app.ts`), in order: a session whose account is a member of the business in the path (its
+  role and account id go on the request: `src/server/roles.ts`); otherwise that business's owner link, which makes the
+  caller the owner; otherwise a demo business, read-only; otherwise a 401 with one sentence for a business that exists
+  and one that does not. Every route under `/api/<slug>/` is behind it (a test lists them all).
+- **Roles.** The owner may do everything. A member asks, writes drafts and approves, but connecting or disconnecting
+  tools, where approved fixes land, switching people on the team on or off, applying instructions to the team and
+  inviting people are the owner's (`requireOwner()`); the plan and billing follow when they are built.
+- **Setting a business up.** A signed-in account may set up a business (it becomes the owner and the business starts on
+  the trial: 100 credits for 14 days, `src/auth/trial.ts`); the operator's link still may too. An account never sets up
+  over a business that exists (a name that comes out as an existing id gets the next free one). During the trial an
+  account owns one business; the claim and the check are one query, so two set-ups at once cannot give it two.
+- **Invites.** The owner makes a link, `/invite/<code>`, that lets one person in, once, for 7 days, as a member
+  (`auth:invite` makes one as the owner, for a business set up before accounts). The code is 256 random bits, stored as
+  its SHA-256. Every open invite holds a seat: the people in a business plus its open invites never exceed the plan's
+  seats (the trial has the default plan's 5); the check and the write are one query.
+- **One sentence for every sign-in failure**: "That email and password don't match." An unknown email, a wrong
+  password, a switched-off account and a malformed email get the same answer and the same status. Signing up with an
+  email that already has an account is treated as a sign-in with what was typed. (A sign-up form without email
+  confirmation cannot hide that an address has an account from someone who knows its password is wrong; the per-email
+  and per-client limits below keep that from being used at scale.)
+- **Rate limits** on every account door, before the body is read where possible: signing in 10 tries a minute per client
+  and 300 a minute for everybody (each try is a 32 MB hash); 10 password tries per email address per 15 minutes from
+  anywhere; 10 new accounts an hour per client and 200 for everybody; invite and reset links count as sign-in tries.
+- **No email sender yet.** A forgotten password is a reset link the operator makes (`auth:reset-link <email>`, single use,
+  24 hours) and sends by hand.
+
+The web app sends a signed-out visitor with no business of their own to `/login`; "See the demo" opens the demo business
+read-only. (`src/server/routes/account.ts`, `web/src/pages/Auth.tsx`; tests: `tests/security/login.test.ts` through the
+app, `tests/security/hosted-demo.test.ts` over real HTTP, `tests/security/accounts.test.ts` and
+`tests/security/passwords.test.ts` for the store.)
+
 ## What we found and fixed
 
 Ranked by how bad it would have been.
@@ -125,8 +186,9 @@ Ranked by how bad it would have been.
 2. **Onboarding could be steered into someone else's business.** `POST /api/onboard` with an existing slug, or with a name
    or web address that mapped onto one, ran the onboarder against that business's graph: it renamed it and wrote another
    site's crawl into it. Fixed: an existing business is never onboarded unless the operator names it; otherwise 409 or
-   the next free id. With the flag on, onboarding is operator-only.
-3. **No login.** See above. Fixed behind `ALLEVIA_AUTH=1`.
+   the next free id. With the flag on, onboarding is for the operator and signed-in accounts, and an account only ever
+   sets up a new business.
+3. **No login.** See above. Fixed behind `ALLEVIA_AUTH=1`: owner links, then accounts (17 October).
 4. **A customer's approved card could leave through the founder's accounts.** With live actions on, an approved
    `github_issue` was filed on the founder's repository, and a `discord_post` went to the founder's channel, or to any
    channel id written in the card. Fixed: those accounts belong to the founder's businesses only; other businesses are
@@ -162,11 +224,14 @@ defaults come from code.
 2. **One process, one database user.** Isolation between businesses is enforced by the application, not by the database:
    a bug in our code could reach another graph, because the app's connection can read all of them. The next step is a
    database user per business (Redis ACL on the key pattern `allevia_<slug>*`) with the app opening one connection each.
-3. **An owner link is a shared secret, not a login.** Whoever holds it has the whole business until it is revoked: there
-   are no individual users, no roles, no audit trail of who did what (changes are attributed to `person:owner`), and
-   links do not expire unless issued with `--days`. (Guessing a 256-bit token is not feasible, and since 17 October each
-   try is also rate limited: see "Rate limits" below.) Issue short-lived links, and plan real sign-in before a business
-   has more than one person.
+3. **Accounts are new, and thin in places.** Sign-in exists since 17 October (see "Accounts" above), but: an email is not
+   confirmed (anyone can sign up with any address, and nothing is sent to it); there is no email sender, so reset links
+   go by hand; there is no second factor; an owner cannot yet remove a teammate or cancel an open invite from the app
+   (the operator can switch an account off with `auth:disable`); changes in a business are still attributed to
+   `person:owner` in its graph, not to the account that made them (the account id is on the request, unused so far); and
+   a set-up that does not finish leaves a business in the registry with no owner, for the operator to erase. An owner
+   link is still a shared secret: whoever holds it is the owner until it is revoked, and links do not expire unless
+   issued with `--days`. Prefer accounts, and revoke old links once their owners have accounts.
 4. **The operator link is all-powerful** and stored the same way as an owner link. Keep it to one or two people; revoke
    and reissue when someone leaves.
 5. **There is no per-business store for secrets yet.** Every token Allevia uses today (the Discord bot, the founder's Instagram
@@ -235,7 +300,10 @@ A deployment that shows one business to the public and keeps the rest private:
    `auth:issue --operator` for the person who sets businesses up.
 3. A stranger then sees only the demo: it lists as `readOnly`, every change is a 403 that says it is the public demo, a
    question replays a recorded thread (or says live chat is off), and the web app turns its change buttons off. Everything
-   else, and the business list, needs a link. An owner link for the demo makes its holder the owner.
+   else, and the business list, needs an account or a link. An owner link for the demo makes its holder the owner.
+4. A visitor can sign up, paste their website and own the business that is set up, on the trial; the demo stays
+   read-only for them. Set `ALLEVIA_WEB_URL` to the https address, so the session cookie is `Secure` even though the proxy
+   talks plain http to the app.
 `tests/security/hosted-demo.test.ts` runs the real server over HTTP through exactly this.
 
 ## Running it
@@ -246,6 +314,10 @@ npm run cli -- auth:list [kestrel_oak]                                     # ids
 npm run cli -- auth:revoke tok_ab12cd34ef                                  # or: auth:revoke --tenant kestrel_oak
 npm run cli -- auth:demo demo_seed                                         # public read-only demo; --off to undo
 npm run cli -- auth:issue --operator --label ops                           # the operator's link
+npm run cli -- auth:users [kestrel_oak]                                    # accounts, their businesses and roles; never a hash
+npm run cli -- auth:invite kestrel_oak --role owner                        # an owner account for a business set up before accounts
+npm run cli -- auth:reset-link priya@example.com                           # a single-use link to choose a new password (24 hours)
+npm run cli -- auth:disable priya@example.com                              # signed out everywhere, cannot sign in; --off to undo
 ALLEVIA_AUTH=1 npm run cli -- serve
 ```
 
@@ -253,6 +325,7 @@ ALLEVIA_AUTH=1 npm run cli -- serve
 
 > Every business is its own graph (`allevia_<slug>`) and its own folders; a request is bound to one business by the
 > server, no tool or message can pick another, and a new business starts from code, never from another's data.
-> With `ALLEVIA_AUTH=1` every business needs its private owner link (random, hashed, revocable); only marked demo
-> businesses open without one, read-only.
+> With `ALLEVIA_AUTH=1` every business needs a signed-in member (passwords as scrypt hashes, sessions as hashes, owner and
+> member roles) or its private owner link (random, hashed, revocable); only marked demo businesses open without one,
+> read-only.
 > The proof is in `tests/security/`; the open items, ranked, are in this page.

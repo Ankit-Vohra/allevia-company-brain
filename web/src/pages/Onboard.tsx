@@ -94,7 +94,9 @@ interface RunState {
 }
 
 export default function OnboardPage() {
-  const { refreshTenants, setTenant, effectiveTheme, reducedMotion } = useApp();
+  const { refreshTenants, setTenant, effectiveTheme, reducedMotion, account, tenants } = useApp();
+  // a new account's first business (straight after signing up)
+  const first = !!account && !tenants.some((t) => !t.readOnly);
   const nav = useNavigate();
   const params = new URLSearchParams(location.search);
   const [name, setName] = useState(params.get("name") ?? "");
@@ -192,7 +194,7 @@ export default function OnboardPage() {
   return (
     <div className="onboard-page">
       <header className="ob-head">
-        <h1 className="page-title">{run?.done ? `${bizName} is ready` : running ? `Setting up ${bizName}` : "Add a business"}</h1>
+        <h1 className="page-title">{run?.done ? `${bizName} is ready` : running ? `Setting up ${bizName}` : first ? "Set up your business" : "Add a business"}</h1>
         {!run || run.error ? (
           <p className="page-lede">Paste your website. We read it, learn your business and set your team up. It takes about two minutes, and nothing is posted or changed anywhere.</p>
         ) : null}

@@ -6,6 +6,7 @@
 //           format of `db:export`), and every file in its data folders (photos, drafts, run reports, caches), in chunks.
 //           Never the sealed connection tokens: they are encrypted with the server's key and mean nothing to anyone else.
 //   erase   exports first and checks the export reads back whole; only then removes the graph, the registry rows (Tenant, AuthToken,
+//           its account invites and who was a member of it (the accounts themselves stay: a person may be in other businesses),
 //           the Discord area, channel mapping, invites and post records: the Discord channels themselves stay on Discord), and the
 //           data folders, sealed connection tokens included. Refuses a public demo unless --force. Leaves a line in
 //           <data>/erasures.jsonl (the id and when, nothing else) and the export, which is the customer's to be handed and then deleted.
@@ -305,7 +306,8 @@ export interface EraseOpts extends LifecycleOpts {
 
 const REGISTRY_DELETES: Array<{ label: string; key: string }> = [
   { label: "DiscordPost", key: "slug" }, { label: "DiscordChannel", key: "slug" }, { label: "DiscordArea", key: "slug" },
-  { label: "DiscordInvite", key: "slug" }, { label: "AuthToken", key: "scope" }, { label: "Tenant", key: "slug" },
+  { label: "DiscordInvite", key: "slug" }, { label: "AuthToken", key: "scope" }, { label: "Invite", key: "slug" },
+  { label: "Tenant", key: "slug" }, // its MEMBER_OF edges go with it; the accounts stay (a person may be in other businesses)
 ];
 
 const stamp = (ms: number): string => new Date(ms).toISOString().replace(/[-:]/g, "").replace(/\..*$/, "").replace("T", "-");

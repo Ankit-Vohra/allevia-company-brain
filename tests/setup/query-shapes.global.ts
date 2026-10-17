@@ -24,10 +24,13 @@ export default function setup(): () => Promise<void> {
       process.env.ALLEVIA_ENV_FILE ??= fileURLToPath(new URL("../fixtures/allevia.test.env", import.meta.url));
       const { openGraphByName, closeAll } = await import("../../src/graph/client.js");
       const { ensureIndexes } = await import("../../src/graph/indexes.js");
+      const { ACCOUNT_INDEXES } = await import("../../src/auth/accounts.js");
       const { testGraphName } = await import("./../helpers/graph.js");
       const g = await openGraphByName(testGraphName());
       try {
         await ensureIndexes(g);
+        // the registry's own indexes too (accounts: User.id, Session.idHash, …), so its queries plan as they do in allevia_meta
+        await ensureIndexes(g, ACCOUNT_INDEXES.map((i) => ({ ...i, type: "RANGE" as const })));
         const r = await checkShapes((q) => g.explain(q), shapes, INTENTIONAL_SCANS);
         if (r.unplannable > 0.1 * shapes.length) throw new Error(`query-shape check: ${r.unplannable} of ${shapes.length} recorded shapes would not plan`);
         if (r.violations.length) {

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { type ApiMode, api, setSpeed as setApiSpeed, setTenantReadOnly } from "../api";
+import { type ApiMode, api, setSignedOutHandler, setSpeed as setApiSpeed, setTenantReadOnly } from "../api";
+import { accountApi, type Account } from "../lib/account";
 import { chromeMood, useOfficeClock } from "../lib/daylight";
 import { setFormatTenant } from "../lib/format";
 import type { Tenant } from "../types-ext";
@@ -10,7 +11,12 @@ export type ThemeChoice = "light" | "dark" | "clock";
 
 interface AppState {
   mode: ApiMode;
+  /** Sign-in is on (ALLEVIA_AUTH=1). */
+  authRequired: boolean;
+  /** The signed-in account, or null (signed out, or sign-in is off). */
+  account: Account | null;
   tenants: Tenant[];
+  /** The business on screen. Before an account has set up its first business (and with no demo), a blank one: `id` is "". */
   tenant: Tenant;
   setTenant: (id: string) => void;
   refreshTenants: () => Promise<void>;
@@ -40,12 +46,23 @@ function useMedia(query: string) {
   return match;
 }
 
-export function AppProvider({ mode, initialTenants, children }: { mode: ApiMode; initialTenants: Tenant[]; children: ReactNode }) {
+const NO_TENANT: Tenant = { id: "", name: "Your business", domain: "", industry: "" };
+
+export function AppProvider({ mode, initialTenants, authRequired = false, account: initialAccount = null, children }: {
+  mode: ApiMode; initialTenants: Tenant[]; authRequired?: boolean; account?: Account | null; children: ReactNode;
+}) {
   const [tenants, setTenants] = useState(initialTenants);
+  const [account, setAccount] = useState(initialAccount);
+  // signed in, and the server stops recognising the session (signed out in another tab, expired): start again at sign-in
+  useEffect(() => {
+    if (!account) return;
+    setSignedOutHandler(() => { setSignedOutHandler(null); location.assign(`/login?next=${encodeURIComponent(location.pathname)}`); });
+    return () => setSignedOutHandler(null);
+  }, [account]);
   const params = new URLSearchParams(location.search);
   const [tenantId, setTenantId] = useState(() => {
     const want = params.get("tenant") ?? read("allevia.tenant");
-    return initialTenants.find((t) => t.id === want)?.id ?? initialTenants[0]?.id ?? "aamdani";
+    return initialTenants.find((t) => t.id === want)?.id ?? initialTenants[0]?.id ?? (authRequired ? "" : "aamdani");
   });
   const [theme, setThemeState] = useState<ThemeChoice>(() => {
     const t = params.get("theme") ?? read("allevia.theme");
@@ -73,16 +90,20 @@ export function AppProvider({ mode, initialTenants, children }: { mode: ApiMode;
   const setTenant = useCallback((id: string) => { setTenantId(id); write("allevia.tenant", id); }, []);
   const setTheme = useCallback((t: ThemeChoice) => { setThemeState(t); write("allevia.theme", t === "light" ? null : t); }, []);
   const setSpeed = useCallback((s: number) => { setSpeedState(s); setApiSpeed(s); }, []);
-  const refreshTenants = useCallback(async () => { setTenants(await api.tenants()); }, []);
+  // a business set up or joined: the list, and the account's businesses with it
+  const refreshTenants = useCallback(async () => {
+    setTenants(await api.tenants());
+    if (authRequired && initialAccount) setAccount((await accountApi.me().catch(() => null)) ?? initialAccount);
+  }, [authRequired, initialAccount]);
 
-  const tenant = tenants.find((t) => t.id === tenantId) ?? tenants[0]!;
+  const tenant = tenants.find((t) => t.id === tenantId) ?? tenants[0] ?? NO_TENANT;
   // set synchronously so this render already formats money and dates for the new business
   setFormatTenant(tenant);
   setTenantReadOnly(tenant.readOnly === true); // likewise: the change buttons are off in this render when the business is a read-only demo
   useEffect(() => { document.documentElement.lang = tenant.locale ?? "en"; }, [tenant.locale]);
   const value = useMemo<AppState>(
-    () => ({ mode, tenants, tenant, setTenant, refreshTenants, theme, effectiveTheme, setTheme, speed, setSpeed, reducedMotion }),
-    [mode, tenants, tenant, setTenant, refreshTenants, theme, effectiveTheme, setTheme, speed, setSpeed, reducedMotion],
+    () => ({ mode, authRequired, account, tenants, tenant, setTenant, refreshTenants, theme, effectiveTheme, setTheme, speed, setSpeed, reducedMotion }),
+    [mode, authRequired, account, tenants, tenant, setTenant, refreshTenants, theme, effectiveTheme, setTheme, speed, setSpeed, reducedMotion],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

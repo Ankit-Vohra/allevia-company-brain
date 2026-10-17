@@ -1,8 +1,9 @@
-// Rate limits for the two doors a stranger can knock on before a deployment is hosted (issue #23): opening a business with an owner
-// link (POST /api/auth/open, where each try costs a registry read) and setting a business up (POST /api/onboard, which spends the
-// operator's model time and makes a graph). In memory, per process: a sliding window per client, and one window for everybody, so a
-// guesser who rotates addresses is still bounded. Nothing here replaces a reverse proxy's own limits; it keeps the server safe
-// when there is none.
+// Rate limits for the doors a stranger can knock on (issue #23): opening a business with an owner link (POST /api/auth/open, where
+// each try costs a registry read), setting a business up (POST /api/onboard, which spends model time and makes a graph), and the
+// account doors (routes/account.ts: signing up, signing in, changing a password, a reset or an invite link, where a try costs a
+// 32 MB password hash or a registry read; per client, per email address and for everybody). In memory, per process: a sliding
+// window per client, and one window for everybody, so a guesser who rotates addresses is still bounded. Nothing here replaces a
+// reverse proxy's own limits; it keeps the server safe when there is none.
 //
 // Who is "a client": the address the connection came from. Behind a reverse proxy that is the proxy for everyone, so the server
 // then reads the address the proxy saw from the proxy's own header, and only when ALLEVIA_TRUST_PROXY=1: a header from a visitor is
@@ -24,6 +25,16 @@ export interface RateLimitConfig {
   onboard?: LimitSpec | false;
   /** /api/onboard: set-ups started by anybody, counted only once the request was let in (the operator's). */
   onboardRuns?: LimitSpec | false;
+  /** Signing in, changing a password, a reset or an invite link: tries per client (each costs a password hash or a registry read). */
+  login?: LimitSpec | false;
+  /** Password tries against one email address, from anywhere (a guesser who rotates addresses still gets only these). */
+  loginEmail?: LimitSpec | false;
+  /** Password tries from all clients together (each is 32 MB of scrypt: this bounds the server's work). */
+  loginAll?: LimitSpec | false;
+  /** New accounts per client. */
+  signup?: LimitSpec | false;
+  /** New accounts from all clients together. */
+  signupAll?: LimitSpec | false;
 }
 
 export const DEFAULT_LIMITS = {
@@ -31,6 +42,11 @@ export const DEFAULT_LIMITS = {
   authOpenAll: { max: 120, windowMs: 60_000 },
   onboard: { max: 10, windowMs: 10 * 60_000 },
   onboardRuns: { max: 20, windowMs: 60 * 60_000 },
+  login: { max: 10, windowMs: 60_000 },
+  loginEmail: { max: 10, windowMs: 15 * 60_000 },
+  loginAll: { max: 300, windowMs: 60_000 },
+  signup: { max: 10, windowMs: 60 * 60_000 },
+  signupAll: { max: 200, windowMs: 60 * 60_000 },
 } as const satisfies Record<string, LimitSpec>;
 
 /** At most `max` events per `windowMs` for each key; the oldest events fall out of the window one by one. */
@@ -83,6 +99,11 @@ export interface Limits {
   authOpenAll: SlidingWindow | null;
   onboard: SlidingWindow | null;
   onboardRuns: SlidingWindow | null;
+  login: SlidingWindow | null;
+  loginEmail: SlidingWindow | null;
+  loginAll: SlidingWindow | null;
+  signup: SlidingWindow | null;
+  signupAll: SlidingWindow | null;
 }
 
 export function makeLimits(config: RateLimitConfig | undefined, now: () => number): Limits {
@@ -93,6 +114,11 @@ export function makeLimits(config: RateLimitConfig | undefined, now: () => numbe
     authOpenAll: window(config?.authOpenAll, DEFAULT_LIMITS.authOpenAll),
     onboard: window(config?.onboard, DEFAULT_LIMITS.onboard),
     onboardRuns: window(config?.onboardRuns, DEFAULT_LIMITS.onboardRuns),
+    login: window(config?.login, DEFAULT_LIMITS.login),
+    loginEmail: window(config?.loginEmail, DEFAULT_LIMITS.loginEmail),
+    loginAll: window(config?.loginAll, DEFAULT_LIMITS.loginAll),
+    signup: window(config?.signup, DEFAULT_LIMITS.signup),
+    signupAll: window(config?.signupAll, DEFAULT_LIMITS.signupAll),
   };
 }
 
@@ -107,3 +133,5 @@ export function enforce(c: Context, window: SlidingWindow | null, key: string, w
 
 export const AUTH_OPEN_WORDS = "Too many tries. Wait a minute, then open your link again.";
 export const ONBOARD_WORDS = "That is a lot of set-ups in a short time. Try again in a few minutes.";
+export const LOGIN_WORDS = "Too many tries. Wait a few minutes, then try again.";
+export const SIGNUP_WORDS = "That is a lot of new accounts in a short time. Try again later.";

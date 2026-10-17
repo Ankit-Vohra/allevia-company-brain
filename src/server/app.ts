@@ -35,11 +35,17 @@ import type { GraphHandle } from "../graph/client.js";
 import { isDbUnavailable, WAKING_UP_MESSAGE } from "../graph/waking.js";
 import { MAX_SLUG_LENGTH, isTenantSlug, RESERVED_SLUGS } from "../graph/slug.js";
 import { OPERATOR_SCOPE } from "../auth/tokens.js";
+import { SESSION_TOUCH_MS, claimBusiness, ownedCount, resolveSession, touchSession, type AccountOpts, type SessionView } from "../auth/accounts.js";
+import { seatsFor } from "../auth/seats.js";
+import { startTrial } from "../auth/trial.js";
 import type { LlmRunner } from "../ingest/llm.js";
 import { DecisionError, decide, type ActionOpts, type OnDecision } from "./approvals.js";
-import { PRIVATE_MESSAGE, authorize, clearSession, presentedTokens, requestView, scopesOf, setSession, type AuthDeps } from "./auth.js";
+import {
+  PRIVATE_MESSAGE, PRIVATE_SIGN_IN_MESSAGE, authorize, clearSession, cookieSecure, presentedTokens, requestView, scopesOf, sessionCookie, setSession, setSessionCookie, type AuthDeps,
+} from "./auth.js";
 import { HttpError, readBody, type RouteCtx } from "./http.js";
 import { AUTH_OPEN_WORDS, ONBOARD_WORDS, clientKey, enforce, makeLimits, type RateLimitConfig } from "./ratelimit.js";
+import { registerAccountRoutes } from "./routes/account.js";
 import { registerActionRoutes } from "./routes/actions.js";
 import { registerConnectorRoutes, type GoogleWiring } from "./routes/connectors.js";
 import { registerConnectionRoutes, type ConnectionsWiring } from "./routes/connections.js";
@@ -102,8 +108,9 @@ export interface PlansModule { [k: string]: unknown }
 
 export interface ServerDeps {
   publicMode: boolean;
-  // ALLEVIA_AUTH=1 (src/auth, docs/tenant-isolation.md): every /api/:t/... route needs that business's owner token, and
-  // /api/onboard the operator's. Absent (or enabled: false) is local development: no checks.
+  // ALLEVIA_AUTH=1 (src/auth, docs/tenant-isolation.md): every /api/:t/... route needs a signed-in member of that business
+  // (with auth.accounts) or its owner token, and /api/onboard a signed-in account or the operator's token. Absent (or
+  // enabled: false) is local development: no checks.
   auth?: AuthDeps;
   // How often a stranger may knock on the two doors that cost something: opening a business with a link, and setting one up
   // (ratelimit.ts; the defaults are on, `false` for one switches it off, trustProxy reads the client's address from a reverse proxy).
@@ -145,6 +152,7 @@ export interface ServerDeps {
   liveTurns?: LiveTurnsOpts; // how long finished turns stay re-attachable, and the turn-level time cap (turns.ts)
   tenantCacheMs?: number;   // how long the registry is cached (default 5 s)
   staticDir?: string;       // the built web app (web/dist); served with an index.html fallback
+  webBaseUrl?: string;      // the public address (ALLEVIA_WEB_URL): when it is https, every cookie is Secure (auth.ts cookieSecure)
   corsOrigins?: string[];   // default: the Vite dev server
   log?: (line: string) => void;
 }
@@ -287,6 +295,41 @@ export function createApp(deps: ServerDeps): Hono {
   const authOn = !!deps.auth?.enabled;
   const isPublic = (): boolean => (authOn ? requestView.getStore()?.publicView ?? true : deps.publicMode);
   const refuseInPublicMode = () => { if (isPublic()) throw new HttpError(403, PUBLIC_REFUSAL); };
+
+  // Accounts (src/auth/accounts.ts), on with ALLEVIA_AUTH=1 when the deps wire them. A request's session is read once (one
+  // indexed registry read) and shared by the door and the route; a live session's end moves 30 days on at most once an hour.
+  const accounts = authOn ? deps.auth?.accounts ?? null : null;
+  // Secure on the cookies when the browser is on https: the public address says so, or the request, or a trusted proxy's header
+  const secure = (c: Context): boolean => cookieSecure(c, { trustProxy: limits.trustProxy, ...(deps.webBaseUrl ? { webBaseUrl: deps.webBaseUrl } : {}) });
+  // the accounts live in the registry graph the rest of the server uses (deps.registry), unless the wiring names its own
+  const accountMeta = accounts?.metaGraph ?? deps.registry?.metaGraph;
+  const accountOpts = (): AccountOpts => ({ ...(accountMeta ? { metaGraph: accountMeta } : {}), now: now() });
+  const seats = (slug: string): Promise<number> => (accounts?.seats ?? ((s: string) => seatsFor(s, accountOpts())))(slug);
+  const maxOwned = accounts?.maxOwned ?? 1;
+  const privateMessage = accounts ? PRIVATE_SIGN_IN_MESSAGE : PRIVATE_MESSAGE;
+  const sessions = new WeakMap<Request, Promise<SessionView | null>>();
+  const sessionOf = (c: Context): Promise<SessionView | null> => {
+    if (!accounts) return Promise.resolve(null);
+    let p = sessions.get(c.req.raw);
+    if (!p) {
+      p = (async () => {
+        const raw = sessionCookie(c);
+        if (!raw) return null;
+        const s = await resolveSession(raw, accountOpts());
+        if (s && now() - s.lastSeenAt > SESSION_TOUCH_MS) {
+          try {
+            const until = await touchSession(s.hash, accountOpts());
+            if (until) setSessionCookie(c, raw, { expiresAt: until, now: now(), secure: secure(c) });
+          } catch (e) {
+            log(`[api] could not extend a session: ${e instanceof Error ? e.message : String(e)}`); // the session is still good until its old end
+          }
+        }
+        return s;
+      })();
+      sessions.set(c.req.raw, p);
+    }
+    return p;
+  };
   // Studio cards approved anywhere become draft posts; then the server's own hook runs.
   const onDecision = studioDecisionHook(deps.openGraph, now, deps.onDecision);
   const credits = deps.credits ?? new Credits({ openGraph: deps.openGraph, now, log, ...(deps.registry ? { tenantOpts: deps.registry } : {}) });
@@ -318,16 +361,23 @@ export function createApp(deps: ServerDeps): Hono {
     }
     return next();
   });
-  // The door (ALLEVIA_AUTH=1): before any body is read or any route runs, a request for a business needs that business's
-  // owner token, or the business must be a demo, and then it is the read-only public view. Reserved first segments
-  // (health, tenants, plans, onboard, auth) are the global routes below; a first segment that is not a slug is a 404 later.
+  // The door (ALLEVIA_AUTH=1): before any body is read or any route runs, a request for a business is let in, in this order:
+  //   1. a signed-in account that is a member of the business, with its role there (owner or member);
+  //   2. that business's owner link (or the operator's), which makes the caller the owner;
+  //   3. a demo business, as the read-only public view;
+  //   4. otherwise a 401, the same for a business that exists and one that does not.
+  // Reserved first segments (health, tenants, plans, onboard, auth) are the global routes below; a first segment that is not a
+  // slug is a 404 later.
   app.use("/api/:t/*", async (c, next) => {
     const slug = c.req.param("t") ?? "";
     if (!authOn || RESERVED_SLUGS.includes(slug) || !isTenantSlug(slug)) return next();
-    if (await authorize(deps.auth!, c, slug)) return requestView.run({ publicView: false }, next);
+    const s = await sessionOf(c);
+    const member = s?.memberships.find((m) => m.slug === slug);
+    if (s && member) return requestView.run({ publicView: false, role: member.role, userId: s.user.id }, next);
+    if (await authorize(deps.auth!, c, slug)) return requestView.run({ publicView: false, role: "owner" }, next);
     const reg = (await registry()).find((t) => t.slug === slug);
     if (reg?.demo === true) return requestView.run({ publicView: true }, next);
-    throw new HttpError(401, PRIVATE_MESSAGE); // the same answer for a business that exists and one that does not
+    throw new HttpError(401, privateMessage); // the same answer for a business that exists and one that does not
   });
   // 64 KB everywhere except the Studio's photo upload (studio.ts) and the spreadsheet upload (routes/numbers.ts), which set their own limits
   const smallBodies = bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: "The request body is too large." }, 413) });
@@ -364,18 +414,23 @@ export function createApp(deps: ServerDeps): Hono {
 
   app.get("/api/tenants", async (c) => {
     let list = await registry();
-    let held: Set<string> | undefined;
+    let roleOf: ((slug: string) => "owner" | "member" | undefined) | undefined;
     if (authOn) {
-      // a stranger sees the demo businesses, an owner also their own, the operator all of them
-      const scopes = await scopesOf(deps.auth!, c);
-      list = list.filter((t) => scopes.has(OPERATOR_SCOPE) || scopes.has(t.slug) || t.demo === true);
-      held = scopes;
+      // a stranger sees the demo businesses; a signed-in account also the businesses it is in, an owner link its business, the
+      // operator all of them. The caller's own businesses come first.
+      const [scopes, s] = await Promise.all([scopesOf(deps.auth!, c), sessionOf(c)]);
+      const mine = new Map(s?.memberships.map((m) => [m.slug, m.role]) ?? []);
+      roleOf = (slug) => mine.get(slug) ?? (scopes.has(OPERATOR_SCOPE) || scopes.has(slug) ? "owner" : undefined);
+      list = list.filter((t) => roleOf!(t.slug) !== undefined || t.demo === true);
+      list = [...list.filter((t) => roleOf!(t.slug)), ...list.filter((t) => !roleOf!(t.slug))];
     }
     const out = await Promise.all(list.slice(0, 200).map(async (reg) => {
       let g: GraphHandle | undefined;
       try { g = await deps.openGraph(reg.slug); } catch { g = undefined; }
-      // with owner links on, a business the caller holds no link for is a demo they may only read: say so, so the app turns its buttons off
-      return tenantDto(reg, g, !!held && !held.has(OPERATOR_SCOPE) && !held.has(reg.slug));
+      // with sign-in on, a business the caller is not in (and holds no link for) is a demo they may only read: say so, so the app turns its buttons off
+      const role = roleOf?.(reg.slug);
+      const dto = await tenantDto(reg, g, !!roleOf && !role);
+      return role ? { ...dto, role } : dto;
     }));
     return c.json(out);
   });
@@ -393,7 +448,7 @@ export function createApp(deps: ServerDeps): Hono {
     if (typeof body.token !== "string") throw bad;
     const v = await deps.auth!.verify(body.token);
     if (!v) throw bad;
-    setSession(c, v.scope, body.token);
+    setSession(c, v.scope, body.token, secure(c));
     return c.json(v.scope === OPERATOR_SCOPE ? { scope: v.scope } : { scope: v.scope, tenant: v.scope });
   });
 
@@ -401,9 +456,12 @@ export function createApp(deps: ServerDeps): Hono {
     if (!authOn) throw new HttpError(404, "No such endpoint.");
     const body = await readBody(c, z.object({ tenant: z.string() }));
     if (body.tenant !== OPERATOR_SCOPE && !isTenantSlug(body.tenant)) throw new HttpError(400, "Say which business to close.");
-    clearSession(c, body.tenant);
+    clearSession(c, body.tenant, secure(c));
     return c.json({ closed: body.tenant });
   });
+
+  // ---- accounts: sign up, sign in and out, invites (routes/account.ts; 404s unless ALLEVIA_AUTH=1 with accounts) ----
+  registerAccountRoutes(app, { wiring: accounts, opts: accountOpts, sessionOf, limits, tenantOf, seats, now, secure });
 
   app.get("/api/plans", async (c) => {
     const currency = (c.req.query("currency") ?? "").toUpperCase();
@@ -419,49 +477,88 @@ export function createApp(deps: ServerDeps): Hono {
 
   app.post("/api/onboard", async (c) => {
     enforce(c, limits.onboard, clientKey(c, limits.trustProxy), ONBOARD_WORDS); // every request counts, a stranger's too
+    // With sign-in on, a business is set up by a signed-in account (it becomes the owner and the business starts on the trial)
+    // or by the operator; creating one spends model time and makes a graph, so nobody else may.
+    let operator = false;
+    let account: SessionView | null = null;
     if (authOn) {
-      // creating a business spends the operator's model access and makes a graph: only the operator does it
-      const tokens = presentedTokens(c);
-      if (!tokens.length) throw new HttpError(401, PRIVATE_MESSAGE);
-      if (!(await scopesOf(deps.auth!, c)).has(OPERATOR_SCOPE)) throw new HttpError(403, "Setting up a business is done by the Allevia team.");
+      account = await sessionOf(c);
+      operator = presentedTokens(c).length > 0 && (await scopesOf(deps.auth!, c)).has(OPERATOR_SCOPE);
+      if (!operator && !account) {
+        if (!presentedTokens(c).length) throw new HttpError(401, accounts ? "Sign in first, then set up your business." : PRIVATE_MESSAGE);
+        throw new HttpError(403, "Setting up a business is done by the Allevia team.");
+      }
+      // one business per account during the trial (the operator is not counted)
+      if (account && !operator && (await ownedCount(account.user.id, accountOpts())) >= maxOwned) {
+        throw new HttpError(403, "Your free trial covers one business, and you have set yours up.");
+      }
     } else refuseInPublicMode();
     enforce(c, limits.onboardRuns, "all", ONBOARD_WORDS); // only requests that were let in count against everybody's set-ups
     const body = await readBody(c, OnboardBody);
     const run = await (deps.loadOnboard ?? loadOnboardModule)();
     if (!run) throw new HttpError(501, "Website onboarding is not installed on this server yet.");
     if (onboarding) throw new HttpError(429, "Another business is being set up right now. Try again in a few minutes.");
-    // Onboarding writes into the graph of the slug it is given. It must never be a business that already exists unless the
-    // operator says so by naming it: another business's name, web address or id cannot steer it into that business's graph.
-    // (A re-run from the open web is not offered: `npm run cli -- enroll` and scripts/onboard.ts do it.)
-    const known = new Set((await registry()).map((t) => t.slug));
-    let slug = body.slug ?? slugFor(body.name, body.url);
-    if (known.has(slug)) {
-      if (body.slug && authOn) {
-        // the operator re-runs a business by naming it
-      } else if (body.slug) throw new HttpError(409, "That business id is already taken.");
-      else slug = freeSlug(slug, known);
-    }
-    const input: OnboardStart = {
-      name: body.name, slug, url: body.url,
-      ...Object.fromEntries((["instagram", "country", "currency", "locale", "industry", "vertical"] as const)
-        .filter((k) => body[k]).map((k) => [k, k === "currency" ? body[k]!.toUpperCase() : body[k]!])),
-      ...(validTimeZone(body.timeZone) ? { timeZone: body.timeZone } : {}),
-    };
-    onboarding = true;
-    return sse<OnboardEvent>(c, { heartbeatMs, log }, async (send, signal) => {
-      try {
-        const hub = await discordHub();
-        // With a hub, the "done" event waits until the business's Discord area is set up, so it can carry the join link.
-        // Provisioning never fails onboarding: when it cannot finish, `done` says "later" and the retry loop finishes it.
-        let held: Extract<OnboardEvent, { type: "done" }> | undefined;
-        // onboarding v2 stores the region itself (its profile stage), so nothing more to write here
-        await run(input, (e) => { if (e.type === "done" && hub) held = e; else send(e); }, signal);
-        cache = undefined; // a new tenant may be in the registry now
-        if (held && hub) send({ ...held, discord: await hub.afterOnboarding(held.tenant) });
-      } finally {
-        onboarding = false;
+    onboarding = true; // taken before the registry is read, so two set-ups can never pick the same id at once
+    let streaming = false;
+    try {
+      // Onboarding writes into the graph of the slug it is given. It must never be a business that already exists unless the
+      // operator says so by naming it: another business's name, web address or id cannot steer it into that business's graph,
+      // and neither can an account (it only ever sets up a new one).
+      // (A re-run from the open web is not offered: `npm run cli -- enroll` and scripts/onboard.ts do it.)
+      // The registry is read fresh here, not from the short cache: a business added a moment ago must count as existing.
+      cache = undefined;
+      const known = new Set((await registry()).map((t) => t.slug));
+      const startedAt = Date.now(); // the registry's own clock (ensureTenant): only a business created after this can be claimed
+      let slug = body.slug ?? slugFor(body.name, body.url);
+      if (known.has(slug)) {
+        if (body.slug && authOn && operator) {
+          // the operator re-runs a business by naming it
+        } else if (body.slug) throw new HttpError(409, "That business id is already taken.");
+        else slug = freeSlug(slug, known);
       }
-    });
+      // a signed-in account becomes the owner of the business it sets up, once it is ready (never of one that was already there)
+      const owner = account && !known.has(slug) ? account.user.id : undefined;
+      const input: OnboardStart = {
+        name: body.name, slug, url: body.url,
+        ...Object.fromEntries((["instagram", "country", "currency", "locale", "industry", "vertical"] as const)
+          .filter((k) => body[k]).map((k) => [k, k === "currency" ? body[k]!.toUpperCase() : body[k]!])),
+        ...(validTimeZone(body.timeZone) ? { timeZone: body.timeZone } : {}),
+      };
+      streaming = true;
+      return sse<OnboardEvent>(c, { heartbeatMs, log }, async (send, signal) => {
+        try {
+          const hub = await discordHub();
+          // The "done" event waits until the business is ready for its owner: an account that set it up is made its owner and
+          // the trial starts; with a hub, its Discord area is set up, so "done" can carry the join link. Neither fails
+          // onboarding: when the Discord area cannot be finished, `done` says "later" and the retry loop finishes it.
+          let held: Extract<OnboardEvent, { type: "done" }> | undefined;
+          // onboarding v2 stores the region itself (its profile stage), so nothing more to write here
+          await run(input, (e) => { if (e.type === "done" && (hub || owner)) held = e; else send(e); }, signal);
+          cache = undefined; // a new tenant may be in the registry now
+          if (!held) return;
+          if (owner) {
+            if (!(await claimBusiness(owner, slug, { ...accountOpts(), maxOwned, createdSince: startedAt - 1000 }))) {
+              log(`[api] ${slug} was set up, but account ${owner} could not be made its owner (it owns another business now, or this one has an owner)`);
+              send({ type: "error", message: "Your business is set up, but it could not be added to your account. Write to us and we will sort it out." });
+              return;
+            }
+            try {
+              // the trial (100 credits, 14 days) through this server's own ledger (src/credits), as the trial's grant
+              await (accounts?.startTrial ?? ((s: string, by: string) => startTrial(s, by, {
+                ...accountOpts(), log, grant: (slug2, n, reason, ref) => credits.grant(slug2, n, reason, ref),
+              })))(slug, owner);
+            } catch (e) {
+              log(`[api] the trial for ${slug} did not start: ${e instanceof Error ? e.message : String(e)}`);
+            }
+          }
+          send(hub ? { ...held, discord: await hub.afterOnboarding(held.tenant) } : held);
+        } finally {
+          onboarding = false;
+        }
+      });
+    } finally {
+      if (!streaming) onboarding = false;
+    }
   });
 
 

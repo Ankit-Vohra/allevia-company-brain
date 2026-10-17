@@ -9,6 +9,7 @@ import { AgentAvatar } from "../components/bits";
 import { Icon } from "../components/Icon";
 import { RuleRow } from "../components/Learning";
 import { Reveal } from "../components/Reveal";
+import { TeamPeople } from "../components/TeamPeople";
 import { fmtDate } from "../lib/format";
 import { useApp, useAsync } from "../state/app";
 import type { AgentView } from "../types-ext";
@@ -41,7 +42,7 @@ const plain = (s?: string) => (s ?? "").replace(/\bthe graph\b/gi, "what we know
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export default function TeamPage() {
-  const { tenant } = useApp();
+  const { tenant, authRequired } = useApp();
   const team = useAsync(() => api.team(tenant.id), [tenant.id]);
   const [agents, setAgents] = useState<AgentView[] | undefined>();
   const [openId, setOpenId] = useState<string | null>(null);
@@ -97,6 +98,9 @@ export default function TeamPage() {
       </header>
 
       <TellYourTeam tenantId={tenant.id} prefill={prefill} onApplied={() => { team.reload(); changed(); }} />
+
+      {/* with sign-in on, the people who can open this business (not on a demo, which nobody here is in) */}
+      {authRequired && !tenant.readOnly && <TeamPeople tenantId={tenant.id} tenantName={tenant.name} />}
 
       {team.error && <p className="notice notice-bad" role="alert">Your team did not load: {team.error}</p>}
       {!team.data && team.loading ? (

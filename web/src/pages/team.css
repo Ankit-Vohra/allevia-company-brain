@@ -114,7 +114,32 @@
 .tm-empty { font-size: var(--text-sm); color: var(--color-muted); text-wrap: pretty; }
 .tm-foot { font-size: var(--text-xs); color: var(--color-muted); }
 
+/* the people who can open the business (with sign-in on), and "Invite someone" for the owner */
+.tm-people { display: grid; gap: var(--space-sm); min-width: 0; }
+.tm-people-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 4px var(--space-md); }
+.tm-people-lede { margin-top: 2px; font-size: var(--text-sm); color: var(--color-muted); max-width: 56ch; text-wrap: pretty; }
+.tm-people-seats { font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.tm-people-list { list-style: none; display: grid; border-top: 1px solid var(--color-rule-2); }
+.tm-people-list li {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto; align-items: center; gap: var(--space-sm);
+  padding: 10px 0; border-bottom: 1px solid var(--color-rule-2); font-size: var(--text-sm);
+}
+.tm-people-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-people-you { font-weight: 400; color: var(--color-muted); }
+.tm-people-email { color: var(--color-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-people-invite { display: grid; gap: var(--space-xs); justify-items: start; }
+.tm-people-invite .label { width: 100%; }
+.tm-people-link { display: flex; gap: var(--space-xs); min-width: 0; }
+.tm-people-link .field { min-width: 0; font-family: var(--font-mono); font-size: var(--text-xs); }
+.tm-people-link .btn { flex: none; min-height: 40px; }
+.tm-people-note { font-size: var(--text-xs); color: var(--color-muted); }
+
 @media (max-width: 760px) {
+  .tm-people-list li { grid-template-columns: minmax(0, 1fr) auto; }
+  .tm-people-email { grid-column: 1; grid-row: 2; margin-top: -6px; }
+  .tm-people-list .badge { grid-column: 2; grid-row: 1 / span 2; }
+  .tm-people-link { flex-direction: column; }
+  .tm-people-link .btn { min-height: 46px; }
   .team-page { padding-top: var(--space-md); gap: var(--space-md); }
   .tell { padding: var(--space-md); }
   .tell-actions { flex-direction: column-reverse; align-items: stretch; }

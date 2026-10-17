@@ -18,6 +18,7 @@ import { entryById, fitOf, recommendedFor, startersFor } from "../../../shared/c
 import type { ConnectionsService } from "../../connections/service.js";
 import { GROUP_LABELS, GROUP_ORDER, NotConfiguredError, type ConnectionView } from "../../connections/types.js";
 import { HttpError, readBody, type RouteCtx } from "../http.js";
+import { requireOwner } from "../roles.js";
 import { businessProps } from "../reads.js";
 
 export interface ConnectionsWiring { service: ConnectionsService; webBaseUrl: string }
@@ -85,6 +86,7 @@ export function registerConnectionRoutes(app: Hono, ctx: RouteCtx, h: { connecti
   app.post("/api/:t/connections/:id/connect", async (c) => {
     const { reg } = await ctx.tenantOf(c);
     ctx.refuseInPublicMode();
+    requireOwner(); // the business's accounts are the owner's to connect (src/server/roles.ts)
     const w = await need();
     const id = c.req.param("id");
     known(w, id);
@@ -95,6 +97,7 @@ export function registerConnectionRoutes(app: Hono, ctx: RouteCtx, h: { connecti
   app.post("/api/:t/connections/:id/select", async (c) => {
     const { reg } = await ctx.tenantOf(c);
     ctx.refuseInPublicMode();
+    requireOwner();
     const w = await need();
     known(w, c.req.param("id"));
     const body = await readBody(c, Select);
@@ -113,6 +116,7 @@ export function registerConnectionRoutes(app: Hono, ctx: RouteCtx, h: { connecti
   app.post("/api/:t/connections/:id/disconnect", async (c) => {
     const { reg } = await ctx.tenantOf(c);
     ctx.refuseInPublicMode();
+    requireOwner();
     const w = await need();
     known(w, c.req.param("id"));
     return c.json(await wrap(() => w.service.disconnect(reg.slug, c.req.param("id"))));

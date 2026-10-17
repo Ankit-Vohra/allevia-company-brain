@@ -1,5 +1,6 @@
 // The CLI that issues and revokes owner links. The registry is a throwaway graph (ALLEVIA_META_GRAPH), never allevia_meta.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { acceptInvite, checkLogin, createUser, previewInvite, useResetCode } from "../../src/auth/accounts.js";
 import { verifyToken } from "../../src/auth/tokens.js";
 import { loadCommands } from "../../src/cli.js";
 import { closeAll, openGraphByName } from "../../src/graph/client.js";
@@ -90,5 +91,48 @@ describe("auth CLI", () => {
     expect((await run("auth:demo", "test_cli_a", "--off")).code).toBe(0);
     expect((await getTenant("test_cli_a"))?.demo).toBeUndefined();
     expect((await run("auth:demo", "nobody_here")).code).toBe(1);
+  });
+});
+
+describe("accounts CLI", () => {
+  const PW = "a long enough password";
+
+  it("invites an owner into a business set up before sign-in, lists accounts without a hash, resets a password, switches an account off", async () => {
+    const inv = await run("auth:invite", "test_cli_a", "--role", "owner");
+    expect(inv.code).toBe(0);
+    const code = /\/invite\/([A-Za-z0-9_-]{43})/.exec(inv.out)![1]!;
+    expect(inv.out).toMatch(/as owner/);
+    expect(await previewInvite(code)).toMatchObject({ slug: "test_cli_a", role: "owner" });
+    const u = (await createUser({ email: "cli.owner@example.com", name: "Cli Owner", password: PW }))!;
+    expect(await acceptInvite(code, u.id)).toMatchObject({ slug: "test_cli_a", role: "owner" });
+
+    const users = await run("auth:users");
+    expect(users.out).toMatch(/cli\.owner@example\.com .*"Cli Owner"\s+test_cli_a \(owner\)/);
+    expect(users.out).not.toMatch(/scrypt|[0-9a-f]{64}/);
+    expect((await run("auth:users", "test_cli_a")).out).toContain("cli.owner@example.com");
+    expect((await run("auth:users", "someone_else")).out).toMatch(/No accounts in someone_else/);
+
+    const reset = await run("auth:reset-link", "CLI.Owner@example.com");
+    expect(reset.code).toBe(0);
+    const resetCode = /\/reset\/([A-Za-z0-9_-]{43})/.exec(reset.out)![1]!;
+    expect(await useResetCode(resetCode, "a fresh new password")).toMatchObject({ id: u.id });
+    expect(await checkLogin("cli.owner@example.com", "a fresh new password")).not.toBeNull();
+    expect((await run("auth:reset-link", "nobody@example.com")).code).toBe(1);
+
+    expect((await run("auth:disable", "cli.owner@example.com")).code).toBe(0);
+    expect(await checkLogin("cli.owner@example.com", "a fresh new password")).toBeNull();
+    expect((await run("auth:users")).out).toMatch(/OFF/);
+    expect((await run("auth:disable", "cli.owner@example.com", "--off")).code).toBe(0);
+    expect(await checkLogin("cli.owner@example.com", "a fresh new password")).not.toBeNull();
+  });
+
+  it("refuses bad arguments", async () => {
+    expect((await run("auth:invite")).code).toBe(2);
+    expect((await run("auth:invite", "test_cli_a", "--role", "admin")).code).toBe(2);
+    expect((await run("auth:invite", "test_cli_a", "--days", "99")).code).toBe(2);
+    expect((await run("auth:invite", "nobody_here")).code).toBe(1);
+    expect((await run("auth:reset-link")).code).toBe(2);
+    expect((await run("auth:disable")).code).toBe(2);
+    expect((await run("auth:disable", "nobody@example.com")).code).toBe(1);
   });
 });

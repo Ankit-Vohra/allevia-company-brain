@@ -1,6 +1,7 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { api } from "../api";
+import { signOut } from "../lib/account";
 import { type ThemeChoice, useApp, useAsync } from "../state/app";
 import { Icon, type IconName } from "./Icon";
 import { CreditsChip } from "./Credits";
@@ -31,7 +32,7 @@ export function usePendingApprovals() {
     window.addEventListener(APPROVALS_CHANGED, on);
     return () => window.removeEventListener(APPROVALS_CHANGED, on);
   }, []);
-  const { data } = useAsync(() => api.approvals(tenant.id), [tenant.id, tick]);
+  const { data } = useAsync(() => (tenant.id ? api.approvals(tenant.id) : Promise.resolve([])), [tenant.id, tick]);
   return data?.filter((a) => a.status === "pending").length ?? 0;
 }
 
@@ -189,34 +190,83 @@ function MoreMenu({ variant }: { variant: "desktop" | "mobile" }) {
   );
 }
 
+/** With sign-in on: the signed-in person (name, their businesses, their account, sign out). */
+function AccountMenu() {
+  const { account, tenant, setTenant } = useApp();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const nav = useNavigate();
+  const loc = useLocation();
+  useEffect(() => { setOpen(false); }, [loc.pathname]);
+  useDismiss(open, ref, useCallback(() => setOpen(false), []));
+  if (!account) return null;
+  const initial = (account.user.name.trim()[0] ?? account.user.email[0] ?? "?").toUpperCase();
+  return (
+    <div className="more" ref={ref}>
+      <button type="button" className="account-btn" aria-haspopup="menu" aria-expanded={open} aria-label={`Your account: ${account.user.name}`} title={account.user.name} onClick={() => setOpen((o) => !o)}>
+        <span aria-hidden="true">{initial}</span>
+      </button>
+      {open && (
+        <div className="switcher-menu account-menu" role="menu" aria-label="Your account">
+          <div className="account-who"><b>{account.user.name}</b><span>{account.user.email}</span></div>
+          {account.businesses.length > 0 && <p className="account-menu-label">Your businesses</p>}
+          {account.businesses.map((b) => (
+            <button key={b.id} type="button" role="menuitemradio" aria-checked={b.id === tenant.id} className="switcher-item"
+              onClick={() => { setTenant(b.id); setOpen(false); nav("/"); }}>
+              <span className="switcher-monogram" aria-hidden="true">{b.name.slice(0, 1)}</span>
+              <span className="switcher-text"><span className="switcher-name">{b.name}</span></span>
+              <span className="account-role">{b.role === "owner" ? "Owner" : "Teammate"}</span>
+            </button>
+          ))}
+          <NavLink to="/account" role="menuitem" className="more-item">
+            <span className="more-icon"><Icon name="pen" size={16} /></span>
+            <span className="switcher-text"><span className="switcher-name">Your account</span><span className="switcher-domain">Your password, and the businesses you're in</span></span>
+          </NavLink>
+          <button type="button" role="menuitem" className="switcher-item" onClick={() => void signOut()}>
+            <span className="more-icon"><Icon name="send" size={16} /></span>
+            <span className="switcher-text"><span className="switcher-name">Sign out</span></span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TopBar() {
-  const { mode } = useApp();
+  const { mode, authRequired, account, tenant } = useApp();
   const pending = usePendingApprovals();
+  const none = !tenant.id; // signed in, with no business yet: only setting one up
   return (
     <header className="topbar">
       <div className="topbar-left">
         <Wordmark />
-        <span className="topbar-rule" aria-hidden="true" />
-        <BusinessSwitcher />
+        {!none && <span className="topbar-rule" aria-hidden="true" />}
+        {!none && <BusinessSwitcher />}
       </div>
-      <nav className="topnav" aria-label="Main">
-        {NAV.map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.end} className="topnav-link">
-            {n.label}
-            {n.to === "/approvals" && pending > 0 && <span className="count" aria-label={`${pending} waiting`}>{pending}</span>}
-          </NavLink>
-        ))}
-        <MoreMenu variant="desktop" />
-      </nav>
+      {!none && (
+        <nav className="topnav" aria-label="Main">
+          {NAV.map((n) => (
+            <NavLink key={n.to} to={n.to} end={n.end} className="topnav-link">
+              {n.label}
+              {n.to === "/approvals" && pending > 0 && <span className="count" aria-label={`${pending} waiting`}>{pending}</span>}
+            </NavLink>
+          ))}
+          <MoreMenu variant="desktop" />
+        </nav>
+      )}
       <div className="topbar-right">
         {mode === "mock" && (
           <span className="mode-pill" title="The API is not reachable, so the app runs on prepared demo data and scripted runs.">
             <span className="mode-dot" aria-hidden="true" /> Demo data
           </span>
         )}
-        <CreditsChip />
+        {/* the credits of a business you are in; a demo you only look at has none of yours */}
+        {!none && !tenant.readOnly && <CreditsChip />}
+        {/* looking at the demo without an account: one way in */}
+        {authRequired && !account && <a className="btn btn-gold btn-sm account-signup" href="/signup">Sign up free</a>}
         <ThemeMenu />
-        <MoreMenu variant="mobile" />
+        {!none && <MoreMenu variant="mobile" />}
+        <AccountMenu />
       </div>
     </header>
   );
@@ -224,6 +274,8 @@ export function TopBar() {
 
 export function TabBar() {
   const pending = usePendingApprovals();
+  const { tenant } = useApp();
+  if (!tenant.id) return null;
   return (
     <nav className="tabbar" aria-label="Main">
       {NAV.map((n) => (

@@ -28,6 +28,7 @@ export function NeedsLink({ failed }: { failed: boolean }) {
         <button className="btn btn-gold" type="submit" disabled={state === "busy" || !text.trim()}>{state === "busy" ? "Opening…" : "Open"}</button>
       </form>
       {state === "bad" && <p role="alert" className="needs-link-bad">That link is not valid any more. Ask your Allevia team for a new one.</p>}
+      <p>Have an account? <a href="/login">Sign in with your email</a>.</p>
       <style>{`
         .needs-link { max-width: 34rem; margin: 12vh auto 0; padding: 0 var(--space-md); display: grid; gap: var(--space-md); color: var(--color-ink); }
         .needs-link h1 { font-family: var(--font-display); font-weight: 400; font-size: var(--text-xl); margin: 0; }
