@@ -213,4 +213,11 @@ describe("server: studio (integration)", () => {
     expect(img.headers.get("content-type")).toBe("image/jpeg");
     expect((await app.request("/api/other/studio/sample")).status).toBe(404);
   });
+
+  it("the last run is not offered when its photo file is gone (the page shows the upload, not empty frames)", async () => {
+    const app = h.make({ studio: async () => wiring });
+    await upsertNode(h.g, { type: "Asset", id: "asset:lost-photo", name: "lost", props: { kind: "original", storageKey: "lost/photo.jpg", studioRunAt: Date.now() + 60_000, studioEvents: "[]", note: "" } });
+    const latest = await (await app.request("/api/mini/studio/latest")).json() as { run: unknown };
+    expect(latest.run).toBeNull();
+  });
 });

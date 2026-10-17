@@ -238,9 +238,13 @@ export function mountStudio(app: Hono, h: StudioHelpers): void {
   });
 
   app.get("/api/:t/studio/latest", async (c) => {
-    const { g } = await h.tenantOf(c);
+    const { reg, g } = await h.tenantOf(c);
     const run = await latestStudioRun(g);
     if (!run) return c.json({ run: null });
+    // a run whose photo file is gone (another data folder, a cleaned disk) would show empty grey frames: show the upload instead
+    const [orig] = await g.roQuery<{ key: string | null }>("MATCH (a:Entity:Asset {id:$id}) RETURN a.storageKey AS key LIMIT 1", { id: run.assetId });
+    const w = await h.studio?.();
+    if (w && (!orig?.key || !w.deps.store.get(reg.slug, orig.key))) return c.json({ run: null });
     const approvalId = [...run.events].reverse().find((e): e is Extract<AgentEvent, { type: "proposal" }> => e.type === "proposal")?.approvalId;
     const card = approvalId ? await readApproval(g, approvalId) : null;
     const [content] = approvalId
