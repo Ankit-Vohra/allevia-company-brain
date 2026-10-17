@@ -229,7 +229,9 @@ describe("files: a photo is served only from its own tenant's folder", () => {
   });
 
   it("the demo sample photo is per tenant", async () => {
-    expect((await get("/api/tenant_a/studio/sample")).status).toBe(404);
+    const none = await get("/api/tenant_a/studio/sample");
+    expect(none.status).toBe(200);
+    expect(await none.json()).toBeNull(); // no sample of its own, and never tenant_b's
     expect((await get("/api/tenant_a/studio/sample.jpg")).status).toBe(404);
     expect(await (await get("/api/tenant_b/studio/sample.jpg")).text()).toBe("B-SAMPLE-BYTES");
   });
