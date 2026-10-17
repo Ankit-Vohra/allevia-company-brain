@@ -155,7 +155,7 @@ export function realComposioClient(apiKey: string, fetchFn: FetchFn = realFetch)
       await call(`/connected_accounts/${encodeURIComponent(id)}`, { method: "DELETE" });
     },
     async execute(o) {
-      const r = await call(`/tools/execute/${encodeURIComponent(o.tool)}`, { method: "POST", body: { connected_account_id: o.accountId, user_id: o.userId, arguments: o.args } });
+      const r = await call(`/tools/execute/${encodeURIComponent(o.tool)}`, { method: "POST", body: { connected_account_id: o.accountId, user_id: o.userId, arguments: o.args, version: "latest" } });
       const success = r.body.successful === true || r.body.success === true;
       return { ok: success, data: r.body.data ?? null, ...(success ? {} : { error: str(r.body.error) || "The tool did not work." }) };
     },
@@ -169,7 +169,8 @@ export function realComposioClient(apiKey: string, fetchFn: FetchFn = realFetch)
       return { status: typeof r.body.status === "number" ? r.body.status : r.status, data: r.body.data ?? null };
     },
     async tools(toolkit, search) {
-      const q = new URLSearchParams({ toolkit_slug: toolkit, limit: "100", ...(search ? { search } : {}) });
+      // MCP toolkits (Higgsfield MCP) list and run their tools only at a named version: without it the list is empty and a run is "not found"
+      const q = new URLSearchParams({ toolkit_slug: toolkit, toolkit_versions: "latest", limit: "200", ...(search ? { search } : {}) });
       return items((await call(`/tools?${q}`)).body).map((t): ComposioToolInfo => {
         const input = asRecord(t.input_parameters);
         const properties = Object.keys(asRecord(input.properties));
