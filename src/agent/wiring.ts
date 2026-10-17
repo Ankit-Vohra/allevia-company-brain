@@ -26,7 +26,7 @@ import type { CreativeDeps } from "../creative/ports.js";
 import type { PublicDataPort } from "../publicdata/service.js";
 import type { ConnectionsPort } from "../connections/service.js";
 import { search } from "./tools/search.js";
-import { demoConnections, isSalesDemo } from "../sales/demo.js";
+import { demoPortFor, isSalesDemo } from "../sales/demo.js";
 
 export const SEED_LIMIT = 8;
 // The files the q8 e5-small pipeline reads (embed.ts loads it with dtype "q8" from MODELS_DIR).
@@ -96,7 +96,7 @@ export async function createAskDeps(opts: { tenant: string; model?: string }, ov
   // Public data (Apify): always present so the tools can say plainly when it is off; it runs only with APIFY_TOKEN set.
   const publicData = over.publicData === null ? undefined : over.publicData ?? (await import("../publicdata/service.js")).productionPublicData(loadConfig(), { log: (l) => console.error(l) });
   // Connections (Google, Composio) for this business only: the port is bound to the tenant, tools never name one.
-  const connections = over.connections === null ? undefined : over.connections ?? (isSalesDemo(opts.tenant) ? demoConnections(opts.tenant) : (await import("../connections/production.js")).productionConnections().port(opts.tenant));
+  const connections = over.connections === null ? undefined : over.connections ?? (isSalesDemo(opts.tenant) ? demoPortFor(opts.tenant) : (await import("../connections/production.js")).productionConnections().port(opts.tenant));
   const runtime = over.runtime
     ?? new ClaudeAgentSdkRuntime({ onInit: (init) => { assertSubscription(init); }, ...(over.sdk ? { sdk: over.sdk } : {}) });
   return {

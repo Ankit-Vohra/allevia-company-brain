@@ -70,7 +70,7 @@ export const FIXTURE_FACTS = {
 
 export class FakeLlm implements LlmRunner {
   calls: StructuredInput[] = [];
-  constructor(private readonly opts: { failPaths?: string[]; profile?: Obj; facts?: Obj } = {}) {}
+  constructor(private readonly opts: { failPaths?: string[]; profile?: Obj; facts?: Obj; extractions?: Record<string, Extraction>; brand?: Obj } = {}) {}
   async structured(input: StructuredInput): Promise<unknown> {
     this.calls.push(input);
     const keys = props(input.schema);
@@ -78,9 +78,9 @@ export class FakeLlm implements LlmRunner {
       const url = /\npath: (\S+)/.exec(input.prompt)?.[1] ?? "";
       const path = new URL(url).pathname;
       if (this.opts.failPaths?.includes(path)) throw new Error(`fake failure for ${path}`);
-      return FIXTURE_EXTRACTIONS[path] ?? { entities: [], relations: [], observations: [] };
+      return (this.opts.extractions ?? FIXTURE_EXTRACTIONS)[path] ?? { entities: [], relations: [], observations: [] };
     }
-    if (keys.includes("tone")) return FIXTURE_BRAND;
+    if (keys.includes("tone")) return this.opts.brand ?? FIXTURE_BRAND;
     if (keys.includes("city")) return this.opts.profile ?? FIXTURE_PROFILE;
     // day-one facts (src/ingest/sources/website/facts.ts): the address in the footer, quoted; no hours or prices stated
     if (keys.includes("hours") && keys.includes("items")) return this.opts.facts ?? FIXTURE_FACTS;

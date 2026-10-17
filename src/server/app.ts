@@ -849,19 +849,14 @@ export async function loadOnboardModule(): Promise<OnboardFn | null> {
   const mod = (await import(url.href)) as { onboard?: (input: unknown, emit: (e: OnboardEvent) => void, deps: unknown) => Promise<unknown> };
   if (typeof mod.onboard !== "function") return null;
   const onboard = mod.onboard;
-  const { AgentSdkRunner } = await import("../ingest/llm.js");
-  // The brand library's production deps: files under the data dir, Claude vision on the subscription (cached on disk).
-  const { productionStudioDeps } = await import("../studio/wiring.js");
-  const { loadConfig } = await import("../config.js");
-  const studio = productionStudioDeps(loadConfig().dataDir);
-  return async (input, emit, signal) => onboard(input, emit, {
-    runner: new AgentSdkRunner({ concurrency: 3 }), signal,
+  // the same dependencies the operator's `onboard <url>` command uses (src/onboard/wiring.ts): Claude on the subscription, the
+  // brand library, public data when APIFY_TOKEN is set
+  const { productionOnboardDeps } = await import("../onboard/wiring.js");
+  return async (input, emit, signal) => onboard(input, emit, await productionOnboardDeps({
+    signal,
     // what the crawl and the stages say goes to the server log (a failed onboarding leaves a trace there)
     log: (line: string) => { if (!line.startsWith("[crawl] assets for")) console.error(`[onboard] ${line.replace(/^\[onboard\]\s*/, "")}`); },
-    brand: { store: studio.store, vision: studio.vision, googleFonts: true },
-    // public data (Apify): off without APIFY_TOKEN; with it, a blocked site and the Google listing, inside the budget
-    publicData: (await import("../publicdata/service.js")).productionPublicData(loadConfig()),
-  });
+  }));
 }
 
 // shared/plans.ts: pricing data. Absent -> null (501).

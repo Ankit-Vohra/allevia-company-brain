@@ -1,0 +1,3 @@
+# Test fixture: a hand-made coffee roaster's site, served locally by the tests.
+User-agent: *
+Disallow: /checkouts/

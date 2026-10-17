@@ -9,6 +9,7 @@
 //                    it are the real ones.
 // Everything here is synthetic: no real company, person or address (all .example).
 import { entryById } from "../../shared/connection-map.js";
+import { isSampleTenant, sampleConnections } from "../demo/sample/connections.js";
 import type { ConnectionsPort } from "../connections/service.js";
 import type { BusyBlock, CreatedEvent, GoogleApis, InboxMessage, NewEvent, OutgoingEmail, SentEmail } from "../connections/google/apis.js";
 import { NotConnectedError, type ConnectionStatus, type ConnectionView } from "../connections/types.js";
@@ -21,7 +22,8 @@ import { toIso } from "../util/time.js";
 import { DAY, enquiryGoal, logMessage, moveStage, openDeal, recordEnquiry, recordMeeting, type Src } from "./graph.js";
 
 export const SALES_DEMO_TENANT = "demo_growth";
-export const isSalesDemo = (tenant: string): boolean => tenant === SALES_DEMO_TENANT;
+/** A demo business whose tools are sample connections: Shiftly (this file) or a public demo business with sample data (src/demo/sample). */
+export const isSalesDemo = (tenant: string): boolean => tenant === SALES_DEMO_TENANT || isSampleTenant(tenant);
 
 const HOUR = 3_600_000;
 
@@ -296,4 +298,9 @@ export function demoConnections(tenant: string, now: () => number = () => Date.n
   };
   ports.set(tenant, { port, apis });
   return Object.assign(port, { apis });
+}
+
+/** The sample connections of whichever demo business this is (isSalesDemo): the public demo's sample Gmail, Calendar and Shopify, or Shiftly's. */
+export function demoPortFor(tenant: string): ConnectionsPort {
+  return isSampleTenant(tenant) ? sampleConnections(tenant) : demoConnections(tenant);
 }

@@ -1,0 +1,20 @@
+{
+  "_note": "Test fixture, hand-made in the shapes apify/facebook-ads-scraper and s-r/google-ads-transparency return. Fictional ads; never fetched from Apify.",
+  "meta": {
+    "Fixture Roasters": [
+      { "adArchiveID": "900000001", "pageName": "Fixture Roasters", "isActive": true, "startDate": 1759881600, "publisherPlatform": ["FACEBOOK", "INSTAGRAM"],
+        "snapshot": { "body": { "text": "Fresh coffee, roasted this week. Free delivery over 999." }, "title": "Roasted this week", "cta_text": "Shop now", "link_url": "https://fixtureroasters.example/collections/coffee", "display_format": "VIDEO" } }
+    ],
+    "Rival Roasters": [
+      { "adArchiveID": "900000101", "pageName": "Rival Roasters", "isActive": true, "startDate": 1760054400, "publisherPlatform": ["INSTAGRAM"],
+        "snapshot": { "body": { "text": "Buy two bags, get a third free this weekend." }, "title": "Weekend offer", "cta_text": "Shop now", "link_url": "https://rivalroasters.example/offer", "display_format": "IMAGE" } },
+      { "ad_archive_id": "900000102", "page_name": "Rival Roasters", "is_active": false, "start_date": "1757289600", "end_date": "1758499200",
+        "snapshot": { "body": "Cold brew season", "cta_text": "Learn more" } }
+    ]
+  },
+  "google": {
+    "rivalroasters.example": [
+      { "advertiserName": "Rival Roasters Pvt Ltd", "creativeId": "CRfixture01", "format": "TEXT", "firstShown": "2026-09-20", "lastShown": "2026-10-15", "url": "https://adstransparency.google.com/advertiser/ARfixture01" }
+    ]
+  }
+}

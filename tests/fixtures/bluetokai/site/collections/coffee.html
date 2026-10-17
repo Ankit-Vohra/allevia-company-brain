@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- Test fixture: a collection page with priced products in structured data, as a Shopify store publishes them. Hand-made. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shop coffee | Fixture Roasters</title>
+  <meta name="description" content="Whole beans and ground coffee, roasted fresh. Medium, dark and light roasts, cold brew bags and drip bags.">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"ItemList","itemListElement":[
+    {"@type":"Product","name":"Estate Blend Medium Roast","description":"A balanced medium roast with notes of cocoa and caramel. 250 g.","offers":{"@type":"Offer","price":"650.00","priceCurrency":"INR"}},
+    {"@type":"Product","name":"Dark Roast Espresso","description":"A bold dark roast for espresso and milk drinks. 250 g.","offers":{"@type":"Offer","price":"720.00","priceCurrency":"INR"}},
+    {"@type":"Product","name":"Single Origin Light Roast","description":"A bright light roast from one estate, for pour-over. 250 g.","offers":{"@type":"Offer","price":"790.00","priceCurrency":"INR"}},
+    {"@type":"Product","name":"Cold Brew Bags","description":"Ten bags of coarse-ground coffee for cold brew at home.","offers":{"@type":"Offer","price":"499.00","priceCurrency":"INR"}}
+  ]}
+  </script>
+</head>
+<body>
+  <header><nav><a href="/">Home</a> <a href="/collections/coffee">Shop coffee</a> <a href="/pages/about">About us</a></nav></header>
+  <main>
+    <h1>Shop coffee</h1>
+    <ul>
+      <li><h2>Estate Blend Medium Roast</h2><p>A balanced medium roast with notes of cocoa and caramel. 250 g. ₹650</p></li>
+      <li><h2>Dark Roast Espresso</h2><p>A bold dark roast for espresso and milk drinks. 250 g. ₹720</p></li>
+      <li><h2>Single Origin Light Roast</h2><p>A bright light roast from one estate, for pour-over. 250 g. ₹790</p></li>
+      <li><h2>Cold Brew Bags</h2><p>Ten bags of coarse-ground coffee for cold brew at home. ₹499</p></li>
+    </ul>
+    <p>Every order is roasted to order and ships within two days. Free delivery over ₹999.</p>
+  </main>
+</body>
+</html>

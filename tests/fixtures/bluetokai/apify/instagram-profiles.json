@@ -1,0 +1,25 @@
+{
+  "_note": "Test fixture, hand-made in the shape apify/instagram-profile-scraper returns. Fictional accounts and numbers; never fetched from Apify.",
+  "items": [
+    {
+      "username": "fixtureroasters", "fullName": "Fixture Roasters", "followersCount": 182000, "followsCount": 410, "postsCount": 2950,
+      "private": false, "isBusinessAccount": true, "businessCategoryName": "Coffee shop", "biography": "Specialty coffee, roasted fresh.",
+      "externalUrl": "https://fixtureroasters.example/",
+      "latestPosts": [
+        { "type": "Video", "shortCode": "Cfr001", "caption": "How we roast", "likesCount": 2400, "commentsCount": 61, "videoViewCount": 88000, "timestamp": "2026-10-15T08:00:00.000Z" },
+        { "type": "Image", "shortCode": "Cfr002", "caption": "New week, new roast", "likesCount": 1800, "commentsCount": 40, "timestamp": "2026-10-13T08:00:00.000Z" },
+        { "type": "Sidecar", "shortCode": "Cfr003", "caption": "Brew guide", "likesCount": 1500, "commentsCount": 33, "timestamp": "2026-10-11T08:00:00.000Z" },
+        { "type": "Image", "shortCode": "Cfr004", "caption": "Café mornings", "likesCount": 1300, "commentsCount": 25, "timestamp": "2026-10-08T08:00:00.000Z" }
+      ]
+    },
+    {
+      "username": "rivalroasters", "fullName": "Rival Roasters", "followersCount": 96000, "followsCount": 220, "postsCount": 1400,
+      "private": false, "isBusinessAccount": true, "businessCategoryName": "Coffee shop", "biography": "Coffee for everyone.",
+      "latestPosts": [
+        { "type": "Image", "shortCode": "Crr001", "caption": "Weekend offer", "likesCount": 900, "commentsCount": 21, "timestamp": "2026-10-14T08:00:00.000Z" },
+        { "type": "Video", "shortCode": "Crr002", "caption": "Latte art", "likesCount": 1200, "commentsCount": 30, "videoViewCount": 40000, "timestamp": "2026-10-12T08:00:00.000Z" },
+        { "type": "Image", "shortCode": "Crr003", "caption": "New café", "likesCount": 700, "commentsCount": 18, "timestamp": "2026-10-09T08:00:00.000Z" }
+      ]
+    }
+  ]
+}

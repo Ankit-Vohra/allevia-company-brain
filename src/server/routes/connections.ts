@@ -14,14 +14,29 @@
 // owner's door, when auth is on), never from the body.
 import type { Hono } from "hono";
 import { z } from "zod";
-import { entryById, fitOf, recommendedFor, startersFor } from "../../../shared/connection-map.js";
+import { entryById, fitOf, recommendedFor, startersFor, TOOLKIT_CATALOG } from "../../../shared/connection-map.js";
 import type { ConnectionsService } from "../../connections/service.js";
 import { GROUP_LABELS, GROUP_ORDER, NotConfiguredError, type ConnectionView } from "../../connections/types.js";
 import { HttpError, readBody, type RouteCtx } from "../http.js";
 import { requireOwner } from "../roles.js";
 import { businessProps } from "../reads.js";
+import { isSampleTenant, SAMPLE_CONNECTED, SAMPLE_WORDS, sampleView } from "../../demo/sample/connections.js";
 
 export interface ConnectionsWiring { service: ConnectionsService; webBaseUrl: string }
+
+// A public demo business with sample data (src/demo/sample) shows Gmail, Google Calendar and Shopify as connected, each saying it is
+// sample data; the rest of the catalogue is listed as the server has it (or as not connected in this demo when connecting is off).
+// Its sample tools cannot be connected, read again or disconnected: they are not real accounts.
+const SAMPLE_REFUSAL = "This is sample data for the demo, not a real account, so there is nothing to connect, read again or disconnect.";
+async function sampleViews(w: ConnectionsWiring | null, tenant: string): Promise<ConnectionView[]> {
+  const real = w ? await w.service.list(tenant).catch(() => [] as ConnectionView[]) : [];
+  const ids = new Set<string>(SAMPLE_CONNECTED);
+  const others = real.length ? real.filter((v) => !ids.has(v.id)) : TOOLKIT_CATALOG.filter((e) => e.recommended !== null && !ids.has(e.id)).map((e): ConnectionView => ({
+    id: e.id, name: e.name, access: e.acts.length ? "read_act" : "read", group: e.group, blurb: e.blurb, reads: e.reads, acts: e.acts,
+    state: "not_connected", message: "Not connected in this demo.", available: false, unavailableWords: "Not connected in this demo.",
+  }));
+  return [...SAMPLE_CONNECTED.map(sampleView), ...others].sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group));
+}
 
 const Connect = z.object({ inbox: z.boolean().optional(), returnTo: z.enum(["connections", "onboard", "popup", "home"]).optional() });
 const Select = z.object({ value: z.string().trim().min(1).max(300) });
@@ -54,8 +69,9 @@ export function registerConnectionRoutes(app: Hono, ctx: RouteCtx, h: { connecti
   app.get("/api/:t/connections", async (c) => {
     const { reg, g } = await ctx.tenantOf(c);
     const w = await wiring();
-    if (!w) return c.json({ ready: false, message: "Connecting your tools isn't switched on yet.", groups: [], recommended: [], more: [], starters: [] });
-    const views = await w.service.list(reg.slug);
+    const sample = isSampleTenant(reg.slug);
+    if (!w && !sample) return c.json({ ready: false, message: "Connecting your tools isn't switched on yet.", groups: [], recommended: [], more: [], starters: [] });
+    const views = sample ? await sampleViews(w, reg.slug) : await w!.service.list(reg.slug);
     const byId = new Map(views.map((v) => [v.id, v]));
     const props = await businessProps(g, reg.businessId).catch(() => ({}) as Awaited<ReturnType<typeof businessProps>>);
     const fit = fitOf(props.industry, props.name ?? reg.name, props.domain);
@@ -64,9 +80,9 @@ export function registerConnectionRoutes(app: Hono, ctx: RouteCtx, h: { connecti
     const more = views.filter((v) => !shown.has(v.id));
     const connected = views.filter((v) => v.state === "connected").map((v) => v.id);
     const missing = new Map<string, string>();
-    for (const cn of w.service.connectors) for (const m of cn.availability().missing) missing.set(m.setting, m.words);
+    for (const cn of w?.service.connectors ?? []) for (const m of cn.availability().missing) missing.set(m.setting, m.words);
     return c.json({
-      ready: [...byId.values()].some((v) => v.available), fit,
+      ready: [...byId.values()].some((v) => v.available), fit, ...(sample ? { sample: SAMPLE_WORDS } : {}),
       recommended, more,
       groups: GROUP_ORDER.map((g) => ({ id: g, label: GROUP_LABELS[g], items: views.filter((v) => v.group === g) })).filter((g) => g.items.length),
       starters: startersFor(connected),
@@ -87,6 +103,7 @@ export function registerConnectionRoutes(app: Hono, ctx: RouteCtx, h: { connecti
     const { reg } = await ctx.tenantOf(c);
     ctx.refuseInPublicMode();
     requireOwner(); // the business's accounts are the owner's to connect (src/server/roles.ts)
+    if (isSampleTenant(reg.slug)) throw new HttpError(400, SAMPLE_REFUSAL);
     const w = await need();
     const id = c.req.param("id");
     known(w, id);
@@ -98,6 +115,7 @@ export function registerConnectionRoutes(app: Hono, ctx: RouteCtx, h: { connecti
     const { reg } = await ctx.tenantOf(c);
     ctx.refuseInPublicMode();
     requireOwner();
+    if (isSampleTenant(reg.slug)) throw new HttpError(400, SAMPLE_REFUSAL);
     const w = await need();
     known(w, c.req.param("id"));
     const body = await readBody(c, Select);
@@ -107,6 +125,7 @@ export function registerConnectionRoutes(app: Hono, ctx: RouteCtx, h: { connecti
   app.post("/api/:t/connections/:id/pull", async (c) => {
     const { reg } = await ctx.tenantOf(c);
     ctx.refuseInPublicMode();
+    if (isSampleTenant(reg.slug)) throw new HttpError(400, SAMPLE_REFUSAL);
     const w = await need();
     known(w, c.req.param("id"));
     const r = await wrap(() => w.service.pull(reg.slug, c.req.param("id")));
@@ -117,6 +136,7 @@ export function registerConnectionRoutes(app: Hono, ctx: RouteCtx, h: { connecti
     const { reg } = await ctx.tenantOf(c);
     ctx.refuseInPublicMode();
     requireOwner();
+    if (isSampleTenant(reg.slug)) throw new HttpError(400, SAMPLE_REFUSAL);
     const w = await need();
     known(w, c.req.param("id"));
     return c.json(await wrap(() => w.service.disconnect(reg.slug, c.req.param("id"))));

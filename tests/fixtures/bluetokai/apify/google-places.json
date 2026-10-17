@@ -1,0 +1,35 @@
+{
+  "_note": "Test fixture, hand-made in the shape compass/crawler-google-places returns (one place, newest reviews). Fictional place and reviewers; never fetched from Apify.",
+  "items": [
+    {
+      "title": "Fixture Roasters Café, Indiranagar",
+      "placeId": "ChIJfixtureRoasters01",
+      "url": "https://www.google.com/maps/place/?q=place_id:ChIJfixtureRoasters01",
+      "address": "100 Feet Road, Indiranagar, Bengaluru, Karnataka 560038, India",
+      "city": "Bengaluru",
+      "countryCode": "IN",
+      "categoryName": "Coffee shop",
+      "website": "{{ORIGIN}}/",
+      "phone": "+91 80 0000 0000",
+      "totalScore": 4.5,
+      "reviewsCount": 2140,
+      "openingHours": [
+        { "day": "Monday", "hours": "8 AM to 11 PM" },
+        { "day": "Tuesday", "hours": "8 AM to 11 PM" },
+        { "day": "Wednesday", "hours": "8 AM to 11 PM" },
+        { "day": "Thursday", "hours": "8 AM to 11 PM" },
+        { "day": "Friday", "hours": "8 AM to 11 PM" },
+        { "day": "Saturday", "hours": "8 AM to 11 PM" },
+        { "day": "Sunday", "hours": "8 AM to 11 PM" }
+      ],
+      "reviews": [
+        { "name": "Anika S.", "stars": 5, "publishedAtDate": "2026-10-14T09:12:00.000Z", "reviewId": "fixture-rev-1",
+          "text": "Lovely pour-over and friendly staff. The cold brew is the best I have had in the city.", "responseFromOwnerText": "Thank you, see you again soon!" },
+        { "name": "Rohan", "stars": 3, "publishedAtDate": "2026-10-13T17:40:00.000Z", "reviewId": "fixture-rev-2",
+          "text": "Good coffee but the café was very crowded on Sunday and my order took twenty minutes." },
+        { "name": "Priya", "stars": 4, "publishedAtDate": "2026-10-09T11:05:00.000Z", "reviewId": "fixture-rev-3",
+          "text": "Great beans to take home. Wish there were more seats near the window." }
+      ]
+    }
+  ]
+}
