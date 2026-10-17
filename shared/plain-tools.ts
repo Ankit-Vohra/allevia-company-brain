@@ -39,6 +39,7 @@ export const PLAIN_TOOLS: Record<string, string> = {
   crm_read: "Look at your leads, deals and meetings",
   crm_write: "Add a lead, a deal or a follow-up to your records",
   meetings_read: "See what was agreed in a meeting and who does what",
+  what_worked: "See which of your posts worked best and why",
   calendar_free_slots: "Find free times on your calendar",
   calendar_book: "Prepare a meeting on your calendar for your OK",
   gmail_draft: "Write an email for you to read first",
