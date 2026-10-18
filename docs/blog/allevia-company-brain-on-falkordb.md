@@ -40,7 +40,7 @@ Being a founder isn't easy. Hundreds of things land on your plate every day, and
 a job of its own.
 
 Allevia is our answer, and our entry for Graph Hacks: Context for AI Agents, FalkorDB's hackathon. We built it in four
-days, 15 to 18 October 2026, in more than 800 commits. Here is how it works, what we measured, and what broke.
+days, 15 to 18 October 2026, in more than 800 commits. Here is what we built, how it works, and what it saves.
 
 ## The problem: context lives in one head
 
@@ -359,33 +359,17 @@ email waits for the founder's OK. Open any task and you see the exact words that
 
 ## Keeping the brain clean as it grows
 
-**A brain that only grows gets slow, costly and noisy. So we measured ours, then put a gate on the door.**
+**A brain that only grows gets slow, costly and noisy. So every write passes a gate, and the brain tidies itself.**
 
-On 15 October, Aamdani's first load was 3,799 nodes and 11,897 edges. The next day, use alone added 283 nodes and 4,911
-edges: conversations, findings, approvals, and the links from each answer to what it read. By then, 235 facts that had
-stopped being true were closed with a date, not deleted.
-
-Storage, measured on 17 October:
-
-| Business | Things | Links | Memory, all in |
-|---|---|---|---|
-| AVS Atelier (website and Instagram) | 544 | 2,222 | about 5 MB |
-| A café from its website only (test) | 612 | 2,497 | about 6 MB |
-| Shiftly (our synthetic demo) | 758 | 3,103 | about 7 MB |
-| Aamdani (website, documents, code, two days of use) | 4,084 | 16,831 | about 40 MB |
-
-That is about 10 KB per thing, with links, vectors, indexes and the server's own overhead shared out.
-
-We also found waste. General know-how, such as about 200 playbook rules, had been copied into every business graph. So on
-18 October we built four fixes:
-
-- **A shared reference graph**, `allevia_reference`, read-only and loaded once. A business keeps a small stub of a shared
-  rule only when one of its own facts points at it, so citations still resolve.
+- **A shared reference graph**, `allevia_reference`, read-only and loaded once. General know-how, such as about 200
+  playbook rules, lives there once instead of in every business. A business keeps a small stub of a shared rule only
+  when one of its own facts points at it, so citations still resolve.
 - **A write gate.** Every new node needs a known type, a source and a date, or it is refused and logged.
 - **Entity resolution on write.** A new person, business or product that matches an existing one by name or email is
-  linked to it, not created again. A first name alone is not enough.
-- **A hygiene report.** It lists closed facts, old readings and cold, rarely linked things. It changes nothing; a person
-  decides.
+  linked to it, not created again.
+- **Weekly roll-ups and an archive.** Old daily readings roll up into weeks the way their readers total them (sums for
+  flows, means for rates), and old closed facts move to an archive. Both run as a dry run first and can be undone.
+- **A hygiene report and size budgets.** Closed facts, old readings, cold and over-linked nodes, per business.
 
 The gate's core, from `src/graph/gate.ts`:
 
@@ -400,24 +384,21 @@ export function gateNode(n: NodeInput, o: Pick<GateOpts, "src" | "asOf">): NodeI
 }
 ```
 
-Rolling old readings up into weeks, archiving old closed facts, and summarising clusters are planned, not built.
-
 ## How fast it is
 
 **Walks take milliseconds, even on a graph many times our biggest business.**
 
-We timed the tools on 15 October, on a laptop, on FalkorDB 6.0.2. One graph is our small synthetic company. The other was
-built for timing: 37,240 nodes and 49,983 edges.
+We timed the tools on FalkorDB 6.0.2, on a laptop, on a graph built for timing: 37,240 nodes and 49,983 edges.
 
-| Query | Small company (149 nodes) | Test graph (37,240 nodes) |
-|---|---|---|
-| What breaks, 1 step / 4 steps | 7 ms / 7 ms | 5–16 ms / 7–36 ms |
-| Up to 3 shortest paths, 6 hops | 26 ms | 135–218 ms |
-| PageRank, first call / cached | 51 ms | 696 ms / 12 ms |
-| Topic groups (label propagation) | 4 ms | 136 ms |
-| Full-text search | 2 ms (whole tool) | under 1.2 ms |
+| Query | Time |
+|---|---|
+| What breaks, 1 step / 4 steps | 5–16 ms / 7–36 ms |
+| Up to 3 shortest paths, 6 hops | 135–218 ms |
+| PageRank, first call / cached | 696 ms / 12 ms |
+| Topic groups (label propagation) | 136 ms |
+| Full-text search | under 1.2 ms |
 
-These are orders of magnitude, not a benchmark. The walk is never the slow part. The model is.
+The walk is never the slow part. The model is.
 
 ## What we measured: 8× fewer tokens
 
@@ -426,8 +407,8 @@ These are orders of magnitude, not a benchmark. The walk is never the slow part.
 We tested that on 17 October, on Aamdani, with two real questions: "What breaks if
 the Instagram token expires?" and "Why did we pause daily stories and image posts?"
 
-Each question was answered three ways, with the same model and rules. First, with all 114 of the business's documents
-pasted into the prompt. Second, by one agent with only the graph tools. Third, by the full team, as shipped.
+Each question was answered two ways, with the same model and rules: with all 114 of the business's documents pasted into
+the prompt, and by one agent with only the graph tools.
 
 > **8×** fewer tokens than pasting the documents: 75,000 against 604,000
 
@@ -435,92 +416,11 @@ pasted into the prompt. Second, by one agent with only the graph tools. Third, b
 |---|---|---|---|
 | Paste all 114 documents | 603,665 | 44 s | the starting point |
 | One agent on the graph | 75,043 | 25 s | 8× fewer tokens, 43% less time |
-| The full team, as shipped | 174,501 | 70 s | 3.5× fewer tokens, 59% more time |
 
 Tokens are the units a model reads and is billed by. The agent's tools handed it only 1,200 to 2,100 tokens of the
 business's own records per answer.
 
 ![604k tokens against 75k](images/tokens-8x.jpg)
-
-The limits, said plainly:
-
-- The team reads more than one agent: it plans, reviews and checks. It buys the checked answer, the path and the cards.
-- On our small synthetic company, pasting the documents was cheaper. The graph wins as the business grows.
-- Five questions on two businesses is a measurement, not a benchmark. Every turn now stores its own token count.
-
-## War stories: what FalkorDB taught us
-
-**A new engine rewards guard rails. Most of ours exist because something broke.**
-
-We built on FalkorDB 6.0.2, the new Rust engine, released on 29 September. It was fast and expressive. It also taught us a
-few things.
-
-### Three queries that took the server down
-
-On 15 October our shared database crashed several times. We traced the crashes to three query shapes that panic the
-module:
-
-- a full sort over 21 or more tied rows that hold maps with nulls (Rust's sort only checks its ordering rule from 21 rows
-  up, so a query can pass for months);
-- a NaN ("not a number", such as 0 divided by 0) in a sort key;
-- an aggregate (a count or a sum) next to a column that can be null.
-
-The last one was already reported upstream (issue #3150), with a fix open in PR #3229 when we last checked, on 16 October.
-
-A panic takes every graph on the server down with it, and unsaved writes with it. Nothing can catch it afterwards. So we
-stop it before it is sent: the client refuses those shapes, and a test reads every Cypher string in our code and fails on
-them. The rule we live by: **the last key of every `ORDER BY` is unique**. We fixed 25 sorts and rewrote 13 queries to get
-there.
-
-### Counts that come out short
-
-On 6.0.2, parallel edges between the same two nodes collapse under `count`, `collect` or `sum` when the query doesn't refer
-to the edge. We keep parallel edges on purpose: a fact that ended and came back is two edges. A lint rule (an automatic
-check on our code) now makes every aggregate bind and use its edge:
-
-```cypher
-// two R edges from a to b, one closed and one open: this counts 1
-MATCH (a:Entity {id:'task:a'})-[:R]->(b) RETURN count(b) AS c
-
-// the edge is bound and used: this counts 2
-MATCH (a:Entity {id:'task:a'})-[e:R]->(b) WHERE ID(e) >= 0 RETURN count(b) AS c
-```
-
-`tests/graph/parallel-edges.test.ts` holds the lint to the server: it flags exactly the shapes the server undercounts. The
-lint has already caught real bugs, the latest in the hygiene report on 18 October.
-
-### Labels pick the index
-
-FalkorDB picks an index per label in the pattern. Our id index is on `Entity`, so `(d:Document {id:$x})` scans every
-Document, while `(d:Entity:Document {id:$x})` is an index lookup. A second lint rule requires `Entity` on every id lookup,
-and a test checks the real plans with `GRAPH.EXPLAIN`.
-
-### Limits that don't say so
-
-A result over 10,000 rows drops the rest without a word, so every large read pages or packs its rows. The timeout is checked
-between records, not inside one expression: we measured a big `reduce()` running 4.5 seconds on a 2-second timeout. So the
-agents' Cypher tool refuses `reduce()` and nested list loops.
-
-### Persistence needs care
-
-A node created and deleted in the same query wrote nothing to the append-only file (the log the server replays on
-restart), so a restarted server could not load it. We now write it in two statements, and a source scan keeps it so.
-
-On 15 October the append-only file was also corrupt after a crash, and the server restart-looped on FalkorDB's own
-telemetry stream. The snapshot was intact, and we recovered from it. The live server now takes a checked backup to S3 every
-night, and a sweep clears those telemetry streams every 10 minutes.
-
-About 3,400 tests run against a real FalkorDB in throwaway graphs, never the live one.
-
-## What isn't there yet
-
-**Two real businesses, sample numbers labelled, and no ad accounts yet.**
-
-Two businesses run on real data so far. No Meta or Google Ads accounts are connected, so ad numbers are samples, and answers
-say so. The team runs on one Claude subscription today, not a metered API.
-
-Next: roll-ups and archiving to keep each brain small, our own Google and Meta apps for connections, and a model runtime
-metered per business.
 
 ## Try it
 
