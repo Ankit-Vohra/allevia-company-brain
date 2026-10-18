@@ -7,7 +7,7 @@
 
 ![The pixel office: Allevia's 13 agents at their desks in nine departments, working on a request](docs/blog/images/pixel-office.jpg)
 
-Entry for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB, 15–18 October 2026), in all three tracks: Company
+Entry for **Graph Hacks: Context for AI Agents** (FalkorDB, 15–18 October 2026), in all three tracks: Company
 Brain, Agent Memory and Coordination, and Agents That Act on Connected Data.
 
 ## The problem

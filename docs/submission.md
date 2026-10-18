@@ -50,9 +50,8 @@ Tick all three:
 
 ### Repository
 
-Today: https://github.com/Ankit-Vohra/allevia-company-brain (a clean export with a short history).
-Founder's decision on 18 October: publish the full build history instead (over 800 commits from 15 October), once the
-history audit is clean. See the audit report before switching.
+https://github.com/Ankit-Vohra/allevia-company-brain. Since 18 October it carries the full build history (833 commits from
+15 October 01:08 IST), cleaned of real-business screenshots and identifiers after a full audit.
 
 ### Demo video (public or unlisted YouTube link)
 
