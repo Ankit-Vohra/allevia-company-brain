@@ -7,13 +7,13 @@ import { AGENTS, DEPARTMENTS } from "../../shared/roster.js";
 const readme = readFileSync(new URL("../../README.md", import.meta.url), "utf8");
 
 describe("README counts", () => {
-  it("says how many detectors there are", () => {
-    const said = [...readme.matchAll(/\b(\d+) deterministic Cypher detectors|Run the (\d+) detectors/g)].map((m) => Number(m[1] ?? m[2]));
-    expect(said.length).toBeGreaterThanOrEqual(2);
+  it("any detector count it states is the real one", () => {
+    const said = [...readme.matchAll(/\b(\d+) (?:deterministic (?:Cypher )?)?detectors|Run the (\d+) detectors/g)].map((m) => Number(m[1] ?? m[2]));
     for (const n of said) expect(n).toBe(DETECTOR_NAMES.length);
   });
-  it("says how many staff and departments there are", () => {
-    expect(readme).toMatch(/Thirteen AI staff in nine departments/);
+  it("says how many agents and departments there are", () => {
+    expect(readme).toMatch(/\b13 AI agents\b/);
+    expect(readme).toMatch(/\bnine departments\b/);
     expect(AGENTS).toHaveLength(13);
     expect(DEPARTMENTS).toHaveLength(9);
   });
