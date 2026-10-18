@@ -6,10 +6,13 @@
 //     HAS_CHUNK holds any more (the text of an older version of a document);
 //   - readings (Observations) older than 90 days: what the daily-to-weekly roll-up would fold;
 //   - cold things: untouched for 180 days, with at most one link, and a low PageRank (stored by the librarian; under 5% of the
-//     top one, or none stored), never the Business itself: a review list, not a delete list.
-// Every read is GRAPH.RO_QUERY and counts on the server.
+//     top one, or none stored), never the Business itself: a review list, not a delete list;
+//   - its size against the business budget (src/graph/health.ts: warning from 80 percent), and its best-linked nodes, a
+//     supernode flagged (graph:compact's weekly roll-up thins the links readings pile onto their subject and source).
+// Every read is GRAPH.RO_QUERY and counts on the server. graph:compact acts on the report.
 import type { GraphHandle } from "./client.js";
 import { referenceFilter, referenceParams } from "./reference.js";
+import { assessBudget, brainBudget, graphCounts, isSupernode, topHubs, type Budget, type Hub } from "./health.js";
 
 const DAY = 86_400_000;
 export const HYGIENE = { closedDays: 180, coldDays: 180, readingDays: 90, coldMaxDegree: 1, lowRankShare: 0.05, examples: 15 } as const;
@@ -27,12 +30,16 @@ export interface HygieneReport {
   chunks: { total: number; superseded: number; unheld: number };
   readings: { total: number; old: number };
   cold: { count: number; rankStored: boolean; examples: Array<{ id: string; type: string; name: string; degree: number; lastTouched: string | null }> };
+  size: { nodes: number; edges: number; mb: number | null; budget: ReturnType<typeof assessBudget> };
+  hubs: Array<Hub & { supernode: boolean }>;
 }
 
 const one = async (g: GraphHandle, q: string, p: Record<string, unknown> = {}): Promise<number> =>
   (await g.roQuery<{ c: number }>(q, p, READ))[0]?.c ?? 0;
 
-export async function graphHygiene(g: GraphHandle, now: number = Date.now()): Promise<HygieneReport> {
+// `mb` is the graph's own memory (GRAPH.MEMORY USAGE, which needs the server connection: the CLI passes it); without it the
+// memory part of the budget reads as unknown.
+export async function graphHygiene(g: GraphHandle, now: number = Date.now(), o: { mb?: number | null; budget?: Budget } = {}): Promise<HygieneReport> {
   const ref = referenceParams();
   const oldClosed = now - HYGIENE.closedDays * DAY;
   const coldBefore = now - HYGIENE.coldDays * DAY;
@@ -83,7 +90,11 @@ export async function graphHygiene(g: GraphHandle, now: number = Date.now()): Pr
     `MATCH (n:Entity) WHERE ${coldWhere} OPTIONAL MATCH (n)-[r]-() WITH n, count(r) AS deg WHERE deg <= $maxDeg
      RETURN n.id AS id, labels(n) AS labels, n.name AS name, deg, coalesce(n.updatedAt, n.createdAt) AS at ORDER BY at, id LIMIT $limit`,
     { ...coldParams, limit: HYGIENE.examples }, READ);
+  const counts = await graphCounts(g);
+  const mb = o.mb ?? null;
+  const hubs = (await topHubs(g)).map((h) => ({ ...h, supernode: isSupernode(h, counts.edges) }));
   return {
+    size: { ...counts, mb, budget: assessBudget({ ...counts, mb }, o.budget ?? brainBudget()) }, hubs,
     graph: g.name, at: new Date(now).toISOString(), business, general, stubs,
     edges: { current, closed, closedOld }, versions: { total: vTotal, old: vOld },
     chunks: { total: cTotal, superseded: cSuperseded, unheld: cUnheld }, readings: { total: rTotal, old: rOld },
@@ -107,6 +118,8 @@ const list = (o: Record<string, number>, max = 12): string => {
 export function formatHygiene(slug: string, r: HygieneReport): string {
   return [
     `${slug} (${r.graph}), ${r.at.slice(0, 10)}: a report only, nothing is changed`,
+    `  size: ${n(r.size.nodes)} things, ${n(r.size.edges)} links${r.size.mb === null ? "" : `, ${r.size.mb} MB`}; budget ${r.size.budget
+      .filter((b) => b.percent !== null).map((b) => `${b.what} ${b.percent!.toFixed(0)}% of ${n(b.limit)}${b.what === "memory" ? " MB" : ""}${b.level === "ok" ? "" : ` (${b.level.toUpperCase()})`}`).join(", ")}`,
     `  business knowledge: ${n(sum(r.business))} things (${list(r.business)})`,
     `  general know-how still copied in: ${n(sum(r.general))}${sum(r.general) ? ` (${list(r.general)}); graph:reference-split moves it out` : ""}; stubs of shared rules: ${n(r.stubs)}`,
     `  links: ${n(r.edges.current)} current, ${n(r.edges.closed)} closed facts (${n(r.edges.closedOld)} closed over ${HYGIENE.closedDays} days ago)`,
@@ -115,5 +128,7 @@ export function formatHygiene(slug: string, r: HygieneReport): string {
     `  readings: ${n(r.readings.total)} (${n(r.readings.old)} older than ${HYGIENE.readingDays} days: what a weekly roll-up would fold)`,
     `  cold things (untouched ${HYGIENE.coldDays} days, at most ${HYGIENE.coldMaxDegree} link, ${r.cold.rankStored ? "low PageRank" : "no PageRank stored yet"}): ${n(r.cold.count)}`,
     ...r.cold.examples.map((e) => `    ${e.id} (${e.type}) "${e.name}": ${e.degree} link${e.degree === 1 ? "" : "s"}, last touched ${e.lastTouched ?? "never"}`),
+    `  best-linked: ${r.hubs.map((h) => `${h.id} ${n(h.degree)}${h.supernode ? " (SUPERNODE)" : ""}`).join(", ") || "none"}`,
+    ...r.hubs.filter((h) => h.supernode).map((h) => `    ${h.id}: ${Object.entries(h.byType).slice(0, 6).map(([t, c]) => `${t} ${n(c)}`).join(", ")}`),
   ].join("\n");
 }

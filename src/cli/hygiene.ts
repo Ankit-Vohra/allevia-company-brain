@@ -10,7 +10,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { loadConfig } from "../config.js";
-import { graphName, listGraphs, openGraph } from "../graph/client.js";
+import { connect, graphName, listGraphs, openGraph } from "../graph/client.js";
+import { graphMemoryMb } from "../graph/health.js";
 import { listTenants } from "../graph/tenants.js";
 import { ensureReference, referenceGraphName } from "../graph/reference.js";
 import { formatSplit, splitReference, type SplitReport } from "../graph/reference-split.js";
@@ -86,7 +87,7 @@ export const commands: Command[] = [
       const [slug] = positionals;
       if (!slug || positionals.length > 1) { console.error("Usage: npm run cli -- graph:hygiene <tenant> [--json]"); return 2; }
       if (!(await listGraphs()).includes(graphName(slug))) { console.error(`no graph for ${slug} (${graphName(slug)})`); return 1; }
-      const r = await graphHygiene(await openGraph(slug));
+      const r = await graphHygiene(await openGraph(slug), Date.now(), { mb: await graphMemoryMb(await connect(), graphName(slug)) });
       console.log(values.json ? JSON.stringify(r, null, 1) : formatHygiene(slug, r));
       return 0;
     },

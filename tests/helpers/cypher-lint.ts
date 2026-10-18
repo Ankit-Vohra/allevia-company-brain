@@ -115,3 +115,48 @@ export function entityCreateWithoutId(text: string): string[] {
   }
   return found;
 }
+
+// Labels besides Entity that carry range indexes of their own (src/graph/indexes.ts INDEXES), with those properties.
+// Kept in step with INDEXES by tests/graph/cypher-lint.test.ts.
+export const OWN_RANGE_INDEXES: Record<string, string[]> = { Observation: ["metric", "metricKey", "subject", "asOf"] };
+
+const COMPARE = "\\s*(?:=|<>|<=|>=|<|>|\\bIN\\b|\\bSTARTS\\s+WITH\\b|\\bENDS\\s+WITH\\b|\\bCONTAINS\\b)";
+
+// FalkorDB 6.0.2 returns NO rows for a node pattern carrying Entity and another range-indexed label when the query filters
+// on Entity.id and on one of that label's indexed properties: `MATCH (o:Entity:Observation {id:$id}) WHERE o.asOf = $d`
+// is empty even when the node matches (docs/notes/falkordb-two-label-index-scan.md). Anchor on one label only: by id
+// with Entity alone and test the type with `o:Observation`, or by the property with Observation alone and page on id(o).
+export function twoLabelIndexFilters(text: string): string[] {
+  const found: string[] = [];
+  for (const n of nodePatterns(text)) {
+    if (!n.alias || !n.labels.includes("Entity")) continue;
+    if (/\bCREATE\s*$/i.test(text.slice(Math.max(0, n.at - 12), n.at))) continue;
+    for (const label of n.labels) {
+      const props = OWN_RANGE_INDEXES[label];
+      if (!props) continue;
+      const map = /\{[^{}]*\}/.exec(text.slice(n.at, text.indexOf(")", n.at) + 1))?.[0] ?? "";
+      const byId = n.hasIdMap || new RegExp(`(?<![\\w.])${n.alias}\\.id${COMPARE}`, "i").test(text);
+      const byProp = props.filter((p) => new RegExp(`(?<![\\w.])${n.alias}\\.${p}${COMPARE}`, "i").test(text) || new RegExp(`[{,]\\s*${p}\\s*:`).test(map));
+      if (byId && byProp.length) found.push(`(${n.alias}${n.labels.map((l) => `:${l}`).join("")}) is filtered on Entity.id and on ${label}.${byProp.join("/")}`);
+    }
+  }
+  return found;
+}
+
+// A value written into the query text instead of passed as a param: a template placeholder (__EXPR__) inside a quoted
+// Cypher string, or where a value goes (after a comparison, IN, LIMIT or SKIP). Params keep the text the same for every
+// call, so the server plans it once (its plan cache is keyed on the text), and nothing a user typed can change what the
+// query does. Labels, relationship types, property names and fixed fragments (`${NODE("n")}`, `${referenceFilter("n")}`)
+// are not values and are fine; a map value is not judged, since this codebase builds row maps from fragments.
+export function interpolatedValues(text: string): string[] {
+  if (!text.includes("__EXPR__")) return [];
+  const found: string[] = [];
+  for (const m of text.matchAll(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g)) {
+    if (m[0].includes("__EXPR__")) found.push(`a placeholder inside the string ${m[0].slice(0, 60)}`);
+  }
+  const bare = text.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, "''");
+  for (const m of bare.matchAll(new RegExp(`(?:${COMPARE}|\\bLIMIT\\b|\\bSKIP\\b)\\s*__EXPR__`, "gi"))) {
+    found.push(`a placeholder where a value goes: ${m[0].replace(/\s+/g, " ").trim()}`);
+  }
+  return found;
+}

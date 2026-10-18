@@ -4,7 +4,7 @@
 import { describe, it, expect } from "vitest";
 import { blankLiterals, nanRisks, nullableGroupKeys, unsafeSorts } from "../../src/graph/safety.js";
 import { readSource, sourceFiles, stringLiterals } from "../helpers/ts-strings.js";
-import { entityCreateWithoutId, idAnchorsWithoutEntity, unguardedEdgeAggregates } from "../helpers/cypher-lint.js";
+import { entityCreateWithoutId, idAnchorsWithoutEntity, interpolatedValues, twoLabelIndexFilters, unguardedEdgeAggregates } from "../helpers/cypher-lint.js";
 
 // Strings that mention ORDER BY but are not queries (prompts, error text). Keep this empty unless one really is not.
 const NOT_CYPHER = new Set<string>([]);
@@ -106,6 +106,16 @@ describe("every Cypher string in src/", () => {
 
     it("binds and uses the edge under every count, sum and collect, so parallel edges are not collapsed (FalkorDB 6.0.2)", () => {
       const bad = all.filter((f) => !deferred(f)).flatMap((f) => unguardedEdgeAggregates(f.text).map((b) => `${f.where}  ${b}`));
+      expect(bad).toEqual([]);
+    });
+
+    it("never filters Entity:Observation on both Entity.id and an Observation index (FalkorDB 6.0.2 returns no rows)", () => {
+      const bad = all.flatMap((f) => twoLabelIndexFilters(f.text).map((b) => `${f.where}  ${b}`));
+      expect(bad).toEqual([]);
+    });
+
+    it("passes every value as a param, never written into the query text (one plan per query, and no injection)", () => {
+      const bad = all.flatMap((f) => interpolatedValues(f.text).map((b) => `${f.where}  ${b}`));
       expect(bad).toEqual([]);
     });
 

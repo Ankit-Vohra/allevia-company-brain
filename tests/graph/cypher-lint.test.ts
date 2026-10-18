@@ -1,7 +1,7 @@
 // The two source checks in tests/helpers/cypher-lint.ts, on small examples: they flag the shapes that cost an index or
 // a parallel edge, and let the right ones through.
 import { describe, it, expect } from "vitest";
-import { entityCreateWithoutId, idAnchorsWithoutEntity, unguardedEdgeAggregates } from "../helpers/cypher-lint.js";
+import { entityCreateWithoutId, interpolatedValues, OWN_RANGE_INDEXES, twoLabelIndexFilters, idAnchorsWithoutEntity, unguardedEdgeAggregates } from "../helpers/cypher-lint.js";
 
 describe("idAnchorsWithoutEntity", () => {
   it("flags an id lookup without the Entity label", () => {
@@ -64,5 +64,44 @@ describe("entityCreateWithoutId", () => {
     expect(entityCreateWithoutId("MATCH (n:Entity {id:$id}) CREATE (n)-[h:HAD_VERSION]->(v:Entity:Version {id: $vid}) SET v += $version")).toEqual([]);
     expect(entityCreateWithoutId("CREATE (n:Entity:Task) DELETE n")).toEqual([]);
     expect(entityCreateWithoutId("MATCH (a:Entity {id:$a}), (b:Entity {id:$b}) CREATE (a)-[:R]->(b)")).toEqual([]);
+  });
+});
+
+describe("twoLabelIndexFilters", () => {
+  it("flags Entity:Observation filtered on Entity.id and an indexed Observation property", () => {
+    expect(twoLabelIndexFilters("MATCH (o:Entity:Observation {id:$id}) WHERE o.asOf = $d RETURN o")).toHaveLength(1);
+    expect(twoLabelIndexFilters("MATCH (o:Entity:Observation) WHERE o.id > $after AND o.asOf < $cutoff RETURN o")).toHaveLength(1);
+    expect(twoLabelIndexFilters("MATCH (o:Entity:Observation {id:$id, subject:$s}) RETURN o")).toHaveLength(1);
+  });
+
+  it("passes one anchor per label, and a CREATE that sets the properties", () => {
+    expect(twoLabelIndexFilters("MATCH (o:Entity:Observation {id:$id}) WHERE o.value > 0 RETURN o")).toEqual([]);
+    expect(twoLabelIndexFilters("MATCH (o:Observation) WHERE id(o) > $after AND o.asOf < $cutoff RETURN o")).toEqual([]);
+    expect(twoLabelIndexFilters("MATCH (o:Entity {id:$id}) WHERE o:Observation AND o.asOf = $d RETURN o")).toEqual([]);
+    expect(twoLabelIndexFilters("UNWIND $rows AS r CREATE (o:Entity:Observation {id: r.id}) SET o.metric = r.metric")).toEqual([]);
+  });
+
+  it("knows every label that has range indexes of its own (src/graph/indexes.ts)", async () => {
+    const { INDEXES } = await import("../../src/graph/indexes.js");
+    const own: Record<string, string[]> = {};
+    // CreditEntry is not an Entity: its key and month indexes never meet the Entity.id index in one pattern
+    for (const i of INDEXES) if (i.type === "RANGE" && i.label !== "Entity" && i.label !== "CreditEntry") own[i.label] = [...(own[i.label] ?? []), i.prop];
+    expect(own).toEqual(OWN_RANGE_INDEXES);
+  });
+});
+
+describe("interpolatedValues", () => {
+  it("flags a value written into the text", () => {
+    expect(interpolatedValues("MATCH (n:Entity) WHERE n.name = '__EXPR__' RETURN n")).toHaveLength(1);
+    expect(interpolatedValues("MATCH (n:Entity) WHERE n.rank > __EXPR__ RETURN n")).toHaveLength(1);
+    expect(interpolatedValues("MATCH (n:Entity) RETURN n ORDER BY n.id LIMIT __EXPR__")).toHaveLength(1);
+    expect(interpolatedValues("MATCH (n:Entity) WHERE n.id IN __EXPR__ RETURN n")).toHaveLength(1);
+  });
+
+  it("passes labels, fragments and params", () => {
+    expect(interpolatedValues("MATCH (n:__EXPR__ {id:$id}) RETURN n")).toEqual([]);
+    expect(interpolatedValues("MATCH (n:Entity) WHERE __EXPR__ AND n.kind = 'x' RETURN __EXPR__ AS n")).toEqual([]);
+    expect(interpolatedValues("MATCH (m:Memory) WHERE m.kind = 'preference' __EXPR__ RETURN m")).toEqual([]);
+    expect(interpolatedValues("RETURN {ch: __EXPR__, e: __EXPR__} AS x LIMIT $limit")).toEqual([]);
   });
 });
