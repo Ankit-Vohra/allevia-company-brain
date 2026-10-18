@@ -71,7 +71,10 @@ describe("content_performance, seo_report, ad_report (integration)", () => {
     touched.add(r);
     expect(touched.anySimulated()).toBe(true);
     expect(touched.numbers().has("108.33")).toBe(true);
-    const recent = await call(adReport, { days: 3 }, makeCtx(g));
+    // the window ends on the data's last day (13 Oct here, two days before the pinned clock), not on today
+    expect(r.data).toMatchObject({ days: 30, from: "2026-09-14", to: "2026-10-13" });
+    const recent = await call(adReport, { days: 2 }, makeCtx(g));
+    expect(recent.data).toMatchObject({ from: "2026-10-12", to: "2026-10-13" });
     expect(recent.data.campaigns.find((c: { id: string }) => c.id === "campaign:meta-employers")).toMatchObject({ spend: 2000, signups: 7, cpa: 285.71 });
   });
 });

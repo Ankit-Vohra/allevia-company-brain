@@ -13,6 +13,7 @@ import type { ActionKind } from "../../shared/contracts.js";
 import { pageRank } from "../graph/algorithms.js";
 import { GraphHandle } from "../graph/client.js";
 import { typeOfLabels, type EntityType } from "../graph/schema.js";
+import { AD_CONVERSION_METRICS, AD_SPEND_METRICS, HIGH_CPA_MULTIPLE, adWindow, cpaOf, medianCpa } from "./ad-cpa.js";
 import { DAY_MS, addDays, cap1, clip, dayMs, dayOf, fmt, humanise, list, median, money, pageLabel, pct, plural, round, shortDate, times, unownedSystemText } from "./text.js";
 
 export type Area = "seo" | "content" | "funnel" | "ads" | "knowledge" | "tech";
@@ -618,11 +619,11 @@ interface AdRow { id: string; name: string | null; status: string | null; simula
 async function loadAds(g: Read): Promise<{ rows: AdRow[]; last?: string }> {
   const rows = await ro<AdRow>(g,
     `MATCH (c:Campaign)<-[m:MEASURES]-(o:Observation)
-     WHERE m.until IS NULL AND o.metric IN ['spend', 'conversions', 'signups', 'leads', 'impressions', 'clicks']
+     WHERE m.until IS NULL AND coalesce(o.metricKey, toLower(o.metric)) IN $metrics
      OPTIONAL MATCH (c)-[p:PUBLISHED_ON]->(ch:Channel) WHERE p.until IS NULL
-     RETURN c.id AS id, c.name AS name, c.status AS status, c.simulated AS simulated, ch.name AS channel, o.metric AS metric,
+     RETURN c.id AS id, c.name AS name, c.status AS status, c.simulated AS simulated, ch.name AS channel, coalesce(o.metricKey, toLower(o.metric)) AS metric,
             o.value AS value, coalesce(o.windowEnd, o.asOf) AS day, o.unit AS unit
-     LIMIT 9000`);
+     LIMIT 9000`, { metrics: [...AD_SPEND_METRICS, ...AD_CONVERSION_METRICS, "impressions", "clicks"] });
   const days = rows.map((r) => dayOf(r.day)).filter((d): d is string => !!d).sort();
   return { rows, last: days[days.length - 1] };
 }
@@ -634,14 +635,17 @@ function sums(rows: AdRow[], from: string, to: string): Map<string, { name: stri
     if (!d || d < from || d > to || typeof r.value !== "number") continue;
     const c = out.get(r.id) ?? { name: r.name ?? r.id, status: r.status, simulated: r.simulated === true, channel: r.channel, unit: null, m: {}, days: new Set<string>() };
     c.m[r.metric] = (c.m[r.metric] ?? 0) + r.value;
-    if (r.metric === "spend" && r.unit) c.unit = r.unit;
+    if ((AD_SPEND_METRICS as readonly string[]).includes(r.metric) && r.unit) c.unit = r.unit;
     c.days.add(d);
     out.set(r.id, c);
   }
   return out;
 }
 
-const conversionsOf = (m: Record<string, number>): number | undefined => m.conversions ?? m.signups ?? m.leads;
+// The first name a campaign has numbers under (src/insights/ad-cpa.ts): a campaign that records both `signups` and `conversions` is not counted twice.
+const firstOf = (m: Record<string, number>, names: readonly string[]): number | undefined => names.map((n) => m[n]).find((v) => v !== undefined);
+const spendOf = (m: Record<string, number>): number | undefined => firstOf(m, AD_SPEND_METRICS);
+const conversionsOf = (m: Record<string, number>): number | undefined => firstOf(m, AD_CONVERSION_METRICS);
 const sim = (on: boolean) => (on ? " (simulated)" : "");
 
 const adsHighCpa: Detector = {
@@ -649,28 +653,29 @@ const adsHighCpa: Detector = {
   async run(g) {
     const { rows, last } = await loadAds(g);
     if (!last) return [];
-    const from = addDays(last, -13);
-    const camps = [...sums(rows, from, last)]
-      .filter(([, c]) => !/^(paused|ended|archived)$/i.test(c.status ?? ""))
-      .map(([id, c]) => ({ id, ...c, conv: conversionsOf(c.m) ?? 0, spend: c.m.spend ?? 0 }))
-      .filter((c) => c.spend > 0 && c.conv > 0)
-      .map((c) => ({ ...c, cpa: c.spend / c.conv }));
+    // The same window, CPA and median the agents' ad_report reads (src/insights/ad-cpa.ts); only a campaign still running can be paused.
+    const { from, to } = adWindow(last);
+    const camps = [...sums(rows, from, to)].flatMap(([id, c]) => {
+      const conv = conversionsOf(c.m) ?? 0, spend = spendOf(c.m) ?? 0, cpa = cpaOf(spend, conv);
+      return cpa === null ? [] : [{ id, ...c, conv, spend, cpa }];
+    });
     if (camps.length < 3) return [];
-    const md = median(camps.map((c) => c.cpa))!;
+    const md = medianCpa(camps.map((c) => c.cpa))!;
     return camps
-      .filter((c) => c.cpa >= 1.5 * md)
+      .filter((c) => !/^(paused|ended|archived)$/i.test(c.status ?? "") && c.cpa >= HIGH_CPA_MULTIPLE * md)
       .sort((a, b) => b.cpa - a.cpa || a.id.localeCompare(b.id))
       .map((c): Candidate => {
         const multiple = c.cpa / md;
         const label = `"${c.name}"${sim(c.simulated)}`;
         const days = c.days.size;
+        const span = `${plural(days, "day")} to ${shortDate(to)}`;
         return {
           key: `ads.high_cpa:${c.id}`, detector: "ads.high_cpa", area: "ads", agent: "growth-marketer",
           title: `Pause ${label}: CPA ${money(round(c.cpa, 0), c.unit)} vs ${money(round(md, 0), c.unit)} median`,
-          why: `${label} spent ${money(c.spend, c.unit)} for ${fmt(c.conv)} conversions over ${plural(days, "day")}: ${money(round(c.cpa, 0), c.unit)} each, ${times(multiple)} the account median of ${money(round(md, 0), c.unit)}.${c.simulated ? " These ad numbers are simulated: no ad account is connected." : ""}`,
+          why: `${label} spent ${money(c.spend, c.unit)} for ${fmt(c.conv)} conversions over ${span}: ${money(round(c.cpa, 0), c.unit)} each, ${times(multiple)} the account median of ${money(round(md, 0), c.unit)}.${c.simulated ? " These ad numbers are simulated: no ad account is connected." : ""}`,
           impact: `Moving this budget to campaigns at the median would buy about ${fmt(Math.max(0, Math.round(c.spend / md - c.conv)))} more conversions for the same spend.`,
           evidence: [c.id], simulated: c.simulated,
-          numbers: { cpa: round(c.cpa), median_cpa: round(md), multiple: round(multiple), spend: c.spend, conversions: c.conv, days },
+          numbers: { cpa: round(c.cpa), median_cpa: round(md), multiple: round(multiple), spend: round(c.spend), conversions: round(c.conv), days },
           metrics: ["cpa", "spend", "conversions"],
           score: round(cap(0.45 + 0.1 * (multiple - 1), 0.85) * (c.simulated ? 0.8 : 1)), confidence: c.simulated ? 0.6 : 0.75,
           suggestedAction: {
@@ -678,7 +683,7 @@ const adsHighCpa: Detector = {
             payload: {
               title: `Pause ${c.name}`, campaignId: c.id, targetId: c.id, simulated: c.simulated,
               target: `${c.channel ?? "Ads"} · ${c.name}${sim(c.simulated)}`,
-              body: `CPA ${money(round(c.cpa, 0), c.unit)} vs ${money(round(md, 0), c.unit)} account median over ${plural(days, "day")} (${times(multiple)}).${c.simulated ? " Simulated campaign: pausing changes Allevia's simulated data only." : ""}`,
+              body: `CPA ${money(round(c.cpa, 0), c.unit)} vs ${money(round(md, 0), c.unit)} account median over ${span} (${times(multiple)}).${c.simulated ? " Simulated campaign: pausing changes Allevia's simulated data only." : ""}`,
             },
           },
         };

@@ -2,6 +2,7 @@
 // totals, both computed on the server (FalkorDB returns at most 10,000 rows); metric names matched by alias (ingestion
 // names vary: views/plays, signups/conversions…); and a bucket aggregated the right way (flows with a window sum,
 // snapshots take the latest, rates average). Also the channel lookup the content and playbook tools share.
+import { AD_CONVERSION_METRICS, AD_SPEND_METRICS } from "../../insights/ad-cpa.js";
 import type { ToolContext } from "../tool.js";
 import { EDGE, InputError, NODE, ro, type EdgeRow, type NodeRow } from "./common.js";
 
@@ -14,8 +15,8 @@ export const ALIASES = {
   ctr: ["ctr", "gsc_ctr"],
   position: ["position", "gsc_position", "avg_position"],
   sessions: ["sessions", "ga4_sessions"],
-  spend: ["spend", "ad_spend", "cost", "amount_spent"],
-  signups: ["signups", "conversions", "results", "leads"],
+  spend: AD_SPEND_METRICS,
+  signups: AD_CONVERSION_METRICS,
 } as const;
 
 const OBS_ROW = `{o: ${NODE("o")}, e: ${EDGE("r")}, metric: o.metric, value: o.value, unit: o.unit, ws: o.windowStart, we: o.windowEnd, at: at}`;
