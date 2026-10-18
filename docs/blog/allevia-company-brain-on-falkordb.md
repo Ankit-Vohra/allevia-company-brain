@@ -169,7 +169,7 @@ Allevia connects through Composio, whose catalogue has over 1,600 tools: mail, c
 Whatever comes in lands in the same graph, so the ads team, the content team and the website team read the same facts.
 
 On Blue Tokai we asked one question: "What did our ads and posts teach us this month, and what should content, ads and the
-website team each do next?" Eight teammates answered together in about 97 seconds.
+website team each do next?" Seven teammates answered together in 102 seconds.
 
 ![The Chief's answer: the costliest campaign, found (sample numbers)](images/ads-answer.jpg)
 
