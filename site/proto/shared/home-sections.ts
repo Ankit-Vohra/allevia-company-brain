@@ -225,6 +225,20 @@ export function office(): string {
 </section>`;
 }
 
+// ---------- watch it work: the launch teaser, and the full demo ----------
+
+export function watch(): string {
+  return `<section class="watch sec" id="watch" aria-labelledby="watch-h">
+  <div class="wrap watch__in">
+    <h2 id="watch-h" class="h2 h2--split"><span class="t1">Watch it work.</span> <span class="t2">One brain, a team of 13, your OK.</span></h2>
+    <figure class="watch__frame">
+      <video class="watch__video" controls playsinline preload="none" poster="/shared/img/teaser-poster.webp" src="/shared/img/teaser.mp4" width="1920" height="1080" aria-label="The Allevia teaser: the problem, the brain, the team and the founder's OK."></video>
+    </figure>
+    <p class="watch__more"><a class="btn btn-ghost" href="/media/allevia-demo.mp4">Watch the full demo (2:50)</a> <a class="btn btn-ghost" href="https://13-232-139-42.sslip.io">Try the live demo</a></p>
+  </div>
+</section>`;
+}
+
 // ---------- a rough photo, made into an ad ----------
 
 export function makes(): string {
@@ -258,4 +272,4 @@ export function okHome(): string {
   return okBlock("ok", `\n    <p class="okd__more on-ink"><a class="link" href="/product/#grow">See how it keeps growing</a></p>`);
 }
 
-export const HOME_SECTIONS: Record<string, () => string> = { problem, grow, flow, close: closeCta, office, makes, ok: okHome, plans: pricingTeaser };
+export const HOME_SECTIONS: Record<string, () => string> = { problem, grow, flow, close: closeCta, office, makes, ok: okHome, plans: pricingTeaser, watch };

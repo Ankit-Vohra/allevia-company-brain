@@ -29,3 +29,7 @@ site/scripts/.footage/
 
 site/dist-proto/
 site/dist-main/
+
+# The site's videos are published with the site (GitHub Pages), not kept in the code repo
+site/proto/shared/img/teaser.mp4
+site/public/media/allevia-demo.mp4

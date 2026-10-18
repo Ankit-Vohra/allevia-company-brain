@@ -2,13 +2,36 @@
 
 **One FalkorDB graph per business, and a team of 13 AI agents that works from it. Nothing goes out without the founder's OK.**
 
-[Live demo](https://13-232-139-42.sslip.io) · Demo video: link coming (`VIDEO_LINK_TBD`) ·
-[Blog](https://ankit-vohra.github.io/allevia-site/blog/) · [Website](https://ankit-vohra.github.io/allevia-site/)
+**[▶ Watch the demo (2:50)](https://ankit-vohra.github.io/allevia-site/media/allevia-demo.mp4)** ·
+**[Try the live demo](https://13-232-139-42.sslip.io)** (no sign-in) ·
+[30-second teaser](https://ankit-vohra.github.io/allevia-site/#watch) ·
+[Blog: how it's built](https://ankit-vohra.github.io/allevia-site/blog/) ·
+[Website](https://ankit-vohra.github.io/allevia-site/) ·
+[Every Cypher query, with file and line](docs/falkordb-queries.md)
 
 ![The pixel office in daylight: Allevia's 13 agents at their desks in nine departments, and the office dogs in the game room](docs/blog/images/pixel-office.jpg)
 
 Entry for **Graph Hacks: Context for AI Agents** (FalkorDB, 15–18 October 2026), in all three tracks: Company
 Brain, Agent Memory and Coordination, and Agents That Act on Connected Data.
+
+## A look inside
+
+All screenshots are from the live demo: Blue Tokai Coffee, built from its real public website plus clearly labelled sample
+numbers. Open any of it yourself at [13-232-139-42.sslip.io](https://13-232-139-42.sslip.io).
+
+**Paste a website, get a team in about two minutes.** Onboarding reads the site, its brand and its products, and the brain
+grows on screen while it works (this run, on our own website, took 76 seconds).
+
+![Onboarding: paste your website, then watch the team read it and the graph grow, step by step](docs/readme-images/onboarding.jpg)
+
+| | |
+|---|---|
+| ![A recorded call becomes minutes, and every action goes to the right teammate, linked to the line of the call it came from](docs/readme-images/chat-meeting-line.jpg) | ![The Brain map: line 23 of the call, linked to who said it, the task it created and the minutes email](docs/readme-images/brain-line.jpg) |
+| **Meetings arrive by themselves.** A Fireflies call becomes minutes; each action goes to Deal Closer, Techie or Miss Influencer, and points at the exact line it came from. | **Provenance you can click.** That line is a node in the graph, linked to its speaker, the task and the minutes. |
+| ![The minutes email waiting for the founder's OK, with where each action item went](docs/readme-images/approval-minutes.jpg) | ![Your tools: Gmail, Calendar, Shopify and Fireflies connected (sample data in the demo)](docs/readme-images/connections.jpg) |
+| **Nothing goes out without your OK.** Every email, post, ad change and fix is a card with its evidence. | **Works from your own tools.** Composio connects 1,000+ apps; each reads into the same brain. |
+| ![Home: today's note, what needs your OK and the brain at a glance](docs/readme-images/home.jpg) | ![Ideas: what the team noticed in the numbers, each drafted and waiting](docs/readme-images/insights.jpg) |
+| **Home.** Ask anything; see what waits on you. | **The team notices things.** Daily stand-up findings, each drafted for your OK. |
 
 ## The problem
 

@@ -190,3 +190,9 @@
 @media (prefers-reduced-motion: reduce) {
   .flow__ring.is-pulse { animation: none; }
 }
+
+/* watch it work: the teaser in a rounded frame, the full demo one tap away */
+.watch__frame { margin: clamp(1.5rem, 3vw, 2.4rem) 0 0; border-radius: 18px; overflow: hidden; background: #2f2621;
+  box-shadow: 0 2px 6px rgba(40, 28, 18, .08), 0 40px 90px -30px rgba(40, 28, 18, .45); }
+.watch__video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
+.watch__more { margin-top: 1.2rem; display: flex; flex-wrap: wrap; gap: .6rem; }
