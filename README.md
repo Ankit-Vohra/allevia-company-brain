@@ -1,449 +1,139 @@
-# Allevia
+# Allevia: the company brain for founders, built on FalkorDB
 
-**Founder OS: an AI team and a company brain on FalkorDB, working through the founder's own tools.**
+**One FalkorDB graph per business, and a team of 13 AI agents that works from it. Nothing goes out without the founder's OK.**
 
-A founder whose business already works (customers, revenue, a reputation) gets one place to run it with an AI team.
-Thirteen AI staff in nine departments share **one FalkorDB graph per business**, built from the business's website, the
-founder's connected tools, uploads and conversations, every fact with its source and its date. The team answers "why" with the
-path through the graph that proves it, remembers what the founder taught it, and turns what it finds into one-tap approvals:
-nothing that spends money, goes public or contacts someone happens without the founder's OK. Built in India for owner-run
-businesses in the US, UK, UAE and Australia.
+[Live demo](https://13-232-139-42.sslip.io) · Demo video: link coming (`VIDEO_LINK_TBD`) ·
+[Blog](https://ankit-vohra.github.io/allevia-site/blog/) (publishing soon) · [Website](https://ankit-vohra.github.io/allevia-site/)
 
-Entry for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB, 15–18 Oct 2026), all three tracks. Everything below
-that can be run is shown on **Shiftly**, a synthetic shift-jobs app that ships with the repository (no private data).
+![The pixel office: Allevia's 13 agents at their desks in nine departments, working on a request](docs/blog/images/pixel-office.jpg)
 
-![The team's answer to "why did sign-ups drop", and the path through the graph that supports it, lit node by node (Shiftly, synthetic)](docs/demo-screens/hero-path-desktop.png)
+Entry for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB, 15–18 October 2026), in all three tracks: Company
+Brain, Agent Memory and Coordination, and Agents That Act on Connected Data.
 
-**Jump to:** [the hero use case](#the-hero-use-case-in-one-minute) · [why FalkorDB](#why-falkordb-does-real-work) ·
-[every query and algorithm](docs/falkordb-queries.md) · [tracks](#the-three-tracks) · [data model](#the-data-model) ·
-[run it](#run-it) · [what is live](#what-is-live-and-what-needs-an-account) · [the five live scenarios](docs/live-scenarios.md) ·
-[AI tools used](#ai-tools-and-licence)
+## The problem
 
-## The hero use case in one minute
+A founder holds the whole business in their head: why a price changed, what was promised to which client, what shipped on
+Monday. The inbox, analytics, ads and website don't talk to each other, so every "why" comes back to the founder.
 
-> **"Why did sign-ups drop this week, and what should we do?"**
+Most AI tools start each chat from nothing, or from a pile of pasted documents. They can find text that sounds like the
+question, but they can't tell you that a payment error began the day of a release, or that the release changed the payment
+page. Those are links, and links live in a graph.
 
-The Chief (Chief of Staff) does not answer from one place: she sends five desks into the same graph at once. Data Detective finds
-which step of the sign-up flow fell and on which day, Firefighter what crashed on those screens, Bug Hunter what shipped and what waits
-in App Store review, Memory Keeper what the team decided last time, and Techie what else breaks one step away against four.
+## What it does
 
-```mermaid
-flowchart LR
-  Q["Why did sign-ups drop,<br/>and what should we do?"] --> M[The Chief plans five desks]
-  M --> K["Data Detective: which step fell, which day"]
-  M --> Z["Firefighter: what crashed on those screens"]
-  M --> I["Bug Hunter: what shipped, what waits in review"]
-  M --> S["Memory Keeper: what we decided before"]
-  Z --> A["Techie: what else breaks,<br/>one step against four"]
-  K & Z & I & S & A --> C["The Chief: cause, chain, path,<br/>two cards for your OK"]
+- **A team of 13, in a pixel office.** The Chief (Chief of Staff) takes each request and sends it to the right desks:
+  Data Detective (Analytics), Growth Hacker (Marketing), Miss Influencer, Wordsmith and Fact Checker (Content Studio), Techie,
+  Firefighter and Bug Hunter (Tech), Number Cruncher (Center of Excellence, a second check on every figure), Deal Closer
+  (Sales), Taskmaster (Operations) and Memory Keeper (Library). Every agent is an `Agent` node in the graph, and every step and
+  handoff shows in the office and the work log. The roster is [`shared/roster.ts`](shared/roster.ts).
+
+- **Every answer comes with its path through the graph.** The answer cites node ids; the server checks that each cited node
+  was returned by a tool in that turn and that each number appears in the tools' data. A failed check shows as "unverified",
+  never hidden ([`src/agent/checks.ts`](src/agent/checks.ts)). The Chief ends by naming the nodes behind the answer, and the
+  app lights that path on the map.
+
+  ![Blue Tokai, "Why did online orders drop this week?": the path from the order drop to UPI payments, the payment error, the checkout release and its owner, lit on the map](docs/blog/images/answer-path.jpg)
+
+- **A brain you can see.** The Brain page draws the business's graph, shows "what breaks if this stops" one step away against
+  up to four, and shows how the brain grew from its own facts (`npm run cli -- graph:story <business>`).
+
+  ![Blue Tokai's brain map: 2,187 things and 6,229 links](docs/blog/images/brain-map.jpg)
+
+- **One-tap approvals, on the web and in Discord.** Anything that spends money, goes public or contacts someone becomes an
+  approval card with its evidence: approve, change or reject. When the founder edits a draft before approving it, the edit
+  becomes a learned `Rule` linked to that approval, and later drafts apply it ([`src/actions/`](src/actions)).
+
+  ![An approval card waiting for the founder's OK, with the evidence under it](docs/blog/images/approval-card.jpg)
+
+- **Memory that keeps history.** Every edge carries when it was true and when it was recorded. A fact that stops being true is
+  closed with a date and kept, so the brain remembers what changed and when, and every tool can answer "as of" a past date.
+
+  ![How a fact changes (an example): the closed fact kept next to the one that holds now](docs/blog/images/fact-over-time.jpg)
+
+- **Built from the founder's own sources.** Onboarding reads the business's website (pages, products, brand kit, SEO checks);
+  connections go through Composio (Gmail, Calendar, Analytics, Search Console and Instagram are connected for real on Aamdani);
+  public data (Google listing, public Instagram, ad libraries) comes through Apify. Also: a Studio for posters and product
+  photos, a CLI for everything, and a read-only MCP server so other agents can use the brain.
+
+## How FalkorDB is used
+
+Each business gets its own FalkorDB graph (`allevia_<slug>`), beside a registry graph (`allevia_meta`) and a shared, read-only
+graph of general know-how (`allevia_reference`). The agents cannot answer without walking the graph: their 21 graph tools are
+Cypher queries and graph algorithms. Every query, with its file, line and parameters, is in
+[`docs/falkordb-queries.md`](docs/falkordb-queries.md), and a test keeps that page in step with the code.
+
+| Problem | How FalkorDB solves it | Where |
+|---|---|---|
+| Keeping businesses apart | Isolation is the graph boundary: no query filters by tenant, and no agent tool takes a graph name | [`src/graph/tenants.ts`](src/graph/tenants.ts) |
+| Finding where to start | Vector indexes (384-dimension multilingual e5 embeddings, made locally) and full-text indexes on a `Searchable` label and on text chunks, merged by reciprocal rank. A chunk hit answers as its source document, so citations point at sources | [`src/graph/indexes.ts`](src/graph/indexes.ts), [`src/agent/tools/search.ts`](src/agent/tools/search.ts) |
+| Explaining "why" | `algo.SPpaths` joins up the path drawn under each answer. A hop-by-hop walk over `DEPENDS_ON`, `AFFECTS` and `BLOCKS` answers "what breaks if this stops". `algo.pageRank` ranks what matters; `algo.labelPropagation` groups topics; `algo.WCC` finds orphaned knowledge | [`src/graph/algorithms.ts`](src/graph/algorithms.ts) |
+| Remembering change | Every edge has two clocks (`since`/`until` for when it was true, `recordedAt`/`retiredAt` for when we recorded it), plus `src` and `asOf`. Facts are closed, never deleted; every tool takes `asOf`. Changed tasks, decisions and goals keep their old state as a `Version` node one hop away | [`src/graph/upsert.ts`](src/graph/upsert.ts) |
+| History inside graph algorithms | `algo.*` can't filter on edge properties, so closed edges carry a high `closedCost` that `SPpaths` prunes with `maxCost`; PageRank and topics run on a cached projection of current edges | [`src/graph/projection.ts`](src/graph/projection.ts) |
+| Checking answers | Metric readings are `Observation` nodes with a window, a date and a source, never overwritten properties. The server checks every cited node and number against that turn's tool results | [`src/agent/checks.ts`](src/agent/checks.ts) |
+| Safe agent Cypher | The agents' raw Cypher tool runs through `GRAPH.RO_QUERY`, with a procedure allow-list and a 5-second timeout | [`src/agent/tools/cypher.ts`](src/agent/tools/cypher.ts) |
+| Keeping the graph clean | A write gate refuses a node without a known type, a source and a date; shared know-how lives once in the reference graph | [`src/graph/gate.ts`](src/graph/gate.ts), [`src/graph/reference.ts`](src/graph/reference.ts) |
+
+The shortest-path call behind every answer's path, from [`src/graph/algorithms.ts`](src/graph/algorithms.ts):
+
+```cypher
+MATCH (a:Entity {id:$from}), (b:Entity {id:$to})
+CALL algo.SPpaths({sourceNode: a, targetNode: b, relDirection: 'both', maxLen: $maxLen, pathCount: $pathCount,
+  relTypes: $rels, costProp: 'closedCost', maxCost: $maxCost})
+YIELD path RETURN path
 ```
 
-What comes back in about 90 seconds, from a recorded live run you can replay: new accounts fell from about 238 a day to about
-51; people stop at the phone-number step (about 294 entered a day, then about 60) while visits to the sign-up screen held; that
-step sits on a screen with a crash first seen on 7 Oct, and release 2.8.0 brought the field that crashes; the fix is built and
-waits in review; the ad campaign paused three days *after* the fall began is ruled out by its date; what is **not in the
-records** is named; and two cards wait for the founder's OK (a fix task and a two-line message to users). Every figure carries
-its date, every claim cites a node, and the server checks each citation was returned by a tool in that turn.
-
-**The graph path behind the answer** (written by the ingest mappers from the tracker's own fields, each edge with its source,
-its date and how sure the source is, and drawn by `show_path` over exactly these nodes):
-
-```mermaid
-flowchart LR
-  O["Observation<br/>phone number entered:<br/>about 294 a day, then about 60"] -- MEASURES --> F["Feature<br/>phone-number step"]
-  F -- DEPENDS_ON --> P["Page<br/>sign-up screen"]
-  C["Event<br/>crash, first seen 7 Oct"] -- "AFFECTS: crashed_on" --> P
-  R["Event<br/>release 2.8.0, 7 Oct"] -- "AFFECTS: introduced" --> C
-  X["Person<br/>Farhan, Android"] -- OWNS --> P
-```
-
-On Shiftly the cause is **proven** by that chain. On a real business whose records do not link a release to a crash, the same
-question honestly ends in "cause not shown, and here is what to connect" (the pass on that business's eval set). Both are
-asserted by evals that ran live with no recordings: the hero question passed **5 of 5** on Shiftly (`evals/hero.yaml`, report:
-[`docs/evals/2026-10-16-demo_growth.md`](docs/evals/2026-10-16-demo_growth.md)) and **5 of 5** on a real, private business
-(its set and report stay private).
-
-## Why FalkorDB does real work
-
-The agents cannot answer without walking the graph: every one of the 21 graph tools is a query or an algorithm, and the answer's
-path is checked against the graph before it is drawn. Take FalkorDB away and no tool has anything to answer from.
-
-- **The cause is a path of unknown length**, through different kinds of things (a number, a flow step, a screen, a crash, a
-  release, a person). One Cypher pattern and `algo.SPpaths` walk it; a table would need a join written for this one question
-  ([queries §13](docs/falkordb-queries.md)).
-- **"What breaks if this stops"** is `impact_of`: one traversal per hop over `DEPENDS_ON`, `AFFECTS` and `BLOCKS`, so depth 1
-  (what a lookup sees) sits beside depth 4 with the path to each far item and its owner
-  ([§3](docs/falkordb-queries.md)); the Brain page draws it.
-- **Facts have two clocks.** Every edge carries valid time (`since`/`until`) and record time (`recordedAt`/`retiredAt`); nothing
-  is deleted, a contradicted fact is closed, every tool takes `asOf` ([§7](docs/falkordb-queries.md)).
-- **Memory is nodes and edges.** `Turn`, `Finding`, `Memory` and `Rule` live in the same graph; recall is a traversal from the
-  nodes in the question to earlier turns, decisions and the cards they drafted, and an edit becomes
-  `Rule -LEARNED_FROM-> Approval` ([§11](docs/falkordb-queries.md)).
-- **One graph per business** (`allevia_<slug>`), vector and full-text indexes fused in `search`, graph algorithms
-  (`pageRank`, `labelPropagation`, `WCC`) on cached projections, and a read-only Cypher escape hatch behind its own guard.
-- **What the team does is in the graph too.** The path under an answer is stored on the turn and can be asked back ("which answers
-  walked through this node?"), a connection owns the facts each read produced, a post and a message advance the goal they were for,
-  and a Studio ad is a chain from the owner's photo through each Higgsfield job and its cost to the card and the post
-  (`graph:lineage`). Every write stamps two clocks, so the brain's growth is a count of its own facts, not a drawing:
-  `npm run cli -- graph:story <business>` and the Brain page's "It keeps growing". [The audit of every feature](docs/graph-audit.md).
-- **An answer follows a few hops instead of rereading the documents** (measured, below).
-
-### Hops, not rereading: tokens and time per answer (measured 17 October 2026)
-
-The same questions, the same model (Sonnet) and the same answer rules, on the Claude subscription, three ways: **stuff** (one model call
-whose prompt holds all of the business's documents), **one agent** (the graph tools, no documents in the prompt) and the **team** (the
-product: the Chief plans, desks work, reviewers check, the Chief answers). "Read" is everything the model read, in the Agent SDK's own usage
-numbers (the cached prompt prefix counts every call, so a multi-call answer reads more than its context); "evidence" is what the tools
-handed the model. Script: [`scripts/bench-efficiency.ts`](scripts/bench-efficiency.ts), every turn now saves its tokens and tool calls on
-the Turn node.
-
-| Business and corpus | Questions | Stuff the documents | One agent on the graph | The team (as shipped) |
-|---|---|---|---|---|
-| A real business (private): 114 vault files, about 173,000 tokens | 2: what breaks if the Instagram token expires; why we paused daily stories | 604,000 tokens read, 22 s each, 173,000 tokens of "evidence" every time | **75,000 read (8x fewer), 13 s each**, 2 to 4 tool calls, 1,200 to 2,100 tokens of its records | 175,000 read (3.5x fewer), 26 to 44 s, 3 to 7 calls |
-| Shiftly (the synthetic demo): about 6,300 tokens | 3: the hero question, what else breaks, did the ads cause it | 47,000 read, 11 s each | 134,000 read, 14 to 17 s, 3 to 7 calls, 1,800 to 3,800 tokens of evidence | 504,000 read, 39 to 51 s, 3 to 19 calls |
-
-What it says, honestly: the graph wins on **scale**. Handing a model the whole of a real business costs the same 170,000 tokens for every
-question, and the cost grows with the business; an agent that follows a few hops reads one to two thousand tokens of the business's own
-records, 8 times fewer tokens and about 40% less time (the vault is about 173,000 tokens at four characters a token; the model's own
-count for the stuffed call was 300,000 read, cached prefix included). On a business small enough to fit in a prompt (Shiftly,
-6,000 tokens), stuffing is **cheaper** than the agents: the fixed cost of the tools' prompt and of every extra model call outweighs a
-corpus that small. The 13-person team costs more than one agent (it plans, delegates, reviews and fact-checks) and is slower than stuffing
-on a single question; what it buys is the checked answer with its citations and path, which a stuffed prompt cannot give. Every
-one-agent answer contained the expected facts (a regex per question); the stuffed prompt missed one of four on the hero question, and four of
-the five team answers passed: the fifth was a real bug the benchmark found ("I've written the answer above..." replaced the answer on
-the real business), fixed with a test. Five questions on two businesses is a measurement, not a benchmark suite.
-
-The queries and algorithms the product depends on, each with its file and line, parameters, why a table would not do, and a plan
-or timing note: **[`docs/falkordb-queries.md`](docs/falkordb-queries.md)**. A test holds that page to the code. Two FalkorDB 6.0.2
-crash shapes were found and are written up in [`docs/notes/`](docs/notes/falkordb-nan-crash.md).
-
-## The three tracks
-
-| Track | In one line |
-|---|---|
-| **Agents That Act on Connected Data** | 47 agent tools (21 of them graph queries and algorithms) over the business's own data and connected tools; every finding becomes an approval card with its graph evidence, and an approved card is carried out (dry run until switched on). |
-| **Agent Memory and Coordination** | Thirteen agents hand work to each other through `Finding` nodes in one shared graph; each turn's citations, the owner's notes and learned rules are written back and recalled by traversal on the next question. |
-| **Company Brain** | Decisions with their evidence and deciders, who owns and who knows what, facts with valid time and sources, versions one hop away, and "what breaks if this stops" with the path. |
-
-What fits each, and where it is thinner, is in [Tracks](#tracks) below.
-
-## The data model
-
-Every node is an `Entity` with a unique `id` (`<type>:<slug>`); every relationship carries `since`/`until`, `recordedAt`/`retiredAt`,
-`src` and `asOf`. The part that carries the hero use case and the memory loop (all 38 node types and 54 relationship types are in
-[`src/graph/schema.ts`](src/graph/schema.ts); the full diagram is [below](#the-graph-data-model)):
+**Data model.** Every node has the base label `Entity` and a unique `id` (`<type>:<slug>`, with a range index and UNIQUE and
+MANDATORY constraints). Memory lives in the same graph as the business: `Turn`, `Finding`, `Memory`, `Rule`, `Approval`. Agents
+hand work to each other through `Finding` nodes. All 38 node types and 54 relationship types are in
+[`src/graph/schema.ts`](src/graph/schema.ts). The part that carries an answer and the memory loop:
 
 ```mermaid
 flowchart LR
   O[Observation] -- MEASURES --> F[Feature: funnel step]
-  F -- DEPENDS_ON --> P[Page: screen]
-  E1[Event: crash] -- AFFECTS --> P
+  F -- DEPENDS_ON --> P[Page]
+  E1[Event: error] -- AFFECTS --> P
   E2[Event: release] -- AFFECTS --> E1
   Pe[Person] -- OWNS --> P
   D[Decision] -- BASED_ON --> O
-  D -- AFFECTS --> F
   Tu[Turn] -- CITED --> D
   Fi[Finding] -- PART_OF --> Tu
   Ag[Agent] -- PRODUCED --> Fi
   Re[Recommendation] -- PROPOSES --> Ap[Approval]
   Ru[Rule] -- LEARNED_FROM --> Ap
-  Tu -- TOUCHED --> Ap
   Ap -- RESULTED_IN --> Ac[Action]
-  Ac -- RESULTED_IN --> Ta[Task]
 ```
 
-## Run it
-
-Two ways. Neither needs an API key: the agents run on a claude.ai login, never on an API key.
-
-**1. Look first, no accounts (Docker with Compose v2.24 or later).** The public read-only demo: the office, the Brain page, the
-approvals and four recorded team answers on Shiftly, replayed with their work logs and lit paths. About 5 minutes, most of it
-the image build.
-
-```sh
-git clone <repository-url> allevia && cd allevia
-docker compose up -d --build                                  # FalkorDB 6.0.2 and Allevia, http://127.0.0.1:8787
-docker compose exec app tsx src/cli.ts seed-demo --recorded   # Shiftly (synthetic) with four recorded answers
-open http://127.0.0.1:8787                                    # Chat: pick a thread, then "See the path" (FalkorDB Browser: http://127.0.0.1:3090)
-```
-
-**2. Run the team live, on your own Claude login (Node 22 or later, Docker for FalkorDB).** Five commands; the agents answer
-the hero question for real, in about 90 seconds.
-
-```sh
-git clone <repository-url> allevia && cd allevia && npm install && (cd web && npm install && npm run build)   # 1
-docker compose up -d falkordb       # 2  FalkorDB on 127.0.0.1:6390 (no Compose? docker run -d -p 127.0.0.1:6390:6379 falkordb/falkordb:6.0.2)
-npm run cli -- seed-demo            # 3  Shiftly, plain: no recorded answers, so the live run starts from the records only
-npm run cli -- serve                # 4  http://127.0.0.1:8787; Claude Code logged in first: `claude`, then /login
-npm run cli -- ask demo_growth "Why did sign-ups drop this week, and what should we do?"   # 5  or ask it in the web app
-```
-
-More (live mode in Docker, the CLI, tests, FalkorDB settings): [Run it in detail](#run-it-in-detail).
-
-## What is live, and what needs an account
-
-| Part | State today | Needs |
-|---|---|---|
-| The graph, thirteen agents, answers with their path, approvals, learned rules, Today's note, the pixel office | **Works, live.** The eval runs are real agents, no recordings. | A claude.ai login on the machine |
-| The public read-only demo with recorded answers | **Works with nothing.** | Docker |
-| Onboarding a business from its website | **Works, live** (crawl, brand kit, SEO checks, goals; a large site takes about 8 minutes) | Chromium for the crawler (`WITH_CHROMIUM=1` in Docker), a Claude login |
-| Studio: photo clean-up, posters in the brand's fonts, captions | **Works, live** on the free paths | A Claude login |
-| Studio AI edits, paid artwork, 5-second clips | **Works, paid and capped**; each generation is quoted first | The `higgsfield` CLI logged in, and credits |
-| Connections: Google (Calendar, Gmail, Search Console, GA4, Ads) and 16 other toolkits | **Built.** The connect flow, the approvals and the audit log are tested against fakes; the first real account is not yet connected. | A Composio key; a Google OAuth app for GA4 and Ads |
-| Public data: a business's Google listing, public Instagram, competitors, ad libraries | **Built, budgeted, off by default.** A live smoke test passes. | An Apify token |
-| Discord: a thread per conversation, live work log, approval buttons | **Ran live on the founder's server**; the newest approval cards were tested with fake ports only | A Discord bot token and server |
-| Acting in the outside world: GitHub issues, posts, emails, calendar bookings, ad changes | **Dry run by default.** An approved card is recorded; nothing is sent until `ALLEVIA_ACTIONS_LIVE=1`. Ad data is simulated and always marked. | |
-
-## AI tools and licence
-
-Claude Code, with subagents working in parallel git worktrees, wrote most of the code, tests and docs under the founder's
-direction and review. Claude, through a claude.ai subscription login (the Claude Agent SDK), runs the thirteen agents at runtime.
-Higgsfield made the website's illustrations. Local multilingual e5 embeddings serve vector search. What the founder decided and
-checked, and what was reused, is in [AI tools used](#ai-tools-used) and [Built during the event](#built-during-the-event).
-Licence: **MIT** (see `LICENSE`); vendored third-party data and skills keep their own licences ([`NOTICE.md`](NOTICE.md),
-[`vendor/`](vendor)).
-
----
-
-## The problem
-
-Most small businesses have tried AI. Very few have AI doing a job in the business.
-
-- **US:** 76% of engaged owners use AI, but only 14% have it fully integrated into core operations (Goldman Sachs
-  10,000 Small Businesses, n=1,256, 2026). Census BTOS puts any-function use at 17–20% of firms, under 20% below
-  five staff.
-- **UK:** 29% of firms use AI, and adopters went from 1.4 to 1.6 technologies in three years: "widening, not
-  deepening" (ONS, TechMarketView).
-- **UAE:** 72% say they use AI; transaction data from 6,000 firms shows 12% pay for an AI tool (Pemo).
-
-The gap between "I've tried ChatGPT" and "an AI does a job here" is 50 points or more in each market. Owners name the same
-blockers: no clear use case, no skills, no time, no trust in the numbers, and nobody to keep it running when a token
-expires or a model changes. Tools that sell brand memory and prompt-free content exist. We found none that joins
-Search Console, GA4, Instagram and the company's own decisions into one memory and answers "why" with evidence.
-
-Allevia's answer: set it up once for the owner (the plan is a 15-minute setup, then a team in India keeps it
-running), give the owner a team instead of a tool, and make every answer carry its receipts. Sources and pricing method:
-[product design](docs/superpowers/specs/2026-10-15-allevia-product-design.md) §0 and §4.
-
-## What it does
-
-- **A thirteen-person company in a pixel office.** The Chief (Chief of Staff) plans each request and sends it to the right
-  desks: Number Cruncher (Center of Excellence, checks every number), Data Detective (Analytics), Growth Hacker (Marketing), Miss Influencer, Wordsmith and Fact Checker
-  (Content Studio: strategist, copy editor, fact checker), Techie, Firefighter and Bug Hunter (Tech: tech lead, on-call engineer for
-  Sentry errors and crashes, QA and release manager for builds and the app stores), Taskmaster (Operations), Deal Closer (Sales: answers new
-  enquiries, offers real times from the calendar, books the call once the owner says OK, follows up) and Memory Keeper (Library). Every
-  agent is an `Agent` node in the graph, every step streams to the office and the work log, and every handoff is
-  visible. The roster is [`shared/roster.ts`](shared/roster.ts).
-- **Every answer comes with its graph path.** The answer cites node ids; the server checks each citation was returned
-  by a tool in this turn, each number appears in tool data, simulated data is called simulated, stale data says
-  "as of", and non-API data says where it came from. A failed check shows an "unverified" badge; it is never hidden
-  ([`src/agent/checks.ts`](src/agent/checks.ts)). The final step draws the path through the graph that supports the
-  answer, and the web app lights it up.
-- **Memory that compounds.** Threads, findings, approvals and the owner's notes are written back to the graph, and the
-  next thread recalls them from it. When the owner edits a draft before approving it ("villa" to "home"), the edit
-  becomes a learned `Rule` linked to that approval, later drafts apply it, and the first-pass approval rate is tracked
-  day by day on the Allevia 90 scorecard ([`src/actions/learning.ts`](src/actions/learning.ts),
-  [`src/program/scorecard.ts`](src/program/scorecard.ts)).
-- **One-tap approvals.** Anything that would change the outside world becomes an approval card: a GitHub issue, a
-  content draft, a (simulated) ad pause, a Discord post. Approve, edit or reject, from the web or Discord. GitHub
-  issues and Discord posts are dry runs unless `ALLEVIA_ACTIONS_LIVE=1`; drafts are never published.
-- **Insights without model guesswork.** 21 deterministic Cypher detectors (SEO, content, funnel, simulated ads,
-  knowledge gaps, and on-call and release health for the app) produce findings with evidence ids and numbers from the
-  graph; Today's note (the morning brief) is a goal pulse built from them, with an "On call" section only when Firefighter or
-  Bug Hunter has something open ([`src/insights/`](src/insights)).
-- **Answers a busy owner can act on.** The Chief of Staff leads with the answer, numbers the steps, ranks at most five
-  items and ends on one next action, in plain words (no "baseline" or "agent"). The shape follows the MIT-licensed
-  [i-have-adhd](vendor/skills/i-have-adhd/NOTICE.md) rules and [`docs/owner-words.md`](docs/owner-words.md)
-  ([`src/agent/style.ts`](src/agent/style.ts)).
-- **Onboarding from a URL.** A polite, SSRF-safe crawler reads the site, builds the brand kit, runs SEO checks, maps
-  services, audiences and needs, and enrols the business in a 90-day program with goals and Day-0 baselines
-  ([`src/onboard/`](src/onboard), [`src/ingest/sources/website/`](src/ingest/sources/website)).
-- **Studio.** A phone photo goes in with EXIF stripped; Miss Influencer assesses it and the owner gets two options: A, a free local
-  clean-up, and B, an AI edit from the real Higgsfield engine, quoted first in Studio credits (about 2) and refused above
-  the per-edit and daily caps. Fact Checker's fidelity check compares each against the original, marks any structural change
-  and picks "our pick"; a held-back AI edit gets one tighter retry. Under the options the owner asks for changes in plain
-  words: light and colour are free, "make it festive", "a different background", "remove the pole" and "make this into an ad
-  saying ..." use the AI editor, and a 5 second 9:16 clip is an explicit, priced extra. **"Make this a premium UGC ad"** turns a rough product
-  photo into a premium, UGC-style ad picture with Higgsfield's product-photoshoot backend (a lifestyle scene, quoted first at about 6.5
-  credits and capped; the owner's photo goes in as the reference), Fact Checker checks that the *product* is unchanged, and a 5 second vertical clip
-  from it (about 5 credits) waits on the same card, web and Discord. The job, its cost, the rules it was built from and the chain from the
-  photo are in the graph ([`src/studio/premium.ts`](src/studio/premium.ts), [`lineage.ts`](src/studio/lineage.ts); live check on 17 October:
-  the founder's private run notes, 11.5 credits). People in a photo are kept as they
-  are unless the business turns on "Blur people's faces in my content"; a photo with a child gets the free clean-up only.
-  Wordsmith writes the caption and the owner approves ([`src/studio/`](src/studio)). Spend and the live check are in
-  [`docs/higgsfield-spend.md`](docs/higgsfield-spend.md).
-- **Other surfaces.** A Discord bot (a thread per conversation, live work log, approval buttons), a read-only MCP server
-  for other agents, a CLI for everything, and a static marketing site (`site/`): one scroll story about the company brain, drawn from the real graph, with prices in US dollars.
-
-## Hero use case, in detail
-
-The question the demo is built around, and the clearest place to see the graph doing work. It runs live on the Claude subscription.
-**Shiftly** (`demo_growth`, a synthetic shift-jobs app, seeded by `npm run cli -- seed-demo`, no private data) is what this repository
-ships: on it the 2.8.0 release (7 Oct) put a new phone-number box on the sign-up screen, it crashes, and new accounts fell from
-about 250 a day to about 50 the same day. Around it, the noise a real week has: Google sign-ups unchanged, an ad campaign paused
-three days *after* the fall began, a search update from September, an older crash on another screen, a hotfix waiting in the App
-Store's review queue, a decision from last week and the thread it came from. The five desks and the answer are at the top of this page.
-
-What comes back, in about two minutes: the cause and how sure it is ("proven" where a record links the release to the crash, "likely" where only the dates
-fit, "not shown" where nothing does); the chain with dates; what else it hits at depth 1 against depth 4; what we decided last time and where it
-stands; what is **not in the records**; the path drawn node by node under the answer; and two approval cards, a fix task with the evidence and a
-two-line message to users. Editing the message before approving teaches a rule; asking again a day later reports where yesterday's cards stand instead of drafting them again.
-
-**The path, as the graph holds it** (written by the ingest mappers from the tracker's own fields, each edge with its source, date and `conf`):
-
-```
-reading (Observation) -MEASURES-> funnel step (Feature) -DEPENDS_ON-> screen (Page)
-        <-AFFECTS{how: crashed_on}- crash (Event) <-AFFECTS{how: introduced}- release (Event);   person -OWNS-> screen
-```
-
-| Part of the answer | FalkorDB at work | Where |
-|---|---|---|
-| Which step fell, and the day | Reads through the `Observation` indexes (subject, metricKey), one query ranks every step; a one-change-point fit returns `shift {at, before, after}` | [`metrics.ts`](src/agent/tools/metrics.ts), [queries §13](docs/falkordb-queries.md) |
-| Screen, crash, release, owner | A 4-hop pattern over current edges; `algo.SPpaths` finds the same chain between any step and any release | `find_paths`, [queries §4 and §13](docs/falkordb-queries.md) |
-| Depth 1 against depth 4 | `impact_of`: one traversal per hop over `DEPENDS_ON`, `AFFECTS`, `BLOCKS`, each item with the edge that pulled it in | [queries §3](docs/falkordb-queries.md) |
-| What was decided and where it stands | Recall: from the nodes in the question to earlier turns, decisions, notes, and now each earlier answer's cards and the task an approved card made | [queries §11 and §13](docs/falkordb-queries.md) |
-| What changed when | Every number is a dated `Observation`; every edge has `since`/`until` and `recordedAt` | [schema](src/graph/schema.ts) |
-| Honest "not in the records" | A crash with no route gets no screen; a crash with no first release gets no release; the answer says what the records do not link | [`app-health.ts`](src/ingest/sources/ops-map/app-health.ts) |
-| Two cards, then a learned rule | `Recommendation -PROPOSES-> Approval`; an edit becomes `Rule -LEARNED_FROM-> Approval` | [`actions/`](src/actions) |
-
-On a real business whose records hold the sign-up counts, the funnel steps and the crash-free sessions but no record that links a release to a
-crash or a crash to the sign-up step, the same question honestly ends in "cause not shown", and says what to connect. The mapper links a crash to its
-screen and a release to its crash the day the tracker's data carries them (`firstRelease`, the route in `where`). `evals/hero.yaml` (Shiftly) asserts
-all of this: the cause named, the path nodes present, valid citations and grounded numbers, the honest "not in the records", and the two cards drafted.
-**Live pass rate, 16 October 2026** (real agents on the Claude subscription, no recordings; Shiftly reseeded before each attempt): the hero question passed
-**5 of 5 on Shiftly** (69 to 102 s) and **5 of 5 on a real, private business** (60 to 85 s, where the pass is the honest "not shown"), and each of the other items in
-the set passed on a live run (the ad red herring, "not in the records", depth 1 against 4, memory). The Shiftly report is
-[`docs/evals/2026-10-16-demo_growth.md`](docs/evals/2026-10-16-demo_growth.md); the real business's stays private. The demo steps are the opening of
-[`docs/demo-script.md`](docs/demo-script.md), and four answers recorded on 16 October from a clean copy of this repository are what the public mode replays
-(`seed-demo --recorded`, [`src/demo/recorded/`](src/demo/recorded)).
-
-## How FalkorDB is central
-
-The agents cannot answer without walking the graph: every tool is a graph query or a graph algorithm, and the answer's
-path is checked against the graph before it is drawn. Take FalkorDB away and no tool has anything to answer from.
-
-**The queries and algorithms the product depends on**, each with its file and line, parameters, why a table would not
-do, and a plan or timing note: [`docs/falkordb-queries.md`](docs/falkordb-queries.md) (a test keeps it in step with
-the code). The quickest way to see the graph do work: the Brain page's **What breaks if something stops**, which shows
-what fails one step away against what fails up to four steps away, with the path to each.
-
-| FalkorDB capability | How Allevia uses it |
-|---|---|
-| **Multi-graph tenancy** | One graph per business (`allevia_<slug>`) plus a registry graph (`allevia_meta`). A request is bound to one tenant's graph; no tool takes a graph name ([`src/graph/tenants.ts`](src/graph/tenants.ts)). |
-| **Bi-temporal facts and versions** | Every relationship carries valid time (`since`/`until`) and record time (`recordedAt`/`retiredAt`); nothing is deleted, a contradicted fact is closed. Changing entities write a `Version` before an update, so history is one hop away and every tool accepts `asOf` for time travel ([`src/graph/upsert.ts`](src/graph/upsert.ts)). |
-| **Provenance on every fact** | Nodes and edges carry `src` (the source document) and `asOf`; extracted facts carry `conf` and `SOURCED_FROM`. Numbers are always `Observation` nodes with a window and a date, never overwritten properties. |
-| **Read-only Cypher, guarded** | The `cypher` escape hatch runs `GRAPH.RO_QUERY` with a 5 s server timeout, a write-keyword and procedure allow-list check, bounded `range()`/`reduce()`, and capped output ([`src/agent/tools/cypher.ts`](src/agent/tools/cypher.ts)). |
-| **Graph algorithms as agent tools** | `algo.SPpaths` for `find_paths` and the answer path (`show_path`), `algo.pageRank` for `important`, `algo.labelPropagation` for `topics`; the librarian stores PageRank and community ids (onboarding does too, for a business read from a website, with the site's own page links feeding the groups) and uses `algo.WCC` to report orphaned knowledge. `impact_of` walks `DEPENDS_ON`/`AFFECTS`/`BLOCKS` and scores the result by betweenness ([`src/graph/algorithms.ts`](src/graph/algorithms.ts)). |
-| **Projections** | `algo.*` cannot filter on edge properties, so ranking and community algorithms run on a slim, cached projection graph of the currently valid edges (or of the edges valid at `asOf`), rebuilt when a write lands ([`src/graph/projection.ts`](src/graph/projection.ts)). |
-| **Vector + full-text indexes** | 384-dim cosine vector indexes on entities and document chunks (local multilingual e5 embeddings, English and Hindi) and full-text indexes on names, summaries and chunk text, fused by reciprocal rank in `search` ([`src/graph/indexes.ts`](src/graph/indexes.ts), [`src/agent/tools/search.ts`](src/agent/tools/search.ts)). |
-| **Memory in the graph** | `Session`, `Turn` (with `TOUCHED` and `CITED` edges and the full event log), `Finding`, `Memory`, learned `Rule`s with `LEARNED_FROM`, `GUIDED_BY` from a finding to the owner instruction it followed. Agents hand off through Findings stored in the graph. |
-| **MCP** | `npm run cli -- mcp --tenant <slug>` serves 15 read-only graph tools for one tenant over stdio or Streamable HTTP, so another agent can use the company brain ([`docs/jarvis-integration.md`](docs/jarvis-integration.md)). |
-| **FalkorDB Browser** | The compose file publishes it on 127.0.0.1:3090 for exploring the tenant graphs directly. |
-
-### The graph data model
-
-Every node has the base label `Entity` and a unique `id` (`<type>:<slug>`, range index plus UNIQUE and MANDATORY
-constraints); the types search can return also carry `Searchable`, which holds the full-text and vector indexes. Every
-relationship carries `since`/`until` (when it was true) and `recordedAt`/`retiredAt` (when we learned it), plus `src`
-and `asOf` (where it came from). The main types and relationships (all 38 node types and 54 relationship types, with the
-triples each allows, are in [`src/graph/schema.ts`](src/graph/schema.ts)):
-
-```mermaid
-flowchart LR
-  subgraph Company
-    B[Business]; P[Person]; A[Agent]; T[Team]
-  end
-  subgraph Work
-    S[System]; C[Channel]; K[Task]; D[Decision]; G[Goal]
-  end
-  subgraph Knowledge
-    Doc[Document]; Ch[Chunk]; O[Observation]; V[Version]
-  end
-  subgraph Memory
-    Tu[Turn]; F[Finding]; M[Memory]; R[Rule]; Ap[Approval]; Rec[Recommendation]
-  end
-  P -- MEMBER_OF --> T
-  P -- OWNS --> K
-  T -- OWNS --> S
-  S -- DEPENDS_ON --> S
-  C -- DEPENDS_ON --> S
-  K -- DEPENDS_ON --> S
-  S -- BLOCKS --> K
-  D -- AFFECTS --> C
-  P -- DECIDED --> D
-  D -- BASED_ON --> O
-  D -- SUPERSEDES --> D
-  O -- MEASURES --> C
-  O -- SOURCED_FROM --> Doc
-  Doc -- HAS_CHUNK --> Ch
-  Doc -- MENTIONS --> S
-  B -- PURSUES --> G
-  A -- KNOWS_ABOUT --> C
-  Tu -- CITED --> D
-  F -- PART_OF --> Tu
-  A -- PRODUCED --> F
-  F -- BASED_ON --> F
-  M -- ABOUT --> C
-  Rec -- PROPOSES --> Ap
-  R -- LEARNED_FROM --> Ap
-  K -- HAD_VERSION --> V
-```
-
-Three patterns carry most of the weight:
-
-- **Facts with two clocks.** Nothing is deleted. A fact that ends gets `until`; a contradicted claim is stored closed
-  with a reason; a fact that comes back is a new edge beside the closed one. Every tool takes `asOf`.
-- **Versions one hop away.** When a tracked property changes (a task's status, a reading's value), the old state is
-  written as a `Version` in the same statement, behind `HAD_VERSION`.
-- **Functional slots.** Some relationships have one holder at a time ("a task has one current owner", "an asset has one
-  parent"): a new holder closes the old edge instead of adding a second.
-
-On 15 October the graph of a real business built from its operating vault, read-only connectors and GitHub held about 3,700
-nodes and 11,300 edges, and a second real business's, built from its website URL alone, about 460 nodes and 2,000 edges.
-
-We built on FalkorDB 6.0.2 and found two query shapes that crash it (a tied full sort over rows with nullable maps,
-and NaN in a sort key). They are measured and reproduced in
-[`docs/notes/falkordb-nan-crash.md`](docs/notes/falkordb-nan-crash.md), refused client-side before they are sent,
-and held out of `src/` by a static test.
-
-## Tracks
-
-Entered in all three: **Agents That Act on Connected Data**, **Agent Memory and Coordination**, **Company Brain**. What
-fits each, and where it is thinner:
-
-| Track | What fits | Honest limits |
-|---|---|---|
-| **Agents That Act on Connected Data** | 21 graph tools (impact at depth 1 to 4, shortest paths, PageRank, communities, decisions, ownership, metrics, SEO, read-only Cypher); findings become approval cards with graph evidence; approved actions are recorded as `Action` nodes; an MCP server lets other agents use the same tools. | GitHub issues and Discord posts are dry runs unless switched on; ad changes are simulated; content is drafted, never published by us. |
-| **Agent Memory and Coordination** | Thirteen agents hand work to each other through `Finding` nodes in one shared graph (`BASED_ON` is the handoff); each turn's citations, the owner's notes and learned rules are written back and recalled by traversal on the next question; an owner's edit becomes a `Rule` linked to the approval it came from. | Memory is per business (by design); there is no memory across businesses. |
-| **Company Brain** | Decisions with their evidence and deciders, who owns and who knows what, facts with valid time and sources, versions one hop away, "what breaks if this stops" with the path. | Proven on two real businesses and a synthetic demo company; the connectors that would feed it daily are read-only and few. |
+**What we hit.** On FalkorDB 6.0.2 we found query shapes that crash the server (a tied full sort over rows with nullable maps,
+and NaN in a sort key). They are written up in [`docs/notes/`](docs/notes/falkordb-nan-crash.md), refused client-side before
+they are sent, and held out of `src/` by a static test.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
   subgraph Surfaces
-    WEB["Web app<br/>office, ask, brain, insights,<br/>approvals, onboard, studio, team"]
-    DIS["Discord bot<br/>thread per conversation"]
+    WEB["Web app<br/>office, chat, brain,<br/>approvals, studio"]
+    DIS["Discord bot<br/>thread per conversation,<br/>approval buttons"]
     MCPC["Other agents<br/>(MCP clients)"]
     CLI["CLI"]
   end
   subgraph Server["Node + TypeScript"]
-    API["Hono API<br/>SSE streams, public mode"]
-    ORCH["Agent company<br/>The Chief plans, desks work,<br/>reviewers check, the Chief answers"]
-    TOOLS["21 graph tools<br/>queries, algo.*, RO Cypher"]
-    CHK["Answer checks<br/>citations, numbers,<br/>simulated, freshness, mode"]
-    INS["Detectors, brief,<br/>approvals, executors"]
-    ING["Ingestion<br/>privacy filter, extraction,<br/>embeddings, librarian"]
-    MCPS["MCP server<br/>read-only, one tenant"]
+    API["Hono API<br/>SSE streams"]
+    ORCH["The team<br/>The Chief plans, desks work,<br/>reviewers check, the Chief answers"]
+    TOOLS["21 graph tools<br/>queries, algo.*, read-only Cypher"]
+    CHK["Answer checks<br/>citations, numbers, freshness"]
+    INS["Detectors, approvals,<br/>executors, learned rules"]
+    ING["Ingestion<br/>privacy filter, extraction,<br/>embeddings, write gate"]
+    MCPS["MCP server<br/>read-only, one business"]
   end
   SDK["Claude Agent SDK<br/>(subscription login)"]
-  subgraph FDB["FalkorDB 6.0.2"]
+  subgraph FDB["FalkorDB"]
     META[("allevia_meta")]
-    T1[("allevia_demo_growth")]
-    T2[("allevia_your_business")]
+    REF[("allevia_reference")]
+    T1[("allevia_&lt;business&gt;<br/>one per business")]
     PROJ[("projections<br/>current edges")]
   end
-  SRC["Sources: vault, registry, GitHub,<br/>ops connectors (read-only),<br/>website crawl, playbooks, simulated ads"]
+  SRC["Sources: website crawl, Composio<br/>connections, Apify public data,<br/>uploads, conversations"]
 
   WEB --> API
   DIS --> API
@@ -460,275 +150,134 @@ flowchart LR
   SRC --> ING --> FDB
 ```
 
-A request: recall what the graph already knows about the question; the Chief returns a plan (one to three desks); each
-desk runs as its own Agent SDK query with only its tools and writes a Finding; the reviewers named in the roster
-check it; the Chief writes the answer, calls `show_path`, and may propose an action. The Turn, Findings, reviews and the
-full event log are written to the graph, which is what makes replay possible. Design:
-[engineering spec](docs/superpowers/specs/2026-10-15-allevia-design.md) §4–§9 and §16.
+A request: recall what the graph already knows about the question; The Chief plans which desks to use; each desk runs as its
+own Agent SDK query with only its tools and writes a `Finding`; the reviewers named in the roster check it; The Chief writes the
+answer, calls `show_path` and may propose an approval card. The turn, its findings, reviews and full event log are written back
+to the graph.
 
-## Screenshots
+## Try it
 
-All of Shiftly, the synthetic business, from the public read-only mode (`node web/scripts/screenshots-demo.mjs`).
+**[13-232-139-42.sslip.io](https://13-232-139-42.sslip.io)** has three businesses, open read-only to visitors:
 
-| | |
-|---|---|
-| ![The answer to the hero question, with its citations as labels](docs/demo-screens/hero-answer-desktop.png) | ![The same answer's path: five nodes lit out of everything the team checked](docs/demo-screens/hero-path-desktop.png) |
-| **The answer.** Cause, chain, what is not recorded, what waits for OK; every claim is a label on a node. | **"How we know".** The path the answer stands on, lit in the business's own graph: step, screen, crash, release, fix. |
-| ![Brain: what breaks if the sign-up screen stops, one step away against up to four](docs/demo-screens/brain-desktop.png) | ![Waiting for your OK: a fix task and a message, nothing sent](docs/demo-screens/approvals-desktop.png) |
-| **What breaks if something stops.** Three things straight away, ten in all, each with its path and who looks after it. | **Approvals.** An edit becomes a learned rule that later drafts apply; executors are dry runs by default. |
-| ![The pixel office: thirteen people in nine departments](docs/demo-screens/office-desktop.png) | ![Insights: what the team noticed, with the evidence behind each idea](docs/demo-screens/insights-desktop.png) |
-| **The office.** Every agent, department and handoff is visible while a request runs. | **What we noticed.** Deterministic detectors over the graph, each idea with its numbers and sources. |
+- **Blue Tokai Coffee Roasters**, a known Indian coffee roaster. Its public side is real (website, products and prices, Google
+  listing, public Instagram, ad libraries). Its private side (orders, payments, ad spend, inbox) is **sample numbers**, labelled
+  as samples on every screen. Ask: "Why did online orders drop this week, and what should we do?" The answer walks from the
+  drop in online orders to UPI payments timing out, the payment error and the checkout release that brought it, and rules out
+  an Instagram dip that came nine days earlier. What is real and what is sample: [`docs/demo-bluetokai.md`](docs/demo-bluetokai.md).
+- **Aamdani**, our own startup (Allevia grew out of running it), with Gmail, Calendar, Analytics, Search Console and Instagram
+  connected for real.
+- **AVS Atelier**, an architecture and interiors studio, built from its website and Instagram.
 
-More, on a phone: [`docs/demo-screens/`](docs/demo-screens). Screens of the founder's real businesses stay in the private repository.
+The five scenarios we run live are in [`docs/live-scenarios.md`](docs/live-scenarios.md).
 
-## Run it in detail
+## Run it locally
 
-The short version is [near the top](#run-it).
+The local demo uses **Shiftly**, a synthetic shift-jobs app that ships with the repository (no private data). Its hero
+question: "Why did sign-ups drop this week, and what should we do?" The agents run on a claude.ai subscription login through the
+Claude Agent SDK, never on an API key ([`src/agent/sdk-env.ts`](src/agent/sdk-env.ts)).
 
-### Public demo with Docker (no model needed)
-
-Needs Docker with Compose v2.24 or later (Docker Desktop, or Colima with the Compose plugin).
-
-```sh
-docker compose up -d --build                                  # FalkorDB 6.0.2 + Allevia on http://127.0.0.1:8787
-docker compose exec app tsx src/cli.ts seed-demo --recorded   # Shiftly (synthetic) with four recorded team answers
-```
-
-The app starts in **public mode** (`ALLEVIA_PUBLIC_MODE=1`): the office, the Brain page, insights, approvals history and the
-scorecard read live from the graph; every write is refused; Chat replays recorded showcase answers instead of calling a model
-(a question that was recorded replays with its work log; anything else says live chat needs the owner's own model access). A
-fresh FalkorDB is empty, so load Shiftly first, as above. Then open http://127.0.0.1:8787:
-
-- **Chat**, pick a thread (the hero question is the oldest), then **How we got this**, **See the full work log**, **See the
-  path**: the answer's chain lit in the graph. Straight to it:
-  http://127.0.0.1:8787/ask/session%3A2026-10-16-ec0314ed?tenant=demo_growth
-- **More**, **What your team knows**, then **What breaks if something stops**: choose "Sign-up screen (phone number)" to see
-  three things straight away against ten in all.
-- **Approvals** (two cards wait, nothing is sent) and **Insights**.
-- The FalkorDB Browser is on http://127.0.0.1:3090: the graph `allevia_demo_growth`.
-
-Without `--recorded`, `seed-demo` builds the same business with no recorded answers (the live path starts from the records
-only). A second synthetic company, with the Instagram-connector chain that shows depth 1 against 4 on a different shape of
-graph, loads with:
+**1. Look first, no accounts** (Docker with Compose v2.24 or later). The read-only demo replays four recorded team answers with
+their work logs and lit paths:
 
 ```sh
-docker compose exec app tsx scripts/seed-demo.ts demo_seed --register
-docker compose exec app tsx src/cli.ts enroll demo_seed --country UK --industry "jobs platform"
-docker compose exec app tsx src/cli.ts insights demo_seed   # deterministic detectors, approval cards
-docker compose exec app tsx src/cli.ts brief demo_seed      # today's note (the morning brief)
+git clone https://github.com/Ankit-Vohra/allevia-company-brain.git allevia && cd allevia
+docker compose up -d --build                                  # FalkorDB 6.0.2 and Allevia on http://127.0.0.1:8787
+docker compose exec app tsx src/cli.ts seed-demo --recorded   # Shiftly with four recorded answers
+open http://127.0.0.1:8787                                    # FalkorDB Browser: http://127.0.0.1:3090
 ```
 
-### Live mode (needs your own Claude login)
-
-The agents run on the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-typescript) with a claude.ai
-subscription login, never an API key: `ANTHROPIC_API_KEY` is stripped from the SDK's environment, and a run stops if
-the SDK reports any API-key source ([`src/agent/sdk-env.ts`](src/agent/sdk-env.ts)). A public deployment therefore
-cannot offer live chat to strangers. An evaluator with their own Claude account can run it live:
-
-- **Recommended, on your machine:** install [Claude Code](https://docs.claude.com/en/docs/claude-code), run
-  `claude` and `/login` with your claude.ai account, then follow the development setup below and run
-  `npm run cli -- serve` (live mode is the default outside Docker). This is the path the eval runs used.
-- **In Docker:** create a long-lived token with `claude setup-token`, put `CLAUDE_CODE_OAUTH_TOKEN=<token>` and
-  `ALLEVIA_PUBLIC_MODE=0` in `.env`, and `docker compose up -d`. The SDK passes that token through; this path was
-  not exercised in our runs, so if the subscription guard refuses it, use the local route.
-- Onboarding from a URL needs Chromium for the crawler: `WITH_CHROMIUM=1 docker compose build`.
-
-### Development setup
-
-Node 22 or later (24 recommended), Docker for FalkorDB. These are the steps of "Run it", with the optional ones:
+**2. Run the team live** (Node 22 or later, Docker for FalkorDB, Claude Code logged in: run `claude`, then `/login`):
 
 ```sh
-npm install && (cd web && npm install && npm run build)   # the API serves web/dist; or `cd web && npm run dev` on :5173
-docker compose up -d falkordb                  # FalkorDB on 127.0.0.1:6390, the CLI's default
-npm run cli -- db:check                        # "FalkorDB at redis://127.0.0.1:6390: ok"
-npm run cli -- seed-demo                       # Shiftly, the synthetic hero-use-case business (add --recorded for the replays)
-npm run cli -- serve                           # http://127.0.0.1:8787 (add --public for the read-only demo)
+npm install && (cd web && npm install && npm run build)   # the API serves web/dist
+docker compose up -d falkordb                             # FalkorDB on 127.0.0.1:6390
+npm run cli -- db:check                                   # "FalkorDB at redis://127.0.0.1:6390: ok"
+npm run cli -- seed-demo                                  # Shiftly, no recorded answers
+npm run cli -- serve                                      # http://127.0.0.1:8787 (add --public for the read-only demo)
+npm run cli -- ask demo_growth "Why did sign-ups drop this week, and what should we do?"
 ```
 
-Optional: `mkdir -p ~/.config/allevia && cp .env.example ~/.config/allevia/allevia.env && chmod 600 ~/.config/allevia/allevia.env`
-for the settings (Discord, connections, Apify) in [`.env.example`](.env.example); every name has a default and none is needed for
-the above. To use another FalkorDB port, set `ALLEVIA_FALKORDB_URL=redis://127.0.0.1:<port>` and, with Compose, `FALKORDB_PORT=<port>`.
+Optional:
+- Settings (Discord, Composio, Apify) go in `~/.config/allevia/allevia.env`; every name is documented in
+  [`.env.example`](.env.example), and none is needed for the steps above.
+- Local embeddings ($0, no network after the first download): `npx tsx scripts/spikes/embeddings.ts` fetches
+  `Xenova/multilingual-e5-small` into `models/`. Without it, search is full-text only.
+- Onboarding a business from its website needs Chromium: `npx playwright install chromium` (or `WITH_CHROMIUM=1` for the
+  Docker build), then `npm run onboard -- --name "…" --slug … --url https://…`.
+- A port is taken (6390, 3090, 8787): `FALKORDB_PORT=6395 FALKORDB_BROWSER_PORT=3095 ALLEVIA_PORT=8795 docker compose up -d`.
+- FalkorDB settings (`THREAD_COUNT`, timeouts, `RESULTSET_SIZE` and the rest) are module load arguments in
+  [`docker-compose.yml`](docker-compose.yml), explained in [`src/graph/server-config.ts`](src/graph/server-config.ts).
 
-Local embeddings are optional too ($0, no network after the first download): `npx tsx scripts/spikes/embeddings.ts` fetches
-`Xenova/multilingual-e5-small` (about 130 MB) into `models/`. Without it, search is full-text only. Onboarding a business from
-its website needs Chromium for the crawler: `npx playwright install chromium`.
-
-If `npm install` prints "install scripts not yet covered by allowScripts" (npm 11.16 and later), it is a notice: esbuild,
-sharp, onnxruntime and the Agent SDK all load without those scripts.
-
-### If something does not start
-
-- **`docker compose: unknown command`**: the Compose plugin is missing (Colima and some Linux installs do not ship it). Start
-  FalkorDB alone with `docker run -d -p 127.0.0.1:6390:6379 falkordb/falkordb:6.0.2` and use the Node setup above.
-- **A port is taken** (6390, 3090, 8787): `FALKORDB_PORT=6395 FALKORDB_BROWSER_PORT=3095 ALLEVIA_PORT=8795 docker compose up -d`,
-  and for the Node setup `ALLEVIA_FALKORDB_URL=redis://127.0.0.1:6395 PORT=8795 npm run cli -- serve`.
-- **FalkorDB will not restart** (6.0.2 crashed once under repeated drops and re-seeds, and a crash can leave an append-only
-  file it cannot replay): `docker compose down -v`, `docker compose up -d`, then seed again. The synthetic business is rebuilt in
-  seconds; nothing else in the demo needs the old data. A plain stop and start (or a reboot) after `seed-demo` is fine: labels
-  are registered in two statements precisely so that file stays loadable ([`tests/graph/aof-restart.test.ts`](tests/graph/aof-restart.test.ts)).
-- **A live question ends with "Not logged in"**: run `claude` once and `/login` with a claude.ai account (not a Console API key), or use `serve --public` for the replay.
-- **The web page is blank or says "API only"**: build it once with `cd web && npm run build`.
-
-### Keeping it running
-
-`scripts/ops/run-server.sh` and `scripts/ops/run-bot.sh` start the server or the Discord bot and start it again whenever
-it exits, logging to `~/allevia-logs/server.log` and `bot.log` (extra arguments go to `serve` or `discord`). A FalkorDB
-restart does not stop either: queries wait for the database to come back (up to `ALLEVIA_DB_WAKE_WAIT_MS`, 20 s), and
-meanwhile owners are told "Your team's memory is waking up, try again in a minute."
-
-### FalkorDB settings and schema
-
-`docker-compose.yml` starts FalkorDB with the limits the code is written for, as module load arguments (`FALKORDB_ARGS`:
-`THREAD_COUNT 4`, `MAX_QUEUED_QUERIES 500`, `TIMEOUT_DEFAULT 15000`, `TIMEOUT_MAX 120000`, `QUERY_MEM_CAPACITY 536870912`,
-`CACHE_SIZE 256`, `RESULTSET_SIZE 10000`; what each is for is in [`src/graph/server-config.ts`](src/graph/server-config.ts)).
-Load arguments survive a restart and `GRAPH.CONFIG SET` does not, so a running server picks them up with
-`docker compose up -d falkordb`, and `npm run cli -- db:check` reports one that differs.
-
-Every tenant graph is brought to the same schema when it is created and again at the start of every ingest
-([`src/graph/indexes.ts`](src/graph/indexes.ts), [`migrate.ts`](src/graph/migrate.ts)); `npm run cli -- db:migrate [tenant]`
-runs it on demand. The schema is: a range index on `Entity.id` with UNIQUE and MANDATORY constraints (duplicate ids already in a graph
-are merged first); range indexes on `Observation.metric`, `metricKey` (the lowercase metric, so no read wraps it in
-`toLower()`), `subject` and `asOf`; the `Searchable` label on the types search returns, with the full-text and vector
-indexes on it, so a reading's name never competes with an entity's. Queries look nodes up as `(n:Entity:Type {id:$id})`
-(the index is on `Entity.id`), and bind the edge under every count (`WHERE ID(e) >= 0`) because FalkorDB 6.0.2 collapses parallel
-edges nothing refers to; the suite holds both rules (see Tests).
-
-### CLI
-
-`npm run cli -- <command>` (`npm run cli` lists them all). The main ones:
+Useful CLI commands (`npm run cli` lists them all):
 
 | Command | What it does |
 |---|---|
-| `ingest <tenant> [--sources brain,ops,playbooks,simads,github]` | Ingest a configured tenant's sources (privacy filter, extraction on the subscription, embeddings, librarian, privacy scan) |
-| `npm run onboard -- --name "…" --slug … --url https://…` | Onboard a business from its website (crawl, brand kit, SEO checks, understanding, program) |
-| `enroll <tenant>` | Enrol a business already in the graph in Allevia 90: country defaults, goals, Day-0 baselines, capabilities |
-| `ask <tenant> "<question>"` | Ask the agent company and watch every agent's steps in the terminal |
-| `insights <tenant>` | Run the 21 detectors; write recommendations and approval cards |
-| `brief <tenant>` | Write today's note (goals, what changed, what we noticed, on call, waiting for your OK, next step) |
-| `standup <tenant>` | Run today's team stand-up now: the Chief picks at most 3 things worth doing, the team drafts them for your OK, and today's note leads with them (the server runs it each business's morning; see docs/proactive-trials.md) |
-| `approvals <tenant> [approve\|reject <id>]` | List or decide approval cards (`--edit <file>` teaches a learned rule) |
-| `program <tenant> [--read-only]` | The Allevia 90 scorecard |
-| `tell <tenant> "<instruction>"` | "Tell your team": preview a plain-language change, `--apply` to make it |
-| `serve [--public]` | The API and the web app on one port |
-| `discord [--tenant <slug>]` | The Discord bot (needs a bot token in the env file); with `DISCORD_HUB_GUILD_ID` set it serves every customer on the hub |
-| `discord-hub status \| list \| provision <tenant> \| reinvite <tenant>` | The customer hub on Discord: read-only check and list, set a business up, a new join link ([setup](docs/discord-hub-setup.md)) |
-| `mcp --tenant <slug> [--http]` | The read-only MCP server for one tenant |
-| `auth:issue <tenant> [--days N]` / `auth:list` / `auth:revoke <id>` / `auth:demo <tenant>` | Owner links for `ALLEVIA_AUTH=1`: issue one (shown once), list them, revoke, mark a business as a public demo |
-| `tenant:export <tenant> <file>` / `tenant:erase <tenant> --confirm <tenant> [--force]` | One business out of Allevia: write all of its data to one checked file; or export it first, then delete its graph, registry rows, files, Discord mapping and sealed connection tokens ([how](docs/tenant-isolation.md)) |
-| `eval <tenant> [--fake]` | Run the tenant's eval questions, score every turn, write `docs/evals/<date>-<tenant>.md` |
-| `showcase <tenant> [<turnId>]` | Mark a stored turn for public replay, or list the showcase turns |
-| `db:check` / `db:migrate [tenant…]` | Ping FalkorDB and compare its settings with `docker-compose.yml`; bring tenant graphs up to the current schema |
-| `db:telemetry [--dry-run]` | Remove FalkorDB's own `telemetry{<graph>}` streams, which once broke a restart ([#29](docs/notes/falkordb-reply-compact-panic.md)); the server also does it every 10 minutes (`ALLEVIA_TELEMETRY_SWEEP=off` stops that) |
-| `db:usage [--on <url|env:NAME>] [--limit-mb N] [--all]` | How full the database is: memory used against its limit (`INFO memory`), each graph's share (`GRAPH.MEMORY USAGE`); warns from 80% (exit 3). Read-only; works on FalkorDB Cloud |
-| `db:export` / `db:import` / `db:busy` | Copy a graph between FalkorDB servers as a verified JSON-lines file, and see what a server is running ([moving to FalkorDB Cloud](docs/falkordb-cloud.md)) |
-| `privacy-scan <tenant>` | Scan every string in a tenant's graph for secrets and personal data (must report 0) |
-| `graph:story <tenant> [--by recorded\|happened] [--bucket day\|week]` | How the business's brain grew: nodes and edges per day or week by kind, from the graph itself (two clocks: when the team learned it, and the date of its source); read-only |
-| `graph:lineage <tenant> <assetId>` | How a Studio picture or clip was made: the photo it came from, each step, the Higgsfield jobs and their cost, the rules, Fact Checker's check, the card and the post; read-only |
-| `checkup [<url>] --tenant <slug> [--weekly on\|off]` | The free website check-up: top five fixes by likely enquiries; with `--tenant` the site and kind come from onboarding and the run is stored. The web button, `/checkup` and the weekly schedule run it in the background |
+| `ask <business> "<question>"` | Ask the team and watch every agent's steps in the terminal |
+| `insights <business>` | Run the deterministic detectors; write recommendations and approval cards |
+| `approvals <business> [approve\|reject <id>]` | List or decide approval cards (`--edit <file>` teaches a learned rule) |
+| `graph:story <business>` | How the brain grew: nodes and edges per day, from the graph's own clocks |
+| `mcp --tenant <business> [--http]` | The read-only MCP server for one business |
+| `db:check` / `db:migrate` / `db:usage` | Check FalkorDB and its settings; bring graphs to the current schema; memory per graph |
+| `privacy-scan <business>` | Scan every string in a business's graph for secrets and personal data |
 
-## Tests and evals
+**Tests.** About 3,400 vitest tests run against a real FalkorDB in throwaway graphs, including a static scan that holds every
+Cypher string in `src/` to the crash rules and a `GRAPH.EXPLAIN` check that id lookups use the index. Start a throwaway FalkorDB
+(`docker run -d -p 127.0.0.1:6391:6379 falkordb/falkordb:6.0.2`), then `npm test`. Eval sets are in [`evals/`](evals), reports
+in [`docs/evals/`](docs/evals).
 
-- **About 3,400 tests** (the last full run, on 17 October, passed 3,405 in 307 files, 3 skipped), vitest, run against a real FalkorDB in throwaway graphs: unit tests,
-  integration tests for every tool and algorithm, the API, SSE, the Discord and MCP surfaces, a static scan that
-  holds every Cypher string in `src/` to the crash rules, the Entity-label and parallel-edge rules, an `EXPLAIN` of every
-  query the suite sends (it fails the run if one looks a node up by id and still scans a label), and a regression that runs every tool, detector and read
-  over a graph built of ties, zeros and gaps. Two live-model tests are skipped unless `ALLEVIA_LIVE_LLM=1`.
-  To run it: `docker run -d -p 127.0.0.1:6391:6379 falkordb/falkordb:6.0.2`, then `npm test` (or point `ALLEVIA_TEST_FALKORDB_URL=redis://127.0.0.1:<port>` at any throwaway FalkorDB; the suite refuses port 6390, where the demo's graphs live, and a full run takes several minutes).
-- **Evals** ([`evals/`](evals), reports in [`docs/evals/`](docs/evals)): 43 questions with expected citations, regexes,
-  tools, agents and trap questions, scored automatically. The hero set on Shiftly (`evals/hero.yaml`) passed 5 of 5 on its
-  hero question and every item on a live run (report: [`docs/evals/2026-10-16-demo_growth.md`](docs/evals/2026-10-16-demo_growth.md)).
-  The first live runs on 15 October on two real, private businesses: 8 of 12 questions passed every check and expectation on
-  one (96% of expectations hit, 100% of turns finished) and 2 of 5 on the other (89% of expectations hit); failures are kept
-  in the reports, with their causes, in the private repository.
-
-## Privacy and safety
-
-- **Privacy filter before anything is stored or sent to a model:** a path allow-list for the vault, sensitive sections
-  dropped, and redaction of addresses, account ids, emails, phone numbers, credentials and company identifiers
-  ([`src/ingest/privacy.ts`](src/ingest/privacy.ts), [`src/ingest/redact.ts`](src/ingest/redact.ts)). Finance stays
-  out entirely.
-- **`privacy-scan`** checks every string in a tenant graph for the same patterns; ingestion fails loudly if it finds
-  one.
-- **Repo hygiene test** ([`tests/hygiene.test.ts`](tests/hygiene.test.ts)): every tracked file goes through the same
-  detectors, and, where the real vault is present, every identifier found in it must be absent from the repo.
-- **Read-only connectors:** the ops connector calls only tools on a read-only allow-list, refused before a byte is
-  sent; the MCP server registers read tools only; `cypher` is `GRAPH.RO_QUERY` behind its own guard.
-- **Dry-run actions:** approved GitHub issues and Discord posts are recorded, not executed, unless
-  `ALLEVIA_ACTIONS_LIVE=1`; ad changes are simulated; content is drafted, never published.
-- **Public mode:** every write route returns 403, and only turns marked as showcase are visible or replayable.
-- **Tenant isolation:** every business is its own graph (`allevia_<slug>`) and its own folders; the server binds a request
-  to one business, no tool or message can pick another, and a new business starts from code, never from another's data.
-  With `ALLEVIA_AUTH=1` every business needs its private owner link (random, hashed, revocable; `auth:issue`), and only
-  marked demo businesses open without one, read-only. Proof in `tests/security/`; findings and the ranked open items in
-  [`docs/tenant-isolation.md`](docs/tenant-isolation.md).
-- **Subscription only:** no API key is used or accepted for model calls. Secrets live in
-  `~/.config/allevia/allevia.env`, outside the repo; `.env.example` documents every name with no values.
-- **Studio:** photos are re-encoded without EXIF metadata on intake; edit prompts forbid text, numbers, logos and
-  added or removed structures (except what the owner asked for), and Fact Checker's fidelity check fails closed. The AI editor
-  runs on the founder's `higgsfield` CLI login (argument arrays, no shell, the photo in a private temp dir that is deleted),
-  is quoted before every generation, and is capped per edit (`ALLEVIA_STUDIO_RUN_CREDIT_CAP`, 5), per clip
-  (`ALLEVIA_STUDIO_CLIP_CREDIT_CAP`, 8) and per day (`ALLEVIA_STUDIO_DAILY_CREDIT_CAP`, 25) in a ledger kept in the data dir.
-  `ALLEVIA_STUDIO_ENGINE=recorded` turns the live editor off.
-
-## Repository layout
+## Repo map
 
 | Path | What |
 |---|---|
-| `src/graph/` | FalkorDB client with the crash guards, schema, bi-temporal upsert, algorithms, projections, indexes, tenants |
-| `src/agent/` | Orchestrator, runtime (Agent SDK), 47 tools (21 of them graph queries and algorithms), answer checks, memory |
-| `src/ingest/`, `src/onboard/` | Sources, privacy and redaction, extraction, embeddings, librarian; onboarding a business from its website |
+| `src/graph/` | FalkorDB client and crash guards, schema, two-clock upsert, algorithms, projections, indexes, tenants, write gate, reference graph |
+| `src/agent/` | The team: orchestrator, Agent SDK runtime, tools (21 of them graph queries and algorithms), answer checks, memory |
+| `src/ingest/`, `src/onboard/` | Sources, privacy filter and redaction, extraction, embeddings; onboarding a business from its website |
+| `src/insights/`, `src/actions/` | Deterministic detectors and the morning brief; approvals, executors and learned rules |
+| `src/connections/`, `src/publicdata/` | Connected tools through Composio, with a sealed per-business store and audit log; public data through Apify |
 | `src/server/`, `web/` | Hono API and the React web app (Vite) |
-| `src/insights/`, `src/actions/`, `src/program/`, `src/capabilities/`, `src/settings/`, `src/proactive/` | Detectors and brief; approvals, executors and learning; Allevia 90; capability ladder; team settings; the daily stand-up |
-| `src/studio/`, `src/creative/`, `src/checkup/` | Photo Studio; posters, ads and reels; the website check-up |
-| `src/connections/`, `src/connectors/`, `src/publicdata/` | The founder's connected tools (Composio and Google) with a sealed per-business store and audit log; read-only connectors; public data through Apify |
-| `src/discord/`, `src/mcp/` | Discord bot, MCP server |
-| `src/demo/` | The synthetic business (Shiftly) and its recorded answers (`recorded/shiftly-hero.jsonl`) |
-| `shared/` | Contracts, roster and plans shared by server, web and site |
-| `site/` | The public website (home, how it works, product tour, demo, pricing, security, about, contact, FAQ, privacy, terms, data deletion, cookies); static, built from shared/plans.ts. See docs/website-deploy.md |
+| `src/discord/`, `src/mcp/`, `src/studio/` | Discord bot, MCP server, the photo and poster Studio |
+| `src/demo/` | Shiftly, the synthetic business, and its recorded answers |
+| `shared/` | Contracts and the team roster, shared by server, web and site |
+| `site/` | The public website |
 | `evals/`, `tests/` | Eval sets and runner; the test suite |
-| `docs/` | The queries doc, the live scenarios, the demo script, design and setup notes; `demo-screens/` are screenshots of Shiftly |
-| `skills/` | The agents' skills (plain-language playbooks they open with `use_skill`) |
-| `vendor/playbooks/` | Third-party playbook data, with licences and notices |
+| `docs/` | The queries doc, live scenarios, the blog post and its images, design and setup notes |
+| `skills/`, `vendor/` | Plain-language playbooks the agents open; third-party playbook data with its licences |
 
-## Credits and licences
+## Measured results
 
-- **Vendored playbook data** (MIT): hook formulas and a profile rubric (Jakeschincariol/instagram-agent-skill), SEO
-  audit issues (every-app/open-seo), the Google update timeline (AgriciDaniel/claude-seo), industry templates and ad
-  policy registries (nowork-studio/notfair-plugin), AI-writing patterns (conorbronsdon/avoid-ai-writing). Data only, at
-  pinned commits, each with its LICENSE: [`vendor/playbooks/NOTICE.md`](vendor/playbooks/NOTICE.md).
-- **brag-slim** (MIT, latent-spaces/brag), vendored unmodified in `.claude/skills/brag-slim/` to render the launch
-  video.
-- **Visuals:** the marketing site (v6) draws the company brain from the real graph and shows a real recorded run, with no
-  generated pictures; the Studio demo's generated variant and the posters and reels the team made were made with Higgsfield; every generation is logged in [`docs/higgsfield-spend.md`](docs/higgsfield-spend.md). The office
-  sprites are drawn in code by us.
-- Libraries: FalkorDB and its Node client, the Claude Agent SDK, Hono, React, Vite, transformers.js, sharp,
-  Playwright, discord.js and the MCP SDK, each under its own licence.
+On 17 October we measured tokens and time on Aamdani, with two real questions ("What breaks if the Instagram token expires?" and
+"Why did we pause daily stories and image posts?"), the same model and the same answer rules, three ways. Script:
+[`scripts/bench-efficiency.ts`](scripts/bench-efficiency.ts); write-up: [`docs/graph-audit.md`](docs/graph-audit.md).
 
-## AI tools used
+![604k tokens against 75k](docs/blog/images/tokens-8x.jpg)
 
-- **Claude Code** (with subagents working in parallel git worktrees) wrote most of the code, tests and docs, under the
-  founder's direction and review.
-- **Claude, through a claude.ai subscription login** (the Claude Agent SDK), runs the thirteen agents at runtime. No API
-  key is used or accepted.
-- **Higgsfield** made the website's illustrations, hero loop and social card, and the Studio demo's generated photo
-  variant; every generation is logged in [`docs/higgsfield-spend.md`](docs/higgsfield-spend.md).
-- **Local embeddings** (multilingual e5, run on the machine) for vector search.
+| Way of answering | Tokens read (two questions) | Time |
+|---|---|---|
+| Paste all 114 documents into the prompt | 604,000 | 22 s each |
+| One agent with only the graph tools | **75,000 (8× fewer)** | 13 s each (43% less) |
+| The full 13-agent team | 175,000 (3.5× fewer) | 26 to 44 s |
 
-What the founder decided and checked: the product (a done-for-you team for owner-run businesses, not a tool), who it is
-for and the pricing; that FalkorDB is the company brain and one graph per business; the data rules (read-only
-connectors, a privacy filter before anything is stored, actions as dry runs until approved, subscription only); which
-businesses to use (his own two, kept private; the public demo uses synthetic data only);
-the plain-words, owner-first style; and that the demo must be run live. He reviewed the agents' answers and the screens,
-and can explain the graph model and the queries above.
+The graph agent's tools handed it only 1,200 to 2,100 tokens of the business's own records per answer.
 
-## Built during the event
+Honest limits:
+- The full team reads more than one agent and is slower than pasting, because it plans, reviews and checks facts. What it buys
+  is a checked answer with citations and a path.
+- On Shiftly, our small synthetic company (about 6,300 tokens of documents), pasting was cheaper than the agents. The graph wins
+  as the business grows.
+- Five questions on two businesses is a measurement, not a benchmark suite.
+- Three businesses are live. Real connected tools are proven on Aamdani; on Blue Tokai the private numbers are samples.
+  Actions in the outside world (posts, emails, GitHub issues, ad changes) are dry runs until `ALLEVIA_ACTIONS_LIVE=1`; ad data
+  is simulated and always marked.
 
-All of Allevia's code was written during the hackathon, which opened on 15 October 2026 at 00:01 IST. The
-development history starts with its first commit at 01:08 IST that day; it is kept in a private repository because
-early commits held private identifiers that were later removed, and this public repository is a single squashed
-commit of the result. We can show the full history to the organisers on request.
+## Built in four days
 
-Reused, not written here: npm libraries, the vendored third-party data and the brag-slim skill (credited above), and
-the founder's existing systems, which Allevia reads as a service (a read-only connector over SSH) without copying
-their code. The design spec, the plan and the decisions are in [`docs/superpowers/`](docs/superpowers). How AI tools
-were used is above.
+Allevia was built from 15 to 18 October 2026, during the hackathon. The first commit is at 01:08 IST on 15 October, and the
+history has 833 commits: see the [commit history](https://github.com/Ankit-Vohra/allevia-company-brain/commits/). Claude Code,
+with subagents in parallel git worktrees, wrote most of the code, tests and docs under the founder's direction and review;
+Claude, through a claude.ai subscription login, runs the 13 agents. Reused, not written here: npm libraries and the vendored
+third-party data and skills credited in [`NOTICE.md`](NOTICE.md).
+
+## Licence
+
+MIT, see [`LICENSE`](LICENSE). Vendored third-party data and skills keep their own licences ([`NOTICE.md`](NOTICE.md),
+[`vendor/`](vendor)).
