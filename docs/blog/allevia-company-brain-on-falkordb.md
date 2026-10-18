@@ -12,12 +12,12 @@ Draft for the founder's OK. Nothing here has been published.
 
 | File | What it should show |
 |---|---|
-| `images/pixel-office.png` | The pixel office: the 13 agents at their desks, grouped by department |
-| `images/answer-path.png` | Blue Tokai, "Why did online orders drop this week?": the answer with its path lit in gold on the map |
-| `images/brain-map.png` | Blue Tokai's Brain map with the line "2,187 things · 6,229 links" |
-| `images/fact-over-time.png` | The "How FalkorDB powers it" scene, "How a fact changes (example)": one fact closed and kept, one current (a diagram, not live data) |
-| `images/tokens-8x.png` | The "How FalkorDB powers it" scene, the step "604k tokens against 75k" |
-| `images/approval-card.png` | An approval card waiting for the founder's OK (web or Discord), with the evidence under it |
+| `images/pixel-office.jpg` | The pixel office: the 13 agents at their desks, grouped by department |
+| `images/answer-path.jpg` | Blue Tokai, "Why did online orders drop this week?": the answer with its path lit in gold on the map |
+| `images/brain-map.jpg` | Blue Tokai's Brain map with the line "2,187 things · 6,229 links" |
+| `images/fact-over-time.jpg` | The "How FalkorDB powers it" scene, "How a fact changes (example)": one fact closed and kept, one current (a diagram, not live data) |
+| `images/tokens-8x.jpg` | The "How FalkorDB powers it" scene, the step "604k tokens against 75k" |
+| `images/approval-card.jpg` | An approval card waiting for the founder's OK (web or Discord), with the evidence under it |
 
 ---
 
@@ -45,12 +45,12 @@ Influencer, Techie, Firefighter, Bug Hunter, Memory Keeper, Wordsmith, Fact Chec
 Taskmaster. The Chief takes each request and decides who does what. Each agent is told what to read in the brain first,
 before any outside tool.
 
-![The pixel office: Allevia's 13 agents at their desks](images/pixel-office.png)
+![The pixel office: Allevia's 13 agents at their desks](images/pixel-office.jpg)
 
 Nothing goes out without the founder's OK. A post, an email, a fix or an ad change arrives as an approval card, on the
 web or in Discord.
 
-![An approval card waiting for the founder's OK](images/approval-card.png)
+![An approval card waiting for the founder's OK](images/approval-card.jpg)
 
 The live demo has three businesses:
 
@@ -103,7 +103,7 @@ as "unverified".
 **4. Show the path.** The Chief ends by naming the nodes behind the answer, in order. The server links each pair through
 the graph and the app lights that path on the map.
 
-![The answer to "why did online orders drop", with its path lit on the map](images/answer-path.png)
+![The answer to "why did online orders drop", with its path lit on the map](images/answer-path.jpg)
 
 On the Blue Tokai demo, "Why did online orders drop this week?" walks from the drop in online-store orders to the UPI
 payment step, the payment error, and the checkout release that brought it. Those numbers are samples, and the answer
@@ -150,7 +150,7 @@ so closed edges are pruned inside the search. PageRank and topic grouping run on
 current edges only. Building that copy ourselves took about 110 ms at 20,000 nodes, against 5.3 seconds for
 `GRAPH.COPY`, which also rebuilds every search index.
 
-![How a fact changes (an example): closed and kept, next to the one that holds now](images/fact-over-time.png)
+![How a fact changes (an example): closed and kept, next to the one that holds now](images/fact-over-time.jpg)
 
 ## Keeping the brain clean as it grows
 
@@ -176,7 +176,7 @@ on 18 October we built four fixes:
 
 Rolling old readings up into weeks, archiving old closed facts, and summarising clusters are planned, not built.
 
-![Blue Tokai's brain: 2,187 things and 6,229 links](images/brain-map.png)
+![Blue Tokai's brain: 2,187 things and 6,229 links](images/brain-map.jpg)
 
 ## What we measured: 8× fewer tokens
 
@@ -197,7 +197,7 @@ The limits, said plainly:
 - On our small synthetic company, pasting the documents was cheaper. The graph wins as the business grows.
 - Five questions on two businesses is a measurement, not a benchmark.
 
-![604k tokens against 75k](images/tokens-8x.png)
+![604k tokens against 75k](images/tokens-8x.jpg)
 
 ## What we learned
 
