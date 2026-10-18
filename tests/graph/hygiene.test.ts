@@ -75,6 +75,17 @@ describe("graph:hygiene (integration)", () => {
     expect(formatHygiene("cafe", r)).toMatch(/cold things .*: 1\n {4}task:forgotten \(Task\) "Forgotten task": 0 links, last touched 2025-/);
   });
 
+  it("reports the size against the business budget, and the best-linked nodes", async () => {
+    const r = await graphHygiene(g, NOW, { mb: 2, budget: { nodes: 1_000, edges: 10, mb: 10 } });
+    expect(r.size.nodes).toBeGreaterThanOrEqual(15);
+    expect(r.size.budget.map((b) => [b.what, b.level])).toEqual([["things", "ok"], ["links", "over"], ["memory", "ok"]]);
+    expect(r.hubs[0]!.id).toBe("business:cafe");
+    expect(r.hubs[0]!.byType.OWNS).toBeGreaterThanOrEqual(3);
+    const text = formatHygiene("cafe", r);
+    expect(text).toMatch(/size: \d+ things, \d+ links, 2 MB; budget things \d+% of 1,000, links \d+% of 10 \(OVER\), memory 20% of 10 MB/);
+    expect(text).toMatch(/best-linked: business:cafe \d+/);
+  });
+
   it("with PageRank stored, a well-ranked old thing is not cold", async () => {
     await g.query("MATCH (n:Entity {id:'business:cafe'}) SET n.rank = 1.0");
     await g.query("MATCH (n:Entity {id:'task:forgotten'}) SET n.rank = 0.5");

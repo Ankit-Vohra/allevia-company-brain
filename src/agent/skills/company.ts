@@ -70,7 +70,7 @@ export async function companyFacts(g: GraphHandle, tenant: string, now: number =
     // leaves out the least connected extracted ones, which are mostly repeats of each other.
     "MATCH (r:BrandRule) WHERE coalesce(r.status, 'active') = 'active' RETURN r.kind AS kind, r.name AS name, coalesce(r.text, r.summary) AS text, CASE WHEN r.origin = 'owner' THEN 0 ELSE 1 END AS told, coalesce(r.rank, 0) AS weight ORDER BY told, weight DESC, r.id LIMIT 120");
   const list = async (label: string, n: number) => (await g.roQuery<{ name: string | null; summary: string | null }>(
-    `MATCH (x:${label}) RETURN x.name AS name, x.summary AS summary ORDER BY coalesce(x.createdAt, 0), x.id LIMIT ${n}`))
+    `MATCH (x:${label}) RETURN x.name AS name, x.summary AS summary ORDER BY coalesce(x.createdAt, 0), x.id LIMIT $limit`, { limit: n }))
     .map((r) => one([r.name, r.summary].filter(Boolean).join(": "))).filter(Boolean);
   const [audiences, needs, products, features, channels] = await Promise.all([list("Audience", 8), list("Need", 8), list("Product", 8), list("Feature", 10), list("Channel", 8)]);
   // the business's own hook rules first, then the shared playbook's (src/graph/reference.ts); a stub has no text of its own
