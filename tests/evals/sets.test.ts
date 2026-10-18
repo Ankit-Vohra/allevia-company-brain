@@ -1,16 +1,21 @@
 // The committed eval sets parse, cover every job (spec §1: why, growth/SEO, content briefs, ads) plus memory, and only
 // name real tools, roster agents and valid regexes.
+import { existsSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { AGENTS } from "../../shared/roster.js";
 import { ALL_TOOLS } from "../../src/agent/tools/index.js";
 import { compilePattern } from "../../evals/scorer.js";
 import { findSet, parseSet, selectItems } from "../../evals/set.js";
 
-const sets = { aamdani: findSet("aamdani"), avs: findSet("avs") };
+// The aamdani and avs sets quote real businesses' decisions, so the public copy of the history leaves them out
+// (the 18 Oct history audit); there this suite is skipped.
+const present = ["aamdani", "avs"].every((n) => existsSync(new URL(`../../evals/${n}.yaml`, import.meta.url)));
+const load = () => ({ aamdani: findSet("aamdani"), avs: findSet("avs") });
+const sets = (present ? load() : null) as ReturnType<typeof load>;
 const tools = new Set(ALL_TOOLS.map((t) => t.name));
 const agents = new Set(AGENTS.map((a) => a.id));
 
-describe("eval sets", () => {
+describe.skipIf(!present)("eval sets", () => {
   it("finds each set by file name and by tenant", () => {
     expect(sets.aamdani.set.tenant).toBe("aamdani");
     expect(sets.avs.set.tenant).toBe("avs_atelier");
