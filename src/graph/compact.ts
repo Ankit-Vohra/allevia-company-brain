@@ -460,7 +460,6 @@ const check = (what: string, xs: string[]): void => {
 // gets a `<file>.restored` marker, and an archive with one is refused: links would otherwise come back twice.
 export async function restoreArchive(g: GraphHandle, file: string, o: { apply?: boolean } = {}): Promise<RestoreReport> {
   const a = readArchive(file);
-  if (a.header.graph !== g.name && !o.apply) { /* restoring into a copy is allowed: the header names the source */ }
   if (existsSync(`${file}.restored`)) throw new Error(`${file} was restored already (${file}.restored)`);
   const ids = a.nodes.map((n) => String(n.p.id));
   const there = new Set<string>();

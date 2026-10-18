@@ -334,6 +334,15 @@ chunks grow without limit.
 - a review list of cold, low-degree, low-PageRank nodes, with no auto-delete;
 - per-plan size budgets with an 80% alert.
 
+Built 18 October (`graph:compact`, `graph:compact-undo`, `db:health`; docs/falkordb-best-practices.md):
+- the weekly roll-up after 90 days;
+- the archive of passages no current document holds, and of facts and Versions closed over 180 days ago, to a file with
+  an exact undo;
+- size budgets per business, with the 80% warning in `graph:hygiene` and `db:health`;
+- a supernode check.
+
+Not yet: the monthly roll-up after a year, and uploading the archive to S3 (the bucket's 35-day lifecycle would delete it).
+
 **Phase 3:** community summary nodes (one per cluster, as Graphiti does) for large brains and a calmer map.
 
 **Research:**
