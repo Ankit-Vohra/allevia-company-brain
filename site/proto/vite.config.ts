@@ -3,7 +3,7 @@
 //   build:   npx vite build --config proto/vite.config.ts      (to site/dist-proto)
 //   preview: npx vite preview --config proto/vite.config.ts    (port 4191)
 // Pages: / (home with the 3D brain; its script is a/main.ts), /a/ (an old address that forwards to /), /product/, /integrations/, /team/,
-// /security/, /faq/, /contact/, /about/ and the legal pages (/privacy/, /terms/, /cookies/, /data-deletion/). /pricing/ is hidden for now: it is built, linked and served only with ALLEVIA_SITE_PRICING=1 (shared/flags.ts).
+// /security/, /faq/, /contact/, /about/, /blog/ (the hackathon post) and the legal pages (/privacy/, /terms/, /cookies/, /data-deletion/). /pricing/ is hidden for now: it is built, linked and served only with ALLEVIA_SITE_PRICING=1 (shared/flags.ts).
 // `<!-- @section name -->` in a page is
 // replaced at build time by the shared section (shared/sections.ts), so every page is complete HTML before any script runs.
 // Tool logos are Simple Icons (CC0) drawn inline, plus Slack's local picture (shared/logos.ts). logo.dev is off unless a build sets ALLEVIA_SITE_LOGO_DEV=1

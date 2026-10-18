@@ -246,6 +246,19 @@
   .ledger td, .ledger tbody th { border: 0; padding: 0.15rem 0; }
   .ledger td[data-label]::before { content: attr(data-label) ": "; font-weight: 600; color: var(--color-ink); }
 }
+/* ---------- The blog post (blog-sections.ts): the legal reading column, with figures and one code block ---------- */
+.blog__h1 { max-width: 22ch; }
+.blog__body { max-width: 44rem; gap: 1.1rem; }
+.blog__body h2 { margin-top: 1.6rem; margin-bottom: 0; }
+.blog__body h3 { font-weight: 600; color: var(--color-ink); margin-top: 0.6rem; }
+.blog__body p, .blog__body ul { margin: 0; }
+.blog__body p + p, .blog__body p + ul, .blog__body ul + p { margin-top: 0; }
+.blog__body code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.88em; background: var(--color-paper-2); border-radius: 4px; padding: 0.05em 0.3em; }
+.blog__code { background: #1f1a15; color: #f3ead9; border-radius: var(--r-card); padding: 1rem 1.2rem; overflow-x: auto; font-size: var(--fs-small); line-height: 1.55; }
+.blog__code code { background: none; padding: 0; color: inherit; font-size: inherit; }
+.blog__fig { margin: 0.8rem 0; }
+.blog__fig img { display: block; width: 100%; height: auto; border-radius: var(--r-frame); box-shadow: 0 0 0 1px rgb(60 44 24 / 0.07), var(--shadow-whisper); }
+.blog__fig figcaption { margin-top: 0.55rem; font-size: var(--fs-small); color: var(--color-muted); }
 .about__grid { display: grid; gap: 2rem; }
 @media (min-width: 48rem) { .about__grid { grid-template-columns: 1fr 1fr; gap: 2rem 4rem; } }
 .about__col { background: #fff; border-radius: var(--r-frame); padding: 1.5rem 1.6rem; box-shadow: 0 0 0 1px rgb(60 44 24 / 0.07), var(--shadow-whisper); color: var(--color-ink-2); }

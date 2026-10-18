@@ -11,6 +11,7 @@ import { heroA, productDiagram } from "./hero-sections.ts";
 import { HOME_SECTIONS } from "./home-sections.ts";
 import { PAGE_SECTIONS } from "./page-sections.ts";
 import { LEGAL_SECTIONS } from "./legal-sections.ts";
+import { BLOG_SECTIONS } from "./blog-sections.ts";
 import { pricingVisible } from "./flags.ts";
 export { esc };
 
@@ -74,6 +75,7 @@ export const SECTIONS: Record<string, (page: string) => string> = {
   ...HOME_SECTIONS,
   ...PAGE_SECTIONS,
   ...LEGAL_SECTIONS,
+  ...BLOG_SECTIONS,
   "hero-a": () => heroA(),
   "product-diagram": () => productDiagram(),
   nav: (page) => nav(navItems().some((n) => n.id === page) ? page : "", "/"),

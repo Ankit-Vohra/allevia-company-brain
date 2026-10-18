@@ -35,7 +35,7 @@ describe("the pricing page is hidden (the default)", () => {
 
   it("is not in the list of pages that get built", () => {
     expect(protoPages()).not.toContain("pricing");
-    expect(protoPages()).toEqual(["index", "a", "product", "integrations", "team", "security", "faq", "contact", "about", "privacy", "terms", "cookies", "data-deletion"]);
+    expect(protoPages()).toEqual(["index", "a", "product", "integrations", "team", "security", "faq", "contact", "about", "blog", "privacy", "terms", "cookies", "data-deletion"]);
   });
 
   it("has no Pricing in the top bar or the footer", () => {
