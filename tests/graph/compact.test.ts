@@ -12,6 +12,8 @@ import { ensureIndexes } from "../../src/graph/indexes.js";
 import { addObservation, closeEdge, upsertEdge, upsertNode } from "../../src/graph/upsert.js";
 import { compactGraph, formatCompact, readArchive, restoreArchive, rollupId, weekStart } from "../../src/graph/compact.js";
 import { readGraph } from "../../src/graph/transfer.js";
+import { totalOf, totalsFor } from "../../src/agent/tools/observations.js";
+import type { ToolContext } from "../../src/agent/tool.js";
 import { testGraph } from "../helpers/graph.js";
 
 const DAY = 86_400_000;
@@ -42,20 +44,24 @@ describe("graph:compact (integration)", () => {
     await upsertNode(g, { type: "Business", id: "business:cafe", name: "Cafe", ...AS }, OLD);
     await upsertNode(g, { type: "Document", id: "document:seed", name: "Seed export", ...AS }, OLD);
     await upsertNode(g, { type: "Channel", id: "channel:web", name: "Website", ...AS }, OLD);
-    // two whole old weeks of daily sessions (1..7 and 8..14), one with a corrected reading (a Version)
+    // two whole old weeks of daily sessions (1..7 and 8..14, a flow with a daily window), one with a corrected reading (a
+    // Version); a week of followers (a snapshot, no window); two days of click-through rate (a rate)
     let v = 0;
-    for (const day of days("2026-06-01", 14)) await addObservation(g, { subject: "channel:web", metric: "sessions", unit: "visits", value: ++v, asOf: day, src: "document:seed" }, OLD);
-    await addObservation(g, { subject: "channel:web", metric: "sessions", unit: "visits", value: 100, asOf: "2026-06-03", src: "document:seed" }, OLD + 1000);
+    const daily = (day: string) => ({ asOf: day, windowStart: day, windowEnd: day, src: "document:seed" });
+    for (const day of days("2026-06-01", 14)) await addObservation(g, { subject: "channel:web", metric: "sessions", unit: "visits", value: ++v, ...daily(day) }, OLD);
+    await addObservation(g, { subject: "channel:web", metric: "sessions", unit: "visits", value: 100, ...daily("2026-06-03") }, OLD + 1000);
+    for (const [i, day] of days("2026-06-08", 7).entries()) await addObservation(g, { subject: "channel:web", metric: "followers", unit: "accounts", value: 100 + i, asOf: day, src: "document:seed" }, OLD);
+    for (const [day, ctr] of [["2026-06-02", 2], ["2026-06-04", 5]] as const) await addObservation(g, { subject: "channel:web", metric: "ctr", unit: "%", value: ctr, ...daily(day) }, OLD);
     // an old week an answer cited: stays daily
-    for (const day of days("2026-06-15", 3)) await addObservation(g, { subject: "channel:web", metric: "sessions", unit: "visits", value: 5, asOf: day, src: "document:seed" }, OLD);
+    for (const day of days("2026-06-15", 3)) await addObservation(g, { subject: "channel:web", metric: "sessions", unit: "visits", value: 5, ...daily(day) }, OLD);
     await upsertNode(g, { type: "Turn", id: "turn:asked", name: "How did June go?", ...AS }, OLD);
     await upsertEdge(g, { from: "turn:asked", type: "CITED", to: "obs:sessions:channel:web:2026-06-16", ...AS }, OLD);
     // a turn only looked at one of the folded readings: does not pin it
     await upsertEdge(g, { from: "turn:asked", type: "TOUCHED", to: "obs:sessions:channel:web:2026-06-02", ...AS }, OLD);
     // a lone reading in its week, a week that ends after the cut-off, and a recent reading
-    await addObservation(g, { subject: "channel:web", metric: "sessions", unit: "visits", value: 9, asOf: "2026-06-24", src: "document:seed" }, OLD);
-    for (const day of ["2026-07-17", "2026-07-18"]) await addObservation(g, { subject: "channel:web", metric: "sessions", unit: "visits", value: 3, asOf: day, src: "document:seed" }, OLD);
-    await addObservation(g, { subject: "channel:web", metric: "sessions", unit: "visits", value: 40, asOf: "2026-10-10", src: "document:seed" }, NOW);
+    await addObservation(g, { subject: "channel:web", metric: "sessions", unit: "visits", value: 9, ...daily("2026-06-24") }, OLD);
+    for (const day of ["2026-07-17", "2026-07-18"]) await addObservation(g, { subject: "channel:web", metric: "sessions", unit: "visits", value: 3, ...daily(day) }, OLD);
+    await addObservation(g, { subject: "channel:web", metric: "sessions", unit: "visits", value: 40, ...daily("2026-10-10") }, NOW);
 
     // passages: a superseded document's chunks (one cited), a chunk its document let go of, a current one
     await upsertNode(g, { type: "Document", id: "document:menu-v1", name: "Menu v1", ...AS }, OLD);
@@ -82,12 +88,26 @@ describe("graph:compact (integration)", () => {
 
   let before: string;
   let archive: string;
+  // what the agent's totals tool makes of each metric over June and over all time
+  const totals = async () => {
+    const ctx = { graph: g } as ToolContext;
+    const out: Record<string, number> = {};
+    for (const [from, to] of [["2026-06-01", "2026-06-30"], [null, null]] as const) {
+      for (const t of await totalsFor(ctx, ["channel:web"], { metrics: ["sessions", "followers", "ctr"], from, to })) out[`${t.metric} ${from ?? "all"}`] = totalOf(t);
+    }
+    return out;
+  };
+  let totalsBefore: Record<string, number>;
 
   it("plans without changing anything (a dry run)", async () => {
     before = await digest();
+    totalsBefore = await totals();
+    expect(Object.keys(totalsBefore)).toHaveLength(6);
     const r = await compactGraph(g, { now: NOW });
     const p = r.rollup!.plan;
-    expect(p.weeks.map((w) => [w.weekStart, w.readings.length])).toEqual([["2026-06-01", 7], ["2026-06-08", 7]]);
+    expect(p.weeks.map((w) => [w.metric, w.weekStart, w.readings.length])).toEqual([
+      ["ctr", "2026-06-01", 2], ["followers", "2026-06-08", 7], ["sessions", "2026-06-01", 7], ["sessions", "2026-06-08", 7],
+    ]);
     expect(p.kept).toEqual({ pinned: 3, single: 1, mixedUnits: 0, partialWeek: 2, rolledBefore: 0 });
     expect(r.rollup!.versions).toBe(1);
     expect(r.chunks!.plan.prune.sort()).toEqual(["chunk:v1-a", "chunk:v2-old"]);
@@ -109,15 +129,26 @@ describe("graph:compact (integration)", () => {
     expect(r.applied).toBe(true);
     const a = readArchive(archive);
     expect(a.nodes.length).toBe(r.removed.nodes);
-    expect(a.created).toEqual([rollupId("sessions", "channel:web", "2026-06-01"), rollupId("sessions", "channel:web", "2026-06-08")]);
+    expect(a.created).toEqual([
+      rollupId("ctr", "channel:web", "2026-06-01"), rollupId("followers", "channel:web", "2026-06-08"),
+      rollupId("sessions", "channel:web", "2026-06-01"), rollupId("sessions", "channel:web", "2026-06-08"),
+    ]);
 
-    const [w] = await g.roQuery<Record<string, unknown>>(
+    const week = async (id: string) => (await g.roQuery<Record<string, unknown>>(
       `MATCH (o:Entity {id:$id})-[m:MEASURES]->(s:Entity) WHERE ID(m) >= 0 OPTIONAL MATCH (o)-[f:SOURCED_FROM]->(d:Entity) WHERE ID(f) >= 0
-       RETURN o.value AS value, o.sum AS sum, o.min AS min, o.max AS max, o.samples AS samples, o.rollup AS rollup, o.windowStart AS ws,
-              o.windowEnd AS we, o.metricKey AS mk, s.id AS subject, d.id AS doc`, { id: rollupId("sessions", "channel:web", "2026-06-01") });
-    // days 1..7, with the 3rd corrected to 100: 1+2+100+4+5+6+7
-    expect(w!.value as number).toBeCloseTo(125 / 7, 10); // the server replies with 15 significant digits
-    expect({ ...w, value: undefined }).toEqual({ value: undefined, sum: 125, min: 1, max: 100, samples: 7, rollup: "week", ws: "2026-06-01", we: "2026-06-07", mk: "sessions", subject: "channel:web", doc: "document:seed" });
+       RETURN o.value AS value, o.aggregate AS kind, o.sum AS sum, o.min AS min, o.max AS max, o.samples AS samples, o.rollup AS rollup,
+              o.windowStart AS ws, o.windowEnd AS we, o.rollupStart AS rs, o.asOf AS asOf, o.metricKey AS mk, s.id AS subject, d.id AS doc`, { id }))[0];
+    // sessions, days 1..7 with the 3rd corrected to 100: a flow, so the week's total, and the window is the week
+    expect(await week(rollupId("sessions", "channel:web", "2026-06-01"))).toEqual({
+      value: 125, kind: "sum", sum: 125, min: 1, max: 100, samples: 7, rollup: "week", ws: "2026-06-01", we: "2026-06-07", rs: "2026-06-01",
+      asOf: "2026-06-07", mk: "sessions", subject: "channel:web", doc: "document:seed",
+    });
+    // followers: a snapshot, so the week's last value, and still no window
+    expect(await week(rollupId("followers", "channel:web", "2026-06-08"))).toMatchObject({ value: 106, kind: "last", ws: null, rs: "2026-06-08", asOf: "2026-06-14", samples: 7 });
+    // click-through rate: the mean
+    expect(await week(rollupId("ctr", "channel:web", "2026-06-01"))).toMatchObject({ value: 3.5, kind: "mean", samples: 2 });
+    // and the agent's totals are what they were
+    expect(await totals()).toEqual(totalsBefore);
 
     const left = await g.roQuery<{ id: string }>("MATCH (o:Observation) WHERE o.rollup IS NULL RETURN o.id AS id ORDER BY id");
     expect(left.map((x) => x.id.split(":").pop())).toEqual(["2026-06-15", "2026-06-16", "2026-06-17", "2026-06-24", "2026-07-17", "2026-07-18", "2026-10-10"]);
@@ -140,7 +171,7 @@ describe("graph:compact (integration)", () => {
     expect(dry.applied).toBe(false);
     const r = await restoreArchive(g, archive, { apply: true });
     expect(r.edgesSkipped).toBe(0);
-    expect(r.rollupsRemoved).toBe(2);
+    expect(r.rollupsRemoved).toBe(4);
     expect(await digest()).toBe(before);
     expect(existsSync(`${archive}.restored`)).toBe(true);
     await expect(restoreArchive(g, archive, { apply: true })).rejects.toThrow(/restored already/);

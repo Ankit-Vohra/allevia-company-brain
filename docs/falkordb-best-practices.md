@@ -305,13 +305,17 @@ New in `src/graph/compact.ts`, run as `graph:compact <tenant>`. It is a dry run 
 
 **Roll-up.**
 - Daily readings older than 90 days fold into one reading per subject, metric and ISO week.
-- `value` is the mean of the days, so the weekly point stays on the same scale as the daily points around it.
-- The roll-up also keeps sum, min, max, first, last and the sample count.
+- `value` follows the same rule the agent's totals use (`aggregateKind` in `src/graph/observations.ts`):
+  - a flow read with a daily window (clicks, spend) gets the week's total, and its window becomes the week;
+  - a rate (CTR, position) gets the mean;
+  - a snapshot (followers) gets the last value, and stays without a window.
+- The roll-up also keeps sum, min, max, first, last and the sample count. The agent's totals count it as the days it
+  holds, so a total or a mean over any range is the same before and after (tested in `tests/graph/compact.test.ts`).
 - It MEASURES the same subject and is SOURCED_FROM the same documents.
 - A week stays daily in each of these cases:
   - a reading in it is cited by an answer, evidenced by a recommendation, or a decision is based on it;
   - it has one reading;
-  - its readings mix units;
+  - its readings mix units, or mix readings with and without a window;
   - it is not wholly old.
 
 **Passages.**

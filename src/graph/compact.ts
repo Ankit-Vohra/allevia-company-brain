@@ -4,14 +4,17 @@
 // down to the export digest (tests/graph/compact.test.ts). The CLI also takes a checked tenant:export before any of it.
 //
 //   rollup   daily readings (Observations) older than `readingDays` (90) fold into one reading per subject, metric and
-//            ISO week (Monday to Sunday): `obs:<metric>:<subject>:week:<monday>`, rollup "week". Its `value` is the mean
-//            of the days (a typical day that week, so a chart or detector that mixes it with daily points stays on the
-//            same scale) and it keeps sum, min, max, first, last and samples, so a total is still exact. It MEASURES the
-//            same subject and is SOURCED_FROM the same documents, so the provenance survives. A week is left alone when:
+//            ISO week (Monday to Sunday): `obs:<metric>:<subject>:week:<monday>`, rollup "week". Its `value` is what the
+//            readers would make of the week (aggregateKind in observations.ts): the week's total for a flow read with a
+//            daily window (clicks, spend), and the window becomes the week; the mean for a rate (CTR, position); the
+//            last value for a snapshot without a window (followers), which stays without one. It also keeps sum, min, max,
+//            first, last, samples, rollupStart and rollupEnd, and the agent's totals count it as the days it holds, so a
+//            total or a mean over any range is what it was. It MEASURES the same subject and is SOURCED_FROM the same
+//            documents, so the provenance survives. A week is left alone when:
 //            any of its readings is pinned (something other than a Turn's TOUCHED points at it: an answer CITED it, a
 //            recommendation is EVIDENCED_BY it, a decision is BASED_ON it), or it has one reading only, or the readings
-//            disagree on the unit, or the week is not wholly older than the cut-off, or the reading covers more than a
-//            day (windowStart <> windowEnd). The raw readings, their Versions and every link they had go to the archive.
+//            disagree on the unit or on having a window, or the week is not wholly older than the cut-off, or a reading
+//            covers more than a day (windowStart <> windowEnd). The raw readings, their Versions and every link they had go to the archive.
 //   chunks   passages that no current document holds: the chunks of a superseded or retired document, and the chunks a
 //            document let go of when it was re-read (their HAS_CHUNK is closed). A chunk something cites is kept, and so
 //            is one that was never held at all (an ingest in progress, or a bug worth looking at, not a delete).
@@ -32,6 +35,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { MAX_PAGE, type GraphHandle } from "./client.js";
 import { metricKeyOf } from "./schema.js";
+import { aggregateKind, type Aggregate } from "./observations.js";
 import { noteGraphWrite } from "./projection.js";
 
 const DAY = 86_400_000;
@@ -107,7 +111,7 @@ export async function collect(g: GraphHandle, ids: string[]): Promise<{ nodes: A
 
 interface ReadingRow {
   id: string; metric: string; subject: string; unit: string | null; value: number; asOf: string; src: string | null;
-  conf: number | null; simulated: boolean | null; pins: number;
+  conf: number | null; simulated: boolean | null; pins: number; ws: string | null;
 }
 
 export interface WeekGroup {
@@ -146,7 +150,7 @@ export async function planRollup(g: GraphHandle, now: number, readingDays: numbe
        WITH o, count(pin) AS pinsIn
        OPTIONAL MATCH (o)-[out]->() WHERE NOT type(out) IN $ownOut
        WITH o, pinsIn, count(out) AS pinsOut
-       RETURN id(o) AS i, o.id AS id, o.metric AS metric, o.subject AS subject, o.unit AS unit, o.value AS value, o.asOf AS asOf, o.src AS src,
+       RETURN id(o) AS i, o.id AS id, o.windowStart AS ws, o.metric AS metric, o.subject AS subject, o.unit AS unit, o.value AS value, o.asOf AS asOf, o.src AS src,
               o.conf AS conf, o.simulated AS simulated, pinsIn + pinsOut AS pins ORDER BY i LIMIT $limit`,
       { after, cutoff, softIn: SOFT_IN, ownOut: OWN_OUT, limit: MAX_PAGE }, READ);
     rows.push(...page);
@@ -168,7 +172,7 @@ export async function planRollup(g: GraphHandle, now: number, readingDays: numbe
     if (sunday >= cutoff) { plan.kept.partialWeek += n; continue; }
     if (readings.some((r) => r.pins > 0)) { plan.kept.pinned += n; continue; }
     if (n < COMPACT.minWeekSamples) { plan.kept.single += n; continue; }
-    if (new Set(readings.map((r) => r.unit ?? "")).size > 1) { plan.kept.mixedUnits += n; continue; }
+    if (new Set(readings.map((r) => `${r.unit ?? ""}|${r.ws ? "window" : ""}`)).size > 1) { plan.kept.mixedUnits += n; continue; }
     readings.sort((a, b) => (a.asOf < b.asOf ? -1 : a.asOf > b.asOf ? 1 : a.id < b.id ? -1 : 1));
     candidates.push({ rollupId: rollupId(metric, subject, monday), metric, subject, unit: readings[0]!.unit, weekStart: monday, weekEnd: sunday, readings, existing: "none" });
   }
@@ -193,8 +197,8 @@ export async function planRollup(g: GraphHandle, now: number, readingDays: numbe
 
 interface RollupRow {
   id: string; metric: string; metricKey: string; subject: string; unit: string | null; name: string;
-  value: number; sum: number; min: number; max: number; first: number; last: number; samples: number;
-  windowStart: string; windowEnd: string; asOf: string; conf: number | null; simulated: boolean | null;
+  value: number; sum: number; min: number; max: number; first: number; last: number; samples: number; aggregate: Aggregate;
+  windowStart: string | null; windowEnd: string | null; rollupStart: string; rollupEnd: string; asOf: string; conf: number | null; simulated: boolean | null;
   rolledFrom: string[]; srcs: string[]; since: number;
 }
 
@@ -202,11 +206,16 @@ function rollupRow(w: WeekGroup, subjectName: string): RollupRow {
   const vals = w.readings.map((r) => r.value);
   const sum = vals.reduce((s, x) => s + x, 0);
   const confs = w.readings.map((r) => r.conf).filter((c): c is number => typeof c === "number");
+  const windowed = w.readings.every((r) => !!r.ws);
+  const kind = aggregateKind(w.metric, w.unit, windowed);
+  const last = vals[vals.length - 1]!;
   return {
     id: w.rollupId, metric: w.metric, metricKey: metricKeyOf(w.metric), subject: w.subject, unit: w.unit,
     name: `${w.metric} of ${subjectName} (week of ${w.weekStart})`,
-    value: sum / vals.length, sum, min: Math.min(...vals), max: Math.max(...vals), first: vals[0]!, last: vals[vals.length - 1]!,
-    samples: vals.length, windowStart: w.weekStart, windowEnd: w.weekEnd, asOf: w.weekEnd,
+    value: kind === "sum" ? sum : kind === "mean" ? sum / vals.length : last, aggregate: kind,
+    sum, min: Math.min(...vals), max: Math.max(...vals), first: vals[0]!, last, samples: vals.length,
+    windowStart: windowed ? w.weekStart : null, windowEnd: windowed ? w.weekEnd : null, rollupStart: w.weekStart, rollupEnd: w.weekEnd,
+    asOf: windowed ? w.weekEnd : w.readings[w.readings.length - 1]!.asOf,
     conf: confs.length ? Math.min(...confs) : null,
     simulated: w.readings.every((r) => r.simulated === true) ? true : null,
     rolledFrom: w.readings.map((r) => r.id),
@@ -230,6 +239,7 @@ async function writeRollups(g: GraphHandle, weeks: WeekGroup[], now: number): Pr
        SET o.name = r.name, o.metric = r.metric, o.metricKey = r.metricKey, o.subject = r.subject, o.unit = r.unit,
            o.value = toFloat(r.value), o.sum = toFloat(r.sum), o.min = toFloat(r.min), o.max = toFloat(r.max),
            o.first = toFloat(r.first), o.last = toFloat(r.last), o.samples = r.samples, o.rollup = 'week', o.rolledFrom = r.rolledFrom,
+           o.aggregate = r.aggregate, o.rollupStart = r.rollupStart, o.rollupEnd = r.rollupEnd,
            o.windowStart = r.windowStart, o.windowEnd = r.windowEnd, o.asOf = r.asOf, o.conf = r.conf, o.simulated = r.simulated,
            o.src = $src, o.createdAt = $now, o.updatedAt = $now, o.stateSince = $now, o.rev = 1
        CREATE (o)-[m:MEASURES {src: $src, asOf: r.asOf, since: r.since, recordedAt: $now}]->(s)
@@ -527,7 +537,7 @@ export function formatCompact(slug: string, r: CompactReport): string {
       ` (${n(r.rollup.versions)} of their versions go too)`);
     const k = p.kept;
     out.push(`    kept as they are: ${n(k.pinned)} in weeks something cites, ${n(k.single)} alone in their week, ${n(k.partialWeek)} in a week that is not wholly old,` +
-      ` ${n(k.mixedUnits)} with mixed units, ${n(k.rolledBefore)} that arrived after their week was rolled up`);
+      ` ${n(k.mixedUnits)} with mixed units or windows, ${n(k.rolledBefore)} that arrived after their week was rolled up`);
   }
   if (r.chunks) {
     const p = r.chunks.plan;

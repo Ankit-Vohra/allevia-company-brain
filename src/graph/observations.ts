@@ -9,6 +9,18 @@ import { upsertNode, type NodeResult } from "./nodes.js";
 import { upsertEdge } from "./edges.js";
 import { defined, nonEmpty, type ObservationInput } from "./validate.js";
 
+const RATE = /ctr|rate|ratio|position|avg|average|mean|percent|pct|duration|watch|cpa|cpc|cpm|score|share_of/i;
+
+export type Aggregate = "sum" | "mean" | "last";
+
+// How readings of a metric add up over a period. Rates average; readings with a window (daily signups, weekly clicks) are
+// flows and sum; snapshots without a window (followers, lifetime views) take the latest value. The agent's totals
+// (src/agent/tools/observations.ts) and the weekly roll-up (compact.ts) both use it, so a roll-up totals the same way.
+export function aggregateKind(metric: string, unit: string | null, windowed: boolean): Aggregate {
+  if (RATE.test(metric) || /%|percent|ratio|position/i.test(unit ?? "")) return "mean";
+  return windowed ? "sum" : "last";
+}
+
 export function observationId(o: Pick<ObservationInput, "metric" | "subject" | "windowEnd" | "asOf">): string {
   return `obs:${o.metric}:${o.subject}:${o.windowEnd ?? o.asOf}`;
 }

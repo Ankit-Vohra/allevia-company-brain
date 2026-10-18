@@ -4,6 +4,7 @@
 // snapshots take the latest, rates average). Also the channel lookup the content and playbook tools share.
 import { AD_CONVERSION_METRICS, AD_SPEND_METRICS } from "../../insights/ad-cpa.js";
 import type { ToolContext } from "../tool.js";
+import { aggregateKind, type Aggregate } from "../../graph/observations.js";
 import { EDGE, InputError, NODE, ro, type EdgeRow, type NodeRow } from "./common.js";
 
 export interface ObsRow { s: string; o: NodeRow; e: EdgeRow; metric: string; value: number; unit: string | null; ws: string | null; we: string | null; at: string }
@@ -40,7 +41,8 @@ export async function latestFor(ctx: ToolContext, subjects: string[], metrics?: 
 }
 
 // One metric of one subject over a window, totalled on the server (a year of daily numbers for 200 campaigns is
-// hundreds of thousands of rows). `newest` keeps the latest few observations, for nodes and provenance.
+// hundreds of thousands of rows). `newest` keeps the latest few observations, for nodes and provenance. A weekly roll-up
+// (graph:compact) counts as the days it holds: its `sum` and `samples`, so a mean over a range that crosses it stays exact.
 export interface ObsTotal {
   s: string; metric: string; unit: string | null; n: number; sum: number; last: number; windowed: boolean; simulated: boolean;
   newest: Array<{ o: NodeRow; e: EdgeRow }>;
@@ -54,7 +56,7 @@ export async function totalsFor(ctx: ToolContext, subjects: string[], opts: { me
      WITH sid, o, r, coalesce(o.windowEnd, o.asOf) AS at
      WHERE ($from IS NULL OR at >= $from) AND ($to IS NULL OR at <= $to)
      WITH sid, o.metricKey AS metric, o, r, at ORDER BY at DESC, o.id DESC
-     WITH sid, metric, count(o) AS n, sum(o.value) AS sum, collect({o: ${NODE("o")}, e: ${EDGE("r")}, v: o.value, unit: o.unit,
+     WITH sid, metric, sum(coalesce(o.samples, 1)) AS n, sum(coalesce(o.sum, o.value)) AS sum, collect({o: ${NODE("o")}, e: ${EDGE("r")}, v: o.value, unit: o.unit,
        ws: o.windowStart, sim: o.simulated}) AS xs
      RETURN sid AS s, metric, xs[0].unit AS unit, n, sum, xs[0].v AS last, all(x IN xs WHERE x.ws IS NOT NULL) AS windowed,
        any(x IN xs WHERE x.sim = true) AS simulated, [x IN xs[0..$keep] | {o: x.o, e: x.e}] AS newest`,
@@ -86,20 +88,15 @@ export function pick<T>(byMetric: Map<string, T> | undefined, aliases: readonly 
   return undefined;
 }
 
-const RATE = /ctr|rate|ratio|position|avg|average|mean|percent|pct|duration|watch|cpa|cpc|cpm|score|share_of/i;
-
-export type Aggregate = "sum" | "mean" | "last";
+export type { Aggregate };
 
 // Rates average; observations with a window (daily signups, weekly clicks) are flows and sum; snapshots without a
-// window start (followers, lifetime views) take the latest value.
+// window start (followers, lifetime views) take the latest value (src/graph/observations.ts aggregateKind).
 export function aggregateFor(metric: string, unit: string | null, rows: Array<{ ws: string | null }>): Aggregate {
   return kindOf(metric, unit, rows.every((r) => r.ws !== null && r.ws !== undefined));
 }
 
-function kindOf(metric: string, unit: string | null, windowed: boolean): Aggregate {
-  if (RATE.test(metric) || /%|percent|ratio|position/i.test(unit ?? "")) return "mean";
-  return windowed ? "sum" : "last";
-}
+const kindOf = aggregateKind;
 
 // `rows` oldest first.
 export function aggregate(kind: Aggregate, rows: Array<{ value: number }>): number {
