@@ -27,6 +27,9 @@ it. The problems FalkorDB solved:
 - **Remembering change.** Every edge carries two clocks (when it was true, when we recorded it), a source and a date.
   Facts are closed, never deleted; every tool takes `asOf`. `algo.*` can't filter on edge properties, so closed edges
   carry a high `closedCost` that SPpaths prunes with `maxCost`; ranking runs on a cached projection of current edges.
+- **Provenance down to the line.** A recorded meeting (Fireflies, Granola or a forwarded transcript) is split into line
+  chunks linked to their speakers; each decision is `BASED_ON` its line and each action points back at the line it came
+  from, so the founder can open any task and see the exact words that created it.
 - **Checking answers.** Metric readings are `Observation` nodes with a source. The server checks that every cited node,
   and every number, came from a tool in that turn.
 - **Safe agent Cypher.** The agents' raw Cypher tool runs through `GRAPH.RO_QUERY`, with a procedure allow-list and a

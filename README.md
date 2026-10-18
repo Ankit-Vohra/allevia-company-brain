@@ -45,6 +45,12 @@ page. Those are links, and links live in a graph.
 
   ![An approval card waiting for the founder's OK, with the evidence under it](docs/blog/images/approval-card.jpg)
 
+- **Meetings arrive by themselves.** A call recorded by Fireflies or Granola (through Composio), or a transcript posted to the
+  business's own meeting address, becomes minutes, decisions and tasks in the graph with nobody pasting anything. Every line of
+  the call is a `Chunk` linked to who said it; each decision is `BASED_ON` its line and each action points back at the line it
+  came from. Each action goes to the right person or AI teammate (a quote to Deal Closer, a checkout fix to Techie), and the
+  minutes email waits for the founder's OK ([`src/meetings/`](src/meetings)).
+
 - **Memory that keeps history.** Every edge carries when it was true and when it was recorded. A fact that stops being true is
   closed with a date and kept, so the brain remembers what changed and when, and every tool can answer "as of" a past date.
 
@@ -69,6 +75,7 @@ Cypher queries and graph algorithms. Every query, with its file, line and parame
 | Explaining "why" | `algo.SPpaths` joins up the path drawn under each answer. A hop-by-hop walk over `DEPENDS_ON`, `AFFECTS` and `BLOCKS` answers "what breaks if this stops". `algo.pageRank` ranks what matters; `algo.labelPropagation` groups topics; `algo.WCC` finds orphaned knowledge | [`src/graph/algorithms.ts`](src/graph/algorithms.ts) |
 | Remembering change | Every edge has two clocks (`since`/`until` for when it was true, `recordedAt`/`retiredAt` for when we recorded it), plus `src` and `asOf`. Facts are closed, never deleted; every tool takes `asOf`. Changed tasks, decisions and goals keep their old state as a `Version` node one hop away | [`src/graph/upsert.ts`](src/graph/upsert.ts) |
 | History inside graph algorithms | `algo.*` can't filter on edge properties, so closed edges carry a high `closedCost` that `SPpaths` prunes with `maxCost`; PageRank and topics run on a cached projection of current edges | [`src/graph/projection.ts`](src/graph/projection.ts) |
+| "Where did this action come from?" | A meeting's transcript is split into line `Chunk`s (`HAS_CHUNK`, each `MENTIONS` its speaker); a decision is `BASED_ON` the line it was agreed in and the line `MENTIONS` each task, so the answer cites the task and its line, and the path runs line → action. Named by the recorder's own meeting id, so a second read writes nothing | [`src/agent/meeting.ts`](src/agent/meeting.ts), [`src/meetings/lines.ts`](src/meetings/lines.ts) |
 | Checking answers | Metric readings are `Observation` nodes with a window, a date and a source, never overwritten properties. The server checks every cited node and number against that turn's tool results | [`src/agent/checks.ts`](src/agent/checks.ts) |
 | Safe agent Cypher | The agents' raw Cypher tool runs through `GRAPH.RO_QUERY`, with a procedure allow-list and a 5-second timeout | [`src/agent/tools/cypher.ts`](src/agent/tools/cypher.ts) |
 | Keeping the graph clean | A write gate refuses a node without a known type, a source and a date; shared know-how lives once in the reference graph | [`src/graph/gate.ts`](src/graph/gate.ts), [`src/graph/reference.ts`](src/graph/reference.ts) |
