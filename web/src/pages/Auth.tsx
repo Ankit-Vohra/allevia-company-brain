@@ -87,7 +87,11 @@ function useSubmit(run: () => Promise<void>) {
 }
 
 // The demo business, read-only, without an account (only when the server has one)
-const DemoLink = ({ demo }: { demo: boolean }) => (demo ? <a href="/?demo=1">See the demo</a> : null);
+// The demo opens on Blue Tokai (real public data plus labelled sample numbers); a server without it falls back to its first business.
+const DEMO_HREF = "/?demo=1&tenant=bluetokai";
+const DemoLink = ({ demo }: { demo: boolean }) => (demo ? <a href={DEMO_HREF}>See the demo</a> : null);
+/** On the sign-in page, above the form: a visitor (or a judge) can look around without an account. */
+const DemoButton = ({ demo }: { demo: boolean }) => (demo ? <a className="btn btn-ghost auth-demo" href={DEMO_HREF}>See the live demo, no sign-in needed</a> : null);
 
 // ---------------------------------------------------------------- sign in
 
@@ -105,6 +109,7 @@ function LoginPage({ demo }: { demo: boolean }) {
       lede="Your business, your team and everything they know."
       foot={<><span>New here? <Link to="/signup">Create an account</Link></span><DemoLink demo={demo} /></>}
     >
+      <DemoButton demo={demo} />
       <form className="auth-form" onSubmit={submit} aria-label="Sign in">
         <Field label="Email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
         <PasswordField label="Password" autoComplete="current-password" value={password} onChange={setPassword} />

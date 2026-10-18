@@ -3,7 +3,7 @@
 # Asks the server to SAVE, checks the snapshot with redis-check-rdb, and keeps the last 7 good copies in
 # ~/allevia-db-backups/nightly. A snapshot that fails the check is kept aside and never rotated in.
 set -eu
-PATH=/Users/ankit/.nvm/versions/node/v24.18.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
+PATH="$HOME/.nvm/versions/node/v24.18.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 DIR="$HOME/allevia-db-backups/nightly"
 mkdir -p "$DIR"
 STAMP=$(date +%Y%m%d-%H%M%S)

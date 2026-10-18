@@ -272,7 +272,7 @@ Honest limits:
 ## Built in four days
 
 Allevia was built from 15 to 18 October 2026, during the hackathon. The first commit is at 01:08 IST on 15 October, and the
-history has 833 commits: see the [commit history](https://github.com/Ankit-Vohra/allevia-company-brain/commits/). Claude Code,
+history has more than 800 commits: see the [commit history](https://github.com/Ankit-Vohra/allevia-company-brain/commits/). Claude Code,
 with subagents in parallel git worktrees, wrote most of the code, tests and docs under the founder's direction and review;
 Claude, through a claude.ai subscription login, runs the 13 agents. Reused, not written here: npm libraries and the vendored
 third-party data and skills credited in [`NOTICE.md`](NOTICE.md).

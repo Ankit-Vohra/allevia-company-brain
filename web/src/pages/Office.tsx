@@ -40,11 +40,12 @@ const NUMBER_WORDS = ["Nothing", "One thing", "Two things", "Three things"];
 
 /** The stand-up as the office acts it out: who walks to the table, what each says, who gets a brief from The Chief. */
 export function officeStandup(s: Standup): OfficeStandup {
-  const drafted = s.items.filter((i) => i.status === "drafted" && i.approvalId);
+  // a showcase business's stand-up comes back masked, without its attendees (18 Oct: the office was blank for Aamdani and AVS)
+  const drafted = (s.items ?? []).filter((i) => i.status === "drafted" && i.approvalId);
   const n = drafted.length;
   return {
     id: s.id,
-    attendees: s.attendees.length ? s.attendees : ["chief-of-staff"],
+    attendees: s.attendees?.length ? s.attendees : ["chief-of-staff"],
     lines: [
       { agent: "chief-of-staff", text: n ? `Morning, team. ${NUMBER_WORDS[n] ?? `${n} things`} worth doing today.` : "Morning, team. Nothing worth the owner's time today." },
       ...drafted.map((i) => ({ agent: i.agent, text: `I'll draft ${lowerFirst(i.title)}.` })),

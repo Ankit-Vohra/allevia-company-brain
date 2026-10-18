@@ -47,3 +47,6 @@
 .account-list a:hover { text-decoration: underline; }
 .account-form .btn { justify-self: start; min-height: 42px; }
 .account-page .btn-ghost { justify-self: start; }
+
+/* "See the live demo" above the sign-in form: a full-width quiet button, so a visitor sees it before the fields */
+.auth-demo { display: flex; justify-content: center; width: 100%; margin: 0.25rem 0 1rem; }

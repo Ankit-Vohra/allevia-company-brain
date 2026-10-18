@@ -1,7 +1,7 @@
-# Allevia on FalkorDB: blog post draft
+# Allevia on FalkorDB: the blog post
 
-Draft for the founder's OK. Nothing here has been published. The site's /blog/ page shows everything after the first line
-that is only `---`.
+Published at https://ankit-vohra.github.io/allevia-site/blog/ (18 October 2026). The site's /blog/ page shows everything after
+the first line that is only `---`.
 
 **Title options**
 

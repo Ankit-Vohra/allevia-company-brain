@@ -1,6 +1,6 @@
 # Submission form: the three FalkorDB answers
 
-Draft for the founder's OK. Nothing here has been posted. Each answer is ready to paste; the backticks can stay or go,
+Each answer is ready to paste; the backticks can stay or go,
 depending on whether the form shows Markdown.
 
 Where each claim comes from: `docs/falkordb-queries.md` (every query, with file and line, held to the code by a test),

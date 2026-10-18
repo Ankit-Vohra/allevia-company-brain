@@ -1,4 +1,4 @@
-# Hackathon submission (draft for the founder's OK)
+# Hackathon submission
 
 Graph Hacks: Context for AI Agents (FalkorDB). Deadline 18 October 2026, 23:59 IST. The form was updated on 18 October;
 every field below is in its order, ready to paste.
@@ -50,13 +50,13 @@ Tick all three:
 
 ### Repository
 
-https://github.com/Ankit-Vohra/allevia-company-brain. Since 18 October it carries the full build history (833 commits from
+https://github.com/Ankit-Vohra/allevia-company-brain. Since 18 October it carries the full build history (more than 800 commits from
 15 October 01:08 IST), cleaned of real-business screenshots and identifiers after a full audit.
 
 ### Demo video (public or unlisted YouTube link)
 
 The demo is ready to upload (under the 3-minute limit), with a title, a description with chapters and a thumbnail in
-`/Users/ankit/allevia-video/v2/upload/`. The founder uploads it, then the link goes here and in the form.
+the founder's upload folder. The founder uploads it, then the link goes here and in the form.
 
 ### Live demo or deployment
 
