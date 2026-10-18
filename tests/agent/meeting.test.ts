@@ -185,7 +185,13 @@ describe("remember this meeting, end to end (test database)", () => {
     // the meeting, four decisions and four tasks, each sourced to it and dated the day of the meeting
     const made = await g.roQuery<{ type: string; n: number }>(
       "MATCH (x:Entity) WHERE x.src = $doc WITH [l IN labels(x) WHERE l <> 'Entity' AND l <> 'Searchable'][0] AS type, x RETURN type, count(x) AS n ORDER BY type", { doc: doc.id });
-    expect(Object.fromEntries(made.map((m) => [m.type, m.n]))).toEqual({ Client: 1, Decision: 4, Meeting: 1, Person: 2, Task: 4 });
+    expect(Object.fromEntries(made.map((m) => [m.type, m.n]))).toEqual({ Chunk: 14, Client: 1, Decision: 4, Meeting: 1, Person: 2, Task: 4 });
+    // every line of the notes is a Chunk of them; each task points back at the line it was said in (no line numbers from the
+    // model here, so the line sharing the most words is taken): Aman's promise of the grinder model is his own line
+    const grinder = await one<{ ord: number; text: string; who: string | null }>(
+      "MATCH (c:Chunk)-[m:MENTIONS]->(t:Task) WHERE m.until IS NULL AND t.name = 'Send the grinder model' OPTIONAL MATCH (c)-[s:MENTIONS]->(p:Person) WHERE s.until IS NULL RETURN c.ord AS ord, c.text AS text, p.name AS who");
+    expect(grinder.text).toMatch(/^Aman: I'll send you our grinder model/);
+    expect((await one<{ n: number }>("MATCH (d:Entity:Document {id:$id})-[h:HAS_CHUNK]->(c:Chunk) WHERE h.until IS NULL RETURN count(c) AS n", { id: doc.id })).n).toBe(14);
     const asOf = await g.roQuery<{ asOf: string }>("MATCH (x:Entity) WHERE x.src = $doc RETURN DISTINCT x.asOf AS asOf", { doc: doc.id });
     expect(asOf.map((a) => a.asOf)).toEqual(["2026-10-16"]);
     // every edge the notes made carries them as its source

@@ -28,6 +28,9 @@
 //   - Memory Keeper also writes the minutes: a Document {kind:'minutes'} SOURCED_FROM the transcript, which MENTIONS the meeting,
 //     its decisions and its tasks, and says who picks up each action item;
 //        minutes -SOURCED_FROM-> transcript      Meeting -SOURCED_FROM-> transcript      Memory Keeper -AUTHORED-> minutes
+//   - (both paths) every non-empty line of the notes is a Chunk of the transcript, so each decision and action points at the line of
+//     the call it came from (src/meetings/lines.ts):
+//        transcript -HAS_CHUNK-> line, line -MENTIONS-> its speaker, Decision -BASED_ON-> line, line -MENTIONS-> Decision | Task
 //   - the card is the minutes email to everyone on the call (written from the minutes, no second model call), not Deal Closer's
 //     follow-up; the card's reasoning lists where each action item went, for the owner reading Needs your OK.
 import type { AgentEvent, EdgeRef, NodeRef } from "../../shared/contracts.js";
@@ -47,6 +50,7 @@ import { TouchedSet, type ToolContext } from "./tool.js";
 import { runPropose } from "./tools/actions.js";
 import { agentName, routeAction } from "../meetings/route.js";
 import type { Attendee, RecorderId } from "../meetings/recorders.js";
+import { callLines, linesFor, numberedNotes } from "../meetings/lines.js";
 import { remember } from "./tools/memory.js";
 import { ftEntities, getNodes, ro, serial, toRef } from "./tools/common.js";
 import type { TurnOutcome } from "./orchestrator.js";
@@ -87,14 +91,15 @@ export interface Extracted {
   people: MeetingPerson[];            // named but not on the call
   companies: Array<{ name: string; relation: "client" | "supplier" | "partner" | "competitor" | "other" }>;
   products: string[];
-  decisions: Array<{ text: string; decidedBy: string[]; about: string[] }>;
-  tasks: Array<{ text: string; owner: string; due: string; about: string[] }>;
+  decisions: Array<{ text: string; decidedBy: string[]; about: string[]; lines?: number[] }>;
+  tasks: Array<{ text: string; owner: string; due: string; about: string[]; lines?: number[] }>;
   numbers: string[];                  // "40 kg a month", "Rs 1,150 per kg"
   dates: Array<{ text: string; date: string }>;
 }
 
 const str = { type: "string" };
 const strs = { type: "array", items: str };
+const INTS = { type: "array", items: { type: "integer" } };
 const PERSON = {
   type: "object", additionalProperties: false, required: ["name", "email", "company", "role", "side"],
   properties: { name: str, email: str, company: str, role: str, side: { type: "string", enum: ["us", "them", "unknown"] } },
@@ -108,8 +113,8 @@ export const MEETING_SCHEMA = {
     people: { type: "array", items: PERSON },
     companies: { type: "array", items: { type: "object", additionalProperties: false, required: ["name", "relation"], properties: { name: str, relation: { type: "string", enum: ["client", "supplier", "partner", "competitor", "other"] } } } },
     products: strs,
-    decisions: { type: "array", items: { type: "object", additionalProperties: false, required: ["text", "decidedBy", "about"], properties: { text: str, decidedBy: strs, about: strs } } },
-    tasks: { type: "array", items: { type: "object", additionalProperties: false, required: ["text", "owner", "due", "about"], properties: { text: str, owner: str, due: str, about: strs } } },
+    decisions: { type: "array", items: { type: "object", additionalProperties: false, required: ["text", "decidedBy", "about", "lines"], properties: { text: str, decidedBy: strs, about: strs, lines: INTS } } },
+    tasks: { type: "array", items: { type: "object", additionalProperties: false, required: ["text", "owner", "due", "about", "lines"], properties: { text: str, owner: str, due: str, about: strs, lines: INTS } } },
     numbers: strs,
     dates: { type: "array", items: { type: "object", additionalProperties: false, required: ["text", "date"], properties: { text: str, date: str } } },
   },
@@ -126,6 +131,12 @@ const list = (v: unknown, n: number, each = 120): string[] =>
   Array.isArray(v) ? [...new Set(v.map((x) => line(x, each)).filter(Boolean))].slice(0, n) : [];
 const day = (v: unknown): string => { const s = line(v, 10); const ms = ISO_DAY.test(s) ? Date.parse(`${s}T00:00:00Z`) : NaN; return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === s ? s : ""; };
 const objs = (v: unknown): Array<Record<string, unknown>> => (Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => !!x && typeof x === "object") : []);
+
+/** The line numbers the model gave, when it gave any (whole numbers from 1, at most three). */
+const lineNos = (v: unknown): { lines?: number[] } => {
+  const ns = Array.isArray(v) ? [...new Set(v.filter((n): n is number => Number.isInteger(n) && n >= 1))].slice(0, 3) : [];
+  return ns.length ? { lines: ns } : {};
+};
 
 function person(o: Record<string, unknown>): MeetingPerson | null {
   const name = line(o.name, 80);
@@ -150,8 +161,8 @@ export function normaliseExtracted(raw: unknown): Extracted | null {
     attendees, people,
     companies: objs(r.companies).map((c) => ({ name: line(c.name, 80), relation: RELATIONS.find((x) => x === c.relation) ?? "other" })).filter((c) => c.name).slice(0, CAP.companies),
     products: list(r.products, CAP.products, 80),
-    decisions: objs(r.decisions).map((d) => ({ text: line(d.text), decidedBy: list(d.decidedBy, CAP.about, 80), about: list(d.about, CAP.about, 80) })).filter((d) => d.text).slice(0, CAP.decisions),
-    tasks: objs(r.tasks).map((t) => ({ text: line(t.text), owner: line(t.owner, 80), due: day(t.due), about: list(t.about, CAP.about, 80) })).filter((t) => t.text).slice(0, CAP.tasks),
+    decisions: objs(r.decisions).map((d) => ({ text: line(d.text), decidedBy: list(d.decidedBy, CAP.about, 80), about: list(d.about, CAP.about, 80), ...lineNos(d.lines) })).filter((d) => d.text).slice(0, CAP.decisions),
+    tasks: objs(r.tasks).map((t) => ({ text: line(t.text), owner: line(t.owner, 80), due: day(t.due), about: list(t.about, CAP.about, 80), ...lineNos(t.lines) })).filter((t) => t.text).slice(0, CAP.tasks),
     numbers: list(r.numbers, CAP.numbers),
     dates: objs(r.dates).map((d) => ({ text: line(d.text, 120), date: day(d.date) })).filter((d) => d.text && d.date).slice(0, CAP.dates),
   };
@@ -174,11 +185,12 @@ export function extractionPrompt(o: { notes: string; business: string; today: st
     "- companies: other businesses named, with how they relate to the owner's business; products: the owner's products or services named;",
     "- decisions: what was agreed, one per item, as a short sentence that says it fully (with its numbers), who decided (names), and the names it is about;",
     "- tasks: each thing someone will do, as a short imperative (\"Send the written quote\"), its owner (a name from the meeting, or \"us\" when the business will do it and nobody is named), due as YYYY-MM-DD when a day is said (else \"\"), and the names it is about;",
-    "- numbers: every quantity, price or amount, as written with its unit (\"40 kg a month\"); dates: every date said, with what it is for.",
+    "- numbers: every quantity, price or amount, as written with its unit (\"40 kg a month\"); dates: every date said, with what it is for;",
+    "- for each decision and task, lines: the numbers in front of the lines (\"18| ...\") where it was said or agreed, at most three, the most direct first.",
     "Use \"\" or [] when something is not in the text.",
     "",
     "<notes>",
-    o.notes,
+    numberedNotes(o.notes),
     "</notes>",
   ].join("\n");
   return { system, prompt };
@@ -220,7 +232,7 @@ export function fallbackFollowUp(o: { business: string; meeting: Extracted; name
  */
 export function minutesText(o: {
   meeting: Extracted; date: string; recorderName: string; sample: boolean; attendees: string[];
-  tasks: Array<{ text: string; ownerName: string; due: string; agent?: string }>; forEmail?: boolean;
+  tasks: Array<{ text: string; ownerName: string; due: string; agent?: string; line?: number; said?: string }>; forEmail?: boolean;
 }): string {
   const m = o.meeting;
   const out = [
@@ -233,7 +245,8 @@ export function minutesText(o: {
   if (o.tasks.length) {
     out.push("", "Action items", ...o.tasks.map((t) => {
       const who = t.ownerName === "your team" ? "us" : t.ownerName;
-      return `- ${t.text} (${who}${t.due ? `, by ${dayWords(t.due)}` : ""})${!o.forEmail && t.agent ? ` → ${nameOf(t.agent)}` : ""}`;
+      const item = `- ${t.text} (${who}${t.due ? `, by ${dayWords(t.due)}` : ""})${!o.forEmail && t.agent ? ` → ${nameOf(t.agent)}` : ""}`;
+      return !o.forEmail && t.said ? `${item}\n  from line ${t.line}: "${t.said}"` : item;
     }));
   }
   if (m.numbers.length) out.push("", "Numbers", ...m.numbers.map((x) => `- ${x}`));
@@ -538,14 +551,31 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
   if (forDeal) edge(meetingId, "MEETING_FOR", forDeal.dealId ?? forDeal.leadId);
   for (const r of [...people, ...companies, ...products]) edge(docId, "MENTIONS", r.id);
 
+  // the lines of the call: each a Chunk of the transcript, linked to who said it, so a decision or an action can point at its line
+  const lines = callLines(notesRaw);
+  const chunkOf = (ord: number): string => `chunk:${docId.replace(/^document:/, "")}:${ord}`;
+  const lineText = new Map<number, string>(); // line number -> its cleaned words
+  for (const l of lines) {
+    const text = cleanText(l.text, new Removed()); // the Document's own cleaning already counted what was taken out
+    lineText.set(l.ord, text);
+    const id = chunkOf(l.ord);
+    node({ type: "Chunk", id, name: `Line ${l.ord} of the call: ${text.slice(0, 90)}`, props: { text, ord: l.ord, ...(l.speaker ? { speaker: l.speaker } : {}) }, src: docId, asOf });
+    edge(docId, "HAS_CHUNK", id);
+    const who = l.speaker ? lookup(l.speaker) : undefined;
+    if (who?.id.startsWith("person:")) edge(id, "MENTIONS", who.id);
+  }
+  const quote = (ord: number): string => { const t = lineText.get(ord) ?? ""; return t.length > 160 ? `${t.slice(0, 157)}…` : t; };
+
   const decisionIds: string[] = [];
   for (const dec of meeting.decisions) {
     const id = entityId("Decision", `${date} ${dec.text}`);
     decisionIds.push(id);
-    node({ type: "Decision", id, name: dec.text.slice(0, 160), summary: dec.text, props: { status: "accepted", decidedAt: date, text: dec.text, kind: "meeting" }, src: docId, asOf });
+    const from = linesFor(dec, lines, dec.decidedBy[0]);
+    node({ type: "Decision", id, name: dec.text.slice(0, 160), summary: dec.text, props: { status: "accepted", decidedAt: date, text: dec.text, kind: "meeting", ...(from.length ? { line: from[0]!, said: quote(from[0]!) } : {}) }, src: docId, asOf });
     edge(id, "PART_OF", meetingId);
     edge(id, "SOURCED_FROM", docId);
     edge(id, "BASED_ON", docId);
+    for (const ord of from) { edge(id, "BASED_ON", chunkOf(ord)); edge(chunkOf(ord), "MENTIONS", id); }
     for (const who of dec.decidedBy) { const r = lookup(who); if (r && r.id.startsWith("person:")) edge(r.id, "DECIDED", id, { at: date }); }
     const about = aboutIds(dec.about);
     for (const to of about.length ? about : them.flatMap((p) => { const l = leads.get(p.id); return [p.id, ...(l ? [l.dealId ?? l.leadId] : [])]; })) edge(id, "AFFECTS", to);
@@ -555,7 +585,7 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
   t0 = Date.now();
   emit({ type: "agent_start", agent: TASKMASTER, task: steps[1]!.task });
   const taskmaster = await ensureAgentNode(d.graph, TASKMASTER, d.now);
-  const tasks: Array<{ id: string; text: string; owner: string | null; ownerName: string; due: string; agent?: string; why?: string }> = [];
+  const tasks: Array<{ id: string; text: string; owner: string | null; ownerName: string; due: string; agent?: string; why?: string; chunk?: string; line?: number; said?: string }> = [];
   const agentNodes = new Map<string, string>(); // roster id -> Agent node id
   for (const t of meeting.tasks) {
     const id = entityId("Task", `${t.text} ${meetingId}`);
@@ -568,11 +598,13 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
     const side = isUs ? "us" : people.find((p) => p.id === ownerRec?.id)?.side ?? "unknown";
     const routed = routeAction({ text: t.text, side, person: !isUs && !!ownerRec });
     if (routed && !agentNodes.has(routed.agent)) agentNodes.set(routed.agent, await ensureAgentNode(d.graph, routed.agent, d.now));
+    const from = linesFor(t, lines, isUs ? undefined : ownerWord);
     node({
       type: "Task", id, name: t.text.slice(0, 120), summary: t.text,
       props: {
         status: "open", kind: "meeting_task", ...(t.due ? { due: t.due } : {}), ...(Number.isFinite(dueMs) ? { dueAt: dueMs } : {}),
         ...(routed ? { routedTo: routed.agent, routedWhy: routed.why, ...(ownerRec ? { forName: ownerWord } : {}) } : {}),
+        ...(from.length ? { line: from[0]!, said: quote(from[0]!) } : {}),
       },
       src: docId, asOf,
     });
@@ -584,8 +616,13 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
     else if (owner) edge(owner, "OWNS", id);
     if (routed && ownerRec) edge(id, "MENTIONS", ownerRec.id);
     for (const to of aboutIds(t.about)) edge(id, "MENTIONS", to);
-    tasks.push({ id, text: t.text, owner, ownerName: isUs ? "your team" : ownerWord, due: t.due, ...(routed ? { agent: routed.agent, why: routed.why } : {}) });
+    for (const ord of from) edge(chunkOf(ord), "MENTIONS", id); // the line of the call this action came from
+    tasks.push({
+      id, text: t.text, owner, ownerName: isUs ? "your team" : ownerWord, due: t.due, ...(routed ? { agent: routed.agent, why: routed.why } : {}),
+      ...(from.length ? { chunk: chunkOf(from[0]!), line: from[0]!, said: quote(from[0]!) } : {}),
+    });
   }
+  const taskChunks = [...new Set(tasks.map((t) => t.chunk).filter((c): c is string => !!c))];
   emit({ type: "agent_status", agent: TASKMASTER, text: `Filing ${tasks.length} task${tasks.length === 1 ? "" : "s"}` });
   const routedTasks = tasks.filter((t) => t.agent);
   if (routedTasks.length) {
@@ -672,7 +709,7 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
       why: cap
         ? `Minutes of ${meeting.title} (${dayWords(date)}), from the ${cap.recorderName} transcript: ${meeting.decisions.length} decision${meeting.decisions.length === 1 ? "" : "s"}, ${tasks.length} action item${tasks.length === 1 ? "" : "s"}.${handedOver.length ? ` Who picks each one up: ${handedOver.join("; ")}.` : ""}`
         : `Follow-up to ${meeting.title} (${dayWords(date)}): ${meeting.decisions.length} decision${meeting.decisions.length === 1 ? "" : "s"} and ${tasks.length} task${tasks.length === 1 ? "" : "s"} from the notes.`,
-      kind: "email_send", area: cap ? "ops" : "sales", evidence: [meetingId, ...(minutesId ? [minutesId] : []), docId],
+      kind: "email_send", area: cap ? "ops" : "sales", evidence: [meetingId, ...(minutesId ? [minutesId] : []), docId, ...(cap ? taskChunks.slice(0, 8) : [])],
       payload: {
         title: draft.subject, subject: draft.subject, to, body: draft.body, send,
         target: send ? `Email to ${to.join(", ")}` : `Draft email to ${toNames.join(", ") || "the people on the call"} (no address in the notes: add it when you edit)`,
@@ -690,7 +727,7 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
   emit({ type: "agent_done", agent: writer, ms: Date.now() - t0, ok: !!approvalId });
 
   // What the turn saw (its citations, its numbers), and the path on the map.
-  const ids = [docId, ...(minutesId ? [minutesId] : []), meetingId, ...decisionIds, ...tasks.map((t) => t.id), ...people.map((p) => p.id), ...companies.map((c) => c.id), ...products.map((p) => p.id),
+  const ids = [docId, ...(minutesId ? [minutesId] : []), meetingId, ...taskChunks, ...decisionIds, ...tasks.map((t) => t.id), ...people.map((p) => p.id), ...companies.map((c) => c.id), ...products.map((p) => p.id),
     ...[...leads.values()].map((l) => l.dealId ?? l.leadId), ...(memoryId ? [memoryId] : []), ...(approvalId ? [approvalId] : [])];
   const found = await getNodes(ctx, ids);
   const ref = (id: string): NodeRef | undefined => { const n = found.get(id); return n ? toRef(n) : undefined; };
@@ -709,7 +746,8 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
     },
     nodes: refs, edges: edgeRefs, sources: [{ id: docId, title: `Meeting notes: ${meeting.title}`, asOf: isoDate(d.now) }],
   });
-  const pathIds = [docId, ...(minutesId ? [minutesId] : []), meetingId, ...decisionIds, ...tasks.map((t) => t.id), ...them.map((p) => p.id)].slice(0, 14);
+  // the path: the transcript, the minutes, the meeting, its decisions, and each action with the line of the call it came from
+  const pathIds = [docId, ...(minutesId ? [minutesId] : []), meetingId, ...decisionIds, ...tasks.flatMap((t) => [...(t.chunk ? [t.chunk] : []), t.id]), ...them.map((p) => p.id)].slice(0, 28);
   const pathNodes = pathIds.map(ref).filter((r): r is NodeRef => !!r);
   const onPath = new Set(pathNodes.map((n) => n.id));
   const path = { nodes: pathNodes, edges: edgeRefs.filter((e) => onPath.has(e.from) && onPath.has(e.to)) };
@@ -747,7 +785,7 @@ export function meetingAnswer(o: {
   meeting: Extracted; date: string; sample: boolean; removed: string;
   counts: { decisions: number; tasks: number; people: number; companies: number; products: number; peopleAndCompanies: number; numbersAndDates: number; linkedToRecords: number };
   decisions: Array<{ id: string; text: string }>;
-  tasks: Array<{ id: string; text: string; ownerName: string; due: string; agent?: string }>;
+  tasks: Array<{ id: string; text: string; ownerName: string; due: string; agent?: string; chunk?: string }>;
   names: string[]; to: string[]; approvalId?: string;
   recorder?: string; toNames?: string[]; minutesId?: string;   // a recorded meeting: who recorded it, who the minutes go to
 }): string {
@@ -763,7 +801,7 @@ export function meetingAnswer(o: {
   ];
   if (o.sample) out.push("This was a sample transcript, so it's saved as sample data, not a real call.");
   if (o.decisions.length) out.push("", "**Decided**", ...o.decisions.map((d) => `- ${d.text} [[${d.id}]]`));
-  if (o.tasks.length) out.push("", o.recorder ? "**Who does what**" : "**To do**", ...o.tasks.map((t) => `- ${t.text}: ${t.ownerName}${t.due ? `, by ${dayWords(t.due)}` : ""}${t.agent ? ` → ${nameOf(t.agent)}` : ""} [[${t.id}]]`));
+  if (o.tasks.length) out.push("", o.recorder ? "**Who does what**" : "**To do**", ...o.tasks.map((t) => `- ${t.text}: ${t.ownerName}${t.due ? `, by ${dayWords(t.due)}` : ""}${t.agent ? ` → ${nameOf(t.agent)}` : ""} [[${t.id}]]${t.chunk ? ` [[${t.chunk}]]` : ""}`));
   const handed = [...new Set(o.tasks.map((t) => t.agent).filter((a): a is string => !!a))];
   if (handed.length) out.push("", `Each → is on that teammate's to-do list now: ${handed.map(nameOf).join(", ")}. The rest stays with the person named, and Taskmaster keeps it on the list.`);
   out.push("", "**Waiting for your OK**");

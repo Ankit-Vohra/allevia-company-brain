@@ -10,12 +10,13 @@ import { FakeRuntime } from "../../src/agent/runtime.js";
 import { toolsByName } from "../../src/agent/tools/index.js";
 import type { ConnectionsPort } from "../../src/connections/service.js";
 import { registerSampleTenant, sampleConnections } from "../../src/demo/sample/connections.js";
-import { SAMPLE_FIREFLIES_ID } from "../../src/demo/sample/fireflies.js";
+import { SAMPLE_FIREFLIES_ID, sampleFirefliesTranscript } from "../../src/demo/sample/fireflies.js";
 import { closeAll, openGraphByName, type GraphHandle } from "../../src/graph/client.js";
 import { ensureIndexes } from "../../src/graph/indexes.js";
 import { upsertNode } from "../../src/graph/upsert.js";
 import { captureInbound, captureMeetings, connectWords } from "../../src/meetings/capture.js";
-import { fireflies } from "../../src/meetings/recorders.js";
+import { fireflies, firefliesMeeting, notesOf } from "../../src/meetings/recorders.js";
+import { callLines } from "../../src/meetings/lines.js";
 import { captureDue } from "../../src/meetings/schedule.js";
 import { testGraphName } from "../helpers/graph.js";
 
@@ -25,6 +26,9 @@ const RITIKA = "ritika@kettleandcrumb.example";
 const AMAN = "aman@kettleandcrumb.example";
 
 // What the model returns for the sample follow-up call (the shape MEETING_SCHEMA asks for).
+// The line numbers Memory Keeper reads ("N| ..."), as the model would give them: the decaf price is said on this line of the notes.
+const DECAF_LINE = callLines(notesOf(firefliesMeeting(sampleFirefliesTranscript())!)).find((l) => l.text.includes("Decaf is Rs 1,250 per kg"))!.ord;
+
 const EXTRACTED = {
   title: "Follow-up call with Kettle & Crumb",
   date: "2026-10-17",
@@ -39,7 +43,7 @@ const EXTRACTED = {
   companies: [{ name: "Kettle & Crumb", relation: "client" }],
   products: [],
   decisions: [
-    { text: "Add 5 kg a month of decaf at Rs 1,250 per kg, 45 kg a month in total", decidedBy: ["Ritika Menon"], about: ["Kettle & Crumb"] },
+    { text: "Add 5 kg a month of decaf at Rs 1,250 per kg, 45 kg a month in total", decidedBy: ["Ritika Menon"], about: ["Kettle & Crumb"], lines: [DECAF_LINE, 999] },
     { text: "Payment 15 days after each delivery", decidedBy: ["Ritika Menon"], about: ["Kettle & Crumb"] },
     { text: "A joint post on launch day, Monday 2 November", decidedBy: [], about: ["Kettle & Crumb"] },
   ],
@@ -121,6 +125,20 @@ describe("meeting capture, end to end (test database)", () => {
       ["Send the revised quote with the decaf and the 15-day terms", "Deal Closer"],
       ["Share the opening-week menu", "Aman Shetty"],
     ]);
+    // graph-native provenance: every line of the call is a Chunk of the transcript, linked to who said it; the decaf decision is
+    // BASED_ON the line Memory Keeper named (the made-up line 999 is ignored), and the checkout fix points back at Aman's line
+    const decaf = await one<{ ord: number; who: string; line: number; said: string }>(
+      "MATCH (d:Decision)-[b:BASED_ON]->(c:Chunk)-[s:MENTIONS]->(p:Person) WHERE b.until IS NULL AND s.until IS NULL AND d.name STARTS WITH 'Add 5 kg' RETURN c.ord AS ord, p.name AS who, d.line AS line, d.said AS said");
+    expect(decaf).toMatchObject({ ord: DECAF_LINE, who: "Wholesale lead (sample role)", line: DECAF_LINE });
+    expect(decaf.said).toContain("Decaf is Rs 1,250 per kg");
+    const fix = await one<{ text: string; who: string; said: string }>(
+      "MATCH (c:Chunk)-[m:MENTIONS]->(t:Task) WHERE m.until IS NULL AND t.name STARTS WITH 'Fix the wholesale checkout' MATCH (c)-[s:MENTIONS]->(p:Person) WHERE s.until IS NULL RETURN c.text AS text, p.name AS who, t.said AS said");
+    expect(fix.who).toBe("Aman Shetty");
+    expect(fix.text).toContain("coupon failed at checkout");
+    expect(fix.said).toBe(fix.text);
+    expect((await one<{ n: number }>("MATCH (d:Entity:Document {id:$id})-[h:HAS_CHUNK]->(c:Chunk) WHERE h.until IS NULL RETURN count(c) AS n", { id: ids.docId })).n).toBeGreaterThan(20);
+    expect(minutes.text).toContain('  from line ');
+    expect(runtime.runs[0]!.prompt).toMatch(new RegExp(`\\n${DECAF_LINE}\\| Wholesale lead \\(sample role\\): We can\\. Decaf`));
     // on each teammate's to-do list
     const todo = await g.roQuery<{ agent: string; n: number }>(
       "MATCH (a:Entity:Agent)-[r:OWNS]->(t:Task {status:'open'}) WHERE r.until IS NULL WITH a, count(t) AS n RETURN a.name AS agent, n ORDER BY agent, a.id");
@@ -147,7 +165,7 @@ describe("meeting capture, end to end (test database)", () => {
     expect(turn.session).toBe(turn.q);
     expect(turn.answer).toMatch(/^Fireflies brought in "Kettle & Crumb follow-up call \(sample\)" with Ritika Menon and Aman Shetty on Sat 17 Oct, so the team wrote the minutes \[\[document:/);
     expect(turn.answer).toContain("**Who does what**");
-    expect(turn.answer).toMatch(/- Fix the wholesale checkout so the reorder coupon works: your team, by Wed 21 Oct → Techie \[\[task:/);
+    expect(turn.answer).toMatch(/- Fix the wholesale checkout so the reorder coupon works: your team, by Wed 21 Oct → Techie \[\[task:[^\]]+\]\] \[\[chunk:transcript-fireflies-sample-ff-kettle-crumb-follow-up:\d+\]\]/);
     expect(turn.answer).toContain("Memory Keeper wrote the minutes email to Ritika Menon, Aman Shetty, Wholesale lead (sample role), Marketing lead (sample role). Nothing goes out until you say OK.");
     expect(turn.answer).toContain("sample data");
   });

@@ -97,6 +97,10 @@ or press **Check for new meetings** in Chat (top right, whole team; signed in as
   details and Aman's menu stay with them.
 - Needs your OK: "Send email: Minutes: …" to the four people on the call; its reasoning lists who picks up each item. Nothing is
   sent until OK (and then a dry run unless actions are live).
+- It is all in the graph, down to the line: every line of the call is a Chunk of the transcript, linked to who said it; each
+  decision is BASED_ON the line it was agreed in, and each action's line MENTIONS it. In the answer, each action carries two chips:
+  the task and the line of the call it came from (open it on the Brain map: the checkout fix → Aman's "the KETTLE10 coupon failed
+  at checkout"). "How we got this" draws transcript → minutes → meeting → decisions → line → action.
 - Run it again: "skipped … already saved". Nothing is written twice (the meeting is named by Fireflies' own meeting id).
 
 A real business connects Fireflies (API key) or Granola (sign-in) on Your tools; the server then reads new calls every 15 minutes
