@@ -18,6 +18,8 @@ import { captureInbound, captureMeetings, connectWords } from "../../src/meeting
 import { fireflies, firefliesMeeting, notesOf } from "../../src/meetings/recorders.js";
 import { callLines } from "../../src/meetings/lines.js";
 import { captureDue } from "../../src/meetings/schedule.js";
+import { forgetSampleMeeting, NotSample } from "../../src/meetings/forget.js";
+import { oneLine } from "../../src/server/preview.js";
 import { testGraphName } from "../helpers/graph.js";
 
 const NOW = Date.UTC(2026, 9, 18, 6, 0);
@@ -155,6 +157,8 @@ describe("meeting capture, end to end (test database)", () => {
     expect(payload.body).not.toMatch(/Deal Closer|Techie|→/);
     const rec = await one<{ why: string; by: string }>("MATCH (a:Entity:Agent)-[:PRODUCED]->(r:Recommendation) RETURN r.summary AS why, a.name AS by");
     expect(rec.by).toBe("Memory Keeper");
+    // the one line Needs your OK shows is where the action items went
+    expect(oneLine(rec.why)).toBe("Minutes of the Fireflies call: 4 action items go to Deal Closer, Techie, Miss Influencer and Taskmaster; 2 stay with Aman Shetty and Ritika Menon.");
     expect(rec.why).toContain("Who picks each one up: Send the revised quote with the decaf and the 15-day terms: Deal Closer for Wholesale lead (sample role);");
     expect(rec.why).toContain("Send the GST details for the invoices: Ritika Menon");
 
@@ -208,6 +212,26 @@ describe("meeting capture, end to end (test database)", () => {
     expect((await captureInbound(TENANT, { id: "call-77", text }, deps)).status).toBe("already_saved");
     expect(inbound.runs).toHaveLength(1);
     await expect(captureInbound(TENANT, { text: "too short" }, deps)).rejects.toThrow(/too short/);
+  });
+
+  it("a retake: the sample meeting can be forgotten and arrives again; a real one cannot be forgotten", async () => {
+    const before = await one<{ n: number }>("MATCH (n:Entity) RETURN count(n) AS n");
+    const labelsBefore = await g.roQuery<{ l: string; n: number }>("MATCH (n:Entity) WITH [x IN labels(n) WHERE x <> 'Entity' AND x <> 'Searchable'][0] AS l, count(n) AS n RETURN l, n").then((r) => r.sort((a, b) => a.l.localeCompare(b.l)));
+    const f = (await forgetSampleMeeting(g, "fireflies", SAMPLE_FIREFLIES_ID))!;
+    expect(f.turns).toBe(1);
+    for (const q of ["MATCH (m:Meeting {recorder:'fireflies'}) RETURN count(m) AS n", "MATCH (c:Chunk) WHERE c.id STARTS WITH 'chunk:transcript-fireflies' RETURN count(c) AS n",
+      "MATCH (a:Approval) WHERE a.title STARTS WITH 'Send email: Minutes' RETURN count(a) AS n", "MATCH (t:Turn) WHERE t.question STARTS WITH 'New meeting from Fireflies' RETURN count(t) AS n"]) {
+      expect((await one<{ n: number }>(q)).n, q).toBe(0);
+    }
+    // the business and the teammates stay
+    expect((await one<{ n: number }>("MATCH (a:Agent) RETURN count(a) AS n")).n).toBeGreaterThan(3);
+    expect(await forgetSampleMeeting(g, "fireflies", SAMPLE_FIREFLIES_ID)).toBeNull();
+    const again = await captureMeetings(TENANT, { graph: g, port, askDeps, now: () => NOW }, { recorder: "fireflies" });
+    expect(again.saved).toEqual([expect.objectContaining({ ok: true })]);
+    const labelsAfter = await g.roQuery<{ l: string; n: number }>("MATCH (n:Entity) WITH [x IN labels(n) WHERE x <> 'Entity' AND x <> 'Searchable'][0] AS l, count(n) AS n RETURN l, n").then((r) => r.sort((a, b) => a.l.localeCompare(b.l)));
+    expect(labelsAfter).toEqual(labelsBefore);
+    expect((await one<{ n: number }>("MATCH (n:Entity) RETURN count(n) AS n")).n).toBe(before.n);
+    await expect(forgetSampleMeeting(g, "inbound", "call-77")).rejects.toBeInstanceOf(NotSample);
   });
 
   it("the clock reads only businesses with a real recorder connected", async () => {

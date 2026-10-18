@@ -3,12 +3,16 @@
 // reads the sample Fireflies account, through the same path. With --file it reads a transcript or notes from a file instead, the
 // way the business's meeting address would. Running it again saves nothing twice.
 // `meetings address`: the business's own meeting address, for a recorder or an automation to post transcripts to.
+// `meetings forget`: forget the demo's SAMPLE recorded meeting (and what it wrote), so it can be shown arriving again. A real
+// meeting is refused.
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { loadConfig } from "../config.js";
 import { openGraph } from "../graph/client.js";
 import { meetingAddress } from "../meetings/address.js";
 import { captureInbound, captureMeetings } from "../meetings/capture.js";
+import { forgetSampleMeeting, NotSample } from "../meetings/forget.js";
+import { SAMPLE_FIREFLIES_ID } from "../demo/sample/fireflies.js";
 import { isSalesDemo, demoPortFor } from "../sales/demo.js";
 import type { Command } from "./_command.js";
 import { workLog } from "./_worklog.js";
@@ -16,7 +20,7 @@ import { workLog } from "./_worklog.js";
 export const commands: Command[] = [
   {
     name: "meetings",
-    usage: "meetings ingest <tenant> [--recorder fireflies|granola] [--file notes.txt --title \"...\" --date YYYY-MM-DD] [--model haiku] [--quiet] | meetings address <tenant>",
+    usage: "meetings ingest <tenant> [--recorder fireflies|granola] [--file notes.txt --title \"...\" --date YYYY-MM-DD] [--model haiku] [--quiet] | meetings address <tenant> | meetings forget <tenant> [--recorder fireflies --id <meeting id>]",
     summary: "Read a business's meeting recorder now: new calls become minutes and routed action items (or print its meeting address)",
     async run(args) {
       const { values, positionals } = parseArgs({
@@ -24,9 +28,20 @@ export const commands: Command[] = [
         options: { recorder: { type: "string" }, file: { type: "string" }, title: { type: "string" }, date: { type: "string" }, id: { type: "string" }, model: { type: "string" }, quiet: { type: "boolean" }, json: { type: "boolean" } },
       });
       const [sub, tenant] = positionals;
-      if (!tenant || (sub !== "ingest" && sub !== "address")) {
-        console.error("Usage: npm run cli -- meetings ingest <tenant> [--recorder fireflies|granola] [--file notes.txt]\n       npm run cli -- meetings address <tenant>");
+      if (!tenant || (sub !== "ingest" && sub !== "address" && sub !== "forget")) {
+        console.error("Usage: npm run cli -- meetings ingest <tenant> [--recorder fireflies|granola] [--file notes.txt]\n       npm run cli -- meetings address <tenant>\n       npm run cli -- meetings forget <tenant>   (the demo's sample meeting, for a retake)");
         return 2;
+      }
+      if (sub === "forget") {
+        const recorder = (values.recorder ?? "fireflies") as "fireflies" | "granola" | "inbound";
+        try {
+          const r = await forgetSampleMeeting(await openGraph(tenant), recorder, values.id ?? SAMPLE_FIREFLIES_ID);
+          console.log(r ? `Forgot the sample meeting ${r.meetingId}: ${r.nodes} records and ${r.turns} chat thread(s). Run "meetings ingest ${tenant}" to show it arriving again.` : "That meeting is not saved, so there is nothing to forget.");
+          return 0;
+        } catch (e) {
+          if (e instanceof NotSample) { console.error(e.message); return 1; }
+          throw e;
+        }
       }
       if (sub === "address") {
         const url = meetingAddress(loadConfig().webBaseUrl, loadConfig().google.connectorKey, tenant);

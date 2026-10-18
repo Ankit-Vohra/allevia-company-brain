@@ -170,7 +170,7 @@ export default function ChatPage() {
   const [checking, setChecking] = useState(false);
   const checkMeetings = async () => {
     setChecking(true);
-    setMeetingNote("Reading your meeting recorder…");
+    setMeetingNote("Reading your meeting recorder… Memory Keeper writes the minutes of each new call (about half a minute).");
     try {
       const r = await api.checkMeetings(tenant.id);
       const saved = r.saved.filter((s) => s.ok);

@@ -254,6 +254,20 @@ export function minutesText(o: {
   return out.join("\n");
 }
 
+/**
+ * The first sentence of the minutes card (the one line Needs your OK shows): where the action items went. "Minutes of the Fireflies
+ * call: 3 action items go to Deal Closer, Techie and Miss Influencer; 3 stay with Wholesale lead, Aman Shetty and Ritika Menon."
+ */
+export function minutesLead(recorderName: string, tasks: Array<{ ownerName: string; agent?: string }>): string {
+  const names = (xs: string[]) => { const u = [...new Set(xs)]; return u.length > 1 ? `${u.slice(0, -1).join(", ")} and ${u.at(-1)}` : u[0] ?? ""; };
+  const handed = tasks.filter((t) => t.agent), kept = tasks.filter((t) => !t.agent);
+  const parts = [
+    handed.length ? `${handed.length} action item${handed.length === 1 ? " goes" : "s go"} to ${names(handed.map((t) => nameOf(t.agent!)))}` : "",
+    kept.length ? `${kept.length} stay${kept.length === 1 ? "s" : ""} with ${names(kept.map((t) => (t.ownerName === "your team" ? "your team" : t.ownerName)))}` : "",
+  ].filter(Boolean);
+  return `Minutes of the ${recorderName} call${parts.length ? `: ${parts.join("; ")}` : ""}.`.replace(/\.(?=.)/g, "").slice(0, 199);
+}
+
 /** The minutes email to everyone on the call: a short hello, the minutes, an invitation to correct them. */
 export function minutesEmail(o: { business: string; meeting: Extracted; date: string; names: string[]; minutes: string }): { subject: string; body: string } {
   const hello = o.names.length ? `Hi ${o.names.map((n) => n.split(/\s+/)[0]).join(", ")},` : "Hello,";
@@ -559,7 +573,7 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
     const text = cleanText(l.text, new Removed()); // the Document's own cleaning already counted what was taken out
     lineText.set(l.ord, text);
     const id = chunkOf(l.ord);
-    node({ type: "Chunk", id, name: `Line ${l.ord} of the call: ${text.slice(0, 90)}`, props: { text, ord: l.ord, ...(l.speaker ? { speaker: l.speaker } : {}) }, src: docId, asOf });
+    node({ type: "Chunk", id, name: `Line ${l.ord} of the call: ${text.length > 90 ? `${text.slice(0, 90).replace(/\s+\S*$/, "")}…` : text}`, props: { text, ord: l.ord, ...(l.speaker ? { speaker: l.speaker } : {}) }, src: docId, asOf });
     edge(docId, "HAS_CHUNK", id);
     const who = l.speaker ? lookup(l.speaker) : undefined;
     if (who?.id.startsWith("person:")) edge(id, "MENTIONS", who.id);
@@ -707,7 +721,7 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
     const r = await runPropose({
       title: `${send ? "Send" : "Draft"} email: ${draft.subject}`.slice(0, 160),
       why: cap
-        ? `Minutes of ${meeting.title} (${dayWords(date)}), from the ${cap.recorderName} transcript: ${meeting.decisions.length} decision${meeting.decisions.length === 1 ? "" : "s"}, ${tasks.length} action item${tasks.length === 1 ? "" : "s"}.${handedOver.length ? ` Who picks each one up: ${handedOver.join("; ")}.` : ""}`
+        ? `${minutesLead(cap.recorderName, tasks)} Minutes of ${meeting.title} (${dayWords(date)}), from the ${cap.recorderName} transcript: ${meeting.decisions.length} decision${meeting.decisions.length === 1 ? "" : "s"}, ${tasks.length} action item${tasks.length === 1 ? "" : "s"}.${handedOver.length ? ` Who picks each one up: ${handedOver.join("; ")}.` : ""}`
         : `Follow-up to ${meeting.title} (${dayWords(date)}): ${meeting.decisions.length} decision${meeting.decisions.length === 1 ? "" : "s"} and ${tasks.length} task${tasks.length === 1 ? "" : "s"} from the notes.`,
       kind: "email_send", area: cap ? "ops" : "sales", evidence: [meetingId, ...(minutesId ? [minutesId] : []), docId, ...(cap ? taskChunks.slice(0, 8) : [])],
       payload: {
