@@ -69,8 +69,11 @@ See `docs/submission-falkordb-answers.md`, answer 1 (ready to paste).
 
 ### Blog link
 
-Draft: `docs/blog/allevia-company-brain-on-falkordb.md`. Where to publish is the founder's call: our website (we can
-build the page) or the founder's own dev.to, Medium or Hashnode account.
+Draft: `docs/blog/allevia-company-brain-on-falkordb.md`. Where to publish is the founder's call:
+- **Our website:** the page is built and checked locally (`site/proto/blog/`, desktop and phone). Publishing it is one run
+  of the site's publish step, giving https://ankit-vohra.github.io/allevia-site/blog/.
+- **The founder's own dev.to, Medium or Hashnode account:** paste the Markdown and upload the six images from
+  `docs/blog/images/`.
 
 ## Part 2: Feedback
 
