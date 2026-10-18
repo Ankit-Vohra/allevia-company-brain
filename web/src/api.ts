@@ -86,6 +86,12 @@ async function withTimeout<T>(ms: number, fn: (signal: AbortSignal) => Promise<T
 
 /** What the app starts with. With sign-in on (ALLEVIA_AUTH=1): `authRequired`, and `account` when this browser is signed in.
  *  `needsLink`: an owner link was tried in the address bar and did not open. */
+export interface MeetingCheck {
+  recorders: Array<{ id: string; name: string; state: "connected" | "not_connected" | "needs_attention" | "failed"; message: string }>;
+  saved: Array<{ recorder: string; title: string; ok: boolean; sessionId: string; turnId: string }>;
+  skipped: Array<{ recorder: string; title: string; why: string }>;
+}
+
 export interface Startup { mode: ApiMode; tenants: Tenant[]; needsLink?: { failed: boolean }; authRequired?: boolean; account?: Account | null }
 
 /** Decide live vs mock once, at startup: live unless ?mock=1, or the API's health check fails. */
@@ -451,6 +457,14 @@ export const api = {
   async connectionsAudit(t: string): Promise<Array<{ at: string; connection: string; did: string; worked: boolean; by: string | null }>> {
     if (mode === "mock") return [];
     return getJson(`/api/${enc(t)}/connections/audit`);
+  },
+
+  // ---- Meetings: a recorder's new calls become minutes and routed action items (live server only) ----
+
+  /** POST /api/:t/meetings/check: read the connected recorders now. What was saved (each a new chat thread), skipped, and what to connect. */
+  async checkMeetings(t: string): Promise<MeetingCheck> {
+    if (mode === "mock") throw new ApiError("Reading your meeting recorder needs the live server.", 501);
+    return sendJson(`/api/${enc(t)}/meetings/check`, "POST", {});
   },
 
   // ---- Connect Search Console (live server only) ----

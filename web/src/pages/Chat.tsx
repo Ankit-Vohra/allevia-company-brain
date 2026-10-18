@@ -165,6 +165,28 @@ export default function ChatPage() {
     setText((t) => (t.trim() ? `${meetingPrefill("")}${t}` : meetingPrefill(tenant.id)));
     requestAnimationFrame(() => { const el = inputRef.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
   };
+  // "Check for new meetings": the connected recorder's new calls become minutes and routed action items; the newest opens as a thread
+  const [meetingNote, setMeetingNote] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const checkMeetings = async () => {
+    setChecking(true);
+    setMeetingNote("Reading your meeting recorder…");
+    try {
+      const r = await api.checkMeetings(tenant.id);
+      const saved = r.saved.filter((s) => s.ok);
+      const off = r.recorders.filter((x) => x.state !== "connected");
+      setMeetingNote(saved.length
+        ? `${saved.length} new meeting${saved.length === 1 ? "" : "s"} saved: the minutes, who does what, and the minutes email in Needs your OK.`
+        : r.recorders.some((x) => x.state === "connected") ? "No new meetings since the last check." : off[0]?.message ?? "No meeting recorder is connected.");
+      threads.reload();
+      window.dispatchEvent(new Event(APPROVALS_CHANGED));
+      if (saved.length) nav(chatPath(TEAM, saved[saved.length - 1]!.sessionId));
+    } catch (e) {
+      setMeetingNote((e as Error).message || "Couldn't read the recorder just now. Try again in a minute.");
+    } finally {
+      setChecking(false);
+    }
+  };
   const last = thread.views[thread.views.length - 1];
   useEffect(() => {
     const el = scrollRef.current;
@@ -237,10 +259,16 @@ export default function ChatPage() {
                 <Icon name="file" size={14} /> Remember a meeting
               </button>
             )}
+            {who === TEAM && !getPublicMode() && getMode() === "live" && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void checkMeetings()} disabled={checking || thread.running} title="Read your meeting recorder (Fireflies, Granola) now: each new call becomes minutes, and every action item goes to the right person">
+                <Icon name="clock" size={14} /> {checking ? "Checking…" : "Check for new meetings"}
+              </button>
+            )}
             {who === TEAM && <Link to="/team" className="btn btn-quiet btn-sm">Manage</Link>}
           </div>
         </header>
 
+        {meetingNote && <p className="notice chat-meeting-note" role="status" onClick={() => !checking && setMeetingNote(null)}>{meetingNote}</p>}
         <div className="chat-scroll" ref={scrollRef} onScroll={(e) => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
           {empty ? (
             <div className="chat-empty">

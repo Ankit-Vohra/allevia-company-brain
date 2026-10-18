@@ -170,6 +170,8 @@ const SEES: Record<string, string> = {
   quickbooks: "to see who still owes you",
   xero: "to see who still owes you",
   "google-sheets": "so your team can keep notes and numbers in a sheet",
+  fireflies: "so each call's minutes and action items arrive by themselves",
+  granola: "so each meeting's minutes and action items arrive by themselves",
 };
 const SEES_DEFAULT = "so your team can see more";
 

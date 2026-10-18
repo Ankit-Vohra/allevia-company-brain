@@ -78,6 +78,31 @@ line). Send it, or paste the same text on Discord after "Remember this meeting:"
   found one, the business.
 - Then ask "What did we decide with Kettle & Crumb?" and "What's pending from the meeting on 16 October?".
 
+### A meeting arrives by itself (sample Fireflies)
+
+Blue Tokai has no real recorder, so its Your tools page shows a **sample Fireflies** account (under More, "Sample data") holding
+one call: the follow-up with Kettle & Crumb the day after the tasting call (`src/demo/sample/fireflies.ts`, Sat 17 Oct, made-up
+people at `.example` addresses, titled and summarised as a sample). It comes in through the same code a real Fireflies or Granola
+account uses (`src/meetings`). Trigger one run, live:
+
+```bash
+npm run cli -- meetings ingest bluetokai
+```
+
+or press **Check for new meetings** in Chat (top right, whole team; signed in as the owner). What to look for:
+
+- A new thread, "New meeting from Fireflies: Kettle & Crumb follow-up call (sample)": Memory Keeper wrote the minutes (cited to the
+  transcript), the decisions (decaf added, 15-day terms, a launch-day post), and **Who does what**: the revised quote → Deal
+  Closer, the checkout coupon fix → Techie, the launch-day post → Miss Influencer, the barista training → Taskmaster; Ritika's GST
+  details and Aman's menu stay with them.
+- Needs your OK: "Send email: Minutes: …" to the four people on the call; its reasoning lists who picks up each item. Nothing is
+  sent until OK (and then a dry run unless actions are live).
+- Run it again: "skipped … already saved". Nothing is written twice (the meeting is named by Fireflies' own meeting id).
+
+A real business connects Fireflies (API key) or Granola (sign-in) on Your tools; the server then reads new calls every 15 minutes
+(`ALLEVIA_MEETINGS=off` stops it). With no recorder at all, `npm run cli -- meetings address <tenant>` prints the business's own
+meeting address: any recorder, Zapier or Make step can post a transcript there.
+
 ## Building it on a fresh server
 
 On the server (its own FalkorDB on 127.0.0.1:6390, Claude logged in, Chromium installed), from the repository:
