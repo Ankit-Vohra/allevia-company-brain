@@ -234,7 +234,7 @@ export function watch(): string {
     <figure class="watch__frame">
       <video class="watch__video" controls playsinline preload="none" poster="/shared/img/teaser-poster.webp" src="/shared/img/teaser.mp4" width="1920" height="1080" aria-label="The Allevia teaser: the problem, the brain, the team and the founder's OK."></video>
     </figure>
-    <p class="watch__more"><a class="btn btn-ghost" href="/media/allevia-demo.mp4">Watch the full demo (2:50)</a> <a class="btn btn-ghost" href="https://13-232-139-42.sslip.io">Try the live demo</a></p>
+    <p class="watch__more"><a class="btn btn-ghost" href="https://youtu.be/fxCLRLmyP2M">Watch the full demo (2:50)</a> <a class="btn btn-ghost" href="https://13-232-139-42.sslip.io">Try the live demo</a></p>
   </div>
 </section>`;
 }

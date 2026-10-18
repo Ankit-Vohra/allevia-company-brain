@@ -55,8 +55,7 @@ https://github.com/Ankit-Vohra/allevia-company-brain. Since 18 October it carrie
 
 ### Demo video (public or unlisted YouTube link)
 
-The demo is ready to upload (under the 3-minute limit), with a title, a description with chapters and a thumbnail in
-the founder's upload folder. The founder uploads it, then the link goes here and in the form.
+https://youtu.be/fxCLRLmyP2M (2:50, uploaded 18 October).
 
 ### Live demo or deployment
 

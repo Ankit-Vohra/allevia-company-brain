@@ -13,6 +13,8 @@ a job of its own.
 Allevia is our answer, and our entry for Graph Hacks: Context for AI Agents, FalkorDB's hackathon. We built it in four
 days, 15 to 18 October 2026, in more than 800 commits. Here is how it works, what we measured, and what broke.
 
+{% embed https://youtu.be/fxCLRLmyP2M %}
+
 ## The problem: context lives in one head
 
 **Every "why" in a small business comes back to the founder, because the context lives nowhere else.**
@@ -320,10 +322,13 @@ on edge properties, so they would walk a closed edge. Our fix has two halves:
   110 ms at 20,000 nodes, against 5.3 seconds for `GRAPH.COPY`, which also rebuilds every search index. The copy is cached
   until a write lands.
 
-Meetings are memory too. Paste the notes, say "remember this meeting", and Memory Keeper files the decisions, tasks and
-people, linked to what is already there, with the notes as the source.
+Meetings are memory too, and they arrive by themselves. A call recorded by Fireflies or Granola (or a transcript sent to
+the business's own meeting address) becomes minutes with nobody pasting anything. Every line of the call is a `Chunk` of the
+transcript, linked to who said it; each decision is `BASED_ON` the line it was agreed in, and each action points back at the
+line it came from. The action goes to the right teammate (a quote to Deal Closer, a checkout fix to Techie), and the minutes
+email waits for the founder's OK. Open any task and you see the exact words that created it.
 
-![A meeting saved to the brain, with the notes as proof (sample notes)](https://raw.githubusercontent.com/Ankit-Vohra/allevia-company-brain/main/docs/blog/images/meeting-saved.jpg)
+![A recorded call becomes minutes: who does what, and the line of the call each action came from (sample call)](https://raw.githubusercontent.com/Ankit-Vohra/allevia-company-brain/main/docs/blog/images/meeting-line.jpg)
 
 ## Keeping the brain clean as it grows
 
@@ -492,6 +497,7 @@ metered per business.
 
 ## Try it
 
+- **Demo video (2:50):** https://youtu.be/fxCLRLmyP2M
 - **Live:** https://13-232-139-42.sslip.io. Sign up for 100 free credits, or open "See the demo".
 - **Code:** https://github.com/Ankit-Vohra/allevia-company-brain
 - **Every query and algorithm**, with its file and line: `docs/falkordb-queries.md` in the repo.

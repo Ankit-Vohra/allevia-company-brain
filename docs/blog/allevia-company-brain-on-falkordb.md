@@ -27,7 +27,7 @@ the first line that is only `---`.
 | `sppaths-path.jpg` | "How FalkorDB powers it": the real `algo.SPpaths` call and the lit path (demo video, 144.6 s) |
 | `answer-path.jpg` | The path under a real answer in the app (demo video) |
 | `two-clocks.png` | Diagram: one fact on a timeline, valid time against record time, closed not deleted |
-| `meeting-saved.jpg` | A meeting saved to the brain from sample notes (demo video, 112.5 s) |
+| `meeting-line.jpg` | A recorded call's minutes: who does what, and the line each action came from (live demo, sample call) |
 | `tokens-8x.jpg` | "604k tokens against 75k" (demo video) |
 
 ---
@@ -349,10 +349,13 @@ on edge properties, so they would walk a closed edge. Our fix has two halves:
   110 ms at 20,000 nodes, against 5.3 seconds for `GRAPH.COPY`, which also rebuilds every search index. The copy is cached
   until a write lands.
 
-Meetings are memory too. Paste the notes, say "remember this meeting", and Memory Keeper files the decisions, tasks and
-people, linked to what is already there, with the notes as the source.
+Meetings are memory too, and they arrive by themselves. A call recorded by Fireflies or Granola (or a transcript sent to
+the business's own meeting address) becomes minutes with nobody pasting anything. Every line of the call is a `Chunk` of the
+transcript, linked to who said it; each decision is `BASED_ON` the line it was agreed in, and each action points back at the
+line it came from. The action goes to the right teammate (a quote to Deal Closer, a checkout fix to Techie), and the minutes
+email waits for the founder's OK. Open any task and you see the exact words that created it.
 
-![A meeting saved to the brain, with the notes as proof (sample notes)](images/meeting-saved.jpg)
+![A recorded call becomes minutes: who does what, and the line of the call each action came from (sample call)](images/meeting-line.jpg)
 
 ## Keeping the brain clean as it grows
 
@@ -521,6 +524,7 @@ metered per business.
 
 ## Try it
 
+- **Demo video (2:50):** https://youtu.be/fxCLRLmyP2M
 - **Live:** https://13-232-139-42.sslip.io. Sign up for 100 free credits, or open "See the demo".
 - **Code:** https://github.com/Ankit-Vohra/allevia-company-brain
 - **Every query and algorithm**, with its file and line: `docs/falkordb-queries.md` in the repo.

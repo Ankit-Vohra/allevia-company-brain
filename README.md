@@ -2,12 +2,14 @@
 
 **One FalkorDB graph per business, and a team of 13 AI agents that works from it. Nothing goes out without the founder's OK.**
 
-**[▶ Watch the demo (2:50)](https://ankit-vohra.github.io/allevia-site/media/allevia-demo.mp4)** ·
+**[▶ Watch the demo (2:50)](https://youtu.be/fxCLRLmyP2M)** ·
 **[Try the live demo](https://13-232-139-42.sslip.io)** (no sign-in) ·
 [30-second teaser](https://ankit-vohra.github.io/allevia-site/#watch) ·
 [Blog: how it's built](https://ankit-vohra.github.io/allevia-site/blog/) ·
 [Website](https://ankit-vohra.github.io/allevia-site/) ·
 [Every Cypher query, with file and line](docs/falkordb-queries.md)
+
+[![Watch the 2:50 demo on YouTube: Allevia, one company brain for founders, built on FalkorDB](docs/readme-images/demo-video.jpg)](https://youtu.be/fxCLRLmyP2M)
 
 ![The pixel office in daylight: Allevia's 13 agents at their desks in nine departments, and the office dogs in the game room](docs/blog/images/pixel-office.jpg)
 
