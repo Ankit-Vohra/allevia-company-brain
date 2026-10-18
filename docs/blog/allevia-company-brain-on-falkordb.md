@@ -213,7 +213,7 @@ RETURN … ORDER BY score ASC, node.id
 ```
 
 A matching chunk answers as its source document, so citations point at sources. The `node.id` at the end of each
-`ORDER BY` is load-bearing; the war stories say why.
+`ORDER BY` keeps the order stable when scores tie.
 
 The result lists are merged by reciprocal rank: each hit scores one over (60 plus its rank) in every list it appears in.
 It needs no tuning, and it doesn't care that vector and full-text scores live on different scales.
