@@ -3,9 +3,9 @@
 **One FalkorDB graph per business, and a team of 13 AI agents that works from it. Nothing goes out without the founder's OK.**
 
 [Live demo](https://13-232-139-42.sslip.io) · Demo video: link coming (`VIDEO_LINK_TBD`) ·
-[Blog](https://ankit-vohra.github.io/allevia-site/blog/) (publishing soon) · [Website](https://ankit-vohra.github.io/allevia-site/)
+[Blog](https://ankit-vohra.github.io/allevia-site/blog/) · [Website](https://ankit-vohra.github.io/allevia-site/)
 
-![The pixel office: Allevia's 13 agents at their desks in nine departments, working on a request](docs/blog/images/pixel-office.jpg)
+![The pixel office in daylight: Allevia's 13 agents at their desks in nine departments, and the office dogs in the game room](docs/blog/images/pixel-office.jpg)
 
 Entry for **Graph Hacks: Context for AI Agents** (FalkorDB, 15–18 October 2026), in all three tracks: Company
 Brain, Agent Memory and Coordination, and Agents That Act on Connected Data.

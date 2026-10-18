@@ -13,7 +13,7 @@ that is only `---`.
 
 | File | What it shows |
 |---|---|
-| `pixel-office.jpg` | Cover: the pixel office, the 13 agents at their desks (demo video) |
+| `pixel-office.jpg` | Cover: the pixel office, the 13 agents at their desks (the website's daylight office) |
 | `architecture.png` | Diagram: founder, Allevia, FalkorDB's graphs, tools through Composio |
 | `integrations.jpg` | The integrations page: "Over 1,000 tools, for every team" (demo video, 74 s) |
 | `graph-per-business.png` | Diagram: one graph per business, the registry and the shared reference graph |
@@ -34,7 +34,7 @@ that is only `---`.
 
 # One brain per business: building Allevia on FalkorDB
 
-![The pixel office: Allevia's 13 agents at their desks](images/pixel-office.jpg)
+![The pixel office in daylight: Allevia's team at their desks, and the office dogs in the game room](images/pixel-office.jpg)
 
 Being a founder isn't easy. Hundreds of things land on your plate every day, and getting all that context to your team is
 a job of its own.
