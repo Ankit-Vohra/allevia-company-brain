@@ -67,8 +67,8 @@ See `docs/submission-falkordb-answers.md`, answer 1 (ready to paste).
 
 ### Blog link
 
-https://ankit-vohra.github.io/allevia-site/blog/ (live since 18 October). A dev.to copy is ready in `docs/blog/devto.md`
-(canonical link back to our site); the founder posts it from their own dev.to account.
+https://ankit-vohra.github.io/allevia-site/blog/ (live since 18 October), also on dev.to:
+https://dev.to/ankitvohra/one-brain-per-business-building-allevia-on-falkordb-3dco (posted 18 October).
 
 ## Part 2: Feedback
 

@@ -5,7 +5,7 @@
 **[▶ Watch the demo (2:50)](https://youtu.be/fxCLRLmyP2M)** ·
 **[Try the live demo](https://13-232-139-42.sslip.io)** (no sign-in) ·
 [30-second teaser](https://ankit-vohra.github.io/allevia-site/#watch) ·
-[Blog: how it's built](https://ankit-vohra.github.io/allevia-site/blog/) ·
+[Blog: how it's built](https://ankit-vohra.github.io/allevia-site/blog/) ([on dev.to](https://dev.to/ankitvohra/one-brain-per-business-building-allevia-on-falkordb-3dco)) ·
 [Website](https://ankit-vohra.github.io/allevia-site/) ·
 [Every Cypher query, with file and line](docs/falkordb-queries.md)
 
