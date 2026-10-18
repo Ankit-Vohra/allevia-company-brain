@@ -31,6 +31,9 @@ if docker exec "$DB" redis-check-rdb /var/lib/falkordb/data/dump.rdb 2>&1 | grep
 # 2. each business on its own (projection graphs, named with "__", are caches and are skipped)
 for g in $(cli GRAPH.LIST | grep '^allevia_' | grep -v '__'); do
   t="${g#allevia_}"
+  # allevia_reference is shared know-how, not a business (its name is reserved, so db:export refuses it): it is in the
+  # snapshot above and is rebuilt from the repo's playbook data.
+  if [ "$t" = "reference" ]; then log "reference graph: in the snapshot"; continue; fi
   if npm run -s cli -- db:export "$t" "$OUT/$t.jsonl" >/dev/null 2>&1; then log "export $t ok"; else log "export $t FAILED"; fi
 done
 
