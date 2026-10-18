@@ -95,6 +95,14 @@ export const TOOLKIT_CATALOG: ToolkitEntry[] = [
     blurb: "Your team sees your invoices and who still owes you.", reads: ["Invoices, bills and balances."], acts: [] }),
   g({ id: "google-sheets", toolkit: "googlesheets", name: "Google Sheets", group: "team", recommended: null, fits: ["services", "shop", "app", "local"], departments: ["ops", "coe", "leadership"],
     blurb: "Your team keeps meeting notes, decisions and action items in a sheet.", reads: ["The sheets you pick."], acts: ["Adds rows only after you say OK."] }),
+  // meeting recorders: each new call's notes arrive by themselves, become minutes, and the action items go to the right person
+  // (src/meetings). Fireflies signs in with an API key; Granola through its own sign-in page (Composio's granola_mcp).
+  g({ id: "fireflies", toolkit: "fireflies", name: "Fireflies", group: "team", recommended: null, fits: ["services", "app", "shop", "local"], departments: ["ops", "sales", "knowledge", "leadership"],
+    blurb: "Your team reads each call Fireflies records, writes the minutes and hands every action item to the right person.",
+    reads: ["The transcripts and summaries of your recorded calls."], acts: [] }),
+  g({ id: "granola", toolkit: "granola_mcp", name: "Granola", group: "team", recommended: null, fits: ["services", "app", "shop", "local"], departments: ["ops", "sales", "knowledge", "leadership"],
+    blurb: "Your team reads your Granola meeting notes, writes the minutes and hands every action item to the right person.",
+    reads: ["Your Granola meeting notes and transcripts."], acts: [] }),
 ];
 
 export const entryById = (id: string): ToolkitEntry | undefined => TOOLKIT_CATALOG.find((e) => e.id === id);

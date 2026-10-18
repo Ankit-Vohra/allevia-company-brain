@@ -213,8 +213,14 @@ describe("remember this meeting, end to end (test database)", () => {
       { task: "Book a barista training session at the café", owner: "Wholesale lead (sample role)", due: null },
       { task: "Confirm the delivery window and the billing address", owner: "Ritika Menon", due: "2026-10-21" },
       { task: "Send the grinder model", owner: "Aman Shetty", due: "2026-10-19" },
-      { task: "Send the written quote and the supply agreement", owner: "Wholesale lead (sample role)", due: "2026-10-20" },
+      { task: "Send the written quote and the supply agreement", owner: "Deal Closer", due: "2026-10-20" },
     ]);
+    // the quote is plainly Deal Closer's job, so it is on Deal Closer's list, naming the colleague who said they would send it;
+    // the training booking is no desk's plain job, so the colleague keeps it; the other side's promises stay theirs
+    const quote = await one<{ to: string; why: string; forName: string; mentions: number }>(
+      "MATCH (t:Task {kind:'meeting_task'}) WHERE t.name STARTS WITH 'Send the written quote' OPTIONAL MATCH (t)-[m:MENTIONS]->(p:Person) WHERE m.until IS NULL WITH t, count(p) AS mentions RETURN t.routedTo AS to, t.routedWhy AS why, t.forName AS forName, mentions");
+    expect(quote).toMatchObject({ to: "sales-lead", forName: "Wholesale lead (sample role)", mentions: 2 });
+    expect(quote.why).toMatch(/Deal Closer/);
     expect((await one<{ n: number }>("MATCH (:Agent {id:'agent:allevia-ops-manager'})-[:PRODUCED]->(t:Task) RETURN count(t) AS n")).n).toBe(4);
 
     // Deal Closer's follow-up waits for the OK, addressed to the people on the call
@@ -270,7 +276,7 @@ describe("remember this meeting, end to end (test database)", () => {
     expect(pending.openTasks).toBe(4);
     expect(pending.meetings[0]!.tasks.map((t) => [t.text, t.owner, t.due])).toEqual([
       ["Send the grinder model", "Aman Shetty", "2026-10-19"],
-      ["Send the written quote and the supply agreement", "Wholesale lead (sample role)", "2026-10-20"],
+      ["Send the written quote and the supply agreement", "Deal Closer", "2026-10-20"],
       ["Confirm the delivery window and the billing address", "Ritika Menon", "2026-10-21"],
       ["Book a barista training session at the café", "Wholesale lead (sample role)", null],
     ]);

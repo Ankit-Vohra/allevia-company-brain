@@ -263,7 +263,7 @@ describe("the sample connections answer from the same week", () => {
     expect(mail.map((m) => m.subject)).toEqual(expect.arrayContaining(["Wholesale beans for our café in Bengaluru", "Diwali gift boxes for 120 people", "UPI payment failed but money was debited"]));
     for (const m of mail) expect(m.from).toMatch(/\.example>$/);
     expect((await port.list()).map((v) => [v.id, v.state, v.message.startsWith("Sample data")])).toEqual([
-      ["gmail", "connected", true], ["google-calendar", "connected", true], ["shopify", "connected", true],
+      ["gmail", "connected", true], ["google-calendar", "connected", true], ["shopify", "connected", true], ["fireflies", "connected", true],
     ]);
   });
 

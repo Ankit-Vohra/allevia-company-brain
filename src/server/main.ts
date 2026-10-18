@@ -150,6 +150,27 @@ export async function startServer(opts: ServeOpts = {}): Promise<{ server: Serve
       log: (l) => console.error(l),
     })
     : () => undefined;
+  // new calls from each business's meeting recorder (Fireflies, Granola) become minutes and routed action items (src/meetings);
+  // never in public mode; ALLEVIA_MEETINGS=off stops it
+  const stopMeetings = !publicMode && (await import("../meetings/schedule.js")).meetingScheduleOn() && !opts.over?.listTenants
+    ? await (async () => {
+      const [{ startMeetingSchedule }, { productionConnections }, { isSampleTenant }] = await Promise.all([
+        import("../meetings/schedule.js"), import("../connections/production.js"), import("../demo/sample/connections.js"),
+      ]);
+      return startMeetingSchedule({
+        tenants: async () => (await listTenants()).map((t) => ({ slug: t.slug })),
+        connected: (slug) => productionConnections().vault.list(slug).catch(() => [] as string[]),
+        isSample: isSampleTenant,
+        openGraph: (slug) => deps.openGraph(slug),
+        run: async (slug, g) => {
+          const { captureMeetings } = await import("../meetings/capture.js");
+          const askDeps = () => deps.askDeps(slug, {});
+          return captureMeetings(slug, { graph: g, port: productionConnections().port(slug), askDeps, channel: "web", log: (l) => console.error(l) });
+        },
+        log: (l) => console.error(l),
+      });
+    })()
+    : () => undefined;
   // FalkorDB's own telemetry streams are cleared every few minutes (src/graph/telemetry.ts, issue #29); a managed server that
   // refuses plain Redis commands is noticed once and left alone. ALLEVIA_TELEMETRY_SWEEP=off switches it off.
   const stopTelemetry = !publicMode && telemetrySweepOn() && !opts.over?.listTenants
@@ -173,7 +194,7 @@ export async function startServer(opts: ServeOpts = {}): Promise<{ server: Serve
       });
     })()
     : () => undefined;
-  return { server, url, close: () => { stopRetry?.(); stopNudge?.(); stopSchedule(); stopCheckups(); stopStandups(); stopTelemetry(); stopPublish(); return new Promise<void>((r) => server.close(() => r())); } };
+  return { server, url, close: () => { stopRetry?.(); stopNudge?.(); stopSchedule(); stopCheckups(); stopStandups(); stopMeetings(); stopTelemetry(); stopPublish(); return new Promise<void>((r) => server.close(() => r())); } };
 }
 
 // Resolves on SIGINT/SIGTERM after the server has stopped taking requests.

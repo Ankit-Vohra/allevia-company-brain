@@ -62,6 +62,7 @@ import { registerWeekRoutes } from "./routes/week.js";
 import { registerLibraryRoutes } from "./routes/library.js";
 import { CHAT_PHOTO_PATH, registerChatPhotoRoutes } from "./routes/chat-photo.js";
 import { registerWorkRoutes } from "./routes/work.js";
+import { registerMeetingRoutes } from "./routes/meetings.js";
 import { registerGraphWorkRoutes } from "./routes/graph-work.js";
 import { registerCheckupRoutes } from "./routes/checkup.js";
 import { callerBy, registerCreditRoutes } from "./routes/credits.js";
@@ -748,6 +749,7 @@ export function createApp(deps: ServerDeps): Hono {
   registerPublishRoutes(app, routeCtx, { actions: () => deps.actions });
   registerMediaRoute(app, async () => (await deps.media?.()) ?? null);
   registerWorkRoutes(app, routeCtx, deps.standup);
+  registerMeetingRoutes(app, routeCtx, { askDeps: (t) => deps.askDeps(t, {}), key: () => loadConfig().google.connectorKey, webBaseUrl: () => deps.webBaseUrl ?? loadConfig().webBaseUrl });
   registerGraphWorkRoutes(app, routeCtx);
   registerCheckupRoutes(app, routeCtx, { jobs: () => deps.checkupJobs ?? checkupJobs(), credits, by: callerBy });
   registerCreditRoutes(app, routeCtx, { credits, billing, ...(deps.registry ? { registry: deps.registry } : {}) });

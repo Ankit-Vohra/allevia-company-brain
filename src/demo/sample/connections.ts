@@ -1,5 +1,5 @@
 // Sample connections for a demo business: Gmail (a sample inbox), Google Calendar (a sample calendar with real-looking busy
-// times) and Shopify (sample store data), behind the same ConnectionsPort the real connections give (src/connections/service.ts),
+// times), Shopify (sample store data) and Fireflies (one sample recorded call, fireflies.ts), behind the same ConnectionsPort the real connections give (src/connections/service.ts),
 // so the agents' tools, the stand-up's free times and the Your tools page work unchanged. Only for the businesses listed in
 // SAMPLE_TENANTS; everything they answer is sample data for the demo and says so.
 //
@@ -17,6 +17,7 @@ import { NotConnectedError, type ConnectionStatus, type ConnectionView } from ".
 import { openGraph } from "../../graph/client.js";
 import { addDays } from "../../insights/text.js";
 import { busyBlocks, COFFEE_INBOX, sampleAt } from "./coffee-inbox.js";
+import { sampleFirefliesSession } from "./fireflies.js";
 import { AOV_INR, coffeeTimeline, istDay, storeDay, type CoffeeTimeline } from "./coffee-model.js";
 
 export type SampleProfile = "coffee";
@@ -28,7 +29,7 @@ const SAMPLE_TENANTS = new Map<string, SampleProfile>([["bluetokai", "coffee"]])
 export function registerSampleTenant(tenant: string, profile: SampleProfile = "coffee"): void { SAMPLE_TENANTS.set(tenant, profile); }
 export const isSampleTenant = (tenant: string): boolean => SAMPLE_TENANTS.has(tenant);
 
-export const SAMPLE_CONNECTED = ["gmail", "google-calendar", "shopify"] as const;
+export const SAMPLE_CONNECTED = ["gmail", "google-calendar", "shopify", "fireflies"] as const;
 export const SAMPLE_WORDS = "Sample data for this demo: nothing is read from a real account, and nothing is really sent or booked.";
 export const SAMPLE_ACCOUNT = "owner@sample-inbox.example";
 const ANCHOR_DOC = "document:sample-shopify-export";
@@ -194,6 +195,7 @@ export function sampleConnections(tenant: string, now: () => number = () => Date
   };
   const apis = new SampleCoffeeGoogle(anchor);
   const shopify = sampleShopifySession(anchor);
+  const fireflies = sampleFirefliesSession();
   const connected = new Set<string>(SAMPLE_CONNECTED);
   const port: ConnectionsPort & { apis: SampleCoffeeGoogle; sample: true } = {
     tenant, apis, sample: true,
@@ -202,11 +204,12 @@ export function sampleConnections(tenant: string, now: () => number = () => Date
     },
     async list() { return SAMPLE_CONNECTED.map(sampleView); },
     async note() {
-      return `Connected tools of this business, all SAMPLE DATA for the demo (say so whenever you use them; nothing is really sent or booked): Gmail (gmail, a sample inbox), Google Calendar (google-calendar, a sample calendar) and Shopify (shopify, sample store data). Use connections_available to see what you may use.`;
+      return `Connected tools of this business, all SAMPLE DATA for the demo (say so whenever you use them; nothing is really sent or booked): Gmail (gmail, a sample inbox), Google Calendar (google-calendar, a sample calendar), Shopify (shopify, sample store data) and Fireflies (fireflies, one sample recorded call, read by the meeting capture). Use connections_available to see what you may use.`;
     },
     async run<S, T>(id: string, _op: string, fn: (session: S) => Promise<T>): Promise<T> {
       if (!connected.has(id)) throw new NotConnectedError(id, entryById(id)?.name ?? id, `${entryById(id)?.name ?? id} isn't connected in this demo.`);
       if (id === "shopify") return fn(shopify as unknown as S);
+      if (id === "fireflies") return fn(fireflies as unknown as S);
       return fn({ apis, accessToken: "sample", meta: {}, allowed: () => true, account: SAMPLE_ACCOUNT } as unknown as S);
     },
   };

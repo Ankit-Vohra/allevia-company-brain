@@ -13,7 +13,7 @@ import { loadTeamSettings } from "../settings/team.js";
 import { loadLanguagePreference } from "./language.js";
 import { loadNorthStar, loadPlanGoals, northStarBlock } from "../northstar/northstar.js";
 import { fillInFromSession, isFillItIn } from "./fillin.js";
-import { meetingNotesIn, rememberMeeting } from "./meeting.js";
+import { meetingNotesIn, rememberMeeting, type MeetingCapture } from "./meeting.js";
 import { VECTOR_DIM } from "../graph/indexes.js";
 import { cleanText } from "../ingest/clean.js";
 import { checkTurn, extractCitations } from "./checks.js";
@@ -60,6 +60,9 @@ export interface AskDeps {
   creative?: CreativeDeps;                            // what the tools that make things may use; absent: they say it isn't set up
   publicData?: PublicDataPort;                        // public-data lookups (Apify); absent or off: those tools say so
   connections?: ConnectionsPort;                      // this business's connections; absent: the tools that need one say none is connected
+  // A meeting a recorder brought (src/meetings/capture.ts): the turn remembers these notes, named by the recorder's own meeting id,
+  // in place of the usual plan. The question is only the thread's title ("New meeting from Fireflies: ...").
+  meetingCapture?: { notes: string; capture: MeetingCapture };
 }
 
 // What src/agent/wiring.ts (written once the graph tools land) must export, so every surface (CLI, server, Discord,
@@ -168,9 +171,10 @@ export async function ask(input: AskInput, deps: AskDeps, emit: Emit): Promise<A
 
     // "Remember this meeting" with the notes pasted in: Memory Keeper reads them, Taskmaster files the tasks and Deal Closer drafts
     // the follow-up card (meeting.ts). It writes, so a read-only or ephemeral ask goes to the team as usual.
-    const notes = !outcome && !deps.readOnly && !input.ephemeral ? meetingNotesIn(question) : null;
+    const notes = !outcome && !deps.readOnly && !input.ephemeral ? deps.meetingCapture?.notes ?? meetingNotesIn(question) : null;
     if (notes) {
       outcome = await rememberMeeting(notes, {
+        ...(deps.meetingCapture ? { capture: deps.meetingCapture.capture } : {}),
         graph: g, runtime: meter.wrap(deps.runtime), tenant: input.tenant, turnId, asker, now, question,
         ...(deps.model ? { model: deps.model } : {}), ...(deps.timeZone ? { timeZone: deps.timeZone } : {}),
         ...(deps.agentTimeoutMs ? { agentTimeoutMs: deps.agentTimeoutMs } : {}), ...(deps.signal ? { signal: deps.signal } : {}),

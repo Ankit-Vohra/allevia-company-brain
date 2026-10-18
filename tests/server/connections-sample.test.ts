@@ -1,4 +1,4 @@
-// Your tools for a public demo business with sample data: Gmail, Google Calendar and Shopify show as connected, each saying it is
+// Your tools for a public demo business with sample data: Gmail, Google Calendar, Shopify and Fireflies show as connected, each saying it is
 // sample data, even on a server where connecting is not switched on; and they cannot be connected, read again or disconnected.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeAll } from "../../src/graph/client.js";
@@ -16,13 +16,15 @@ afterAll(async () => { await h.cleanup(); await closeAll(); });
 describe("server: Your tools on a sample demo business", () => {
   it("lists Gmail, Calendar and Shopify as connected with the sample line, and the jobs they unlock", async () => {
     const r = await (await h.app.request("/api/mini/connections")).json() as {
-      ready: boolean; sample: string; recommended: Array<{ id: string; state: string; message: string }>; starters: Array<{ id: string }>;
+      ready: boolean; sample: string; recommended: Array<{ id: string; state: string; message: string }>; more: Array<{ id: string; state: string; message: string }>; starters: Array<{ id: string }>;
     };
     expect(r.ready).toBe(true);
     expect(r.sample).toMatch(/^Sample data for this demo/);
     const connected = r.recommended.filter((v) => v.state === "connected");
     expect(connected.map((v) => v.id).sort()).toEqual(["gmail", "google-calendar", "shopify"]);
     for (const v of connected) expect(v.message).toMatch(/Sample data/);
+    // the sample meeting recorder (one recorded call) is under "More", connected too
+    expect(r.more.find((v) => v.id === "fireflies")).toMatchObject({ state: "connected", message: expect.stringMatching(/Sample data/) });
     expect(r.recommended.find((v) => v.id === "hubspot")).toMatchObject({ state: "not_connected" });
     expect(r.starters.map((s) => s.id)).toEqual(expect.arrayContaining(["sales-today", "sales-draft-replies", "sales-invite"]));
   });

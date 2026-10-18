@@ -16,6 +16,20 @@
 //   4. A short answer: what was saved (counts), the decisions, the tasks with owners, the follow-up waiting for OK; the path on
 //      the map sits behind "How we got this". Charged as a team answer (question_deep): the outcome is never a fast path.
 // Later, meetings_read (tools/meetings.ts) answers "what did we decide with X?" and "what's pending from the meeting on <date>?".
+//
+// Every action item is routed (src/meetings/route.ts): the other side's promises stay with them; work that is one desk's plain job
+// is OWNED by that AI teammate (on their to-do list; the colleague who said they would do it is MENTIONED and named on the task);
+// the rest of the business's own work goes to Taskmaster, or stays with the named colleague who took it.
+//
+// The same turn runs with no paste when a meeting recorder brings the notes (src/meetings/capture.ts: Fireflies, Granola, or the
+// business's meeting address). Then `capture` says where it came from and the turn differs in four ways:
+//   - the Meeting and the transcript Document are named by the recorder's own meeting id, so a second read changes nothing;
+//   - the recorder's attendee list (with emails) fills in what the transcript does not say;
+//   - Memory Keeper also writes the minutes: a Document {kind:'minutes'} SOURCED_FROM the transcript, which MENTIONS the meeting,
+//     its decisions and its tasks, and says who picks up each action item;
+//        minutes -SOURCED_FROM-> transcript      Meeting -SOURCED_FROM-> transcript      Memory Keeper -AUTHORED-> minutes
+//   - the card is the minutes email to everyone on the call (written from the minutes, no second model call), not Deal Closer's
+//     follow-up; the card's reasoning lists where each action item went, for the owner reading Needs your OK.
 import type { AgentEvent, EdgeRef, NodeRef } from "../../shared/contracts.js";
 import { agentById } from "../../shared/roster.js";
 import { writeBatch } from "../graph/batch.js";
@@ -31,6 +45,8 @@ import { findingId, type FindingRecord, type ProposalRecord } from "./types.js";
 import type { AgentRuntime, Emit } from "./runtime.js";
 import { TouchedSet, type ToolContext } from "./tool.js";
 import { runPropose } from "./tools/actions.js";
+import { agentName, routeAction } from "../meetings/route.js";
+import type { Attendee, RecorderId } from "../meetings/recorders.js";
 import { remember } from "./tools/memory.js";
 import { ftEntities, getNodes, ro, serial, toRef } from "./tools/common.js";
 import type { TurnOutcome } from "./orchestrator.js";
@@ -197,6 +213,41 @@ export function fallbackFollowUp(o: { business: string; meeting: Extracted; name
   return { subject: `Follow-up: ${m.title}`.slice(0, 120), body };
 }
 
+/**
+ * The minutes of a recorded meeting, from what Memory Keeper read: who was there, the summary, what was decided, the action items
+ * with their owners and days, the numbers. Internal minutes say which teammate picks up each item; the email version (`forEmail`)
+ * leaves that out, since the people on the call do not need to know which AI teammate drafts the quote.
+ */
+export function minutesText(o: {
+  meeting: Extracted; date: string; recorderName: string; sample: boolean; attendees: string[];
+  tasks: Array<{ text: string; ownerName: string; due: string; agent?: string }>; forEmail?: boolean;
+}): string {
+  const m = o.meeting;
+  const out = [
+    `Minutes: ${m.title}`,
+    `${dayWords(o.date)}${o.forEmail ? "" : ` · from the ${o.recorderName} transcript`}${o.sample ? " · sample meeting, nobody real" : ""}`,
+    o.attendees.length ? `Present: ${o.attendees.join(", ")}` : "",
+  ].filter(Boolean);
+  if (m.summary) out.push("", "Summary", m.summary);
+  if (m.decisions.length) out.push("", "Decided", ...m.decisions.map((x) => `- ${x.text}`));
+  if (o.tasks.length) {
+    out.push("", "Action items", ...o.tasks.map((t) => {
+      const who = t.ownerName === "your team" ? "us" : t.ownerName;
+      return `- ${t.text} (${who}${t.due ? `, by ${dayWords(t.due)}` : ""})${!o.forEmail && t.agent ? ` → ${nameOf(t.agent)}` : ""}`;
+    }));
+  }
+  if (m.numbers.length) out.push("", "Numbers", ...m.numbers.map((x) => `- ${x}`));
+  if (!o.forEmail) out.push("", `Source: the ${o.recorderName} transcript, kept with these minutes.`);
+  return out.join("\n");
+}
+
+/** The minutes email to everyone on the call: a short hello, the minutes, an invitation to correct them. */
+export function minutesEmail(o: { business: string; meeting: Extracted; date: string; names: string[]; minutes: string }): { subject: string; body: string } {
+  const hello = o.names.length ? `Hi ${o.names.map((n) => n.split(/\s+/)[0]).join(", ")},` : "Hello,";
+  const body = [hello, "", `Here are the minutes of our call on ${dayWords(o.date)}.`, "", o.minutes, "", "If anything is missing or wrong, reply to this email and we will fix it.", "", `The team at ${o.business}`].join("\n");
+  return { subject: `Minutes: ${o.meeting.title} (${dayWords(o.date)})`.slice(0, 150), body: body.slice(0, 4000) };
+}
+
 // ---------- dates in words ----------
 
 /** "Fri 16 Oct" for a YYYY-MM-DD day. */
@@ -251,6 +302,26 @@ export interface MeetingDeps {
   agentTimeoutMs?: number;
   signal?: AbortSignal;
   embedQuery?: ToolContext["embedQuery"];
+  capture?: MeetingCapture;
+}
+
+/** Where a meeting came from when a recorder brought it (src/meetings/capture.ts); absent for a pasted one. */
+export interface MeetingCapture {
+  recorder: RecorderId;
+  recorderName: string;          // "Fireflies", "Granola", "your meeting address"
+  externalId: string;            // the recorder's own id for the meeting
+  title?: string;
+  date?: string;                 // YYYY-MM-DD
+  start?: number;                // ms
+  attendees?: Attendee[];
+  url?: string;
+  sample?: boolean;
+}
+
+/** The ids a recorded meeting is saved under: the same recorder and meeting id always give the same ones. */
+export function capturedIds(c: Pick<MeetingCapture, "recorder" | "externalId">): { meetingId: string; docId: string; minutesId: string } {
+  const key = `${c.recorder} ${c.externalId}`;
+  return { meetingId: entityId("Meeting", key), docId: entityId("Document", `transcript ${key}`), minutesId: entityId("Document", `minutes ${key}`) };
 }
 
 const LIBRARIAN = "librarian";
@@ -291,17 +362,33 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
     graph: d.graph, tenant: d.tenant, turnId: d.turnId, agentId: LIBRARIAN, asker: d.asker, touched, now: d.now, question: d.question,
     ...(d.embedQuery ? { embedQuery: d.embedQuery } : {}), ...(d.signal ? { signal: d.signal } : {}),
   };
-  const sample = isSampleNotes(notesRaw);
+  const cap = d.capture;
+  const sample = cap?.sample ?? isSampleNotes(notesRaw);
   const businessId = await findBusinessId(d.graph, d.tenant);
   const businessName = businessId ? (await getNodes(ctx, [businessId])).get(businessId)?.name ?? d.tenant : d.tenant;
   const today = todayIn(d.now, timeZone);
+  const capIds = cap ? capturedIds(cap) : null;
+  if (capIds && (await getNodes(ctx, [capIds.meetingId])).has(capIds.meetingId)) {
+    throw new Error(`That meeting from ${cap!.recorderName} is already saved, so nothing new was written.`);
+  }
 
-  const steps = [
-    { agent: LIBRARIAN, task: "Read the meeting notes and pull out the decisions, tasks, people and dates" },
-    { agent: TASKMASTER, task: "File the tasks with their owners and due dates", after: [LIBRARIAN] },
-    { agent: CLOSER, task: "Draft the follow-up email to the people on the call", after: [LIBRARIAN] },
-  ];
-  const plan = { steps, rationale: "The owner asked the team to remember a meeting: read it, file what was agreed and who does what, and draft the follow-up." };
+  const steps = cap
+    ? [
+      { agent: LIBRARIAN, task: `Read the ${cap.recorderName} transcript and write the minutes` },
+      { agent: TASKMASTER, task: "File the action items and hand each one to the right person", after: [LIBRARIAN] },
+      { agent: LIBRARIAN, task: "Draft the minutes email to everyone on the call", after: [TASKMASTER] },
+    ]
+    : [
+      { agent: LIBRARIAN, task: "Read the meeting notes and pull out the decisions, tasks, people and dates" },
+      { agent: TASKMASTER, task: "File the tasks with their owners and due dates", after: [LIBRARIAN] },
+      { agent: CLOSER, task: "Draft the follow-up email to the people on the call", after: [LIBRARIAN] },
+    ];
+  const plan = {
+    steps,
+    rationale: cap
+      ? `${cap.recorderName} brought a new meeting: write the minutes, file who does what and hand each action item over, and draft the minutes email.`
+      : "The owner asked the team to remember a meeting: read it, file what was agreed and who does what, and draft the follow-up.",
+  };
   emit({ type: "plan", by: CHIEF, steps, rationale: plan.rationale } satisfies AgentEvent);
 
   // 1. Memory Keeper reads it.
@@ -316,6 +403,16 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
   emit({ type: "agent_done", agent: LIBRARIAN, ms: Date.now() - t0, ok: !!meeting });
   if (!meeting) throw new Error("I couldn't find a meeting in that text: no one on the call, no decision and no task. Paste the notes or the transcript after \"Remember this meeting\".");
   if (d.signal?.aborted) throw new Error("Stopped before anything was saved.");
+  if (cap) {
+    // the recorder's own title, day and attendee emails win over what the transcript seems to say
+    if (cap.title) meeting.title = cap.title;
+    if (cap.date) meeting.date = cap.date;
+    for (const a of cap.attendees ?? []) {
+      const same = meeting.attendees.find((p) => sameName(p.name, a.name) || (!!a.email && p.email === a.email));
+      if (same) { if (a.email && !same.email) same.email = a.email; continue; }
+      if (meeting.attendees.length < CAP.people) meeting.attendees.push({ name: a.name, ...(a.email ? { email: a.email } : {}), side: "unknown" });
+    }
+  }
   const said: Extracted = meeting;
 
   // 2. The writes.
@@ -323,8 +420,8 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
   const date = meeting.date || today;
   const asOf = date;
   const cleanedNotes = cleanText(notesRaw, removed);
-  const docId = `document:meeting-notes-${sha256(cleanedNotes).slice(0, 12)}`;
-  const meetingId = entityId("Meeting", `${meeting.title} ${date}`);
+  const docId = capIds?.docId ?? `document:meeting-notes-${sha256(cleanedNotes).slice(0, 12)}`;
+  const meetingId = capIds?.meetingId ?? entityId("Meeting", `${meeting.title} ${date}`);
   const nodes: NodeInput[] = [];
   const edges: EdgeInput[] = [];
   const sim = sample ? { simulated: true } : {};
@@ -414,7 +511,10 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
   // the pasted text: the source every fact below points at
   node({
     type: "Document", id: docId, name: `Meeting notes: ${meeting.title}, ${dayWords(date)}`.slice(0, 160), summary: meeting.summary || undefined,
-    props: { kind: "meeting_notes", title: meeting.title, text: cleanedNotes, chars: cleanedNotes.length, pastedIn: d.turnId, ...(sample ? { sample: true } : {}) },
+    props: {
+      kind: "meeting_notes", title: meeting.title, text: cleanedNotes, chars: cleanedNotes.length, ...(sample ? { sample: true } : {}),
+      ...(cap ? { recorder: cap.recorder, externalId: cap.externalId, readIn: d.turnId, ...(cap.url ? { url: cap.url } : {}) } : { pastedIn: d.turnId }),
+    },
     src: d.turnId, asOf: isoDate(d.now),
   });
 
@@ -424,7 +524,8 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
   node({
     type: "Meeting", id: meetingId, name: meeting.title, summary: meeting.summary || undefined,
     props: {
-      status: "held", kind: "notes", date, ...(Number.isFinite(startMs) ? { start: startMs } : {}),
+      status: "held", kind: cap ? "recorded" : "notes", date, ...(cap?.start ? { start: cap.start } : Number.isFinite(startMs) ? { start: startMs } : {}),
+      ...(cap ? { recorder: cap.recorder, externalId: cap.externalId } : {}),
       attendees: attendees.map((p) => p.name), ...(meeting.numbers.length ? { facts: meeting.numbers } : {}),
       ...(meeting.dates.length ? { dates: meeting.dates.map((x) => `${x.date}: ${x.text}`) } : {}),
     },
@@ -454,22 +555,59 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
   t0 = Date.now();
   emit({ type: "agent_start", agent: TASKMASTER, task: steps[1]!.task });
   const taskmaster = await ensureAgentNode(d.graph, TASKMASTER, d.now);
-  const tasks: Array<{ id: string; text: string; owner: string | null; ownerName: string; due: string }> = [];
+  const tasks: Array<{ id: string; text: string; owner: string | null; ownerName: string; due: string; agent?: string; why?: string }> = [];
+  const agentNodes = new Map<string, string>(); // roster id -> Agent node id
   for (const t of meeting.tasks) {
     const id = entityId("Task", `${t.text} ${meetingId}`);
     const dueMs = t.due ? Date.parse(`${t.due}T12:00:00Z`) : NaN;
-    node({ type: "Task", id, name: t.text.slice(0, 120), summary: t.text, props: { status: "open", kind: "meeting_task", ...(t.due ? { due: t.due } : {}), ...(Number.isFinite(dueMs) ? { dueAt: dueMs } : {}) }, src: docId, asOf });
+    const ownerWord = t.owner.trim();
+    const isUs = !ownerWord || /^(?:us|we|me|i|the owner|our team)$/i.test(ownerWord) || sameName(ownerWord, businessName);
+    const ownerRec = isUs ? undefined : lookup(ownerWord);
+    const owner = isUs ? businessId : ownerRec?.id ?? null;
+    // whose it is: the other side's promise stays theirs, anything the business does goes to the teammate whose job it is
+    const side = isUs ? "us" : people.find((p) => p.id === ownerRec?.id)?.side ?? "unknown";
+    const routed = routeAction({ text: t.text, side, person: !isUs && !!ownerRec });
+    if (routed && !agentNodes.has(routed.agent)) agentNodes.set(routed.agent, await ensureAgentNode(d.graph, routed.agent, d.now));
+    node({
+      type: "Task", id, name: t.text.slice(0, 120), summary: t.text,
+      props: {
+        status: "open", kind: "meeting_task", ...(t.due ? { due: t.due } : {}), ...(Number.isFinite(dueMs) ? { dueAt: dueMs } : {}),
+        ...(routed ? { routedTo: routed.agent, routedWhy: routed.why, ...(ownerRec ? { forName: ownerWord } : {}) } : {}),
+      },
+      src: docId, asOf,
+    });
     edge(id, "FOLLOWS_UP", meetingId);
     edge(id, "SOURCED_FROM", docId);
     edge(taskmaster, "PRODUCED", id);
-    const ownerWord = t.owner.trim();
-    const isUs = !ownerWord || /^(?:us|we|me|i|the owner|our team)$/i.test(ownerWord) || sameName(ownerWord, businessName);
-    const owner = isUs ? businessId : lookup(ownerWord)?.id ?? null;
-    if (owner) edge(owner, "OWNS", id);
+    // one current owner: the teammate it was handed to, else the person or the business
+    if (routed) edge(agentNodes.get(routed.agent)!, "OWNS", id);
+    else if (owner) edge(owner, "OWNS", id);
+    if (routed && ownerRec) edge(id, "MENTIONS", ownerRec.id);
     for (const to of aboutIds(t.about)) edge(id, "MENTIONS", to);
-    tasks.push({ id, text: t.text, owner, ownerName: isUs ? "your team" : ownerWord, due: t.due });
+    tasks.push({ id, text: t.text, owner, ownerName: isUs ? "your team" : ownerWord, due: t.due, ...(routed ? { agent: routed.agent, why: routed.why } : {}) });
   }
   emit({ type: "agent_status", agent: TASKMASTER, text: `Filing ${tasks.length} task${tasks.length === 1 ? "" : "s"}` });
+  const routedTasks = tasks.filter((t) => t.agent);
+  if (routedTasks.length) {
+    const byAgent = [...new Set(routedTasks.map((t) => t.agent!))].map((a) => `${agentName(a)} (${routedTasks.filter((t) => t.agent === a).length})`);
+    emit({ type: "agent_status", agent: TASKMASTER, text: `Handed over: ${byAgent.join(", ")}` });
+  }
+
+  // The minutes (a recorded meeting): Memory Keeper writes them from what was read, cited to the transcript.
+  const minutesId = capIds?.minutesId;
+  const minutes = cap ? minutesText({ meeting, date, recorderName: cap.recorderName, sample, attendees: people.filter((p) => p.attended).map((p) => p.name), tasks }) : "";
+  if (cap && minutesId) {
+    node({
+      type: "Document", id: minutesId, name: `Minutes: ${meeting.title}, ${dayWords(date)}`.slice(0, 160), summary: meeting.summary || undefined,
+      props: { kind: "minutes", title: meeting.title, text: minutes, chars: minutes.length, recorder: cap.recorder, externalId: cap.externalId, ...(sample ? { sample: true } : {}) },
+      src: docId, asOf,
+    });
+    edge(minutesId, "SOURCED_FROM", docId);
+    edge(minutesId, "MENTIONS", meetingId);
+    for (const id of decisionIds) edge(minutesId, "MENTIONS", id);
+    for (const t of tasks) edge(minutesId, "MENTIONS", t.id);
+    edge(await ensureAgentNode(d.graph, LIBRARIAN, d.now), "AUTHORED", minutesId);
+  }
 
   const written = await serial(d.graph.name, async () => {
     if (d.signal?.aborted) throw new Error("Stopped before anything was saved.");
@@ -493,9 +631,11 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
     emit({ type: "error", agent: LIBRARIAN, message: `The meeting is saved, but the note for recall was not: ${message(e)}` });
   }
 
-  // 4. Deal Closer drafts the follow-up to the people on the call, as a card waiting for the OK.
+  // 4. The card waiting for the OK: Deal Closer's follow-up to the people on the call, or (a recorded meeting) Memory Keeper's
+  //    minutes email to everyone on it, written from the minutes, with where each action item went in its reasoning.
+  const writer = cap ? LIBRARIAN : CLOSER;
   t0 = Date.now();
-  emit({ type: "agent_start", agent: CLOSER, task: steps[2]!.task });
+  emit({ type: "agent_start", agent: writer, task: steps[2]!.task });
   const leadEmails = new Map<string, string>();
   for (const p of them) {
     const l = leads.get(p.id);
@@ -505,43 +645,52 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
   }
   const emailOf = (p: Resolved): string | undefined =>
     [...said.attendees, ...said.people].find((x) => x.name.toLowerCase() === p.name.toLowerCase())?.email ?? leadEmails.get(p.id);
-  const to = [...new Set(them.map(emailOf).filter((x): x is string => !!x))];
+  const recipients = cap ? attendees : them;
+  const to = [...new Set(recipients.map(emailOf).filter((x): x is string => !!x))];
   const names = them.map((p) => p.name);
+  const toNames = recipients.map((p) => p.name);
   let draft: { subject: string; body: string } | null = null;
-  try {
-    const raw = await runJson(d, { ...ctx, agentId: CLOSER }, CLOSER, "sonnet", followUpPrompt({ business: businessName, meeting, to: names }), FOLLOW_UP_SCHEMA, emit) as Record<string, unknown> | undefined;
-    const subject = line(raw?.subject, 150), body = typeof raw?.body === "string" ? raw.body.trim().slice(0, 4000) : "";
-    if (subject && body.length >= 40) draft = { subject, body };
-  } catch (e) {
-    emit({ type: "agent_status", agent: CLOSER, text: `Wrote the follow-up from the notes (${message(e)})` });
+  if (cap) {
+    draft = minutesEmail({ business: businessName, meeting, date, names: toNames, minutes: minutesText({ meeting, date, recorderName: cap.recorderName, sample, attendees: toNames, tasks, forEmail: true }) });
+  } else {
+    try {
+      const raw = await runJson(d, { ...ctx, agentId: CLOSER }, CLOSER, "sonnet", followUpPrompt({ business: businessName, meeting, to: names }), FOLLOW_UP_SCHEMA, emit) as Record<string, unknown> | undefined;
+      const subject = line(raw?.subject, 150), body = typeof raw?.body === "string" ? raw.body.trim().slice(0, 4000) : "";
+      if (subject && body.length >= 40) draft = { subject, body };
+    } catch (e) {
+      emit({ type: "agent_status", agent: CLOSER, text: `Wrote the follow-up from the notes (${message(e)})` });
+    }
   }
   draft ??= fallbackFollowUp({ business: businessName, meeting, names });
   const send = to.length > 0;
   const proposals: ProposalRecord[] = [];
   let approvalId: string | undefined;
+  const handedOver = tasks.map((t) => `${t.text}: ${t.agent ? `${agentName(t.agent)}${t.owner && t.owner !== businessId ? ` for ${t.ownerName}` : ""}` : t.ownerName}`);
   try {
     const r = await runPropose({
       title: `${send ? "Send" : "Draft"} email: ${draft.subject}`.slice(0, 160),
-      why: `Follow-up to ${meeting.title} (${dayWords(date)}): ${meeting.decisions.length} decision${meeting.decisions.length === 1 ? "" : "s"} and ${tasks.length} task${tasks.length === 1 ? "" : "s"} from the notes.`,
-      kind: "email_send", area: "sales", evidence: [meetingId, docId],
+      why: cap
+        ? `Minutes of ${meeting.title} (${dayWords(date)}), from the ${cap.recorderName} transcript: ${meeting.decisions.length} decision${meeting.decisions.length === 1 ? "" : "s"}, ${tasks.length} action item${tasks.length === 1 ? "" : "s"}.${handedOver.length ? ` Who picks each one up: ${handedOver.join("; ")}.` : ""}`
+        : `Follow-up to ${meeting.title} (${dayWords(date)}): ${meeting.decisions.length} decision${meeting.decisions.length === 1 ? "" : "s"} and ${tasks.length} task${tasks.length === 1 ? "" : "s"} from the notes.`,
+      kind: "email_send", area: cap ? "ops" : "sales", evidence: [meetingId, ...(minutesId ? [minutesId] : []), docId],
       payload: {
         title: draft.subject, subject: draft.subject, to, body: draft.body, send,
-        target: send ? `Email to ${to.join(", ")}` : `Draft email to ${names.join(", ") || "the people on the call"} (no address in the notes: add it when you edit)`,
+        target: send ? `Email to ${to.join(", ")}` : `Draft email to ${toNames.join(", ") || "the people on the call"} (no address in the notes: add it when you edit)`,
         ...(sample ? { sample: true } : {}),
       },
-    }, { ...ctx, agentId: CLOSER });
+    }, { ...ctx, agentId: writer });
     const data = r.data as { recommendationId: string; approvalId: string; title: string };
     approvalId = data.approvalId;
-    const p: ProposalRecord = { agent: CLOSER, recommendationId: data.recommendationId, approvalId: data.approvalId, title: data.title, kind: "email_send" };
+    const p: ProposalRecord = { agent: writer, recommendationId: data.recommendationId, approvalId: data.approvalId, title: data.title, kind: "email_send" };
     proposals.push(p);
     emit({ type: "proposal", ...p });
   } catch (e) {
-    emit({ type: "error", agent: CLOSER, message: `Could not draft the follow-up card: ${message(e)}` });
+    emit({ type: "error", agent: writer, message: `Could not draft the ${cap ? "minutes" : "follow-up"} card: ${message(e)}` });
   }
-  emit({ type: "agent_done", agent: CLOSER, ms: Date.now() - t0, ok: !!approvalId });
+  emit({ type: "agent_done", agent: writer, ms: Date.now() - t0, ok: !!approvalId });
 
   // What the turn saw (its citations, its numbers), and the path on the map.
-  const ids = [docId, meetingId, ...decisionIds, ...tasks.map((t) => t.id), ...people.map((p) => p.id), ...companies.map((c) => c.id), ...products.map((p) => p.id),
+  const ids = [docId, ...(minutesId ? [minutesId] : []), meetingId, ...decisionIds, ...tasks.map((t) => t.id), ...people.map((p) => p.id), ...companies.map((c) => c.id), ...products.map((p) => p.id),
     ...[...leads.values()].map((l) => l.dealId ?? l.leadId), ...(memoryId ? [memoryId] : []), ...(approvalId ? [approvalId] : [])];
   const found = await getNodes(ctx, ids);
   const ref = (id: string): NodeRef | undefined => { const n = found.get(id); return n ? toRef(n) : undefined; };
@@ -556,11 +705,11 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
   touched.add({
     data: {
       saved: counts,
-      meeting: { id: meetingId, title: meeting.title, date, ...(sample ? { simulated: true } : {}), numbers: meeting.numbers, decisions: meeting.decisions.map((x) => x.text), tasks: tasks.map((t) => ({ text: t.text, owner: t.ownerName, due: t.due })) },
+      meeting: { id: meetingId, title: meeting.title, date, ...(sample ? { simulated: true } : {}), numbers: meeting.numbers, decisions: meeting.decisions.map((x) => x.text), tasks: tasks.map((t) => ({ text: t.text, owner: t.ownerName, due: t.due, ...(t.agent ? { handedTo: agentName(t.agent) } : {}) })), ...(cap ? { recorder: cap.recorderName } : {}) },
     },
     nodes: refs, edges: edgeRefs, sources: [{ id: docId, title: `Meeting notes: ${meeting.title}`, asOf: isoDate(d.now) }],
   });
-  const pathIds = [docId, meetingId, ...decisionIds, ...tasks.map((t) => t.id), ...them.map((p) => p.id)].slice(0, 14);
+  const pathIds = [docId, ...(minutesId ? [minutesId] : []), meetingId, ...decisionIds, ...tasks.map((t) => t.id), ...them.map((p) => p.id)].slice(0, 14);
   const pathNodes = pathIds.map(ref).filter((r): r is NodeRef => !!r);
   const onPath = new Set(pathNodes.map((n) => n.id));
   const path = { nodes: pathNodes, edges: edgeRefs.filter((e) => onPath.has(e.from) && onPath.has(e.to)) };
@@ -570,7 +719,7 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
   const answer = meetingAnswer({
     meeting, date, sample, removed: removed.total ? removed.words() : "", counts,
     decisions: meeting.decisions.map((x, i) => ({ id: decisionIds[i]!, text: x.text })),
-    tasks, names, to, approvalId,
+    tasks, names, to, approvalId, ...(cap ? { recorder: cap.recorderName, toNames, minutesId } : {}),
   });
   emit({ type: "agent_start", agent: CHIEF, task: "Write the answer" });
   emit({ type: "text", agent: CHIEF, delta: answer });
@@ -580,11 +729,13 @@ export async function rememberMeeting(notesRaw: string, d: MeetingDeps, emit: Em
   const findings: FindingRecord[] = [
     { id: findingId(d.turnId, LIBRARIAN), agent: LIBRARIAN, task: steps[0]!.task, text: `Read ${meeting.title}: ${counts.decisions} decisions, ${counts.tasks} tasks, ${counts.people} people, ${counts.linkedToRecords} matched to the records. [[${meetingId}]]`, citations: cites([meetingId, docId]), basedOn: [], proposals: [], revised: false, rejected: false },
     { id: findingId(d.turnId, TASKMASTER), agent: TASKMASTER, task: steps[1]!.task, text: tasks.map((t) => `${t.text}: ${t.ownerName}${t.due ? `, by ${t.due}` : ""} [[${t.id}]]`).join("\n") || "No tasks in the notes.", citations: cites(tasks.map((t) => t.id)), basedOn: [findingId(d.turnId, LIBRARIAN)], proposals: [], revised: false, rejected: false },
-    { id: findingId(d.turnId, CLOSER), agent: CLOSER, task: steps[2]!.task, text: approvalId ? `Drafted "${draft.subject}" for ${names.join(", ") || "the people on the call"}; waiting for the owner's OK.` : "Could not draft the follow-up card.", citations: cites([meetingId]), basedOn: [findingId(d.turnId, LIBRARIAN)], proposals: [], revised: false, rejected: false },
+    { id: findingId(d.turnId, writer), agent: writer, task: steps[2]!.task, text: approvalId ? `Drafted "${draft.subject}" for ${(cap ? toNames : names).join(", ") || "the people on the call"}; waiting for the owner's OK.` : `Could not draft the ${cap ? "minutes" : "follow-up"} card.`, citations: cites([meetingId, ...(minutesId ? [minutesId] : [])]), basedOn: [findingId(d.turnId, LIBRARIAN)], proposals: [], revised: false, rejected: false },
   ];
+  // the teammates who were handed an action item took part too (it is on their to-do list now)
+  const handedTo = [...new Set(routedTasks.map((t) => t.agent!))].filter((a) => ![CHIEF, LIBRARIAN, TASKMASTER, writer].includes(a));
 
   return {
-    ok: true, answer, plan, fastPath: false, findings, reviews: [], proposals, agents: [CHIEF, LIBRARIAN, TASKMASTER, CLOSER], failed: approvalId ? [] : [CLOSER], touched,
+    ok: true, answer, plan, fastPath: false, findings, reviews: [], proposals, agents: [...new Set([CHIEF, LIBRARIAN, TASKMASTER, writer]), ...handedTo], failed: approvalId ? [] : [writer], touched,
     guidedBy: [], skills: [], deliverables: [], ...(memoryId ? { memories: [memoryId] } : {}),
     ...(path.nodes.length ? { path, pathGrounded: true } : {}),
   };
@@ -596,21 +747,34 @@ export function meetingAnswer(o: {
   meeting: Extracted; date: string; sample: boolean; removed: string;
   counts: { decisions: number; tasks: number; people: number; companies: number; products: number; peopleAndCompanies: number; numbersAndDates: number; linkedToRecords: number };
   decisions: Array<{ id: string; text: string }>;
-  tasks: Array<{ id: string; text: string; ownerName: string; due: string }>;
+  tasks: Array<{ id: string; text: string; ownerName: string; due: string; agent?: string }>;
   names: string[]; to: string[]; approvalId?: string;
+  recorder?: string; toNames?: string[]; minutesId?: string;   // a recorded meeting: who recorded it, who the minutes go to
 }): string {
   const c = o.counts;
   const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
   const who = o.names.length ? ` with ${o.names.join(" and ")}` : "";
   const parts = [plural(c.decisions, "decision"), plural(c.tasks, "task"), plural(c.peopleAndCompanies, "person or company", "people and companies"), plural(c.numbersAndDates, "number or date", "numbers and dates")];
+  const linked = c.linkedToRecords ? ` ${plural(c.linkedToRecords, "of them was", "of them were")} already in your records, so it's linked in.` : "";
   const out = [
-    `Saved the meeting${who} on ${dayWords(o.date)}: ${parts.join(", ")}.${c.linkedToRecords ? ` ${plural(c.linkedToRecords, "of them was", "of them were")} already in your records, so it's linked in.` : ""}`,
+    o.recorder
+      ? `${o.recorder} brought in "${o.meeting.title}"${who} on ${dayWords(o.date)}, so the team wrote the minutes${o.minutesId ? ` [[${o.minutesId}]]` : ""}: ${parts.join(", ")}.${linked}`
+      : `Saved the meeting${who} on ${dayWords(o.date)}: ${parts.join(", ")}.${linked}`,
   ];
   if (o.sample) out.push("This was a sample transcript, so it's saved as sample data, not a real call.");
   if (o.decisions.length) out.push("", "**Decided**", ...o.decisions.map((d) => `- ${d.text} [[${d.id}]]`));
-  if (o.tasks.length) out.push("", "**To do**", ...o.tasks.map((t) => `- ${t.text}: ${t.ownerName}${t.due ? `, by ${dayWords(t.due)}` : ""} [[${t.id}]]`));
+  if (o.tasks.length) out.push("", o.recorder ? "**Who does what**" : "**To do**", ...o.tasks.map((t) => `- ${t.text}: ${t.ownerName}${t.due ? `, by ${dayWords(t.due)}` : ""}${t.agent ? ` → ${nameOf(t.agent)}` : ""} [[${t.id}]]`));
+  const handed = [...new Set(o.tasks.map((t) => t.agent).filter((a): a is string => !!a))];
+  if (handed.length) out.push("", `Each → is on that teammate's to-do list now: ${handed.map(nameOf).join(", ")}. The rest stays with the person named, and Taskmaster keeps it on the list.`);
   out.push("", "**Waiting for your OK**");
-  if (o.approvalId) {
+  if (o.recorder) {
+    const to = o.toNames?.length ? o.toNames.join(", ") : "the people on the call";
+    out.push(!o.approvalId
+      ? `- ${nameOf(LIBRARIAN)} couldn't draft the minutes email this time. Ask "draft the minutes of the meeting" to try again.`
+      : o.to.length
+        ? `- ${nameOf(LIBRARIAN)} wrote the minutes email to ${to}. Nothing goes out until you say OK.`
+        : `- ${nameOf(LIBRARIAN)} wrote the minutes email, but ${o.recorder} gave no email address: add it when you edit the card.`);
+  } else if (o.approvalId) {
     out.push(o.to.length
       ? `- ${nameOf(CLOSER)} wrote the follow-up email to ${o.names.join(" and ") || o.to.join(", ")}. Nothing goes out until you say OK.`
       : `- ${nameOf(CLOSER)} wrote the follow-up email, but the notes have no email address: add it when you edit the card.`);
