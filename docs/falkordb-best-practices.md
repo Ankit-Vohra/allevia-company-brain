@@ -5,8 +5,8 @@
 on allevia-dev. This page lists each FalkorDB practice that keeps a brain fast, small, correct and recoverable as it grows.
 For each one it gives the source, where Allevia already follows it, and what is still missing.
 
-Sources were read on 18 October 2026. `docs` means https://docs.falkordb.com and `#nnnn` means an issue at
-https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from read-only commands on allevia-dev:
+Sources were read on 18 October 2026: FalkorDB's documentation (https://docs.falkordb.com), its issues and release
+notes on GitHub, and Redis's documentation for persistence and eviction. The live numbers come from read-only commands on allevia-dev:
 `GRAPH.MEMORY USAGE`, `GRAPH.SLOWLOG`, `INFO`, `GRAPH.CONFIG GET` and `GRAPH.RO_QUERY`.
 
 ## The short version
@@ -46,9 +46,9 @@ https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from rea
 - Full-text and vector indexes are per (label, property).
 - `<>` never uses an index.
 - Check plans with `GRAPH.EXPLAIN`: `Node By Index Scan` is good, `Node By Label Scan` or `All Node Scan` is a scan.
-- On 6.x, use the DDL `CREATE FULLTEXT INDEX`, not the `db.idx.fulltext.createNodeIndex` procedure (#2540).
-- Sources: docs/cypher/indexing/range-index, docs/cypher/indexing/fulltext-index, docs/cypher/indexing/vector-index,
-  docs/commands/graph.explain.
+- On 6.x, use the DDL `CREATE FULLTEXT INDEX`, not the `db.idx.fulltext.createNodeIndex` procedure ([#2540](https://github.com/FalkorDB/FalkorDB/issues/2540)).
+- Sources: [cypher/indexing/range-index](https://docs.falkordb.com/cypher/indexing/range-index), [cypher/indexing/fulltext-index](https://docs.falkordb.com/cypher/indexing/fulltext-index), [cypher/indexing/vector-index](https://docs.falkordb.com/cypher/indexing/vector-index),
+  [commands/graph.explain](https://docs.falkordb.com/commands/graph.explain).
 
 **Allevia.**
 - Indexes:
@@ -58,12 +58,12 @@ https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from rea
   - all of these are in `src/graph/indexes.ts:30`.
 - Indexes are created with DDL only (`src/graph/indexes.ts:108`).
 - Every id lookup carries the `Entity` label, so the planner uses the index. A lint rule enforces this
-  (`tests/helpers/cypher-lint.ts`, `tests/graph/cypher-sources.test.ts`).
-- When the test suite ends, it EXPLAINs every query shape it ran (`tests/setup/query-shapes.global.ts`).
+  (`tests/helpers/cypher-lint.ts:35`, `tests/graph/cypher-sources.test.ts:102`).
+- When the test suite ends, it EXPLAINs every query shape it ran (`tests/setup/query-shapes.global.ts:14`).
 
 **Gaps.**
-- Indexes are created back to back on one label. On 6.x that can leave the last one unpopulated while `db.indexes()`
-  reports it as OPERATIONAL (#3389, open).
+- Indexes are created back to back on one label (`src/graph/indexes.ts:112`). On 6.x that can leave the last one unpopulated while `db.indexes()`
+  reports it as OPERATIONAL ([#3389](https://github.com/FalkorDB/FalkorDB/issues/3389), open).
   - New: `db:health` lists the indexes that are missing.
   - Not done: a count check that each index really answers.
 - **Found today: a 6.0.2 planner bug.**
@@ -72,8 +72,8 @@ https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from rea
   - Effect: the query returns **no rows** and no error.
   - Details: `docs/notes/falkordb-two-label-index-scan.md`.
   - Guard: no product query has this shape. A new lint rule keeps it out (`tests/helpers/cypher-lint.ts:129`), and
-    `tests/graph/two-label-index.test.ts` pins the bug.
-  - Related upstream issue: #3248, where a range index and a full-text index on one attribute return no rows.
+    `tests/graph/two-label-index.test.ts:33` pins the bug. The source test is `tests/graph/cypher-sources.test.ts:112`.
+  - Related upstream issue: [#3248](https://github.com/FalkorDB/FalkorDB/issues/3248), where a range index and a full-text index on one attribute return no rows.
 - No relationship indexes. The docs suggest them for traversals that pass through supernodes. Not needed at today's sizes.
 
 ## 2. Constraints
@@ -82,14 +82,14 @@ https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from rea
 - `GRAPH.CONSTRAINT CREATE … UNIQUE|MANDATORY`. UNIQUE needs a range index on the same property first.
 - Constraints are built asynchronously. They end OPERATIONAL, or FAILED (and are then not enforced) when existing data
   breaks them.
-- Source: docs/commands/graph.constraint-create.
+- Source: [commands/graph.constraint-create](https://docs.falkordb.com/commands/graph.constraint-create).
 
 **Allevia.**
 - UNIQUE and MANDATORY on `Entity.id`, added after duplicates are merged (`src/graph/migrate.ts:162`).
 - Their status is read back (`src/graph/client.ts:176`).
 
 **Gaps.**
-- 6.0.x inserts under a UNIQUE constraint are 35–120× slower and grow quadratically (#3330). It is fixed on main but not
+- 6.0.x inserts under a UNIQUE constraint are 35–120× slower and grow quadratically ([#3330](https://github.com/FalkorDB/FalkorDB/issues/3330)). It is fixed on main but not
   released.
 - This only matters for big imports: a copy of aamdani (3,992 nodes) imported in 4 s.
 
@@ -99,7 +99,7 @@ https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from rea
 - Set `TIMEOUT_DEFAULT`/`TIMEOUT_MAX`, `RESULTSET_SIZE`, `QUERY_MEM_CAPACITY` and `MAX_QUEUED_QUERIES`.
 - Set them at load time with `FALKORDB_ARGS`, because `GRAPH.CONFIG SET` does not survive a restart.
 - The official image's default `FALKORDB_ARGS` is replaced as a whole when you set your own.
-- Source: docs/getting-started/configuration, docs/commands/graph.config-set.
+- Source: [getting-started/configuration](https://docs.falkordb.com/getting-started/configuration), [commands/graph.config-set](https://docs.falkordb.com/commands/graph.config-set).
 
 **Allevia.**
 - All of these are set at load time. Values: 15 s default, 120 s max, 512 MiB per query, 500 queued, 10,000 rows.
@@ -117,12 +117,12 @@ https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from rea
 - `GRAPH.MEMORY USAGE <graph>` gives a per-graph breakdown in MB. Indexes are often the biggest part.
 - Use `maxmemory` with `noeviction` for a system of record: an `allkeys-*` policy can evict a whole graph, because a graph
   is one key.
-- Memory freed by deletes is reused and not handed back at once (#1867).
-- Sources: docs/commands/graph.memory, docs/operations/docker, https://redis.io/docs/latest/develop/reference/eviction/.
+- Memory freed by deletes is reused and not handed back at once ([#1867](https://github.com/FalkorDB/FalkorDB/issues/1867)).
+- Sources: [commands/graph.memory](https://docs.falkordb.com/commands/graph.memory), [operations/docker](https://docs.falkordb.com/operations/docker), https://redis.io/docs/latest/develop/reference/eviction/.
 
 **Allevia.**
-- `db:usage` warns from 80% (`src/graph/usage.ts`).
-- `db:health` prints the server's memory and each graph's own.
+- `db:usage` warns from 80% (`src/graph/usage.ts:7`, `src/graph/usage.ts:51`).
+- `db:health` prints the server's memory and each graph's own (`src/cli/health.ts:32`, `src/graph/health.ts:63`).
 
 **Live (18 Oct).**
 - 82.5 MB used (peak 88), `maxmemory` 0 (no limit), `noeviction`.
@@ -137,11 +137,11 @@ https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from rea
 
 **Practice.**
 - Use both RDB and AOF, with `appendfsync everysec`.
-- Keep `aof-use-rdb-preamble yes`. With `no`, `BGREWRITEAOF` crashes (#2710).
+- Keep `aof-use-rdb-preamble yes`. With `no`, `BGREWRITEAOF` crashes ([#2710](https://github.com/FalkorDB/FalkorDB/issues/2710)).
 - Watch `rdb_last_bgsave_status`, the AOF size, and rewrite status. A hung BGSAVE child let one user's AOF grow to 1.87 GB
-  (#3204).
+  ([#3204](https://github.com/FalkorDB/FalkorDB/issues/3204)).
 - On 6.x the append log records effects, not query text.
-- Sources: docs/operations/durability, https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/.
+- Sources: [operations/durability](https://docs.falkordb.com/operations/durability), https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/.
 
 **Allevia.**
 - `--appendonly yes --appendfsync everysec` (`docker-compose.yml:19`).
@@ -165,15 +165,16 @@ https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from rea
 **Practice.**
 - Scheduled snapshots, copied off the box. Test restores.
 - `GRAPH.COPY` clones one graph with its indexes. Replication is not a backup.
-- Sources: docs/operations/durability, docs/commands/graph.copy.
+- Sources: [operations/durability](https://docs.falkordb.com/operations/durability), [commands/graph.copy](https://docs.falkordb.com/commands/graph.copy).
 
 **Allevia.**
-- `scripts/ops/backup-server.sh` runs nightly. It takes a `SAVE` checked with `redis-check-rdb`, plus a `db:export` of
-  every business, and sends both to S3 (35-day lifecycle).
+- `scripts/ops/backup-server.sh` runs nightly. It takes a `SAVE` checked with `redis-check-rdb` (`scripts/ops/backup-server.sh:27`),
+  plus a `db:export` of every business (`scripts/ops/backup-server.sh:37`), and sends both to S3
+  (`scripts/ops/backup-server.sh:44`; 35-day lifecycle).
 - A daily disk snapshot is also taken (7 kept).
-- `db:export`/`db:import` are logical and versioned, and verified by digest (`src/graph/transfer.ts`).
-- Any destructive tidy takes a checked `tenant:export` first. This covers `graph:reference-split` and, new,
-  `graph:compact`.
+- `db:export`/`db:import` are logical and versioned, and verified by digest (`src/graph/transfer.ts:148`, `src/graph/transfer.ts:419`).
+- Any destructive tidy takes a checked `tenant:export` first. This covers `graph:reference-split` (`src/cli/hygiene.ts:51`) and, new,
+  `graph:compact` (`src/cli/compact.ts:72`).
 
 **Gaps.**
 - The script uses `SAVE`, which blocks. That is fine at 82 MB; `BGSAVE` and a wait would avoid the block as data grows.
@@ -187,7 +188,7 @@ https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from rea
 - `GRAPH.SLOWLOG <graph>` keeps the 10 slowest queries over 10 ms, with their params.
 - `GRAPH.EXPLAIN` plans without running.
 - `GRAPH.PROFILE` runs the query, writes included, so it is never used on live data.
-- Sources: docs/commands/graph.slowlog, docs/commands/graph.explain, docs/commands/graph.profile.
+- Sources: [commands/graph.slowlog](https://docs.falkordb.com/commands/graph.slowlog), [commands/graph.explain](https://docs.falkordb.com/commands/graph.explain), [commands/graph.profile](https://docs.falkordb.com/commands/graph.profile).
 
 **Allevia.**
 - New: `db:health` reads each graph's slow log and EXPLAINs each query again. It names any label or full scan
@@ -212,7 +213,7 @@ https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from rea
 - Pass values as params (`CYPHER k=v …`; the npm client builds this).
 - The plan cache is keyed on the query text: `CACHE_SIZE`, default 25, LRU, set at load time.
 - Building a query from strings churns the cache and opens the door to injection.
-- Sources: docs/commands/graph.query, docs/getting-started/configuration.
+- Sources: [commands/graph.query](https://docs.falkordb.com/commands/graph.query), [getting-started/configuration](https://docs.falkordb.com/getting-started/configuration).
 
 **Allevia.**
 - Every query goes through `GraphHandle` with params (`src/graph/client.ts:133`).
@@ -230,12 +231,12 @@ https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from rea
 
 **Practice.**
 - Writes to one graph run one at a time, so batch them with `UNWIND $rows`, in moderate chunks.
-- A single query that deleted 380,000 edges crashed 4.16 (#2134).
-- Source: docs/design/concurrency, docs/cypher/unwind.
+- A single query that deleted 380,000 edges crashed 4.16 ([#2134](https://github.com/FalkorDB/FalkorDB/issues/2134)).
+- Source: [design/concurrency](https://docs.falkordb.com/design/concurrency), [cypher/unwind](https://docs.falkordb.com/cypher/unwind).
 
 **Allevia.**
-- `src/graph/batch.ts`, the import in `src/graph/transfer.ts`, the reference split, and the new compaction all batch.
-  Compaction uses 200 rows a statement.
+- `src/graph/batch.ts:31`, the import in `src/graph/transfer.ts:260`, the reference split (`src/graph/reference-split.ts:148`),
+  and the new compaction (`src/graph/compact.ts:410`) all batch. Compaction uses 200 rows a statement (`src/graph/compact.ts:50`).
 
 **Gaps.** None.
 
@@ -248,7 +249,7 @@ https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from rea
   - typed patterns;
   - `indegree()`/`outdegree()` to spot hubs;
   - relationship indexes to start from a link instead of a hub.
-- Sources: docs/design, docs/cypher/indexing/range-index, docs/cypher/functions.
+- Sources: [design](https://docs.falkordb.com/design), [cypher/indexing/range-index](https://docs.falkordb.com/cypher/indexing/range-index), [cypher/functions](https://docs.falkordb.com/cypher/functions).
 
 **Allevia.**
 - New: `db:health` and `graph:hygiene` list the 5 best-linked nodes with their links by type
@@ -273,7 +274,7 @@ https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from rea
 - Storable types: strings, integers, floats, booleans, points, temporal types (4.14+), arrays of scalars, and `vecf32`.
 - `SET n.p = null` removes the property.
 - There is no NaN literal. A NaN in a sort crashed 6.0.2.
-- Source: docs/datatypes, docs/cypher/set.
+- Source: [datatypes](https://docs.falkordb.com/datatypes), [cypher/set](https://docs.falkordb.com/cypher/set).
 
 **Allevia.**
 - Dates are ISO strings, which sort correctly. Times are milliseconds.
@@ -288,11 +289,11 @@ https://github.com/FalkorDB/FalkorDB/issues/nnnn. The live numbers come from rea
 - In FalkorDB, `DELETE` behaves like `DETACH DELETE`.
 - Delete in chunks.
 - There is no soft-delete feature. A flag or a time range is the pattern.
-- Source: docs/cypher/delete.
+- Source: [cypher/delete](https://docs.falkordb.com/cypher/delete).
 
 **Allevia.**
 - Facts are bi-temporal. A fact that ends is closed (`until`) and never deleted (`src/graph/edges.ts:1`).
-- A changed value keeps a Version.
+- A changed value keeps a Version (`src/graph/nodes.ts:2`).
 
 **Gaps.**
 - Closed facts and Versions piled up for good.
@@ -338,14 +339,16 @@ New in `src/graph/compact.ts`, run as `graph:compact <tenant>`. It is a dry run 
 **Practice.**
 - One graph per tenant is FalkorDB's model.
 - Each graph is one key, on one shard.
-- `GRAPH.LIST` shows every graph name, even to users whose ACL restricts them (#2652). Keep sensitive data out of graph
+- `GRAPH.LIST` shows every graph name, even to users whose ACL restricts them ([#2652](https://github.com/FalkorDB/FalkorDB/issues/2652)). Keep sensitive data out of graph
   names.
-- On Rust a graph costs about 41 KiB fixed, against about 462 KiB on C 4.20 (#2499).
-- Source: docs/commands/graph.list, docs/operations/cluster.
+- On Rust a graph costs about 41 KiB fixed, against about 462 KiB on C 4.20 ([#2499](https://github.com/FalkorDB/FalkorDB/issues/2499)).
+- Source: [commands/graph.list](https://docs.falkordb.com/commands/graph.list), [operations/cluster](https://docs.falkordb.com/operations/cluster).
 
 **Allevia.**
 - `graphName()` is the only way a business becomes a graph name, and it is checked (`src/graph/client.ts:61`).
-- There is a registry graph, per-business export, import and erase, and shared know-how in one read-only graph.
+- There is a registry graph (`src/graph/tenants.ts:10`), per-business export, import and erase (`src/tenant/lifecycle.ts:160`,
+  `src/tenant/lifecycle.ts:473`, `src/tenant/lifecycle.ts:319`), and shared know-how in one read-only graph
+  (`src/graph/reference.ts:18`).
 - New: `db:health` sets a size budget per business (`src/graph/health.ts:27`). The defaults are 25,000 things,
   100,000 links and 100 MB, which is about six times aamdani today. You can override them with
   `ALLEVIA_BRAIN_BUDGET_NODES`, `ALLEVIA_BRAIN_BUDGET_EDGES` and `ALLEVIA_BRAIN_BUDGET_MB`.
@@ -359,18 +362,18 @@ New in `src/graph/compact.ts`, run as `graph:compact <tenant>`. It is a dry run 
 - Never mix 4.x and 6.x in one replica set.
 - Source: https://github.com/FalkorDB/FalkorDB/releases/tag/v6.0.0.
 
-**Allevia.** The image is pinned to `falkordb/falkordb:6.0.2`.
+**Allevia.** The image is pinned to `falkordb/falkordb:6.0.2` (`docker-compose.yml:16`).
 
 **Bugs to watch.**
 
 | Bug | Status | Allevia's position |
 |---|---|---|
-| A null column before an aggregate panics the server, read-only queries too (#3150) | Fix in PR #3229, not released | Guarded by `nullableGroupKeys` (`src/graph/safety.ts:275`) |
-| Slow inserts under a UNIQUE constraint (#3330) | Fixed on main, not released | See §2 |
-| Indexes that report OPERATIONAL while unpopulated (#3389) | Open | See §1 |
+| A null column before an aggregate panics the server, read-only queries too ([#3150](https://github.com/FalkorDB/FalkorDB/issues/3150)) | Fix in PR [#3229](https://github.com/FalkorDB/FalkorDB/issues/3229), not released | Guarded by `nullableGroupKeys` (`src/graph/safety.ts:275`) |
+| Slow inserts under a UNIQUE constraint ([#3330](https://github.com/FalkorDB/FalkorDB/issues/3330)) | Fixed on main, not released | See §2 |
+| Indexes that report OPERATIONAL while unpopulated ([#3389](https://github.com/FalkorDB/FalkorDB/issues/3389)) | Open | See §1 |
 | The two-label index scan returns no rows | Found today | See §1 |
 
-**Upgrade.** Move to the first 6.0.x release that carries #3229 and #3330, after the test suite passes on it.
+**Upgrade.** Move to the first 6.0.x release that carries [#3229](https://github.com/FalkorDB/FalkorDB/issues/3229) and [#3330](https://github.com/FalkorDB/FalkorDB/issues/3330), after the test suite passes on it.
 
 ## Measured: dry runs and an apply on copies of the live brains
 
